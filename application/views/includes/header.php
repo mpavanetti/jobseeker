@@ -63,8 +63,6 @@
         background-color: #500ceb;
       }
 
-      
-
     </style>
   </head>
   <body class="hold-transition skin-purple sidebar-mini">
@@ -145,7 +143,7 @@
               </a>
             </li>
             <li>
-              <a href="#" >
+              <a href="<?php echo base_url(); ?>upload" >
                 <i class="fa fa-upload"></i>
                 <span>File Upload</span>
               </a>
