@@ -35,8 +35,39 @@
     <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
     <![endif]-->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
+    <style>
+        .skin-purple .main-header .navbar { 
+        background: #8E2DE2; 
+        background: -webkit-linear-gradient(to right, #4A00E0, #8E2DE2); 
+        background: linear-gradient(to right, #4A00E0, #8E2DE2); !important 
+      }
+
+      .skin-purple .main-header .logo {
+        background: #4A00E0; 
+
+      }
+
+      .skin-purple .main-header .navbar .sidebar-toggle:hover {
+        background: #500ceb;
+      }
+
+      .skin-purple .main-header .logo:hover {
+        background-color: #500ceb;
+      }
+
+      .skin-purple .sidebar-menu>li.active>a {
+        border-left-color: #500ceb;
+      }
+
+      .skin-purple .main-header li.user-header {
+        background-color: #500ceb;
+      }
+
+      
+
+    </style>
   </head>
-  <body class="hold-transition skin-blue sidebar-mini">
+  <body class="hold-transition skin-purple sidebar-mini">
     <div class="wrapper">
       
       <header class="main-header">
@@ -139,6 +170,18 @@
               <a href="<?php echo base_url(); ?>files">
                 <i class="fa fa-files-o"></i>
                 <span>File Manager</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>Database">
+                <i class="fa fa-database"></i>
+                <span>Database Manager</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>Jenkins">
+                <i class="fa fa-link"></i>
+                <span>Jenkins Manager</span>
               </a>
             </li>
             <?php
