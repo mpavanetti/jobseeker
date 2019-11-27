@@ -15,7 +15,7 @@
 
   </head>
   <body class="hold-transition login-page" style="
-            background: url(<?php echo base_url(); ?>assets/images/wallpaper/wallpaper1.jpg) no-repeat center center fixed; 
+            background: url(<?php echo base_url(); ?>assets/images/wallpaper/wallpaper2.jpg) no-repeat center center fixed; 
             -webkit-background-size: cover;
             -moz-background-size: cover;
             -o-background-size: cover;
@@ -24,9 +24,13 @@
   ">
     <div class="login-box">
       <div class="login-logo">
-        <a href="#"><b>Talend Job Seeker</b><br>Admin System</a>
+          <img src="<?php echo base_url(); ?>assets/images/talend.png" alt="Talend Logo" width="300">
+        <a href="#" style="color:white;"><b>Job Seeker</b><br>Admin System</a>
       </div><!-- /.login-logo -->
-      <div class="login-box-body">
+      <div class="login-box-body" style="border-radius: 10px; 
+      -webkit-box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);
+      -moz-box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);
+          box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);">
         <p class="login-box-msg">Sign In</p>
         <?php $this->load->helper('form'); ?>
         <div class="row">

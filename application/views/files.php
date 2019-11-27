@@ -30,9 +30,9 @@
                     {
                         cssAutoLoad : false,               // Disable CSS auto loading
                         baseUrl : './',                    // Base URL to css/*, js/*
-                        url : '<?php echo base_url(); ?>/elfinder/php/connector.minimal.php'  // connector URL (REQUIRED)
+                        url : '<?php echo base_url(); ?>elfinder/php/connector.minimal.php'  // connector URL (REQUIRED)
                         // , lang: 'ru'                    // language (OPTIONAL)
-                        , height: '680'
+                        , height: '790'
                     },
                     // 2nd Arg - before boot up function
                     function(fm, extraObj) {
@@ -79,36 +79,14 @@
       </h1>
       <ol class="breadcrumb">
         <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
-        <li><a href="#">Examples</a></li>
-        <li class="active">Blank page</li>
+        <li><a href="#">File Manager</a></li>
       </ol>
     </section>
 
     <!-- Main content -->
     <section class="content">
 
-      <!-- Default box -->
-      <div class="box">
-        <div class="box-header with-border">
-          <h3 class="box-title">File Manager </h3>
-
-          <div class="box-tools pull-right">
-            <button type="button" class="btn btn-box-tool" data-widget="collapse" data-toggle="tooltip"
-                    title="Collapse">
-              <i class="fa fa-minus"></i></button>
-            <button type="button" class="btn btn-box-tool" data-widget="remove" data-toggle="tooltip" title="Remove">
-              <i class="fa fa-times"></i></button>
-          </div>
-        </div>
-        <div class="box-body" style="height: 700px;">
-
-              <!-- Element where elFinder will be created (REQUIRED) -->
-            <div id="elfinder" height="800"></div>
-
-        </div>
-        <!-- /.box-body -->
-      </div>
-      <!-- /.box -->
+      <div id="elfinder"></div>
 
     </section>
     <!-- /.content -->
