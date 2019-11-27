@@ -136,7 +136,7 @@
               </a>
             </li>
             <li>
-              <a href="#" >
+              <a href="<?php echo base_url(); ?>files">
                 <i class="fa fa-files-o"></i>
                 <span>File Manager</span>
               </a>
