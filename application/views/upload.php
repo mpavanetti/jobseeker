@@ -28,7 +28,7 @@
 
             <div class="info-box-content">
               <span class="info-box-text">Jobs Registered</span>
-              <span class="info-box-number">90</span>
+            <b><span id="jobs-registered" class="info-box-number"></span></b>
             </div>
             <!-- /.info-box-content -->
           </div>
@@ -41,7 +41,7 @@
 
             <div class="info-box-content">
               <span class="info-box-text">Files Uploaded</span>
-              <span class="info-box-number">41</span>
+              <span class="info-box-number">0</span>
             </div>
             <!-- /.info-box-content -->
           </div>
@@ -58,7 +58,7 @@
 
             <div class="info-box-content">
               <span class="info-box-text">Job Components</span>
-              <span class="info-box-number">760</span>
+             <b> <span id="components-registered" class="info-box-number"></span></b>
             </div>
             <!-- /.info-box-content -->
           </div>
@@ -71,7 +71,7 @@
 
             <div class="info-box-content">
               <span class="info-box-text">Component Types</span>
-              <span class="info-box-number">4</span>
+             <b><span id="componentType-registered" class="info-box-number"></span></b>
             </div>
             <!-- /.info-box-content -->
           </div>
@@ -114,34 +114,19 @@
                 <!-- select -->
                 <div class="form-group">
                   <label>Available Jobs</label>
-                  <select class="form-control">
-                    <option>-- Please, Select a job to start --</option>
-                    <option>option 2</option>
-                    <option>option 3</option>
-                    <option>option 4</option>
-                    <option>option 5</option>
+                  <select class="form-control" id="job-name" name="job-name" required="required">
                   </select>
                 </div>
                 <!-- select -->
                 <div class="form-group">
                   <label>Available Components</label>
-                  <select class="form-control">
-                    <option> </option>
-                    <option>option 2</option>
-                    <option>option 3</option>
-                    <option>option 4</option>
-                    <option>option 5</option>
+                  <select class="form-control"  id="job-component" name="job-component" required="required">
                   </select>
                 </div>
                 <!-- select -->
                 <div class="form-group">
-                  <label>Avaiable Files Type</label>
-                  <select class="form-control">
-                    <option> </option>
-                    <option>option 2</option>
-                    <option>option 3</option>
-                    <option>option 4</option>
-                    <option>option 5</option>
+                  <label>Available Files Type</label>
+                  <select class="form-control"  id="job-fileType" name="job-fileType" required="required">
                   </select>
                 </div>
               </div>
@@ -191,6 +176,7 @@
 
 <script>
     $(document).ready(function(){
+
         $('#submit').click(function(){
             $('#form').hide();
             $('#loading').fadeIn(1500);
@@ -198,5 +184,154 @@
             $('#form').delay(8500).fadeIn(1000);
             
         });
+
+        // Populate Job Name Field
+        $("#job-name").ready(function() { 
+        $('#job-name').empty();   
+
+        $('#job-name').append($('<option>', {
+                value: 0,
+                text: 'Please, Select an avaiable job name.',
+                })); 
+                  
+      $.ajax({    //create an ajax request
+        type: "GET",
+        url: "<?php echo base_url(); ?>Upload/listJobsJson",             
+        dataType: "html",   //expect html to be returned                
+        success: function(data){  
+          var json = JSON.parse(data);  
+           $.each(json, function(i, item) {
+            var newJson = (json[i].job_name);
+           // console.log(newJson);
+            $('#job-name').append($('<option>', {
+                value: newJson,
+                text: newJson
+                }))
+             })
+        }
+
+    });
+});
+
+    //Populate component Name
+    $("#job-name").change(function(){
+    $('#job-component').empty();
+
+     $('#job-component').append($('<option>', {
+                value: 0,
+                text: 'Please, Select an avaiable job component name.',
+                })); 
+
+    var id = $("#job-name").val();
+
+     if (id != 0) {
+
+      $.ajax({
+           type: "GET",
+           url: '<?php echo base_url(); ?>Upload/listComponents/'+id,
+           dataType: 'html',
+            success: function(data){  
+              var json = JSON.parse(data);   
+               $.each(json, function(i, item) {
+                var newJson = (json[i].job_component);
+               // console.log(newJson)
+                $('#job-component').append($('<option>', {
+                    value: newJson,
+                    text: newJson
+                    }));
+
+                     })
+                }
+            
+          });
+
+
+        var component = $("#job-component").val();
+        console.log(component)
+
+      } 
+})
+
+     //Populate file type
+    $("#job-component").change(function(){
+    $('#job-fileType').empty();
+
+    var id = $("#job-component").val();
+
+    //console.log(id);
+
+    if (id != 0) {
+
+      $.ajax({
+           type: "GET",
+           url: '<?php echo base_url(); ?>Upload/listComponentType/'+id,
+           dataType: 'html',
+            success: function(data){  
+              var json = JSON.parse(data);   
+               $.each(json, function(i, item) {
+                var newJson = (json[i].component_type);
+
+               console.log(newJson);
+
+                $('#job-fileType').append($('<option>', {
+                    value: newJson,
+                    text: newJson
+                    }));
+
+                     })
+                }
+            
+          });
+
+      }
+
+    })
+
+
+    // Count Jobs
+     $("#jobs-registered").ready(function() { 
+      
+      $.ajax({    //create an ajax request
+        type: "GET",
+        url: "<?php echo base_url(); ?>Upload/countJobs",             
+        dataType: "html",   //expect html to be returned                
+        success: function(data){ 
+         $('#jobs-registered').append('<b>' + data + '</b>');
+        }
+
+    });
+});
+
+ // Count components
+     $("#components-registered").ready(function() { 
+      
+      $.ajax({    //create an ajax request
+        type: "GET",
+        url: "<?php echo base_url(); ?>Upload/countComponents",             
+        dataType: "html",   //expect html to be returned                
+        success: function(data){  
+         $('#components-registered').append('<b>' + data + '</b>');
+        }
+
+    });
+});
+
+
+
+ // Count components types registered
+     $("#componentType-registered").ready(function() { 
+      
+      $.ajax({    //create an ajax request
+        type: "GET",
+        url: "<?php echo base_url(); ?>Upload/countComponentsTypes",             
+        dataType: "html",   //expect html to be returned                
+        success: function(data){ 
+         $('#componentType-registered').append('<b>' + data + '</b>');
+        }
+
+    });
+});
+
+
     });
 </script>
