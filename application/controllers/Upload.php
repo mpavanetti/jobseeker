@@ -17,8 +17,11 @@ class Upload extends BaseController
     public function __construct()
     {
         parent::__construct();
-       $this->load->model('Upload_model');
+        $this->load->helper('file','url');
+        $this->load->model('Upload_model','model');
+        $this->load->library('session');
         $this->isLoggedIn();   
+
     }
 
     /**
@@ -31,6 +34,74 @@ class Upload extends BaseController
         
         $this->loadViews("upload", $this->global, NULL, NULL);
     }
+
+    function listJobsJson() {
+        header('Content-type:application/json;charset=utf-8'); // declaring header
+
+
+        $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+        $listJobsJson = $this->model->listJobs();
+        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+
+     
+    }
+
+     public function listComponents($jobname) {
+     header('Content-Type: application/json');
+
+      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+      $listComponent = $this->model->listComponents($jobname);
+
+      print_r(json_encode($listComponent, JSON_PRETTY_PRINT));
+
+    }
+
+    public function listComponentType($component) {
+     header('Content-Type: application/json');
+
+      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+      $listComponentType = $this->model->listComponentType($component);
+
+      print_r(json_encode($listComponentType, JSON_PRETTY_PRINT));
+
+    }
+
+    public function countJobs() {
+     header('Content-Type: application/json');
+
+      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+      $countJobs = $this->model->countJobs();
+
+      print_r(json_encode($countJobs, JSON_PRETTY_PRINT));
+
+    }
+
+    public function countComponents() {
+     header('Content-Type: application/json');
+
+      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+      $countComponents = $this->model->countComponents();
+
+      print_r(json_encode($countComponents, JSON_PRETTY_PRINT));
+
+    }
+
+    public function countComponentsTypes() {
+     header('Content-Type: application/json');
+
+      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+      $countComponentsTypes = $this->model->countComponentsTypes();
+
+      print_r(json_encode($countComponentsTypes, JSON_PRETTY_PRINT));
+
+    }
+
 
    
     
