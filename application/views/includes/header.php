@@ -133,12 +133,25 @@
             <li class="header">MAIN NAVIGATION</li>
             <li>
               <a href="<?php echo base_url(); ?>dashboard">
-                <i class="fa fa-dashboard"></i> <span>Dashboard</span></i>
+                <i class="fa fa-home"></i> <span>Dashboard</span></i>
               </a>
             </li>
             <li>
+              <a href="#">
+                <i class="fa fa-dashboard"></i> <span>Data Visualization</span></i>
+              </a>
+            </li>
+            <li class="treeview">
+          <a href="#">
+            <i class="fa fa-random"></i> <span>Extract Transform Load</span>
+            <span class="pull-right-container">
+              <i class="fa fa-angle-left pull-right"></i>
+            </span>
+          </a>
+          <ul class="treeview-menu">
+            <li>
               <a href="#" >
-                <i class="fa fa-ticket"></i>
+                <i class="fa fa-table"></i>
                 <span>Database Table</span>
               </a>
             </li>
@@ -150,20 +163,22 @@
             </li>
             <li>
               <a href="#" >
-                <i class="fa fa-plane"></i>
+                <i class="fa fa-play"></i>
                 <span>Job Execution</span>
               </a>
             </li>
+            <li>
+              <a href="#" >
+                <i class="fa fa-list"></i>
+                <span>Job Logs</span>
+              </a>
+            </li>
+          </ul>
+        </li>
             <?php
             if($role == ROLE_ADMIN || $role == ROLE_MANAGER)
             {
             ?>
-            <li>
-              <a href="#" >
-                <i class="fa fa-thumb-tack"></i>
-                <span>Job Logs</span>
-              </a>
-            </li>
             <li>
               <a href="<?php echo base_url(); ?>files">
                 <i class="fa fa-files-o"></i>
@@ -178,7 +193,7 @@
             </li>
             <li>
               <a href="<?php echo base_url(); ?>Jenkins">
-                <i class="fa fa-link"></i>
+                <i class="fa fa-server"></i>
                 <span>Jenkins Manager</span>
               </a>
             </li>
