@@ -27,7 +27,7 @@
           <img src="<?php echo base_url(); ?>assets/images/talend.png" alt="Talend Logo" width="300">
         <a href="#" style="color:white;"><b>Job Seeker</b><br>Admin System</a>
       </div><!-- /.login-logo -->
-      <div class="login-box-body" style="border-radius: 10px; 
+      <div class="login-box-body" style="
       -webkit-box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);
       -moz-box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);
           box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);">
