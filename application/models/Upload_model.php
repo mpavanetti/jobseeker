@@ -30,12 +30,24 @@ class Upload_model extends CI_Model
         return $query->result();
     }
 
-    function listComponentType($component) {
+    function listComponentType($jobname, $component) {
 
         $this->db->select('component_type');
         $this->db->from('job_info');
+        $this->db->where('job_name', $jobname);
         $this->db->where('job_component', $component);
-        $this->db->or_where_in('component_type','xml','json','excel','csv','txt');
+
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function listComponentPath($jobname, $component, $type) {
+
+        $this->db->select('file_path');
+        $this->db->from('job_info');
+        $this->db->where('job_name', $jobname);
+        $this->db->where('job_component', $component);
+        $this->db->where('component_type', $type);
 
         $query = $this->db->get();
         return $query->result();
@@ -66,6 +78,64 @@ class Upload_model extends CI_Model
         $query = $this->db->get();
         return $query->num_rows();
     }
+
+     function countFileUploaded() {
+       $this->db->select_sum('file_uploaded');
+        $query = $this->db->get('job_info'); // Produces: SELECT SUM(age) as age FROM members
+        return $query->result();
+    }
+
+   
+    function Path($jobname, $component, $type) {
+
+        $this->db->select('file');
+        $this->db->from('job_info');
+        $this->db->where('job_name', $jobname);
+        $this->db->where('job_component', $component);
+        $this->db->where('component_type', $type);
+
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function FetchAll($jobname, $component, $type) {
+
+        $this->db->select('*');
+        $this->db->from('job_info');
+        $this->db->where('job_name', $jobname);
+        $this->db->where('job_component', $component);
+        $this->db->where('component_type', $type);
+
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function add($jobname, $component, $type, $amount) {
+
+        $data = array(
+            'file_uploaded' => $amount,
+        );
+
+        $this->db->where('job_name', $jobname);
+        $this->db->where('job_component', $component);
+        $this->db->where('component_type', $type);
+
+        $this->db->update('job_info', $data);
+
+      }
+
+      function fetchUploaded ($jobname, $component, $type) {
+
+        $this->db->select('file_uploaded');
+        $this->db->from('job_info');
+        $this->db->where('job_name', $jobname);
+        $this->db->where('job_component', $component);
+        $this->db->where('component_type', $type);
+
+        $query = $this->db->get();
+        return $query->result();
+
+      }
     
 }
 
