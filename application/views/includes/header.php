@@ -197,6 +197,12 @@
                 <span>Database Manager</span>
               </a>
             </li>
+            <li>
+              <a href="<?php echo base_url(); ?>Cloud">
+                <i class="fa fa-cloud"></i>
+                <span>Cloud Enviroment</span>
+              </a>
+            </li>
             <?php
             }
             if($role == ROLE_ADMIN)
