@@ -9,6 +9,8 @@
     <link href="<?php echo base_url(); ?>assets/bower_components/font-awesome/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo base_url(); ?>assets/dist/css/AdminLTE.min.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/style.css">
+    <!-- Animate.css -->
+    <link href="<?php echo base_url(); ?>assets/plugins/animate/animate.min.css" rel="stylesheet" type="text/css" />
 
     <!-- Google Font -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
@@ -27,7 +29,7 @@
           <img src="<?php echo base_url(); ?>assets/images/talend.png" alt="Talend Logo" width="300">
         <a href="#" style="color:white;"><b>Job Seeker</b><br>Admin System</a>
       </div><!-- /.login-logo -->
-      <div class="login-box-body" style="
+      <div class="login-box-body animated bounceIn" style="
       -webkit-box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);
       -moz-box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);
           box-shadow: 10px 10px 5px 0px rgba(0,0,0,0.75);">
