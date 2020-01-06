@@ -1,0 +1,12 @@
+[
+    {
+        "id": "1",
+        "job_name": "ExcelToJson",
+        "job_component": "tFileInputExcel_1",
+        "component_type": "xlsx",
+        "creation_date": "2020-01-04 15:14:38.824706",
+        "file_path": "new",
+        "file": "1",
+        "file_uploaded": "43"
+    }
+]
