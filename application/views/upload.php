@@ -23,7 +23,7 @@
         <!-- Info boxes -->
       <div class="row">
         <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
+          <div class="info-box animated fadeIn">
             <span class="info-box-icon bg-aqua"><i class="fa fa-server"></i></span>
 
             <div class="info-box-content">
@@ -36,7 +36,7 @@
         </div>
         <!-- /.col -->
         <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
+          <div class="info-box animated fadeIn">
             <span class="info-box-icon bg-red"><i class="fa fa-upload"></i></span>
 
             <div class="info-box-content">
@@ -53,7 +53,7 @@
         <div class="clearfix visible-sm-block"></div>
 
         <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
+          <div class="info-box animated fadeIn">
             <span class="info-box-icon bg-green"><i class="ion ion-ios-gear-outline"></i></span>
 
             <div class="info-box-content">
@@ -66,7 +66,7 @@
         </div>
         <!-- /.col -->
         <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
+          <div class="info-box animated fadeIn">
             <span class="info-box-icon bg-yellow"><i class="fa fa-align-left"></i></span>
 
             <div class="info-box-content">
@@ -103,7 +103,7 @@
         <!-- left column -->
         <div class="col-md-6">
           <!-- general form elements -->
-          <div class="box box-primary">
+          <div class="box box-primary animated fadeIn">
             <div class="box-header with-border">
               <h3 class="box-title">Job Selection</h3>
             </div>
@@ -130,7 +130,7 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Path</label>
+                  <label>Repository</label>
                   <input type="text" class="form-control"  id="job-filePath" name="job-filePath" required="required" autocomplete="off"> 
                   
                 </div>
@@ -161,7 +161,8 @@
             <!-- form start -->
               <div class="box-body" style="padding: 20px;  height: 262px;">
                 <DIV id="dropzone">
-                <form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" style="height: 220px;">
+                <form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" 
+      method="post" style="height: 220px;">
                    <DIV class="dz-message needsclick">   
                     <img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;">
                     <h3><b>Drop files here or click to upload.</b></h3><BR>
@@ -172,7 +173,7 @@
               <!-- /.box-body -->
 
               <div class="box-footer">
-                <button id="submit" type="submit" class="btn btn-success">Upload Files</button>
+                <button id="submit" class="btn btn-success">Send Files</button>
                 
               </div>
           </div>
@@ -186,12 +187,25 @@
 <script>
     $(document).ready(function(){
 
+      toastr.options = {
+        "closeButton": true,
+        "debug": false,
+        "positionClass": "toast-top-right",
+        "newestOnTop": false,
+        "timeOut": "10000",
+        "progressBar": true}
+      toastr.warning("Fill out correctly the form,  Once the file is uploaded it can replace the old one on server.", "Attention")
+
 
         $('#submit').click(function(){
             $('#form').hide();
             $('#loading').fadeIn(1500);
             $('#loading').delay(5500).fadeOut(1500);
-            $('#form').delay(8500).fadeIn(1000);
+           // $('#form').delay(8500).fadeIn(1000);
+
+            setTimeout(function() {
+              location.reload();
+          }, 8500);
             
         });
 
@@ -324,6 +338,8 @@
                   console.log(newJson);
                 $('#job-filePath').val(newJson);
                 $('#seta').show();
+                toastr.success("Right ! Form Completed", "Success")
+                toastr.info("Now Click on the box below to upload your file.", "Info")
                 $('#box-dropzone').show();
                      })
                 }
@@ -397,3 +413,25 @@
     });
 </script>
 
+<script type="text/javascript">
+
+   $("#job-fileType").change(function(){
+  var type = '.' + $("#job-fileType").val();
+  console.log(type);
+
+    $("#mydropzone").dropzone({
+            maxFiles: 20000,
+            acceptedFiles: type,
+            url: "<?php echo base_url(); ?>upload/do_upload/",
+             
+            success: function (file, response) {
+                toastr.success("Your File has been successfully saved.", "Success")
+            }
+        });
+  
+});
+
+   Dropzone.autoDiscover = false;
+
+
+</script>
