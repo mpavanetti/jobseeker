@@ -131,7 +131,7 @@
                 </div>
                 <div class="form-group">
                   <label>Repository</label>
-                  <input type="text" class="form-control"  id="job-filePath" name="job-filePath" required="required" autocomplete="off"> 
+                  <input type="text" class="form-control"  id="job-filePath" name="job-filePath" required="required" autocomplete="off" disabled> 
                   
                 </div>
                   <div id="file-input">
