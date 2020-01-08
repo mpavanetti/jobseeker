@@ -91,6 +91,8 @@ $route['createPasswordUser'] = "login/createPasswordUser";
 
 
 $route['deleteJobInput'] = "JobsTable/delete";
-
+$route['addNewJob'] = "JobsTable/addNewJob";
+$route['addNewJobInsert'] = "JobsTable/addNewJobInsert";
+$route['addNewJobEdit'] = "JobsTable/editJob";
 /* End of file routes.php */
 /* Location: ./application/config/routes.php */

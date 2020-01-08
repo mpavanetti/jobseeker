@@ -176,12 +176,6 @@
                 <span>Console Job Logs</span>
               </a>
             </li>
-            <li>
-              <a href="<?php echo base_url(); ?>Jenkins">
-                <i class="fa fa-server"></i>
-                <span>Jenkins Manager</span>
-              </a>
-            </li>
           </ul>
         </li>
             <?php
@@ -198,6 +192,12 @@
               <a href="<?php echo base_url(); ?>Database">
                 <i class="fa fa-database"></i>
                 <span>Database Manager</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>Jenkins">
+                <i class="fa fa-server"></i>
+                <span>Jenkins Manager</span>
               </a>
             </li>
             <li>

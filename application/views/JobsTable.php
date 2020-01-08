@@ -17,14 +17,16 @@
 
     <!-- Main content -->
     <section class="content">
-      <div class="row">
+   <?php if($role != 1) {  ?>
+    <div class="row">
             <div class="col-xs-12 text-left">
                 <div class="form-group">
-                    <a class="btn btn-primary" href="<?php echo base_url(); ?>addNew"><i class="fa fa-plus"></i> Add New</a>
+                    <a class="btn btn-primary" href="<?php echo base_url(); ?>addNewJob"><i class="fa fa-plus"></i> Add New</a>
                 </div>
             </div>
-        </div>
-      <div class="row">
+        </div> 
+      <?php } ?>
+      <div class="row" style="margin-top: 5px;">
         <div class="col-xs-12">
           <div class="box box-primary">
             <div class="box-header">
@@ -36,14 +38,15 @@
                 <thead>
                 <tr>
                   <th>Id</th>
+                  <th>Creation Date</th>
                   <th>Job Name</th>
                   <th>Job Component</th>
                   <th>Component Type</th>
-                  <th>Creation Date</th>
                   <th>Repository</th>
                   <th>Type</th>
                   <th>File Uploaded</th>
-                  <th>Action</th>
+                  <th>Owner</th>
+                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </thead>
                 <tbody>
@@ -55,17 +58,18 @@
                     ?>
                     <tr>
                       <td><?php echo $record->id ?></td>
+                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
                         <td><?php echo $record->job_name ?></td>
                         <td><?php echo $record->job_component ?></td>
                         <td><?php echo $record->component_type ?></td>
-                        <td><?php echo date("d-m-Y h:m:s", strtotime($record->creation_date)) ?></td>
                         <td><?php echo $record->file_path ?></td>
                         <td><?php echo ($record->file === '1') ? 'File' : 'Folder' ?></td>
                         <td><?php if ($record->file_uploaded === '0') { echo 'None yet';} else {echo $record->file_uploaded;} ?></td>
-                        <td>
-                            <a class="btn btn-sm btn-info" href="<?php echo base_url().'editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                        <td><?php echo $record->owner ?></td>
+                       <?php if($role != 1) {  ?> <td>
+                            <a class="btn btn-sm btn-info" href="<?php echo base_url().'JobsTable/editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
-                        </td>
+                        </td><?php } ?>
                     </tr>
                     <?php
                         }
@@ -75,14 +79,15 @@
                 <tfoot>
                  <tr>
                   <th>Id</th>
+                  <th>Creation Date</th>
                   <th>Job Name</th>
                   <th>Job Component</th>
                   <th>Component Type</th>
-                  <th>Creation Date</th>
                   <th>Repository</th>
                   <th>Type</th>
                   <th>File Uploaded</th>
-                  <th>Action</th>
+                  <th>Owner</th>
+                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </tfoot>
               </table>
@@ -103,6 +108,7 @@
   jQuery(document).ready(function(){
   
   jQuery(document).on("click", ".deleteUser", function(){
+    
     var userId = $(this).data("userid"),
       hitURL = baseURL + "deleteJobInput" ,
       currentRow = $(this);
