@@ -17,10 +17,11 @@ class JobsTable extends BaseController
     public function __construct()
     {
         parent::__construct();
-        $this->load->helper('file','url');
+        $this->load->helper('url','form');
         $this->load->model('JobsTable_model','model');
         $this->load->library('session');
         $this->isLoggedIn();   
+        date_default_timezone_set('America/Sao_Paulo');
     }
 
     /**
@@ -32,6 +33,7 @@ class JobsTable extends BaseController
         $this->global['pageTitle'] = 'Talend Job Seeker : Jobs Table';
 
         $data["jobs"] = $this->model->listJobs();
+        $data["role"] = $this->isManager();
         
         $this->loadViews("JobsTable", $this->global, $data, NULL);
     }
@@ -54,19 +56,201 @@ class JobsTable extends BaseController
      */
     function delete()
     {
-        if($this->isAdmin() == TRUE)
+        if($this->isManager() == TRUE)
         {
             echo(json_encode(array('status'=>'access')));
         }
         else
         {
             $id = $this->input->post('userId');
-            $userInfo = array('isDeleted'=>1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s'));
+            $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s'));
             
             $result = $this->model->deleteUser($id);
             
             if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
             else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
+        }
+    }
+
+
+      /**
+     * This function is used to load the add new form
+     */
+    function addNewJob()
+    {
+        if($this->isManager() == TRUE)
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            $this->load->model('user_model');
+            $data['roles'] = $this->user_model->getUserRoles();
+            
+            $this->global['pageTitle'] = 'Talend Job Seeker : Add New Job';
+
+            $this->loadViews("addNewJob", $this->global, $data, NULL);
+        }
+    }
+
+
+      /**
+     * This function is used to add new user to the system
+     */
+    function addNewJobInsert()
+    {
+        if($this->isManager() == TRUE)
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            $this->load->library('form_validation');
+            
+            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
+            $this->form_validation->set_rules('job_component','Job Component Name','trim|required|max_length[20]');
+            $this->form_validation->set_rules('file_path','Repository','trim|required|max_length[20]');
+
+            if($this->form_validation->run() == FALSE)
+            {
+                $this->addNewJob();
+            }
+            else
+            {
+                $job_name = ucwords(strtolower($this->security->xss_clean($this->input->post('job_name'))));
+                $job_component = $this->security->xss_clean($this->input->post('job_component'));
+                $file_path = strtolower($this->security->xss_clean($this->input->post('file_path')));
+
+                
+                switch ($job_component) {
+                        case "tFileInputExcel":
+                            $component_type = "xlsx";
+                            break;
+                        case "tFileInputDelimited":
+                            $component_type = "csv";
+                            break;
+                        case "tFileInputJSON":
+                            $component_type = "json";
+                            break;
+                        case "tFileInputXML":
+                            $component_type = "xml";
+                            break;
+                    }
+                
+                $logs = array('job_name'=>$job_name, 'job_component'=>$job_component,'file_path' => $file_path, 'roleId'=>$roleId,
+                                     'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
+
+                $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'),
+                    'file_path' => $file_path, 'file' => 0, 'file_uploaded' => 0, 'owner'=>$this->name);
+                
+                $result = $this->model->addNewUserInsert($Info);
+                
+                if($result > 0)
+                {
+                    $this->session->set_flashdata('success', 'New Component Input created successfully !');
+                }
+                else
+                {
+                    $this->session->set_flashdata('error', 'Component Input creation failed');
+                }
+                
+                redirect('addNewJobInsert');
+            }
+        }
+    }
+
+
+     
+    function editOld($id = NULL)
+    {
+        if($this->isManager() == TRUE )
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            if($id == null)
+            {
+                redirect('userListing');
+            }
+            
+           
+            $data['job'] = $this->model->getJobs($id);
+            
+            $this->global['pageTitle'] = 'Talend Job Seeker : Edit Data';
+            
+            $this->loadViews("editOldJob", $this->global, $data, NULL);
+        }
+    }
+
+
+
+      /**
+     * This function is used to add new user to the system
+     */
+    function editJob()
+    {
+        if($this->isManager() == TRUE)
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            $this->load->library('form_validation');
+
+            $id = $this->input->post('job_id');
+            
+            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
+            $this->form_validation->set_rules('job_component','Job Component Name','trim|required|max_length[20]');
+            $this->form_validation->set_rules('file_path','Repository','trim|required|max_length[20]');
+
+            if($this->form_validation->run() == FALSE)
+            {
+                $this->addNewJob();
+            }
+            else
+            {
+                $job_name = ucwords(strtolower($this->security->xss_clean($this->input->post('job_name'))));
+                $job_component = $this->security->xss_clean($this->input->post('job_component'));
+                $file_path = strtolower($this->security->xss_clean($this->input->post('file_path')));
+
+                
+                switch ($job_component) {
+                        case "tFileInputExcel":
+                            $component_type = "xlsx";
+                            break;
+                        case "tFileInputDelimited":
+                            $component_type = "csv";
+                            break;
+                        case "tFileInputJSON":
+                            $component_type = "json";
+                            break;
+                        case "tFileInputXML":
+                            $component_type = "xml";
+                            break;
+                    }
+                
+                $logs = array('job_name'=>$job_name, 'job_component'=>$job_component,'file_path' => $file_path, 'roleId'=>$roleId,
+                                     'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
+
+                $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'), 'file_path' => $file_path, 'owner'=>$this->name);
+
+                
+                $result = $this->model->editUser($Info, $id);
+              
+                
+                if($result == true)
+                {
+                    $this->session->set_flashdata('success', 'Job updated successfully');
+                }
+                else
+                {
+                    $this->session->set_flashdata('error', 'Job updation failed');
+                }
+                
+                
+                redirect('JobsTable');
+            }
         }
     }
     

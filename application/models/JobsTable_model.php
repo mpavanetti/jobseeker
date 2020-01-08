@@ -28,6 +28,36 @@ class JobsTable_model extends CI_Model
         
         return $this->db->affected_rows();
     }
+
+
+    function addNewUserInsert($Info)
+    {
+        $this->db->trans_start();
+        $this->db->insert('job_info', $Info);
+        
+        $insert_id = $this->db->insert_id();
+        
+        $this->db->trans_complete();
+        
+        return $insert_id;
+    }
+
+    function getJobs($id = 0)
+    {
+        $this->db->where('id',$id);
+        $sql = $this->db->get('job_info');
+        //return $sql->result();
+        return $sql->row();
+    }
+
+
+    function editUser($Info, $id)
+    {
+        $this->db->where('id', $id);
+        $this->db->update('job_info', $Info);
+        
+        return TRUE;
+    }
     
 }
 
