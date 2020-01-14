@@ -117,9 +117,11 @@ class JobsTable extends BaseController
             }
             else
             {
-                $job_name = ucwords(strtolower($this->security->xss_clean($this->input->post('job_name'))));
+                $job_name = $this->security->xss_clean($this->input->post('job_name'));
                 $job_component = $this->security->xss_clean($this->input->post('job_component'));
                 $file_path = strtolower($this->security->xss_clean($this->input->post('file_path')));
+                $file = $this->security->xss_clean($this->input->post('file'));
+                $file_name = $this->input->post('file_name'); 
 
                      
             // Test if string contains the word 
