@@ -1,4 +1,9 @@
  <?php // print_r($jobs) ?>
+ <script>
+  $(document).ready(function(){
+    $('body').addClass('sidebar-collapse')
+  });
+</script>
 
  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
@@ -44,6 +49,7 @@
                   <th>Component Type</th>
                   <th>Repository</th>
                   <th>Type</th>
+                  <th>File Name</th>
                   <th>File Uploaded</th>
                   <th>Owner</th>
                   <?php if($role != 1) {  ?><th>Action</th><?php } ?>
@@ -64,10 +70,11 @@
                         <td><?php echo $record->component_type ?></td>
                         <td><?php echo $record->file_path ?></td>
                         <td><?php echo ($record->file === '1') ? 'File' : 'Folder' ?></td>
-                        <td><?php if ($record->file_uploaded === '0') { echo 'None yet';} else {echo $record->file_uploaded;} ?></td>
+                        <td><?php echo ($record->file_name == NULL) ? 'Not Available' : $record->file_name; ?></td>
+                        <td><?php echo ($record->file_uploaded === '0') ? 'None yet' : $record->file_uploaded; ?></td>
                         <td><?php echo $record->owner ?></td>
                        <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-info" href="<?php echo base_url().'JobsTable/editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'JobsTable/editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
@@ -85,6 +92,7 @@
                   <th>Component Type</th>
                   <th>Repository</th>
                   <th>Type</th>
+                  <th>File Name</th>
                   <th>File Uploaded</th>
                   <th>Owner</th>
                   <?php if($role != 1) {  ?><th>Action</th><?php } ?>
