@@ -166,12 +166,14 @@
             job_name :{ required : true },
             job_component :{ required : true },
             file :{ required : true },
+            file_name :{ required : true },
             file_path :{ required : true },
         },
         messages:{
             job_name :{ required : "This field is required" },
             job_component :{ required : "This field is required" },    
             file :{ required : "This field is required" }, 
+            file_name :{ required : "This field is required" }, 
             file_path :{ required : "This field is required" },            
         }
     });
@@ -201,7 +203,7 @@
   $("#file"). change(function(){
     var file_name = $(this). children("option:selected"). val();
         if(file_name === '1'){
-            $(".filename").html('<div class ="filenameAppend"> <div class="form-group"><label for="file_name">File Name</label><input type="text" class="form-control required" id="file_name" value="<?php echo $job->file_name ?>" name="file_name" maxlength="128"></div></div>');
+            $(".filename").html('<div class ="filenameAppend"> <div class="form-group"><label for="file_name">File Name</label><input type="text" class="form-control required" id="file_name" value="<?php echo $job->file_name ?>" name="file_name" maxlength="128" required></div></div>');
         } else {
             $(".filenameAppend").remove();
         }
