@@ -25,14 +25,16 @@
     <!-- Alertify Js -->
     <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/alertify.min.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
-
+    <!-- jQuery UI -->
+    <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.min.css" rel="stylesheet" type="text/css" />
+    <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
     <style>
     	.error{
     		color:red;
     		font-weight: normal;
     	}
     </style>
-    <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
     <script type="text/javascript">
         var baseURL = "<?php echo base_url(); ?>";
     </script>
@@ -155,7 +157,7 @@
             <li>
               <a href="<?php echo base_url(); ?>JobsTable" >
                 <i class="fa fa-table"></i>
-                <span>Database Table</span>
+                <span>Available Components</span>
               </a>
             </li>
             <li>
@@ -174,6 +176,12 @@
               <a href="#" >
                 <i class="fa fa-list"></i>
                 <span>Console Job Logs</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>GenericSettings" >
+                <i class="fa fa-cogs"></i>
+                <span>Generic Settings</span>
               </a>
             </li>
           </ul>

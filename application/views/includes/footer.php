@@ -19,6 +19,8 @@
     <script src="<?php echo base_url(); ?>assets/bower_components/datatables.net-bs/js/dataTables.bootstrap.min.js" type="text/javascript"></script>
     <!-- Alertify JS -->
     <script src="<?php echo base_url(); ?>assets/plugins/alertify/alertify.min.js" type="text/javascript"></script>
+    <!-- jQuery UI -->
+    <script src="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.min.js" type="text/javascript"></script>
 
     <script type="text/javascript">
         $(document).ready(function(){
