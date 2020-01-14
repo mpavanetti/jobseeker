@@ -58,6 +58,20 @@ class JobsTable_model extends CI_Model
         
         return TRUE;
     }
+
+    // Validations
+     function validateComponent($job_name, $job_component, $file_path) {
+
+        $this->db->select('*');
+        $this->db->from('job_info');
+        $this->db->where('job_name', $job_name);
+        $this->db->where('job_component', $job_component);
+        $this->db->where('file_path', $file_path);
+
+        $query = $this->db->get();
+        return $query->num_rows();
+    }
+
     
 }
 
