@@ -43,7 +43,19 @@ class Upload_model extends CI_Model
 
     function listComponentPath($jobname, $component, $type) {
 
-        $this->db->select('file_path');
+        $this->db->select('*');
+        $this->db->from('job_info');
+        $this->db->where('job_name', $jobname);
+        $this->db->where('job_component', $component);
+        $this->db->where('component_type', $type);
+
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function listAll($jobname, $component, $type) {
+
+        $this->db->select('file_name');
         $this->db->from('job_info');
         $this->db->where('job_name', $jobname);
         $this->db->where('job_component', $component);
