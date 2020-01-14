@@ -225,26 +225,31 @@ class JobsTable extends BaseController
                 $file = $this->security->xss_clean($this->input->post('file'));
                 $file_name = $this->input->post('file_name');   
 
-                
-                switch ($job_component) {
-                        case "tFileInputExcel":
-                            $component_type = "xlsx";
-                            break;
-                        case "tFileInputDelimited":
-                            $component_type = "csv";
-                            break;
-                        case "tFileInputJSON":
-                            $component_type = "json";
-                            break;
-                        case "tFileInputXML":
-                            $component_type = "xml";
-                            break;
-                    }
-                
+            if( $file_name == '' || $file_name == ' '){
+                $file_name == NULL;
+            }
+                     
+            // Test if string contains the word 
+            if(strpos($job_component, 'tFileInputExcel') !== false){
+                $component_type = "xlsx";
+            } else if(strpos($job_component, 'tFileInputDelimited') !== false) {
+                $component_type = "csv";
+            } else if (strpos($job_component, 'tFileInputJSON') !== false) {
+                $component_type = "json";
+            } else if (strpos($job_component, 'tFileInputXML') !== false) {
+                $component_type = "xml";
+            } else {
+                $component_type = "None";
+            }
+
+
+           // $validateComponent = $this->model->validateComponent($job_name, $job_component, $file_path);
+                            
                 $logs = array('job_name'=>$job_name, 'job_component'=>$job_component,'file_path' => $file_path, 'roleId'=>$roleId,
                                      'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
 
-                $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'), 'file_path' => $file_path, 'owner'=>$this->name);
+                $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'),
+                    'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name, 'owner'=>$this->name);
 
                 
                 $result = $this->model->editUser($Info, $id);
