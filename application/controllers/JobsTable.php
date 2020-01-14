@@ -205,11 +205,10 @@ class JobsTable extends BaseController
         {
             $this->load->library('form_validation');
 
-            $id = $this->input->post('job_id');
             
             $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('job_component','Job Component Name','trim|required|max_length[20]');
-            $this->form_validation->set_rules('file_path','Repository','trim|required|max_length[20]');
+            $this->form_validation->set_rules('job_component','Job Component Name','trim|required|max_length[30]');
+            $this->form_validation->set_rules('file_path','Repository','trim|required|max_length[30]');
 
             if($this->form_validation->run() == FALSE)
             {
