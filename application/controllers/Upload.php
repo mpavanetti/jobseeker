@@ -87,6 +87,19 @@ class Upload extends BaseController
 
     }
 
+    public function listAll($jobname, $component, $type) {
+     header('Content-Type: application/json');
+
+      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+
+      $listAll = $this->model->listAll($jobname, $component, $type);
+
+      print_r(json_encode($listAll, JSON_PRETTY_PRINT));
+
+      
+    }
+
     public function Path($jobname, $component, $type) {
      header('Content-Type: application/json');
 
