@@ -132,52 +132,29 @@
                 <div class="form-group">
                   <label>Repository</label>
                   <input type="text" class="form-control"  id="job-filePath" name="job-filePath" required="required" autocomplete="off" disabled> 
-                  
                 </div>
+
+                <div id="file-form">
+                </div>
+
+                <div id="file-name-form">
+                </div>
+
                   <div id="file-input">
                 </div>
               </div>
               <!-- /.box-body -->
-
               <div id="box-footer">
               </div>
 
             </form>
           </div>
           <!-- /.box --> 
-          <div id="seta" class="text-right animated fadeInLeft" style="display:none;">
-          <img src="<?php echo base_url(); ?>assets/images/seta-azul-direita.png" alt="Seta" style="transform: rotate(-15deg);">
+          <div id="for-seta">
           </div>
       </div>
 
-
-        <div class="col-md-6">
-          <!-- general form elements -->
-          <div class="box box-secondary animated fadeIn" id="box-dropzone" style="display:none;">
-            <div class="box-header with-border">
-              <h3 class="box-title">File Upload</h3>
-            </div>
-            <!-- /.box-header -->
-            <!-- form start -->
-              <div class="box-body" style="padding: 20px;  height: 262px;">
-                <DIV id="dropzone">
-                <form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" 
-      method="post" style="height: 220px;">
-                   <DIV class="dz-message needsclick">   
-                    <img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;">
-                    <h3><b>Drop files here or click to upload.</b></h3><BR>
-                  </DIV>
-                </form>
-              </DIV> 
-              </div>
-              <!-- /.box-body -->
-
-              <div class="box-footer">
-                <button id="submit" class="btn btn-success">Send Files</button>
-                
-              </div>
-          </div>
-          <!-- /.box --> 
+      <div id="coluna" class="col-md-6" >
       </div>
 
         </div><!-- Row -->
@@ -211,7 +188,11 @@
 
         // Populate Job Name Field
         $("#job-name").ready(function() { 
-        $('#job-name').empty();  
+        $('#job-name').empty();
+        $('#seta').remove(); 
+        $('#drop').remove(); 
+        $('.file-form').remove();
+        $('.file-name-form').remove();
 
         $('#job-name').append($('<option>', {
                 value: 0,
@@ -242,6 +223,11 @@
     $('#job-component').empty();
     $('#job-fileType').empty();
     $('#job-filePath').val('');
+    $('#seta').remove();
+    $('#drop').remove();
+    $('.file-form').remove();
+    $('.file-name-form').remove();
+
 
      $('#job-component').append($('<option>', {
                 value: 0,
@@ -280,6 +266,10 @@
     $("#job-component").change(function(){
     $('#job-fileType').empty();
     $('#job-filePath').val('');
+    $('#drop').remove();
+    $('#seta').remove();
+    $('.file-form').remove();
+    $('.file-name-form').remove();
 
     $('#job-fileType').append($('<option>', {
                 value: 0,
@@ -335,17 +325,80 @@
               var json = JSON.parse(data);   
                $.each(json, function(i, item) {
                 var newJson = (json[i].file_path);
-                  console.log(newJson);
+                var file = (json[i].file);
+                var fileName = (json[i].file_name);
+                
+                //  console.log(newJson);
+                 // console.log('Filename: ' + fileName);
+                // console.log(json)
+
+                $('#file-form').append($('<div class="form-group file-form" style="display:none;"><label>File Type</label><input type="text" class="form-control"  id="file" name="file" autocomplete="off" disabled></div>'))
+
+                if(fileName != null) {
+
+                  $('#file-name-form').append($('<div class="form-group file-name-form"><label>File Name</label><input type="text" class="form-control"  id="file-name" name="file-name" autocomplete="off" disabled></div>'))
+                }
+
+                 
+                // console.log('File: ' + file);
+
                 $('#job-filePath').val(newJson);
-                $('#seta').show();
+
+                $('#file').val(file);
+                
+                $('#file-name').val(fileName);
+                
+                $('#for-seta').append($('<div id="seta" class="text-right animated fadeInLeft"><img src="<?php echo base_url(); ?>assets/images/seta-azul-direita.png" alt="Seta" style="transform: rotate(-15deg);"></div>'))
+
+                $('#coluna').append($('<div id="drop" class="box box-secondary animated fadeIn" id="box-dropzone"><div class="box-header with-border"><h3 class="box-title">File Upload</h3></div><div class="box-body" style="padding: 20px;  height: 262px;"><DIV id="dropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop files here or click to upload.</b></h3><BR></DIV></form></DIV></div></div>'));
+                
+                $("#job-fileType option[value= 0]").remove();
                 toastr.success("Right ! Form Completed", "Success")
                 toastr.info("Now Click on the box below to upload your file.", "Info")
-                $('#box-dropzone').show();
-                     })
+                    })
+                var type = '.' + $("#job-fileType").val();
+             // console.log(type);
+
+              var fileType = $('#file').val();
+             // console.log(fileType)
+
+              if(fileType == 1){
+
+              var fileName = $('#file-name').val() + type;  
+             // console.log(fileName)
+
+              }
+
+              var kind = $("#job-fileType").val();
+
+              $("#mydropzone").dropzone({
+
+                      maxFiles: 20000,
+                      acceptedFiles: type,
+                      url: "<?php echo base_url(); ?>upload/do_upload/",
+
+                     accept: function(file, done) {
+                    if(fileType == 2){
+                      done();
+                      toastr.success("Your File <b>"+ file.name +"</b> has been successfully Uploaded", "Success")
+                    }
+
+                else if (file.name == fileName && file.name != null) {
+                 done();
+                 toastr.success("Your File <b>"+ file.name +"</b> has been successfully Uploaded", "Success")
+                }
+                else { 
+                  done('Error ! Invalid File Detected, Please Check the file name, the required file is: ' + fileName );
+                  toastr.error("Your file does NOT match which the required file, please try again.<br><b>Required: "+ fileName + "<br> Provided: " + file.name + " </b>", "Error");
+
+                 }
+              }
+                  });
                 }
           });
 
     })
+
     var path = $('#job-filePath').val();
 
     
@@ -416,20 +469,11 @@
 <script type="text/javascript">
 
    $("#job-fileType").change(function(){
-  var type = '.' + $("#job-fileType").val();
-  console.log(type);
-
-    $("#mydropzone").dropzone({
-            maxFiles: 20000,
-            acceptedFiles: type,
-            url: "<?php echo base_url(); ?>upload/do_upload/",
-             
-            success: function (file, response) {
-                toastr.success("Your File has been successfully saved.", "Success")
-            }
-        });
+ 
   
 });
+
+  
 
    Dropzone.autoDiscover = false;
 
