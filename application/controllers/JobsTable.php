@@ -141,7 +141,12 @@ class JobsTable extends BaseController
                                      'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
 
                 $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'),
-                    'file_path' => $file_path, 'file' => 0, 'file_uploaded' => 0, 'owner'=>$this->name);
+                    'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name,'file_uploaded' => 0, 'owner'=>$this->name);
+
+                if($validateComponent > 0){
+
+                    $this->session->set_flashdata('error', 'Component Input creation failed, The component seems to be already registered, Please choose another fill another value on form.');
+                } else {
                 
                 $result = $this->model->addNewUserInsert($Info);
                 
