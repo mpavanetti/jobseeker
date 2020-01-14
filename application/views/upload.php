@@ -178,7 +178,6 @@
             $('#form').hide();
             $('#loading').fadeIn(1500);
             $('#loading').delay(5500).fadeOut(1500);
-           // $('#form').delay(8500).fadeIn(1000);
 
             setTimeout(function() {
               location.reload();
@@ -207,7 +206,6 @@
           var json = JSON.parse(data);  
            $.each(json, function(i, item) {
             var newJson = (json[i].job_name);
-           // console.log(newJson);
             $('#job-name').append($('<option>', {
                 value: newJson,
                 text: newJson
@@ -246,7 +244,6 @@
               var json = JSON.parse(data);   
                $.each(json, function(i, item) {
                 var newJson = (json[i].job_component);
-               // console.log(newJson)
                 $('#job-component').append($('<option>', {
                     value: newJson,
                     text: newJson
@@ -257,7 +254,6 @@
             
           });
         var component = $("#job-component").val();
-      //  console.log(component)
 
       } 
 })
@@ -278,9 +274,6 @@
 
     var name = $("#job-name").val();
     var component = $("#job-component").val();
-
-
-    //console.log(id);
 
     if (name != 0 && component != 0) {
 
@@ -328,10 +321,6 @@
                 var file = (json[i].file);
                 var fileName = (json[i].file_name);
                 
-                //  console.log(newJson);
-                 // console.log('Filename: ' + fileName);
-                // console.log(json)
-
                 $('#file-form').append($('<div class="form-group file-form" style="display:none;"><label>File Type</label><input type="text" class="form-control"  id="file" name="file" autocomplete="off" disabled></div>'))
 
                 if(fileName != null) {
@@ -339,40 +328,32 @@
                   $('#file-name-form').append($('<div class="form-group file-name-form"><label>File Name</label><input type="text" class="form-control"  id="file-name" name="file-name" autocomplete="off" disabled></div>'))
                 }
 
-                 
-                // console.log('File: ' + file);
 
                 $('#job-filePath').val(newJson);
 
                 $('#file').val(file);
                 
                 $('#file-name').val(fileName);
-                
-                $('#for-seta').append($('<div id="seta" class="text-right animated fadeInLeft"><img src="<?php echo base_url(); ?>assets/images/seta-azul-direita.png" alt="Seta" style="transform: rotate(-15deg);"></div>'))
 
-                $('#coluna').append($('<div id="drop" class="box box-secondary animated fadeIn" id="box-dropzone"><div class="box-header with-border"><h3 class="box-title">File Upload</h3></div><div class="box-body" style="padding: 20px;  height: 262px;"><DIV id="dropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop files here or click to upload.</b></h3><BR></DIV></form></DIV></div></div>'));
+                $('#coluna').append($('<div id="drop" class="box box-secondary animated fadeIn" id="box-dropzone"><div class="box-header with-border"><h3 class="box-title">File Upload</h3></div><div class="box-body" style="padding: 20px;  height: 262px;"><DIV id="dropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop files here or click to upload.</b></h3><BR></DIV></form></DIV></div></div><div id="seta" class="text-left animated fadeInLeft" style=" margin-top: 60px; margin-left: 10px; margin-bottom: 30px;"><img src="<?php echo base_url(); ?>assets/images/seta-azul-direita.png" alt="Seta" style="transform: rotate(-40deg);"></div>'));
                 
                 $("#job-fileType option[value= 0]").remove();
                 toastr.success("Right ! Form Completed", "Success")
                 toastr.info("Now Click on the box below to upload your file.", "Info")
                     })
                 var type = '.' + $("#job-fileType").val();
-             // console.log(type);
 
               var fileType = $('#file').val();
-             // console.log(fileType)
 
               if(fileType == 1){
 
               var fileName = $('#file-name').val() + type;  
-             // console.log(fileName)
 
               }
 
               var kind = $("#job-fileType").val();
 
               $("#mydropzone").dropzone({
-
                       maxFiles: 20000,
                       acceptedFiles: type,
                       url: "<?php echo base_url(); ?>upload/do_upload/",
@@ -400,8 +381,6 @@
     })
 
     var path = $('#job-filePath').val();
-
-    
 
     // Count Jobs
      $("#jobs-registered").ready(function() { 
@@ -446,8 +425,6 @@
 });
 
 
-
-
  // Count components types registered
      $("#componentType-registered").ready(function() { 
       
@@ -470,12 +447,8 @@
 
    $("#job-fileType").change(function(){
  
-  
 });
 
-  
-
    Dropzone.autoDiscover = false;
-
 
 </script>
