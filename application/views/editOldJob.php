@@ -3,7 +3,7 @@
     <section class="content-header">
       <h1>
         <i class="fa fa-users"></i> Job Management
-        <small>EditJob</small>
+        <small>Edit Input Component</small>
       </h1>
     </section>
     
@@ -11,7 +11,7 @@
         <div class="row">
             <div class="col-xs-12 text-left">
                 <div class="form-group">
-                    <a class="btn btn-warning" href="<?php echo base_url(); ?>JobsTable">Back</a>
+                    <a class="btn btn-warning" href="<?php echo base_url(); ?>JobsTable"><i class="fa fa-arrow-left" aria-hidden="true"></i> Back</a>
                 </div>
             </div>
         </div>
@@ -22,7 +22,7 @@
               
                 <div class="box box-primary">
                     <div class="box-header">
-                        <h3 class="box-title">Enter Job Component Details</h3>
+                        <h3 class="box-title">Enter the input component details</h3>
                     </div><!-- /.box-header -->
                     <!-- form start -->
                     <?php $this->load->helper("form"); ?>
@@ -84,7 +84,7 @@
                         </div><!-- /.box-body -->
     
                         <div class="box-footer">
-                            <input type="submit" class="btn btn-warning" value="Update" />
+                            <input type="submit" class="btn btn-primary" value="Update" />
                         </div>
                     </form>
                 </div>
