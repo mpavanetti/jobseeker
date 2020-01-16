@@ -157,7 +157,7 @@
             <li>
               <a href="<?php echo base_url(); ?>JobsTable" >
                 <i class="fa fa-table"></i>
-                <span>Available Components</span>
+                <span>Input Components</span>
               </a>
             </li>
             <li>
