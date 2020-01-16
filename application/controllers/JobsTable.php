@@ -137,11 +137,6 @@ class JobsTable extends BaseController
                 $component_type = "None";
             }
 
-              if ($file == 1){
-                $newComponent_Type = $component_type;
-              }  else {
-                $newComponent_Type = NULL;
-              }
 
 
             $validateComponent = $this->model->validateComponent($job_name, $job_component, $file_path);
