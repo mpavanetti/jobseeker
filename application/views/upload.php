@@ -341,7 +341,7 @@
                 toastr.success("Right ! Form Completed", "Success")
                 toastr.info("Now Click on the box below to upload your file.", "Info")
                     })
-                var type = '.' + $("#job-fileType").val();
+                var type = $("#job-fileType").val();
 
               var fileType = $('#file').val();
 
