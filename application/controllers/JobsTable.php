@@ -126,13 +126,13 @@ class JobsTable extends BaseController
                      
             // Test if string contains the word 
             if(strpos($job_component, 'tFileInputExcel') !== false){
-                $component_type = "xlsx";
+                $component_type = ".xlsx";
             } else if(strpos($job_component, 'tFileInputDelimited') !== false) {
-                $component_type = "csv";
+                $component_type = ".csv";
             } else if (strpos($job_component, 'tFileInputJSON') !== false) {
-                $component_type = "json";
+                $component_type = ".json";
             } else if (strpos($job_component, 'tFileInputXML') !== false) {
-                $component_type = "xml";
+                $component_type = ".xml";
             } else {
                 $component_type = "None";
             }
@@ -231,13 +231,13 @@ class JobsTable extends BaseController
                      
             // Test if string contains the word 
             if(strpos($job_component, 'tFileInputExcel') !== false){
-                $component_type = "xlsx";
+                $component_type = ".xlsx";
             } else if(strpos($job_component, 'tFileInputDelimited') !== false) {
-                $component_type = "csv";
+                $component_type = ".csv";
             } else if (strpos($job_component, 'tFileInputJSON') !== false) {
-                $component_type = "json";
+                $component_type = ".json";
             } else if (strpos($job_component, 'tFileInputXML') !== false) {
-                $component_type = "xml";
+                $component_type = ".xml";
             } else {
                 $component_type = "None";
             }
