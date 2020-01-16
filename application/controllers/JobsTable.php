@@ -126,13 +126,13 @@ class JobsTable extends BaseController
                      
             // Test if string contains the word 
             if(strpos($job_component, 'tFileInputExcel') !== false){
-                $component_type = "xlsx";
+                $component_type = ".xlsx";
             } else if(strpos($job_component, 'tFileInputDelimited') !== false) {
-                $component_type = "csv";
+                $component_type = ".csv";
             } else if (strpos($job_component, 'tFileInputJSON') !== false) {
-                $component_type = "json";
+                $component_type = ".json";
             } else if (strpos($job_component, 'tFileInputXML') !== false) {
-                $component_type = "xml";
+                $component_type = ".xml";
             } else {
                 $component_type = "None";
             }
@@ -145,7 +145,9 @@ class JobsTable extends BaseController
                                      'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
 
                 $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'),
-                    'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name,'file_uploaded' => 0, 'owner'=>$this->name);
+                    'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name,
+                    'path' => '/repository/talend/input/'.$file_path.'/'.$file_name.$newComponent_Type,
+                    'file_uploaded' => 0, 'owner'=>$this->name);
 
                 if($validateComponent > 0){
 
@@ -231,25 +233,31 @@ class JobsTable extends BaseController
                      
             // Test if string contains the word 
             if(strpos($job_component, 'tFileInputExcel') !== false){
-                $component_type = "xlsx";
+                $component_type = ".xlsx";
             } else if(strpos($job_component, 'tFileInputDelimited') !== false) {
-                $component_type = "csv";
+                $component_type = ".csv";
             } else if (strpos($job_component, 'tFileInputJSON') !== false) {
-                $component_type = "json";
+                $component_type = ".json";
             } else if (strpos($job_component, 'tFileInputXML') !== false) {
-                $component_type = "xml";
+                $component_type = ".xml";
             } else {
                 $component_type = "None";
             }
 
+            if ($file == 1){
+                $newComponent_Type = $component_type;
+              }  else {
+                $newComponent_Type = NULL;
+              }
 
-           // $validateComponent = $this->model->validateComponent($job_name, $job_component, $file_path);
                             
                 $logs = array('job_name'=>$job_name, 'job_component'=>$job_component,'file_path' => $file_path, 'roleId'=>$roleId,
                                      'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
 
                 $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'),
-                    'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name, 'owner'=>$this->name);
+                    'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name,
+                    'path' => '/repository/talend/input/'.$file_path.'/'.$file_name.$newComponent_Type,
+                     'owner'=>$this->name);
 
                 
                 $result = $this->model->editUser($Info, $id);
