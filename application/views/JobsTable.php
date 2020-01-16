@@ -10,13 +10,13 @@
     <!-- Content Header (Page header) -->
     <section class="content-header">
       <h1>
-        Jobs Table
+        Input Components
         <small>advanced tables</small>
       </h1>
       <ol class="breadcrumb">
         <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
-        <li><a href="#">Tables</a></li>
-        <li class="active">Data tables</li>
+        <li><a href="#">Extract Transform and Load</a></li>
+        <li class="active">Input Components</li>
       </ol>
     </section>
 
@@ -35,7 +35,7 @@
         <div class="col-xs-12">
           <div class="box box-primary">
             <div class="box-header">
-              <h3 class="box-title">Available Jobs and components</h3>
+              <h3 class="box-title">Available Jobs and Input Components</h3>
             </div>
             <!-- /.box-header -->
             <div class="box-body">

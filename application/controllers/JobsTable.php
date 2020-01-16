@@ -30,7 +30,7 @@ class JobsTable extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : Jobs Table';
+        $this->global['pageTitle'] = 'Talend Job Seeker : Input Components';
 
         $data["jobs"] = $this->model->listJobs();
         $data["role"] = $this->isManager();
