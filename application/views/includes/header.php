@@ -156,8 +156,14 @@
           <ul class="treeview-menu">
             <li>
               <a href="<?php echo base_url(); ?>JobsTable" >
-                <i class="fa fa-table"></i>
+                <i class="fa fa-caret-square-o-up"></i>
                 <span>Input Components</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>JobsTable/outputTable" >
+                <i class="fa fa-caret-square-o-down"></i>
+                <span>Output Components</span>
               </a>
             </li>
             <li>
