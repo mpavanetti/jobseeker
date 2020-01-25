@@ -89,10 +89,23 @@ $route['resetPasswordConfirmUser/(:any)'] = "login/resetPasswordConfirmUser/$1";
 $route['resetPasswordConfirmUser/(:any)/(:any)'] = "login/resetPasswordConfirmUser/$1/$2";
 $route['createPasswordUser'] = "login/createPasswordUser";
 
+#Input and Output Settings
 
 $route['deleteJobInput'] = "JobsTable/delete";
 $route['addNewJob'] = "JobsTable/addNewJob";
 $route['addNewJobInsert'] = "JobsTable/addNewJobInsert";
 $route['addNewJobEdit'] = "JobsTable/editJob";
+$route['deleteOutput'] = "JobsTable/deleteOutput";
+
+# Generic Settings
+
+$route['AddSettings'] = "GenericSettings/AddSettings";
+$route['InsertGenericSettings'] = "GenericSettings/insertGenericSetting";
+$route['DeleteGenericSettings'] = "GenericSettings/deleteGenericSetting";
+$route['updateGenericSetting'] = "GenericSettings/updateGenericSetting";
+
+
+
+
 /* End of file routes.php */
 /* Location: ./application/config/routes.php */
