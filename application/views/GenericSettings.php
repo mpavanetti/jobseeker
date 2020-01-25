@@ -26,7 +26,7 @@
     <div class="row">
             <div class="col-xs-12 text-left">
                 <div class="form-group">
-                    <a class="btn btn-primary" href="<?php echo base_url(); ?>addNewJob"><i class="fa fa-plus"></i> Add New Setting</a>
+                    <a class="btn btn-primary" href="<?php echo base_url(); ?>AddSettings"><i class="fa fa-plus"></i> Add New Setting</a>
                 </div>
             </div>
         </div> 
@@ -45,7 +45,7 @@
                   <th>Id</th>
                   <th>Creation Date</th>
                   <th>Job Name</th>
-                  <th>Setting</th>
+                  <th>Setting Name</th>
                   <th>Value 1</th>
                   <th>Value 2</th>
                   <th>Value 3</th>
@@ -76,7 +76,7 @@
                         <td><?php echo $record->description ?></td>
                         <td><?php echo $record->owner ?></td>
                        <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'JobsTable/editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'GenericSettings/EditSettingsFetchData/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
@@ -90,7 +90,7 @@
                   <th>Id</th>
                   <th>Creation Date</th>
                   <th>Job Name</th>
-                  <th>Setting</th>
+                  <th>Setting Name</th>
                   <th>Value 1</th>
                   <th>Value 2</th>
                   <th>Value 3</th>
@@ -121,10 +121,10 @@
   jQuery(document).on("click", ".deleteUser", function(){
     
     var userId = $(this).data("userid"),
-      hitURL = baseURL + "deleteJobInput" ,
+      hitURL = baseURL + "DeleteGenericSettings" ,
       currentRow = $(this);
    
-    alertify.confirm('Input Delete Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this input permanently ?</b></p></div></div></div>', 
+    alertify.confirm('Generic Setting Delete Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this Generic Setting permanently ?</b></p></div></div></div>', 
       function(){ 
         jQuery.ajax({
       type : "POST",
@@ -134,7 +134,7 @@
       }).done(function(data){
         console.log(data);
         currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your input has been successfully deleted !'); }
+        if(data.status = true) { alertify.success('Your Generic Setting has been successfully deleted !'); }
         else if(data.status = false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
@@ -146,7 +146,6 @@
   );
     
   
-    
   });
   
   
