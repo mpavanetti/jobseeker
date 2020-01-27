@@ -39,7 +39,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table id="table" class="table table-bordered table-striped">
+              <table id="table2" class="table table-bordered table-striped">
                 <thead>
                 <tr>
                   <th>Id</th>

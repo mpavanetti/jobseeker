@@ -24,8 +24,18 @@
 
     <script type="text/javascript">
         $(document).ready(function(){
+            $('#table2').DataTable( {
+            "scrollX": true,
+            columnDefs: [
+            { width: 50, targets: 11 },
+            { width: 200, targets: 9 }
+        ],
+
+            "order": [[ 1, "desc" ]]
+        } );
+
             $('#table').DataTable( {
-            "order": [[ 0, "desc" ]]
+            "order": [[ 1, "desc" ]]
         } );
         });
     </script>

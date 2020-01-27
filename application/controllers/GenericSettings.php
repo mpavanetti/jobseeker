@@ -93,12 +93,12 @@ class GenericSettings extends BaseController
             
             $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
             $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[30]');
-            $this->form_validation->set_rules('value2','Value 2','trim|max_length[30]');
-            $this->form_validation->set_rules('value3','Value 3','trim|max_length[30]');
-            $this->form_validation->set_rules('value4','Value 4','trim|max_length[30]');
-            $this->form_validation->set_rules('value5','Value 5','trim|max_length[30]');
-            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[1000]');
+            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[3000]');
+            $this->form_validation->set_rules('value2','Value 2','trim|max_length[3000]');
+            $this->form_validation->set_rules('value3','Value 3','trim|max_length[3000]');
+            $this->form_validation->set_rules('value4','Value 4','trim|max_length[3000]');
+            $this->form_validation->set_rules('value5','Value 5','trim|max_length[3000]');
+            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[3000]');
 
             if($this->form_validation->run() == FALSE)
             {
@@ -172,12 +172,12 @@ class GenericSettings extends BaseController
             
             $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
             $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[30]');
-            $this->form_validation->set_rules('value2','Value 2','trim|max_length[30]');
-            $this->form_validation->set_rules('value3','Value 3','trim|max_length[30]');
-            $this->form_validation->set_rules('value4','Value 4','trim|max_length[30]');
-            $this->form_validation->set_rules('value5','Value 5','trim|max_length[30]');
-            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[1000]');
+            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[3000]');
+            $this->form_validation->set_rules('value2','Value 2','trim|max_length[3000]');
+            $this->form_validation->set_rules('value3','Value 3','trim|max_length[3000]');
+            $this->form_validation->set_rules('value4','Value 4','trim|max_length[3000]');
+            $this->form_validation->set_rules('value5','Value 5','trim|max_length[3000]');
+            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[3000]');
 
             if($this->form_validation->run() == FALSE)
             {
