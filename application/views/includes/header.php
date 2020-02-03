@@ -173,7 +173,7 @@
               </a>
             </li>
             <li>
-              <a href="#" >
+              <a href="<?php echo base_url(); ?>jobExecution" >
                 <i class="fa fa-play"></i>
                 <span>Job Execution</span>
               </a>
@@ -209,12 +209,6 @@
               </a>
             </li>
             <li>
-              <a href="<?php echo base_url(); ?>Jenkins">
-                <i class="fa fa-server"></i>
-                <span>Jenkins Manager</span>
-              </a>
-            </li>
-            <li>
               <a href="<?php echo base_url(); ?>Cloud">
                 <i class="fa fa-cloud"></i>
                 <span>Cloud Enviroment</span>
@@ -225,6 +219,12 @@
             if($role == ROLE_ADMIN)
             {
             ?>
+            <li>
+              <a href="http://localhost:8080" target="_blank">
+                <i class="fa fa-server"></i>
+                <span>Jenkins Manager</span>
+              </a>
+            </li>
             <li>
               <a href="<?php echo base_url(); ?>userListing">
                 <i class="fa fa-users"></i>
