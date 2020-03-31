@@ -134,7 +134,7 @@
                   </div>
                   <!-- /.progress-group -->
                   <div class="progress-group readyGraph animated ">
-                    <span class="progress-text">Successfuly ready Jobs</span>
+                    <span class="progress-text">Successfully ready Jobs</span>
                     <span class="progress-number" id="readyGraph"><b></b></span>
 
                     <div class="progress sm">
@@ -168,7 +168,7 @@
             <div class="box-footer">
               <div class="row">
                 <div class="col-sm-12 col-xs-12">
-                  <span class="text-center"><h5><b>Growth X Decline on Month</b></h5></span>
+                  <span class="text-center"><h5><b>Growth X Decline in 30 days</b></h5></span>
                 </div>
                 
                 <hr>
@@ -217,13 +217,13 @@
 
 
 
-          <div class="row" style="margin-top: 30px;">
+          <div class="row">
 
                <!-- Div last jobs -->
             <div class="col-lg-6 col-xs-6">
                 <div class="box box-primary">
             <div class="box-header with-border">
-              <h3 class="box-title">Recently Added Products</h3>
+              <h3 class="box-title">Recently Added Jobs</h3>
 
               <div class="box-tools pull-right">
                 <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
@@ -234,62 +234,82 @@
             <!-- /.box-header -->
             <div class="box-body">
               <ul class="products-list product-list-in-box">
+                 <?php
+                    if(!empty($lastJobs))
+                    {
+                        foreach($lastJobs as $record)
+                        {
+                    ?>
+                <!-- item -->
                 <li class="item">
                   <div class="product-img">
-                    <img src="dist/img/default-50x50.gif" alt="Product Image">
+                    <?php 
+                      switch ($record->status) {
+                        case 'ready':
+                          echo '<img src="assets/images/items/ready.png" alt="Ready">';
+                          break;
+
+                        case 'error':
+                          echo '<img src="assets/images/items/error.png" alt="Error">';
+                          break;
+
+                          case 'warning':
+                          echo '<img src="assets/images/items/warning.png" alt="Warning">';
+                          break;
+
+                          case 'running':
+                          echo '<img src="assets/images/items/running.png" alt="Running">';
+                          break;
+                        
+                        default:
+                          echo '<img src="assets/images/items/404.png" alt="Error 404">';
+                          break;
+                      }
+                    ?>
                   </div>
                   <div class="product-info">
-                    <a href="javascript:void(0)" class="product-title">Samsung TV
-                      <span class="label label-warning pull-right">$1800</span></a>
-                    <span class="product-description">
-                          Samsung 32" 1080p 60Hz LED Smart HDTV.
-                        </span>
+                    <a href="javascript:void(0)" class="product-title"><?php echo $record->job_name ?>
+                    <?php 
+                      switch ($record->status) {
+                        case 'ready':
+                          echo '<span class="label label-success pull-right">Ready</span>';
+                          break;
+
+                        case 'error':
+                          echo '<span class="label label-danger pull-right">Error</span>';
+                          break;
+
+                          case 'warning':
+                          echo '<span class="label label-warning pull-right">Warning</span>';
+                          break;
+
+                          case 'running':
+                          echo '<span class="label label-primary pull-right">Running</span>';
+                          break;
+                        
+                        default:
+                          echo '<span class="label label-danger pull-right">404 Error</span>';
+                          break;
+                      }
+                    ?>
+                    </a>
+                    <span class="product-description"> <?php echo $record->event_text ?> </span>
+                    <span class="product-description"> <?php if ($record->records_processed != 0) { echo $record->records_processed.' Rows Were Affected.'; }?> 
+                    </span>
+
                   </div>
                 </li>
                 <!-- /.item -->
-                <li class="item">
-                  <div class="product-img">
-                    <img src="dist/img/default-50x50.gif" alt="Product Image">
-                  </div>
-                  <div class="product-info">
-                    <a href="javascript:void(0)" class="product-title">Bicycle
-                      <span class="label label-info pull-right">$700</span></a>
-                    <span class="product-description">
-                          26" Mongoose Dolomite Men's 7-speed, Navy Blue.
-                        </span>
-                  </div>
-                </li>
-                <!-- /.item -->
-                <li class="item">
-                  <div class="product-img">
-                    <img src="dist/img/default-50x50.gif" alt="Product Image">
-                  </div>
-                  <div class="product-info">
-                    <a href="javascript:void(0)" class="product-title">Xbox One <span class="label label-danger pull-right">$350</span></a>
-                    <span class="product-description">
-                          Xbox One Console Bundle with Halo Master Chief Collection.
-                        </span>
-                  </div>
-                </li>
-                <!-- /.item -->
-                <li class="item">
-                  <div class="product-img">
-                    <img src="dist/img/default-50x50.gif" alt="Product Image">
-                  </div>
-                  <div class="product-info">
-                    <a href="javascript:void(0)" class="product-title">PlayStation 4
-                      <span class="label label-success pull-right">$399</span></a>
-                    <span class="product-description">
-                          PlayStation 4 500GB Console (PS4)
-                        </span>
-                  </div>
-                </li>
-                <!-- /.item -->
+                 <?php
+                        }
+                    }
+                 ?>
+             
               </ul>
             </div>
             <!-- /.box-body -->
             <div class="box-footer text-center">
-              <a href="javascript:void(0)" class="uppercase">View All Products</a>
+              <a href="<?php echo base_url(); ?>tmf" class="uppercase">View All Jobs</a>
             </div>
             <!-- /.box-footer -->
           </div>
@@ -300,7 +320,7 @@
             <div class="col-lg 6 col-xs-6">
                 <div class="box box-primary">
             <div class="box-header with-border">
-              <h3 class="box-title">Browser Usage</h3>
+              <h3 class="box-title">Job Percent Report</h3>
 
               <div class="box-tools pull-right">
                 <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
@@ -313,19 +333,23 @@
               <div class="row">
                 <div class="col-md-8">
                   <div class="chart-responsive">
-                    <canvas id="pieChart" height="210" width="438" style="width: 438px; height: 210px;"></canvas>
+                    <canvas id="pieChart" height="500" width="600" style="width: 600px; height: 500px;"></canvas>
                   </div>
                   <!-- ./chart-responsive -->
                 </div>
                 <!-- /.col -->
                 <div class="col-md-4">
                   <ul class="chart-legend clearfix">
-                    <li><i class="fa fa-circle-o text-red"></i> Chrome</li>
-                    <li><i class="fa fa-circle-o text-green"></i> IE</li>
-                    <li><i class="fa fa-circle-o text-yellow"></i> FireFox</li>
-                    <li><i class="fa fa-circle-o text-aqua"></i> Safari</li>
-                    <li><i class="fa fa-circle-o text-light-blue"></i> Opera</li>
-                    <li><i class="fa fa-circle-o text-gray"></i> Navigator</li>
+                    <li><i class="fa fa-circle-o text-green"></i> Ready</li>
+                    <li><i class="fa fa-circle-o text-red"></i> error</li>
+                    <li><i class="fa fa-circle-o text-yellow"></i> Warning</li>
+                    <li><i class="fa fa-circle-o text-aqua"></i> Running</li>
+                  </ul>
+                </div>
+                <div class="col-md-4">
+                  <ul class="chart-legend clearfix" style="margin-top: 120px;">
+                    <li id="totalJobs"> </li>
+                    <li>Represents 100%</li>
                   </ul>
                 </div>
                 <!-- /.col -->
@@ -333,24 +357,28 @@
               <!-- /.row -->
             </div>
             <!-- /.box-body -->
-            <div class="box-footer no-padding">
+            <div class="box-footer" style="padding: 9px;">
               <ul class="nav nav-pills nav-stacked">
-                <li><a href="#">United States of America
-                  <span class="pull-right text-red"><i class="fa fa-angle-down"></i> 12%</span></a></li>
-                <li><a href="#">India <span class="pull-right text-green"><i class="fa fa-angle-up"></i> 4%</span></a>
-                </li>
-                <li><a href="#">China
-                  <span class="pull-right text-yellow"><i class="fa fa-angle-left"></i> 0%</span></a></li>
+                <li><a href="#">Percent of <b class="text-green">Ready</b> from total
+                  <span class="pull-right" id="pecentTotalReady"> </span></a></li>
+
+                <li><a href="#">Percent of <b class="text-red">Error</b> from total
+                  <span class="pull-right" id="pecentTotalError"> </span></a></li>
+
+                  <li><a href="#">Percent of <b class="text-yellow">Warning</b> from total
+                  <span class="pull-right" id="pecentTotalWarning"> </span></a></li>
+
+                  <li><a href="#">Percent of <b class="text-blue">Running</b> from total
+                  <span class="pull-right" id="pecentTotalRunning"> </span></a></li>
+               
               </ul>
             </div>
             <!-- /.footer -->
           </div>
 
-            </div>
-            <!-- End Div Graficos -->
-
-
-          </div>
+        </div>
+        <!-- End Div Graficos -->
+      </div>
 
         
     </section>
@@ -461,6 +489,7 @@ function runningGraph(result) {
          $('.runningGraph').addClass("fadeIn");
          $('#runningGraph').append('<b>' + data + ' / ' + result + '</b>');
          $("#runningGraphBar").css("width", bar);
+         $('#pecentTotalRunning').append('<b>' + Math.round(((data*100) / result)) + ' %</b>');
         }
     });
 
@@ -485,6 +514,9 @@ function readyGraph(result) {
          $('.readyGraph').addClass("fadeIn");
          $('#readyGraph').append('<b>' + data + ' / ' + result + '</b>');
          $("#readyGraphBar").css("width", bar);
+
+          $('#pecentTotalReady').append('<b>' + Math.round(((data*100) / result)) + ' %</b>');
+          $('#totalJobs').append('Total of: <b>' + result + '</b> Jobs');
         }
     });
 
@@ -509,6 +541,7 @@ function warningGraph(result) {
          $('.warningGraph').addClass("fadeIn");
          $('#warningGraph').append('<b>' + data + ' / ' + result + '</b>');
          $("#warningGraphBar").css("width", bar);
+         $('#pecentTotalWarning').append('<b>' + Math.round(((data*100) / result)) + ' %</b>');
         }
     });
 
@@ -533,6 +566,7 @@ function errorGraph(result) {
          $('.errorGraph').addClass("fadeIn");
          $('#errorGraph').append('<b>' + data + ' / ' + result + '</b>');
          $("#errorGraphBar").css("width", bar);
+         $('#pecentTotalError').append('<b>' + Math.round(((data*100) / result)) + ' %</b>');
         }
     });
 
@@ -655,6 +689,14 @@ var warningGrowth = request2.data.warningGrowth.map(function(e) {
   });
 
 var runningGrowth = request2.data.runningGrowth.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var statusLabel = request2.data.statusGraph.map(function(e) {
+     return e.STATUS;
+  });
+
+var statusAmount = request2.data.statusGraph.map(function(e) {
      return e.AMOUNT;
   });
 
@@ -813,6 +855,37 @@ var myChart = new Chart(ctx, {
         }
       }
 });
+
+
+ // Pie Chart NCM Updaters
+    var ctx1 = document.getElementById('pieChart').getContext('2d');
+  var myChart = new Chart(ctx1, {
+    type: 'doughnut',
+    data: {
+        labels: ['Error','Ready','Running','Warning'],
+        datasets: [{
+            label: 'Top Updaters',
+            data: statusAmount,
+            backgroundColor: [
+                'rgba(221, 75, 57, 1)',
+                'rgba(0, 166, 90, 1)',
+                'rgba(0, 192, 239, 1)',
+                'rgba(243, 156, 18, 1)'
+                
+            ],
+            borderColor: [
+                'rgba(221, 75, 57, 1)',
+                'rgba(0, 166, 90, 1)',
+                'rgba(0, 192, 239, 1)',
+                'rgba(243, 156, 18, 1)'
+                
+            ],
+            borderWidth: 1
+        }]
+    },
+   
+});// END Pie Chart NCM Updaters  
+
 
  });
 

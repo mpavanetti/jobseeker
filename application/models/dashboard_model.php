@@ -4,6 +4,16 @@
 class Dashboard_model extends CI_Model
 {
 
+	function getLastjobs() {
+
+        $this->db->select('status,job_name,event_text,records_processed');
+        $this->db->from('tmf');
+        $this->db->order_by('id', 'DESC');
+        $this->db->limit(5);
+        $query = $this->db->get();
+        return $query->result();
+    }
+
     function listStatus($status) {
 
         $this->db->select('*');
@@ -77,6 +87,11 @@ class Dashboard_model extends CI_Model
 
     function runningGrowth(){
     	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "RUNNING" AND MONTH(last_Activity) - 1 GROUP BY STATUS, MONTH(last_activity)');
+        return $query->result();
+    }
+
+    function statusGraph(){
+    	$query = $this->db->query('SELECT STATUS, COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY STATUS');
         return $query->result();
     }
 

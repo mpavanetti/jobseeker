@@ -31,8 +31,10 @@ class Dashboard extends BaseController
     {
 
         $this->global['pageTitle'] = 'Talend Job Seeker : Dashboard';
+
+        $data["lastJobs"] = $this->model->getLastjobs();
         
-        $this->loadViews("dashboard", $this->global, NULL, NULL);
+        $this->loadViews("dashboard", $this->global, $data, NULL);
     }
 
     public function query($status){
@@ -76,6 +78,7 @@ class Dashboard extends BaseController
         $errorGrowth = $this->model->errorGrowth();
         $warningGrowth = $this->model->warningGrowth();
         $runningGrowth = $this->model->runningGrowth();
+        $statusGraph = $this->model->statusGraph();
 
         $result["data"] = array(
 
@@ -87,7 +90,8 @@ class Dashboard extends BaseController
             'readyGrowth' => $readyGrowth,
             'errorGrowth' => $errorGrowth,
             'warningGrowth' => $warningGrowth,
-            'runningGrowth' => $runningGrowth
+            'runningGrowth' => $runningGrowth,
+            'statusGraph' => $statusGraph
 
         );
 
