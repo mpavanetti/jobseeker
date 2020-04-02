@@ -95,6 +95,46 @@ class Dashboard_model extends CI_Model
         return $query->result();
     }
 
+    function jobsAmount() {
+    	$query = $this->db->query('SELECT JOB_NAME,DIMENSION,COUNT(job_name) AS AMOUNT FROM tmf GROUP BY job_name,dimension ORDER BY DIMENSION ASC');
+    	return $query->result();
+    }
+
+    function jobsStatusAmount() {
+    	$query = $this->db->query('SELECT JOB_NAME,DIMENSION,STATUS,COUNT(STATUS) AS AMOUNT FROM tmf GROUP BY JOB_NAME,DIMENSION,STATUS ORDER BY DIMENSION ASC');
+    	return $query->result();
+    }
+
+    function stgTableAmount() {
+    	$query = $this->db->query('SELECT id AS STG FROM tmf WHERE job_name LIKE UPPER("%STG%")');
+    	return $query->num_rows();
+    }
+
+    function dimTableAmount() {
+    	$query = $this->db->query('SELECT id AS DIM FROM tmf WHERE job_name LIKE UPPER("%DIM%")');
+    	return $query->num_rows();
+    }
+
+     function factTableAmount() {
+    	$query = $this->db->query('SELECT job_name AS FACT FROM tmf WHERE job_name LIKE UPPER("%MET%") OR job_name LIKE UPPER("%METRIC%") OR job_name LIKE UPPER("%FATO%") OR job_name LIKE UPPER("%FAT%") OR job_name LIKE UPPER("%FACT%")');
+    	return $query->num_rows();
+    }
+
+    function dwAmount() {
+    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  job_name LIKE UPPER("%DW%")');
+    	return $query->num_rows();
+    }
+
+    function dmAmount() {
+    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  job_name LIKE UPPER("%DM%")');
+    	return $query->num_rows();
+    }
+
+    function dmAmountExec() {
+    	$query = $this->db->query('SELECT DIMENSION, COUNT(DIMENSION) AS AMOUNT FROM tmf WHERE  job_name LIKE UPPER("%DW%") GROUP BY DIMENSION');
+    	return $query->result();
+    }
+
 
 
     

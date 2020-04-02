@@ -90,7 +90,7 @@
                 <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
                 </button>
                 <div class="btn-group">
-                  <button type="button" class="btn btn-box-tool dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+                  <!--<button type="button" class="btn btn-box-tool dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
                     <i class="fa fa-wrench"></i></button>
                   <ul class="dropdown-menu" role="menu">
                     <li><a href="#">Action</a></li>
@@ -98,7 +98,7 @@
                     <li><a href="#">Something else here</a></li>
                     <li class="divider"></li>
                     <li><a href="#">Separated link</a></li>
-                  </ul>
+                  </ul> -->
                 </div>
                 <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
               </div>
@@ -215,10 +215,7 @@
             </div>
           </div>
 
-
-
           <div class="row">
-
                <!-- Div last jobs -->
             <div class="col-lg-6 col-xs-6">
                 <div class="box box-primary">
@@ -321,7 +318,6 @@
                 <div class="box box-primary">
             <div class="box-header with-border">
               <h3 class="box-title">Job Percent Report</h3>
-
               <div class="box-tools pull-right">
                 <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
                 </button>
@@ -378,6 +374,227 @@
 
         </div>
         <!-- End Div Graficos -->
+      </div>
+
+      <div class="row">
+        <div class="col-lg-6 col-md-6 col-xs-6">
+          <div class="box box-info">
+            <div class="box-header">
+              <h3 class="box-title">Available job execution amount</h3>
+              <div class="box-tools pull-right">
+                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
+                </button>
+                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
+              </div>
+            </div>
+            <!-- /.box-header -->
+            <div class="box-body">
+              <table class="table table-bordered table-striped dataTable">
+                <thead>
+                <tr>
+                  <th>Job Name</th>
+                  <th>Dimension</th>
+                  <th>Amount</th>
+                </tr>
+                </thead>
+                <tbody>
+                  <?php
+                    if(!empty($jobsAmount))
+                    {
+                        foreach($jobsAmount as $record)
+                        {
+                    ?>
+                    <tr>
+                      <td><?php echo $record->JOB_NAME ?></td>
+                        <td><?php echo $record->DIMENSION ?></td>
+                        <td><?php echo $record->AMOUNT ?></td>
+                    </tr>
+                    <?php
+                        }
+                    }
+                    ?>
+                </tbody>
+                <tfoot>
+                 <tr>
+                  <th>Job Name</th>
+                  <th>Dimension</th>
+                  <th>Amount</th>
+                </tr>
+                </tfoot>
+              </table>
+            </div>
+            <!-- /.box-body -->
+          </div>
+          <!-- /.box -->
+        </div>
+
+        <div class="col-lg-6 col-md-6 col-xs-6">
+          <div class="box box-info">
+            <div class="box-header">
+              <h3 class="box-title">Available status amount per jobs</h3>
+              <div class="box-tools pull-right">
+                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
+                </button>
+                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
+              </div>
+            </div>
+            <!-- /.box-header -->
+            <div class="box-body">
+              <table class="table table-bordered table-striped dataTable">
+                <thead>
+                <tr>
+                  <th>Job Name</th>
+                  <th>Dimension</th>
+                  <th>Status</th>
+                  <th>Amount</th>
+                </tr>
+                </thead>
+                <tbody>
+                  <?php
+                    if(!empty($jobsStatusAmount))
+                    {
+                        foreach($jobsStatusAmount as $record)
+                        {
+                    ?>
+                    <tr>
+                      <td><?php echo $record->JOB_NAME ?></td>
+                        <td><?php echo $record->DIMENSION ?></td>
+                        <td><?php 
+                      switch ($record->STATUS) {
+                        case 'ready':
+                          echo '<span class="label label-success">Ready</span>';
+                          break;
+
+                        case 'error':
+                          echo '<span class="label label-danger">Error</span>';
+                          break;
+
+                          case 'warning':
+                          echo '<span class="label label-warning">Warning</span>';
+                          break;
+
+                          case 'running':
+                          echo '<span class="label label-primary">Running</span>';
+                          break;
+                        
+                        default:
+                          echo '<span class="label label-danger">404 Error</span>';
+                          break;
+                      }
+                    ?></td>
+                        <td><?php echo $record->AMOUNT ?></td>
+                    </tr>
+                    <?php
+                        }
+                    }
+                    ?>
+                </tbody>
+                <tfoot>
+                 <tr>
+                  <th>Job Name</th>
+                  <th>Dimension</th>
+                  <th>Status</th>
+                  <th>Amount</th>
+                </tr>
+                </tfoot>
+              </table>
+            </div>
+            <!-- /.box-body -->
+          </div>
+          <!-- /.box -->
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 15px;">
+        <div class="col-lg-12 col-xs-12">
+          <div class="box box-solid" style="padding: 10px; box-shadow: 10px 10px 5px -4px rgba(0,0,0,0.75);">
+            <div class="text-center">
+              <h4><b>Data Warehouse and Data Marts</b></h4>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="row" style="margin-top: 15px;">
+        <div class="col-md-3 col-sm-6 col-xs-12">
+          <div class="info-box">
+            <span class="info-box-icon bg-aqua"><i class="fa fa-bar-chart"></i></span>
+
+            <div class="info-box-content">
+              <span class="info-box-text">Data Warehouses</span>
+              <small>Loads</small>
+              <span class="info-box-number" id="dwAmount"></span>
+            </div>
+            <!-- /.info-box-content -->
+          </div>
+          <!-- /.info-box -->
+        </div>
+        <!-- /.col -->
+        <div class="col-md-3 col-sm-6 col-xs-12">
+          <div class="info-box">
+            <span class="info-box-icon bg-red"><i class="fa fa-database"></i></span>
+
+            <div class="info-box-content">
+              <span class="info-box-text">Dimensions Tables</span>
+              <small>Loads</small>
+              <span class="info-box-number" id="dimTableAmount"></span>
+            </div>
+            <!-- /.info-box-content -->
+          </div>
+          <!-- /.info-box -->
+        </div>
+        <!-- /.col -->
+
+        <!-- fix for small devices only -->
+        <div class="clearfix visible-sm-block"></div>
+
+        <div class="col-md-3 col-sm-6 col-xs-12">
+          <div class="info-box">
+            <span class="info-box-icon bg-green"><i class="fa fa-database"></i></span>
+
+            <div class="info-box-content">
+              <span class="info-box-text">Facts Tables</span>
+              <small>Loads</small>
+              <span class="info-box-number" id="factTableAmount"></span>
+            </div>
+            <!-- /.info-box-content -->
+          </div>
+          <!-- /.info-box -->
+        </div>
+        <!-- /.col -->
+        <div class="col-md-3 col-sm-6 col-xs-12">
+          <div class="info-box">
+            <span class="info-box-icon bg-yellow"><i class="fa fa-database"></i></span>
+
+            <div class="info-box-content">
+              <span class="info-box-text">Stagging Tables</span>
+              <small>Loads</small>
+              <span class="info-box-number" id="stgTableAmount"></span>
+            </div>
+            <!-- /.info-box-content -->
+          </div>
+          <!-- /.info-box -->
+        </div>
+        <!-- /.col -->
+      </div>
+
+      <div class="row" style="margin-top: 15px;">
+        <div class="col-lg-12 col-md-12 col-xs-12">
+          <div class="box box-primary">
+            <div class="box-header">
+              <h4>Data Warehouse and Data Marts Execution</h4>
+              <div class="box-tools pull-right">
+                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
+                </button>
+                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
+              </div>
+            </div>
+            <div class="box-body">
+              <canvas id="dwChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas> 
+            </div>
+          </div>
+        </div>
       </div>
 
         
@@ -573,7 +790,6 @@ function errorGraph(result) {
 }
 
 
-
   $(document).ready(function(){
 
     var result;
@@ -598,16 +814,37 @@ function errorGraph(result) {
   warningGraph(result);
   errorGraph(result);
 
- //setInterval(running,30000);
- //setInterval(ready,30000);
- //setInterval(warning,30000);
- //setInterval(error,30000);
- //setInterval(runningGraph,30000,result);
- //setInterval(readyGraph,30000,result);
- //setInterval(warningGraph,30000,result);
- //setInterval(errorGraph,30000,result);
 
 
+var tableAmount = $.parseJSON($.ajax({
+      contentType: "application/json",
+        url:  '<?php echo base_url(); ?>Dashboard/getAmount',
+        dataType: "json", 
+        async: false,
+        beforeSend: function() {
+        },
+        success: function() {
+        },
+        complete: function(data) {
+            dateRequest = data;
+        }
+
+    }).responseText);
+
+
+$('#dwAmount').append('<b>' + tableAmount.data.dwAmount + ' </b>');
+$('#dimTableAmount').append('<b>' + tableAmount.data.dimTableAmount + ' </b>');
+$('#factTableAmount').append('<b>' + tableAmount.data.factTableAmount + ' </b>');
+$('#stgTableAmount').append('<b>' + tableAmount.data.stgTableAmount + ' </b>');
+
+
+ var dmAmountExecLabel = tableAmount.data.dmAmountExec.map(function(e) {
+     return e.DIMENSION;
+  });
+
+ var dmAmountExecAmount = tableAmount.data.dmAmountExec.map(function(e) {
+     return e.AMOUNT;
+  });
 
 var dateRequest = $.parseJSON($.ajax({
       contentType: "application/json",
@@ -630,8 +867,6 @@ var dateRequest = $.parseJSON($.ajax({
 var lastDate = moment(dateRequest.data.lastDate[0].last_activity).format('dddd, MMMM Do YYYY');
 
 
-//console.log(firstdate);
-//console.log(lastDate);
 
 $('#date').append('<b>From: </b>' + firstdate + '<b> To: </b>' + lastDate);
 
@@ -857,7 +1092,7 @@ var myChart = new Chart(ctx, {
 });
 
 
- // Pie Chart NCM Updaters
+ // Pie Chart 
     var ctx1 = document.getElementById('pieChart').getContext('2d');
   var myChart = new Chart(ctx1, {
     type: 'doughnut',
@@ -884,7 +1119,60 @@ var myChart = new Chart(ctx, {
         }]
     },
    
-});// END Pie Chart NCM Updaters  
+});// END Pie Chart
+
+console.log(dmAmountExecLabel);
+console.log(dmAmountExecAmount);
+var ctx2 = document.getElementById('dwChart').getContext('2d');
+var myChart = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+        labels: dmAmountExecLabel,
+        datasets: [{
+            label: 'Execution Amount',
+            data: dmAmountExecAmount,
+           backgroundColor: 'rgba(51, 122, 183, 1)',
+            borderColor: 'rgba(51, 122, 183, 1)',
+            hoverBackgroundColor: 'rgba(51, 122, 184, 1)',
+            hoverBorderColor: 'rgba(51, 122, 184, 1)',
+            borderWidth: 3
+        }]
+    },
+    options: {
+        responsive: true,
+        tooltips: {
+          mode: 'index',
+          intersect: false,
+        },
+        hover: {
+          mode: 'nearest',
+          intersect: true
+        },
+        scales: {
+          xAxes: [{
+            display: true,
+            scaleLabel: {
+              display: true,
+              labelString: 'Data Warehouses / Data Marts'
+            }
+          }],
+          yAxes: [{
+            ticks: {
+                suggestedMin: 0
+            },
+            display: true,
+            scaleLabel: {
+              display: true,
+              labelString: 'Amount of Execution',
+              
+            }
+          }]
+        }
+      }
+});
+
+
+
 
 
  });
