@@ -33,6 +33,8 @@ class Dashboard extends BaseController
         $this->global['pageTitle'] = 'Talend Job Seeker : Dashboard';
 
         $data["lastJobs"] = $this->model->getLastjobs();
+        $data["jobsAmount"] = $this->model->jobsAmount();
+        $data["jobsStatusAmount"] = $this->model->jobsStatusAmount();
         
         $this->loadViews("dashboard", $this->global, $data, NULL);
     }
@@ -109,6 +111,31 @@ class Dashboard extends BaseController
 
             'firstDate' => $firstDate,
             'lastDate' => $lastDate
+
+        );
+
+        print_r(JSON_encode($result, JSON_PRETTY_PRINT));
+
+    }
+
+    public function getAmount(){
+        header('Content-Type: application/json');
+
+        $stgTableAmount = $this->model->stgTableAmount();
+        $dimTableAmount = $this->model->dimTableAmount();
+        $factTableAmount = $this->model->factTableAmount();
+        $dwAmount = $this->model->dwAmount();
+        $dmAmount = $this->model->dmAmount();
+        $dmAmountExec = $this->model->dmAmountExec();
+
+         $result["data"] = array(
+
+            'stgTableAmount' => $stgTableAmount,
+            'dimTableAmount' => $dimTableAmount,
+            'factTableAmount' => $factTableAmount,
+            'dwAmount' => $dwAmount,
+            'dmAmount' => $dmAmount,
+            'dmAmountExec' => $dmAmountExec
 
         );
 
