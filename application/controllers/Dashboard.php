@@ -128,6 +128,10 @@ class Dashboard extends BaseController
         $dmAmount = $this->model->dmAmount();
         $dmAmountExec = $this->model->dmAmountExec();
 
+        $dimAmountExec = $this->model->dimAmountExec();
+        $factAmountExec = $this->model->factAmountExec();
+        $stgAmountExec = $this->model->stgAmountExec();
+
          $result["data"] = array(
 
             'stgTableAmount' => $stgTableAmount,
@@ -135,7 +139,10 @@ class Dashboard extends BaseController
             'factTableAmount' => $factTableAmount,
             'dwAmount' => $dwAmount,
             'dmAmount' => $dmAmount,
-            'dmAmountExec' => $dmAmountExec
+            'dmAmountExec' => $dmAmountExec,
+            'dimAmountExec' => $dimAmountExec,
+            'factAmountExec' => $factAmountExec,
+            'stgAmountExec' => $stgAmountExec
 
         );
 
