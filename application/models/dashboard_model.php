@@ -135,6 +135,24 @@ class Dashboard_model extends CI_Model
     	return $query->result();
     }
 
+    function dimAmountExec() {
+        $query = $this->db->query('SELECT job_name AS DIM, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%DIM%") GROUP BY job_name');
+        return $query->result();
+
+    }
+
+    function factAmountExec() {
+        $query = $this->db->query('SELECT job_name AS FACT, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%MET%") OR job_name LIKE UPPER("%METRIC%") OR job_name LIKE UPPER("%FATO%") OR job_name LIKE UPPER("%FAT%") OR job_name LIKE UPPER("%FACT%") GROUP BY job_name');
+        return $query->result();
+
+    }
+
+    function stgAmountExec() {
+        $query = $this->db->query('SELECT job_name AS STG, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%STG%") GROUP BY job_name');
+        return $query->result();
+
+    }
+
 
 
     
