@@ -91,7 +91,7 @@
 
           <!-- Aqui entra os graficos estastítisco -->
 
-          <div class="row" style="margin-top: 15px;">
+          <div class="row animated zoomIn" style="margin-top: 15px;">
             <div class="col-lg-12 col-xs-12">
               <div class="box box-primary">
             <div class="box-header with-border">
@@ -228,7 +228,7 @@
 
           <div class="row">
                <!-- Div last jobs -->
-            <div class="col-lg-6 col-xs-6">
+            <div class="col-lg-6 col-xs-6 animated fadeInLeft">
                 <div class="box box-primary">
             <div class="box-header with-border">
               <h3 class="box-title">Recently Added Jobs</h3>
@@ -325,7 +325,7 @@
             <!-- End Div last jobs -->
 
             <!-- Div Graficos -->
-            <div class="col-lg 6 col-xs-6">
+            <div class="col-lg 6 col-xs-6 animated fadeInRight">
                 <div class="box box-primary">
             <div class="box-header with-border">
               <h3 class="box-title">Job Percent Report</h3>
