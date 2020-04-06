@@ -85,6 +85,24 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
+    function fetchDataStatus($status) {
+
+        $this->db->select('*');
+        $this->db->from('tmf');
+        $this->db->where('status', $status);
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function fetchDataJobName($jobName) {
+
+        $this->db->select('*');
+        $this->db->from('tmf');
+        $this->db->where('job_name', $jobName);
+        $query = $this->db->get();
+        return $query->result();
+    }
+
     function listStatus() {
 
         $this->db->select('status');
