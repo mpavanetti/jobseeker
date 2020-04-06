@@ -71,6 +71,24 @@ class Tmf extends BaseController
         }        
     }
 
+    function fetchDataStatus($status)
+    {
+       
+            $data["jobs"] = $this->model->fetchDataStatus($status);
+            $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+            $this->loadViews("tmf", $this->global, $data, NULL);
+               
+    }
+
+     function fetchDataJobName($jobName)
+    {
+       
+            $data["jobs"] = $this->model->fetchDataJobName($jobName);
+            $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+            $this->loadViews("tmf", $this->global, $data, NULL);
+               
+    }
+
 
    
     
