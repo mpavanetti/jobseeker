@@ -9,7 +9,7 @@
     <section class="content-header">
       <h1>
         <i class="fa fa-dashboard"></i> Transaction Monitoring Framework <b>Query Builder</b>
-        <small>Log your talend data transactions</small>
+        <small>Log your data transactions</small>
       </h1>
       <ol class="breadcrumb">
         <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>

@@ -2,13 +2,7 @@
 
 require APPPATH . '/libraries/BaseController.php';
 
-/**
- * Class : Login (LoginController)
- * Login class to control to authenticate user credentials and starts user's session.
- * @author : Kishor Mali
- * @version : 1.1
- * @since : 15 November 2016
- */
+
 class Dashboard extends BaseController
 {
     /**
@@ -30,7 +24,7 @@ class Dashboard extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : Dashboard';
+        $this->global['pageTitle'] = 'Job Seeker : Dashboard';
 
         $data["lastJobs"] = $this->model->getLastjobs();
         $data["jobsAmount"] = $this->model->jobsAmount();
@@ -42,7 +36,7 @@ class Dashboard extends BaseController
     public function query($status){
 
         header('Content-Type: application/json');
-        $this->global['pageTitle'] = 'Talend Job Seeker : Query';
+        $this->global['pageTitle'] = 'Job Seeker : Query';
 
        $query = $this->model->listStatus($status);
 
@@ -55,7 +49,7 @@ class Dashboard extends BaseController
     public function result(){
 
         header('Content-Type: application/json');
-        $this->global['pageTitle'] = 'Talend Job Seeker : Query';
+        $this->global['pageTitle'] = 'Job Seeker : Query';
 
         $query = $this->model->countAll();
 
@@ -64,7 +58,6 @@ class Dashboard extends BaseController
         print_r($newQuery);
 
     }
-
 
     public function graphMonth(){
 
@@ -150,7 +143,6 @@ class Dashboard extends BaseController
 
     }
 
- 
     
 }
 

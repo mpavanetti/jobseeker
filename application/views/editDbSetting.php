@@ -71,7 +71,7 @@
                                 <div class="col-md-3">                                
                                     <div class="form-group">
                                         <label for="job_name">Job Name</label>
-                                        <input type="text" class="form-control required" value="<?php echo $fetch->job_name ?>" id="job_name" name="job_name" maxlength="20" required autocomplete="off">
+                                        <input type="text" class="form-control required" value="<?php echo $fetch->job_name ?>" id="job_name" name="job_name" maxlength="50" required autocomplete="off">
                                     </div>
                                 </div>
 
@@ -169,7 +169,7 @@
                         <p>
                             <b>For Job Name Input:</b>
                             <ul>
-                                <li>Write the Talend Job Name.</li>
+                                <li>Write the Job Name.</li>
                             </ul><br>
                             <b>Database Type</b>
                             <ul>

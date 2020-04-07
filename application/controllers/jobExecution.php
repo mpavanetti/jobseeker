@@ -2,13 +2,7 @@
 
 require APPPATH . '/libraries/BaseController.php';
 
-/**
- * Class : Login (LoginController)
- * Login class to control to authenticate user credentials and starts user's session.
- * @author : Matheus Pavanetti
- * @version : 1.0
- * @since : 27 january 2020
- */
+
 class jobExecution extends BaseController
 {
     /**
@@ -27,7 +21,7 @@ class jobExecution extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : Job Execution';
+        $this->global['pageTitle'] = 'Job Seeker : Job Execution';
 
      //   $data["GetJobs"] = $fetchObj;
         

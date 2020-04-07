@@ -152,11 +152,11 @@
                         <p>
                             <b>For Job Name Input:</b>
                             <ul>
-                                <li>Write the Talend Job Name.</li>
+                                <li>Write the Job Name.</li>
                             </ul><br>
                             <b>Setting Name</b>
                             <ul>
-                                <li>Type a custom Setting name to be called on Talend Data Integration.</li>
+                                <li>Type a custom Setting name to be called on Data Integrator.</li>
                             </ul><br>
                             <b>Values:</b>
                             <ul>
