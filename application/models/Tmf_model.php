@@ -136,6 +136,25 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
+    function getError($instanceId) {
+
+        $this->db->select('tmf_error.*');
+        $this->db->from('tmf_error');
+        $this->db->where('tmf_id', $instanceId);
+        $this->db->join('tmf', 'tmf_error.tmf_id = tmf.instance_id');
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function updateUser($instanceId,$name) {
+
+    	$this->db->set('username', $name, FALSE);
+		$this->db->where('instance_id', $instanceId);
+		$this->db->update('tmf'); 
+
+
+    }
+
 
 
 
