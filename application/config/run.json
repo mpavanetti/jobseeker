@@ -1,0 +1,9 @@
+{
+    "jenkins": {
+        "url": "http://localhost:8080/",
+        "username": "matheus",
+        "token": "***REMOVED***",
+        "authorization": "Basic"
+		
+    }
+}

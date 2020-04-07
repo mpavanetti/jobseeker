@@ -47,6 +47,17 @@ class BaseController extends CI_Controller {
 			$this->global ['role'] = $this->role;
 			$this->global ['role_text'] = $this->roleText;
 			$this->global ['last_login'] = $this->lastLogin;
+
+			// load Jenkins credentials
+			$loadJson = file_get_contents(base_url().'application/config/run.json');
+			$jsonToArray = json_decode($loadJson);
+
+			// Set global var to be used on Controllers
+			$this->global ['jenkins_url'] = $jsonToArray->jenkins->url;
+			$this->global ['jenkins_username'] = $jsonToArray->jenkins->username;
+			$this->global ['jenkins_token'] = $jsonToArray->jenkins->token;
+			$this->global ['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
+
 		}
 	}
 	
