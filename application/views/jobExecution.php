@@ -13,8 +13,8 @@
     <section class="content">
        
       <div class="row" style="margin-top: 10px;">
-         <div class="col-xs-6">
-                <div class="box">
+         <div class="col-lg-6 col-md-6 col-xs-12">
+                <div class="box box-primary">
                     <div class="box-header with-border">
                         <div class="box-tools pull-right">
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
@@ -35,8 +35,8 @@
                 </div>
                </div>
 
-            <div class="col-xs-6">
-                <div class="box">
+            <div class="col-lg-6 col-md-6 col-xs-12">
+                <div class="box box-primary">
                     <div class="box-header with-border">
                         <div class="box-tools pull-right">
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
@@ -89,16 +89,23 @@
 
 <script type="text/javascript">
     $(document).ready(function(){
-       // console.log("ready")
 
-        var username = "matheus";
-        var apiToken = "11883b9bbf07ade64064dc291d899c34cc";
         var delay = 15000;
 
+        // get Jenkins credentials
+        var jenkins_url = '<?php echo $jenkins_url; ?>';
+        var jenkins_username = '<?php echo $jenkins_username; ?>';
+        var jenkins_token = '<?php echo $jenkins_token; ?>';
+        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+
     $.ajax({
-          url:'http://localhost:8080/api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
+          url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
           method: 'GET',
-          headers: {'Authorization': 'Basic ' + btoa('matheus:11883b9bbf07ade64064dc291d899c34cc')}
+          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+          beforeSend: function() {
+           
+            $('.overlay').show();
+        }
         }).done(function(data) {
 
            $.each(data["jobs"], function (key, item) {
@@ -110,6 +117,8 @@
                 text: newJson
                 }))
             });
+
+           $('.overlay').hide();
 
         }).fail(function() {
           console.error(arguments);
@@ -126,9 +135,9 @@
         } else {
              $('.overlay').show();
              $.ajax({
-          url:'http://localhost:8080/job/'+ job +'/build',
+          url: jenkins_url + 'job/'+ job +'/build',
           method: 'POST',
-          headers: {'Authorization': 'Basic ' + btoa('matheus:11883b9bbf07ade64064dc291d899c34cc')},
+          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
            
             $('.overlay').show();
@@ -145,9 +154,9 @@
         var info = function() {
 
             $.ajax({
-              url:'http://localhost:8080/job/'+ job +'/lastBuild/api/json?pretty=true',
+              url: jenkins_url + 'job/'+ job +'/lastBuild/api/json?pretty=true',
               method: 'GET',
-              headers: {'Authorization': 'Basic ' + btoa('matheus:11883b9bbf07ade64064dc291d899c34cc')},
+              headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               beforeSend: function() {
                
             }
@@ -191,9 +200,9 @@
                }
 
                $.ajax({
-              url:'http://localhost:8080/job/'+ job +'/lastBuild/consoleText',
+              url: jenkins_url + 'job/'+ job +'/lastBuild/consoleText',
               method: 'GET',
-              headers: {'Authorization': 'Basic ' + btoa('matheus:11883b9bbf07ade64064dc291d899c34cc')},
+              headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               beforeSend: function() {
 
             }
