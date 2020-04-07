@@ -52,6 +52,9 @@
       <div class="row" style="margin-top: 30px;">
         <div class="col-xs-12">
           <div class="box box-primary">
+            <div class="overlay" style="display:none;">
+                      <i class="fa fa-refresh fa-spin"></i>
+                    </div>
             <div class="box-header">
               <h3 class="box-title"><b>Available Jobs</b></h3>
             </div>
@@ -113,7 +116,7 @@
                       ?></td>
                       <td><?php echo $record->job_name ?></td>
                       <td><?php echo $record->dimension ?></td>
-                      <td ><?php echo ($record->reprocess == 1) ? '<a href="#" class="btn btn-success">Enable</a>' : 'Disabled' ?></td>
+                      <td ><?php echo ($record->reprocess == 1) ? '<a href="#" class="btn btn-success reprocess">Enable</a>' : 'Disabled' ?></td>
                       <td><?php echo $record->event_text ?></td>
                       <td><?php echo $record->records_total ?></td>
                       <td><?php echo $record->records_processed ?></td>
@@ -125,7 +128,7 @@
                         $interval = $d2->diff($d1);
                         echo $interval->format('%d days, %H hours, %I minutes, %S seconds');
                         ?></td>
-                       <td ><?php echo ($record->distict_errors == 1) ? '<a href="#" class="btn btn-danger">Error</a>' : 'None' ?></td>
+                       <td ><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect"> Show Error </a>' : 'None' ?></td>
                        <td ><?php echo ($record->warnings == 1) ? '<a href="#" class="btn btn-warning">Warning</a>' : 'None' ?></td>
                        <td><?php echo $record->hostname ?></td>
                        <td><?php echo $record->username ?></td>
@@ -171,6 +174,30 @@
     <!-- /.content -->
 </div> 
 
+<div class="modal modal-danger fade" id="modal-danger" style="display: none;">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">×</span></button>
+                <h4 class="modal-title">Error Description</h4>
+              </div>
+              <div class="modal-body">
+
+              <div id="modal-main">
+                
+              </div>
+
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline pull-left" data-dismiss="modal">Close</button>
+              </div>
+            </div>
+            <!-- /.modal-content -->
+          </div>
+          <!-- /.modal-dialog -->
+        </div>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script type="text/javascript">
     $(document).ready(function() {
 
@@ -218,6 +245,99 @@
 //  $('#main').delay(500).fadeIn();
 
 });
+
+
+
+$("#table6").on('click','.btnSelect',function(){
+
+
+         // get the current row Id, job name and instance id
+         var currentRow=$(this).closest("tr"); 
+         var instanceId=currentRow.find("td:last-child").text(); 
+         var jobName=currentRow.find("td:eq(2)").text();
+         var id=currentRow.find("td:eq(0)").text();
+
+
+         var ErrorList = $.parseJSON($.ajax({
+            contentType: "application/json",
+            url:  '<?php echo base_url(); ?>Tmf/getError/' + instanceId,
+            dataType: "json", 
+            async: false,
+            beforeSend: function() {
+             //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
+             $(".destroy").remove();
+            },
+            error: function() {
+               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
+            },
+
+            success: function() {
+            },
+            complete: function(data) {
+                dateRequest = data;
+            }
+
+         }).responseText);
+
+         $.each(ErrorList["data"], function(index, value){
+                // $("#result").append(index + ": " + value.id + '<br>');
+                  $("#modal-main").append('<div class="destroy"><h4>Error Id: <b>' + value.id + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ value.tmf_id +'</td></tr><tr><td>Job Name</td><td>'+ value.job_name +'</td></tr><tr><td>Moment</td><td>'+ moment(value.moment).format('dddd, MMMM Do YYYY, h:mm:ss') +'</td></tr><tr><td>Type</td><td>'+ value.type +'</td></tr><tr><td>Origin</td><td>'+ value.origin +'</td></tr><tr><td>Message</td><td>'+ value.message +'</td></tr></tbody></table><br></div>');
+                });
+
+         $('#modal-danger').modal('show');
+
+    });
+
+
+$("#table6").on('click','.reprocess',function(){
+
+
+         // get the current row Id, job name and instance id
+         var currentRow=$(this).closest("tr"); 
+         var instanceId=currentRow.find("td:last-child").text(); 
+         var jobName=currentRow.find("td:eq(2)").text();
+         var id=currentRow.find("td:eq(0)").text();
+
+
+         alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + jobName + '</b> ID (' + id +') ? \n \n *Please choose your option with caution.', 
+          function(){ 
+
+        // get Jenkins credentials
+        var name = '<?php echo $name; ?>';
+        var jenkins_url = '<?php echo $jenkins_url; ?>';
+        var jenkins_username = '<?php echo $jenkins_username; ?>';
+        var jenkins_token = '<?php echo $jenkins_token; ?>';
+        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+
+             $.ajax({
+          url: jenkins_url + '/job/'+ jobName +'/build',
+          method: 'POST',
+          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+          beforeSend: function() {
+
+           $('.overlay').show();
+          //  toastr.info("Your reprocess request has been sent to server for job: " + jobName, "Reprocess Data");
+        }
+        }).done(function(data) {
+            toastr.success("Your Execution Request has been sent to server, Please wait some minutes and reload the page.", "Request Sent")
+            $('.overlay').hide();
+
+        }).fail(function() {
+          toastr.error("Erro during reprocessing: <b>" + jobName + "</b> <br><br> Result: " + arguments[0].status + "\n"+ arguments[0].statusText, "Erro During Reprocessing");
+          $('.overlay').hide();
+        });
+
+          }, 
+
+          function(){
+
+           alertify.error('Operation Aborted')
+
+         });
+
+      
+
+    });
 
 function clockUpdate() {
   var date = new Date();

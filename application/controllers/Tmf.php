@@ -89,6 +89,23 @@ class Tmf extends BaseController
                
     }
 
+     function getError($instanceId)
+    {
+        $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+        $errorList["data"] = $this->model->getError($instanceId);
+
+        
+          print_r(json_encode($errorList, JSON_PRETTY_PRINT));
+    }
+
+
+     function updateUser($instanceId,$name)
+    {
+        $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+        $errorList["data"] = $this->model->updateUser($instanceId,$name);
+
+    }
+
 
    
     
