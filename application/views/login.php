@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Talend Job Seeker | Admin System Log in</title>
+    <title>Job Seeker | Admin System Log in</title>
     <meta content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' name='viewport'>
     <link rel="shortcut icon" type="image/png" href="<?php echo base_url(); ?>assets/images/bi.png" sizes="16x16"/>
     <link href="<?php echo base_url(); ?>assets/bower_components/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -26,7 +26,6 @@
   ">
     <div class="login-box">
       <div class="login-logo">
-          <img src="<?php echo base_url(); ?>assets/images/talend.png" alt="Talend Logo" width="300">
         <a href="#" style="color:white;"><b>Job Seeker</b><br>Admin System</a>
       </div><!-- /.login-logo -->
       <div class="login-box-body animated bounceIn" style="

@@ -94,16 +94,16 @@
                         <p>
                             <b>For Job Name Input:</b>
                             <ul>
-                                <li>Write the Talend Job Name.</li>
+                                <li>Write the Job Name.</li>
                             </ul><br>
-                            <b>For Job Component Name, Select the component name in the Talend Job, like:</b>
+                            <b>For Job Component Name, Select the component name in the Job, like:</b>
                             <ul>
                                 <li>tFileInputExcel_1</li>
                                 <li>tFileInputDelimited_1</li>
                                 <li>tFileInputJSON_1</li>
                                 <li>tFileInputXML_1</li>
                             </ul>
-                            Obs: If needed just change the number after the underscore _ according to the Talend Job Component Name.<br><br>
+                            Obs: If needed just change the number after the underscore _ according to the Job Component Name.<br><br>
                             <b>For File Name:</b>
                             <ul>
                             <li>Choose the name according to the file name you want to upload.</li>

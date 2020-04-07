@@ -9,7 +9,7 @@ class Dashboard_model extends CI_Model
         $this->db->select('status,job_name,event_text,records_processed');
         $this->db->from('tmf');
         $this->db->order_by('id', 'DESC');
-        $this->db->limit(5);
+        $this->db->limit(6);
         $query = $this->db->get();
         return $query->result();
     }

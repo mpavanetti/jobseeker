@@ -24,7 +24,7 @@ class SmtpSettings extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : Email Settings';
+        $this->global['pageTitle'] = 'Job Seeker : Email Settings';
 
         $data["settings"] = $this->model->listSettings();
         $data["role"] = $this->isManager();
@@ -42,7 +42,7 @@ class SmtpSettings extends BaseController
             else
             {
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : Add New Setting';
+            $this->global['pageTitle'] = 'Job Seeker : Add New Setting';
 
             $this->loadViews("addSmtpSetting", $this->global, NULL, NULL);
         }
@@ -67,7 +67,7 @@ class SmtpSettings extends BaseController
             
             $data['fetch'] = $this->model->EditSettingsFetchData($id);
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : Edit Data';
+            $this->global['pageTitle'] = 'Job Seeker : Edit Data';
             
             $this->loadViews("editSmtpSetting", $this->global, $data, NULL);
         }

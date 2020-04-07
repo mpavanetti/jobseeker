@@ -2,13 +2,7 @@
 
 require APPPATH . '/libraries/BaseController.php';
 
-/**
- * Class : Login (LoginController)
- * Login class to control to authenticate user credentials and starts user's session.
- * @author : Kishor Mali
- * @version : 1.1
- * @since : 15 November 2016
- */
+
 class Upload extends BaseController
 {
     /**
@@ -30,7 +24,7 @@ class Upload extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : File Upload';
+        $this->global['pageTitle'] = 'Job Seeker : File Upload';
         
         $this->loadViews("upload", $this->global, NULL, NULL);
     }
@@ -39,7 +33,7 @@ class Upload extends BaseController
         header('Content-type:application/json;charset=utf-8'); // declaring header
 
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+        $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
         $listJobsJson = $this->model->listJobs();
         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
@@ -50,7 +44,7 @@ class Upload extends BaseController
      public function listComponents($jobname) {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $listComponent = $this->model->listComponents($jobname);
 
@@ -61,7 +55,7 @@ class Upload extends BaseController
     public function listComponentType($jobname, $component) {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $listComponentType = $this->model->listComponentType($jobname, $component);
 
@@ -72,7 +66,7 @@ class Upload extends BaseController
     public function listComponentPath($jobname, $component, $type) {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $listComponentPath = $this->model->listComponentPath($jobname, $component, $type);
 
@@ -90,7 +84,7 @@ class Upload extends BaseController
     public function listAll($jobname, $component, $type) {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
 
       $listAll = $this->model->listAll($jobname, $component, $type);
@@ -103,7 +97,7 @@ class Upload extends BaseController
     public function Path($jobname, $component, $type) {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
 
       $Path = $this->model->Path($jobname, $component, $type);
@@ -116,7 +110,7 @@ class Upload extends BaseController
     public function countJobs() {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $countJobs = $this->model->countJobs();
 
@@ -127,7 +121,7 @@ class Upload extends BaseController
     public function countComponents() {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $countComponents = $this->model->countComponents();
 
@@ -138,7 +132,7 @@ class Upload extends BaseController
     public function countComponentsTypes() {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $countComponentsTypes = $this->model->countComponentsTypes();
 
@@ -149,7 +143,7 @@ class Upload extends BaseController
     public function countFileUploaded() {
      header('Content-Type: application/json');
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+      $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
       $countFileUploaded = $this->model->countFileUploaded();
       print_r($countFileUploaded[0]->file_uploaded);
@@ -160,7 +154,7 @@ class Upload extends BaseController
 
      public function do_upload() {
 
-      $this->global['pageTitle'] = 'Talend Job Seeker : Upload';
+      $this->global['pageTitle'] = 'Job Seeker : Upload';
 
       // Get the contents of the JSON file 
       $strJsonFileContents = file_get_contents(__DIR__ . '/../../json/result.json');

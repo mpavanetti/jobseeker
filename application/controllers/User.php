@@ -2,13 +2,7 @@
 
 require APPPATH . '/libraries/BaseController.php';
 
-/**
- * Class : User (UserController)
- * User Class to control all user related operations.
- * @author : Kishor Mali
- * @version : 1.1
- * @since : 15 November 2016
- */
+
 class User extends BaseController
 {
     /**
@@ -26,7 +20,7 @@ class User extends BaseController
      */
     public function index()
     {
-        $this->global['pageTitle'] = 'Talend Job Seeker : Dashboard';
+        $this->global['pageTitle'] = 'Job Seeker : Dashboard';
         
         $this->loadViews("dashboard", $this->global, NULL , NULL);
     }
@@ -53,7 +47,7 @@ class User extends BaseController
             
             $data['userRecords'] = $this->user_model->userListing($searchText, $returns["page"], $returns["segment"]);
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : User Listing';
+            $this->global['pageTitle'] = 'Job Seeker : User Listing';
             
             $this->loadViews("users", $this->global, $data, NULL);
         }
@@ -73,7 +67,7 @@ class User extends BaseController
             $this->load->model('user_model');
             $data['roles'] = $this->user_model->getUserRoles();
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : Add New User';
+            $this->global['pageTitle'] = 'Job Seeker : Add New User';
 
             $this->loadViews("addNew", $this->global, $data, NULL);
         }
@@ -170,7 +164,7 @@ class User extends BaseController
             $data['roles'] = $this->user_model->getUserRoles();
             $data['userInfo'] = $this->user_model->getUserInfo($userId);
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : Edit User';
+            $this->global['pageTitle'] = 'Job Seeker : Edit User';
             
             $this->loadViews("editOld", $this->global, $data, NULL);
         }
@@ -269,7 +263,7 @@ class User extends BaseController
      */
     function pageNotFound()
     {
-        $this->global['pageTitle'] = 'Talend Job Seeker : 404 - Page Not Found';
+        $this->global['pageTitle'] = 'Job Seeker : 404 - Page Not Found';
         
         $this->loadViews("404", $this->global, NULL, NULL);
     }
@@ -306,7 +300,7 @@ class User extends BaseController
 
             $data['userRecords'] = $this->user_model->loginHistory($userId, $searchText, $fromDate, $toDate, $returns["page"], $returns["segment"]);
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : User Login History';
+            $this->global['pageTitle'] = 'Job Seeker : User Login History';
             
             $this->loadViews("loginHistory", $this->global, $data, NULL);
         }        
@@ -320,7 +314,7 @@ class User extends BaseController
         $data["userInfo"] = $this->user_model->getUserInfoWithRole($this->vendorId);
         $data["active"] = $active;
         
-        $this->global['pageTitle'] = $active == "details" ? 'Talend Job Seeker : My Profile' : 'Talend Job Seeker : Change Password';
+        $this->global['pageTitle'] = $active == "details" ? 'Job Seeker : My Profile' : 'Job Seeker : Change Password';
         $this->loadViews("profile", $this->global, $data, NULL);
     }
 

@@ -2,13 +2,7 @@
 
 require APPPATH . '/libraries/BaseController.php';
 
-/**
- * Class : Login (LoginController)
- * Login class to control to authenticate user credentials and starts user's session.
- * @author : Kishor Mali
- * @version : 1.1
- * @since : 15 November 2016
- */
+
 class GenericSettings extends BaseController
 {
     /**
@@ -30,7 +24,7 @@ class GenericSettings extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Talend Job Seeker : Generic Settings';
+        $this->global['pageTitle'] = 'Job Seeker : Generic Settings';
 
         $data["settings"] = $this->model->listSettings();
         $data["role"] = $this->isManager();
@@ -48,7 +42,7 @@ class GenericSettings extends BaseController
             else
             {
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : Add New Setting';
+            $this->global['pageTitle'] = 'Job Seeker : Add New Setting';
 
             $this->loadViews("addSetting", $this->global, NULL, NULL);
         }
@@ -73,7 +67,7 @@ class GenericSettings extends BaseController
             
             $data['fetch'] = $this->model->EditSettingsFetchData($id);
             
-            $this->global['pageTitle'] = 'Talend Job Seeker : Edit Data';
+            $this->global['pageTitle'] = 'Job Seeker : Edit Data';
             
             $this->loadViews("editSettings", $this->global, $data, NULL);
         }
