@@ -15,8 +15,8 @@
       </h1>
       <ol class="breadcrumb">
         <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
-        <li><a href="#">Tables</a></li>
-        <li class="active">Data tables</li>
+        <li><a href="#">Extract, Transform, Load</a></li>
+        <li class="active">Generic Settings</li>
       </ol>
     </section>
 
@@ -39,7 +39,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table id="table2" class="table table-bordered table-striped">
+              <table class="table table-bordered table-striped dataTable">
                 <thead>
                 <tr>
                   <th>Id</th>

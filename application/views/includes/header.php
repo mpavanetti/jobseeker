@@ -77,9 +77,9 @@
         <!-- Logo -->
         <a href="<?php echo base_url(); ?>" class="logo">
           <!-- mini logo for sidebar mini 50x50 pixels -->
-          <span class="logo-mini"><b>TJ</b>S</span>
+          <span class="logo-mini"><b>J</b>S</span>
           <!-- logo for regular state and mobile devices -->
-          <span class="logo-lg"><b>Talend Job Seeker</b></span>
+          <span class="logo-lg"><b>Job Seeker</b></span>
         </a>
         <!-- Header Navbar: style can be found in header.less -->
         <nav class="navbar navbar-static-top" role="navigation">
@@ -142,8 +142,8 @@
               </a>
             </li>
             <li>
-              <a href="#">
-                <i class="fa fa-dashboard"></i> <span>Data Visualization</span></i>
+              <a href="<?php echo base_url(); ?>Tmf">
+                <i class="fa fa-desktop"></i> <span>Transaction Monitoring</span></i>
               </a>
             </li>
             <li class="treeview">
@@ -179,15 +179,33 @@
               </a>
             </li>
             <li>
+              <a href="<?php echo base_url(); ?>dbSettings" >
+                <i class="fa fa-database"></i>
+                <span>Database Settings</span>
+              </a>
+            </li>
+            <!-- <li>
               <a href="#" >
                 <i class="fa fa-list"></i>
                 <span>Console Job Logs</span>
               </a>
-            </li>
+            </li> -->
             <li>
               <a href="<?php echo base_url(); ?>GenericSettings" >
                 <i class="fa fa-cogs"></i>
                 <span>Generic Settings</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>EmailSettings" >
+                <i class="fa fa-envelope"></i>
+                <span>Email Settings</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>SmtpSettings" >
+                <i class="fa fa-server"></i>
+                <span>Smtp Settings</span>
               </a>
             </li>
           </ul>
