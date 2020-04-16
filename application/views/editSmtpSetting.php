@@ -29,7 +29,7 @@
                     <form role="form" id="addNewJobInsert" action="<?php echo base_url() ?>SmtpSettings/UpdateSettings" method="post" role="form">
                         <div class="box-body">
                             <div class="row">
-                                <div class="col-md-3">                                
+                                <div class="col-md-3" style="display: none;">                                
                                     <div class="form-group">
                                         <label for="id">Id</label>
                                         <input type="text" class="form-control required" value="<?php echo $fetch->id; ?>" id="id" name="id" maxlength="128" required autocomplete="off">
