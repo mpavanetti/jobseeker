@@ -10,7 +10,7 @@
     <!-- Content Header (Page header) -->
     <section class="content-header">
       <h1>
-        Input Components
+       <b> Input Components</b>
         <small>advanced tables</small>
       </h1>
       <ol class="breadcrumb">
@@ -39,7 +39,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table id="table" class="table table-bordered table-striped">
+              <table class="table table-bordered table-striped dataTable">
                 <thead>
                 <tr>
                   <th>Id</th>
