@@ -101,15 +101,6 @@
                 <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
                 </button>
                 <div class="btn-group">
-                  <!--<button type="button" class="btn btn-box-tool dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
-                    <i class="fa fa-wrench"></i></button>
-                  <ul class="dropdown-menu" role="menu">
-                    <li><a href="#">Action</a></li>
-                    <li><a href="#">Another action</a></li>
-                    <li><a href="#">Something else here</a></li>
-                    <li class="divider"></li>
-                    <li><a href="#">Separated link</a></li>
-                  </ul> -->
                 </div>
                 <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
               </div>
@@ -124,8 +115,7 @@
 
                   <div class="chart">
                     <!-- Sales Chart Canvas -->
-                     <canvas id="chart" style="height: 200px; width: 600px;" height="230" width="600"></canvas> 
-                   <!-- <div id="line-chart" style="height: 250px;"></div>-->
+                     <canvas id="chart" class="lineChart" style="height: 300px; width: 600px;" height="300" width="600"></canvas> 
                   </div>
                   <!-- /.chart-responsive -->
                 </div>
@@ -228,7 +218,7 @@
 
           <div class="row">
                <!-- Div last jobs -->
-            <div class="col-lg-6 col-xs-6 animated fadeInLeft">
+            <div class="col-lg-6 col-md-6 col-xs-12 animated fadeInLeft">
                 <div class="box box-primary">
             <div class="box-header with-border">
               <h3 class="box-title">Recently Added Jobs</h3>
@@ -325,7 +315,7 @@
             <!-- End Div last jobs -->
 
             <!-- Div Graficos -->
-            <div class="col-lg 6 col-xs-6 animated fadeInRight">
+            <div class="col-lg 6 col-md-6 col-xs-12 animated fadeInRight">
                 <div class="box box-primary">
             <div class="box-header with-border">
               <h3 class="box-title">Job Percent Report</h3>
@@ -340,7 +330,7 @@
               <div class="row">
                 <div class="col-md-8">
                   <div class="chart-responsive">
-                    <canvas id="pieChart" height="500" width="600" style="width: 600px; height: 500px;"></canvas>
+                    <canvas id="pieChart" height="520" width="600" style="width: 600px; height: 520px;"></canvas>
                   </div>
                   <!-- ./chart-responsive -->
                 </div>
@@ -388,7 +378,7 @@
       </div>
 
       <div class="row">
-        <div class="col-lg-6 col-md-6 col-xs-6">
+        <div class="col-lg-6 col-md-6 col-xs-12">
           <div class="box box-info">
             <div class="box-header">
               <h3 class="box-title">Available job execution amount</h3>
@@ -400,7 +390,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table class="table table-bordered table-striped dataTable">
+              <table class="table table-bordered table-striped table-config dataTable">
                 <thead>
                 <tr>
                   <th>Job Name</th>
@@ -439,7 +429,7 @@
           <!-- /.box -->
         </div>
 
-        <div class="col-lg-6 col-md-6 col-xs-6">
+        <div class="col-lg-6 col-md-6 col-xs-12">
           <div class="box box-info">
             <div class="box-header">
               <h3 class="box-title">Available status amount per jobs</h3>
@@ -451,7 +441,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table class="table table-bordered table-striped dataTable">
+              <table class="table table-bordered table-striped table-config dataTable">
                 <thead>
                 <tr>
                   <th>Job Name</th>
@@ -667,5 +657,21 @@
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.js"></script>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
+<script>
+$(document).ready(function(){
+    if(window.matchMedia("(max-width: 767px)").matches){
+        // The viewport is less than 768 pixels wide
+        // alert("This is a mobile device.");
+        $('.table-config').removeClass('dataTable')
+        $('.table-config').addClass('dataTableMobile')
+        $('.lineChart').remove();
+       $('.chart').append('<canvas id="chart" class="lineChart" style="height: 300px; width: 300px;" height="300" width="300"></canvas>');
+    } else{
+        // The viewport is at least 768 pixels wide
+       // alert("This is a tablet or desktop.");
+       
+    }
+});
+</script>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js"></script>
 
