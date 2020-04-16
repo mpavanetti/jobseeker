@@ -2,7 +2,7 @@
 
     <footer class="main-footer">
         <div class="pull-right hidden-xs">
-          <b>Talend Job Seeker</b> Admin System | Version 1.0
+          <b>Job Seeker</b> Admin System | Version 1.0
         </div>
         <strong>Copyright &copy; 2019-2020 <a href="<?php echo base_url(); ?>">Matheus Pavanetti</a>.</strong> All rights reserved.
     </footer>
@@ -24,19 +24,58 @@
 
     <script type="text/javascript">
         $(document).ready(function(){
-            $('#table2').DataTable( {
+
+         $('.dataTable').DataTable( {
+            "order": [[ 1, "desc" ]],
+            lengthMenu:  [ 10, 20, 50, 100, 200, 500],
+
+        });
+
+          $('.dataTableMobile').DataTable( {
+            "scrollX": true,
+            "order": [[ 1, "desc" ]],
+            lengthMenu:  [ 10, 20, 50, 100, 200, 500],
+
+        });
+
+        $('#table3').DataTable( {
             "scrollX": true,
             columnDefs: [
-            { width: 50, targets: 11 },
-            { width: 200, targets: 9 }
+            { width: 50, targets: 14 },
+            { width: 200, targets: 12 }
         ],
 
             "order": [[ 1, "desc" ]]
         } );
 
-            $('#table').DataTable( {
+        $('#table4').DataTable( {
+            "scrollX": true,
+
             "order": [[ 1, "desc" ]]
         } );
+
+        $('#table5').DataTable( {
+            "scrollX": true,
+            columnDefs: [
+            { width: 300, targets: 8 }
+        ],
+
+            "order": [[ 1, "desc" ]]
+        } );
+
+        $('#table6').DataTable( {
+            "scrollX": true,
+
+           columnDefs: [
+            { width: 100, targets: 8 },
+            { width: 100, targets: 5 },
+            { width: 100, targets: 9 },
+            { width: 100, targets: 10 }
+        ],
+        "order": [[ 0, "desc" ]]
+        });
+
+           
         });
     </script>
 
