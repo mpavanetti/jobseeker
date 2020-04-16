@@ -61,6 +61,18 @@ class JobsTable extends BaseController
      
     }
 
+    function listJobsName() {
+        
+        header('Content-type:application/json;charset=utf-8'); // declaring header
+
+        $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
+
+        $listJobsJson["data"] = $this->model->listJobsName();
+        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+
+     
+    }
+
      /**
      * This function is used to delete the data using id
      * @return boolean $result : TRUE / FALSE
@@ -199,8 +211,8 @@ class JobsTable extends BaseController
 
             $validateComponent = $this->model->validateComponent($job_name, $job_component);
                             
-                $logs = array('job_name'=>$job_name, 'job_component'=>$job_component,'file_path' => $file_path, 'roleId'=>$roleId,
-                                     'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
+            /*    $logs = array('job_name'=>$job_name, 'job_component'=>$job_component,'file_path' => $file_path, 'roleId'=>$roleId,
+                                     'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));  Not Working Yet - Future Release */
 
                 $Info = array('job_name'=>$job_name, 'job_component'=>$job_component, 'component_type' => $component_type,'creation_date'=>date('Y-m-d H:i:s'),
                     'file_path' => $file_path, 'file' => $file, 'file_name' => $file_name,
