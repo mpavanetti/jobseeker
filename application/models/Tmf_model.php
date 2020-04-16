@@ -8,25 +8,30 @@ class Tmf_model extends CI_Model
 
         $this->db->select('*');
         $this->db->from('tmf');
-       
-        // Check Status
+
+    // Check Status
+     if ($status != null) {    
         if($status[0] == "*"){
         } else {
         	$this->db->where_in('status',$status);
         } 
- 	
- 		// Check Job Name
+ 	}
+
+ 	// Check Job Name
+    if ($job_name != null) {
         if($job_name[0] == "*"){
         } else {
         	$this->db->where_in('job_name',$job_name);
         }
+     }
 
-        // Check Dimension
+     // Check Dimension
+     if ($dimension != null) {
         if($dimension[0] == "*"){
         } else {
         	$this->db->where_in('dimension',$dimension);
         }
-
+     }
         // Check Reprocess
         if($reprocess == "*"){
         } else {
