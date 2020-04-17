@@ -173,12 +173,6 @@
               </a>
             </li>
             <li>
-              <a href="<?php echo base_url(); ?>jobExecution" >
-                <i class="fa fa-play"></i>
-                <span>Job Execution</span>
-              </a>
-            </li>
-            <li>
               <a href="<?php echo base_url(); ?>dbSettings" >
                 <i class="fa fa-database"></i>
                 <span>Database Settings</span>
@@ -208,6 +202,34 @@
                 <span>Smtp Settings</span>
               </a>
             </li>
+          </ul>
+        </li>
+        <li class="treeview">
+          <a href="#">
+            <i class="fa fa-laptop"></i> <span>Job Management</span>
+            <span class="pull-right-container">
+              <i class="fa fa-angle-left pull-right"></i>
+            </span>
+          </a>
+          <ul class="treeview-menu">
+            <li>
+              <a href="<?php echo base_url(); ?>jobExecution" >
+                <i class="fa fa-play"></i>
+                <span>Job Execution</span>
+              </a>
+            </li>
+            <li>
+              <a href="<?php echo base_url(); ?>jobCreation" >
+                <i class="fa fa-plus-square"></i>
+                <span>Job Creation</span>
+              </a>
+            </li>
+            <!-- <li>
+              <a href="#" >
+                <i class="fa fa-list"></i>
+                <span>Console Job Logs</span>
+              </a>
+            </li> -->
           </ul>
         </li>
             <?php
