@@ -116,7 +116,7 @@
                       ?></td>
                       <td><?php echo $record->job_name ?></td>
                       <td><?php echo $record->dimension ?></td>
-                      <td ><?php echo ($record->reprocess == 1) ? '<a href="#" class="btn btn-success reprocess">Enable</a>' : 'Disabled' ?></td>
+                      <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : 'Disabled' ?></td>
                       <td><?php echo $record->event_text ?></td>
                       <td><?php echo $record->records_total ?></td>
                       <td><?php echo $record->records_processed ?></td>
@@ -289,8 +289,27 @@ $("#table6").on('click','.btnSelect',function(){
     });
 
 
-$("#table6").on('click','.reprocess',function(){
+        // get Jenkins credentials
+    var name = '<?php echo $name; ?>';
+    var jenkins_url = '<?php echo $jenkins_url; ?>';
+    var jenkins_username = '<?php echo $jenkins_username; ?>';
+    var jenkins_token = '<?php echo $jenkins_token; ?>';
+    var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
+      $.ajax({
+                url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
+                method: 'GET',
+                headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+                beforeSend: function() {
+                  console.log("Loading Jenkins Jobs...")
+              }
+              }).done(function(data) {
+                console.log("Success to fetch Jenkins Jobs...")
+                 $.each(data["jobs"], function (key, item) {
+                      newJson = item.name;
+                      //Sucess Case to fech data from jenkins
+
+                      $("#table6").on('click','.reprocess',function(){
 
          // get the current row Id, job name and instance id
          var currentRow=$(this).closest("tr"); 
@@ -301,13 +320,6 @@ $("#table6").on('click','.reprocess',function(){
 
          alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + jobName + '</b> ID (' + id +') ? \n \n *Please choose your option with caution.', 
           function(){ 
-
-        // get Jenkins credentials
-        var name = '<?php echo $name; ?>';
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
              $.ajax({
           url: jenkins_url + '/job/'+ jobName +'/build',
@@ -335,9 +347,18 @@ $("#table6").on('click','.reprocess',function(){
 
          });
 
-      
-
     });
+});
+
+  $('.spin').hide();
+  $('.reprocess').fadeIn();
+   }).fail(function() {
+      //console.error(arguments);
+      console.log("Erro to fetch Jenkins Jobs...")
+     $('.spin').hide();
+     $('.reprocess-erro').fadeIn();
+     });
+
 
 function clockUpdate() {
   var date = new Date();
