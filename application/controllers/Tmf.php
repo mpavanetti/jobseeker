@@ -99,6 +99,28 @@ class Tmf extends BaseController
 
     }
 
+      /**
+     * This function is used to delete the data using id
+     * @return boolean $result : TRUE / FALSE
+     */
+    function delete()
+    {
+        if($this->isManager() == TRUE)
+        {
+            echo(json_encode(array('status'=>'access')));
+        }
+        else
+        {
+            $id = $this->input->post('userId');
+            $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s'));
+            
+            $result = $this->model->delete($id);
+            
+            if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
+            else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
+        }
+    }
+
 
    
     

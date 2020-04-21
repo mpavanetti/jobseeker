@@ -79,6 +79,7 @@
                   <th>Hostname</th>
                   <th>Username</th>
                   <th>instance_id</th>
+                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </thead>
                 <tbody>
@@ -134,8 +135,9 @@
                        <td><?php echo $record->hostname ?></td>
                        <td><?php echo $record->username ?></td>
                        <td><?php echo $record->instance_id ?></td>
-
-                        <!-- <td><?php echo ($record->file_name == NULL) ? 'Not Available' : $record->file_name; ?></td> -->
+                      <?php if($role != 1) {  ?> <td class="text-center">
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                        </td><?php } ?>
                     </tr>
                     <?php
                         }
@@ -160,6 +162,7 @@
                   <th>Hostname</th>
                   <th>Username</th>
                   <th>instance_id</th>
+                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </tfoot>
               </table>
@@ -247,7 +250,34 @@
 
 });
 
+  jQuery(document).on("click", ".deleteUser", function(){
+    
+    var userId = $(this).data("userid"),
+      hitURL = baseURL + "tmf/delete" ,
+      currentRow = $(this);
+   
+    alertify.confirm('Record Delete Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this record permanently ?</b></p></div></div></div>', 
+      function(){ 
+        jQuery.ajax({
+      type : "POST",
+      dataType : "json",
+      url : hitURL,
+      data : { userId : userId } 
+      }).done(function(data){
+       // console.log(data);
+        currentRow.parents('tr').remove();
+        if(data.status = true) { alertify.success('Your record has been successfully deleted !'); }
+        else if(data.status = false) { alertify.error("data deletion failed"); }
+        else { alert("Access denied..!"); }
+      });
 
+    }, 
+      function(){ 
+        alertify.error('Operation Aborted')
+    }
+  );
+    
+  });
 
 $("#table6").on('click','.btnSelect',function(){
 
