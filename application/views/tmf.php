@@ -79,7 +79,7 @@
                   <th>Hostname</th>
                   <th>Username</th>
                   <th>instance_id</th>
-                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
+                  <?php if($role == 1 || $role == 2) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </thead>
                 <tbody>
@@ -135,7 +135,7 @@
                        <td><?php echo $record->hostname ?></td>
                        <td><?php echo $record->username ?></td>
                        <td><?php echo $record->instance_id ?></td>
-                      <?php if($role != 1) {  ?> <td class="text-center">
+                      <?php if($role == 1 || $role == 2) {  ?> <td class="text-center">
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
@@ -162,7 +162,7 @@
                   <th>Hostname</th>
                   <th>Username</th>
                   <th>instance_id</th>
-                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
+                  <?php if($role == 1 || $role == 2) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </tfoot>
               </table>
