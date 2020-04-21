@@ -53,6 +53,7 @@ class BaseController extends CI_Controller {
 			$jsonToArray = json_decode($loadJson);
 
 			// Set global var to be used on Controllers
+			$this->global ['jenkins_enabled'] = $jsonToArray->jenkins->enabled;
 			$this->global ['jenkins_url'] = $jsonToArray->jenkins->url;
 			$this->global ['jenkins_username'] = $jsonToArray->jenkins->username;
 			$this->global ['jenkins_token'] = $jsonToArray->jenkins->token;
@@ -98,7 +99,7 @@ class BaseController extends CI_Controller {
 	 * This function is used to load the set of views
 	 */
 	function loadThis() {
-		$this->global ['pageTitle'] = 'CodeInsect : Access Denied';
+		$this->global ['pageTitle'] = 'Job Seeker : Access Denied';
 		
 		$this->load->view ( 'includes/header', $this->global );
 		$this->load->view ( 'access' );
