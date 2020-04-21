@@ -161,7 +161,15 @@ class Tmf_model extends CI_Model
     }
 
 
+    function delete($id)
+    {
+        
+        $this->db->where('id', $id);
+        $this->db->delete('tmf');
 
+        
+        return $this->db->affected_rows();
+    }
 
     
 }
