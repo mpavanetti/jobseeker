@@ -49,13 +49,6 @@ class Tmf extends BaseController
 
      function fetchData()
     {
-        if($this->isManager() == TRUE)
-        {
-            $this->loadThis();
-        }
-        else
-        {
-            
             $status = $this->input->post('status');
             $job_name = $this->input->post('job_name');
             $dimension = $this->input->post('dimension');
@@ -68,7 +61,7 @@ class Tmf extends BaseController
 
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
-        }        
+               
     }
 
     function fetchDataStatus($status)
