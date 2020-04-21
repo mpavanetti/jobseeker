@@ -59,7 +59,6 @@
               <h3 class="box-title"><b>Available Jobs</b></h3>
             </div>
             <!-- /.box-header -->
-
             <div class="box-body">
               <table id="table6" class="table table-bordered table-striped">
                 <thead>
@@ -116,7 +115,9 @@
                       ?></td>
                       <td><?php echo $record->job_name ?></td>
                       <td><?php echo $record->dimension ?></td>
-                      <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : 'Disabled' ?></td>
+                      <?php  if ($jenkins_enabled == true) { 
+                         if($role == 1 || $role == 2) {  ?>
+                      <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : 'Disabled' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo $record->event_text ?></td>
                       <td><?php echo $record->records_total ?></td>
                       <td><?php echo $record->records_processed ?></td>

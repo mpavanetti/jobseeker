@@ -204,6 +204,10 @@
             </li>
           </ul>
         </li>
+        <?php  if ($jenkins_enabled == true) { 
+            if($role == ROLE_ADMIN || $role == ROLE_MANAGER)
+            {
+            ?>
         <li class="treeview">
           <a href="#">
             <i class="fa fa-laptop"></i> <span>Job Management</span>
@@ -232,6 +236,7 @@
             </li> -->
           </ul>
         </li>
+      <?php } } ?>
             <?php
             if($role == ROLE_ADMIN || $role == ROLE_MANAGER)
             {
@@ -248,21 +253,29 @@
                 <span>Database Manager</span>
               </a>
             </li>
-            <li>
-              <a href="<?php echo base_url(); ?>Cloud">
-                <i class="fa fa-cloud"></i>
-                <span>Cloud Enviroment</span>
-              </a>
-            </li>
             <?php
             }
             if($role == ROLE_ADMIN)
             {
             ?>
+             <li>
+              <a href="<?php echo base_url(); ?>Cloud">
+                <i class="fa fa-cloud"></i>
+                <span>Cloud Enviroment</span>
+              </a>
+            </li>
+            <?php  if ($jenkins_enabled == true) { ?>
             <li>
-              <a href="http://localhost:8080" target="_blank">
-                <i class="fa fa-server"></i>
+              <a href="<?php echo $jenkins_url; ?>" target="_blank">
+                <i class="fa fa-share-alt"></i>
                 <span>Jenkins Manager</span>
+              </a>
+            </li>
+          <?php } ?>
+            <li>
+              <a href="<?php echo base_url(); ?>serverinfo">
+                <i class="fa fa-server"></i>
+                <span>Server Statistics</span>
               </a>
             </li>
             <li>
