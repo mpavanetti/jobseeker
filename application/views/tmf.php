@@ -21,6 +21,12 @@
       font: 40px/50px 'DIGITAL', Helvetica;
      /* background: linear-gradient(90deg, #4A00E0, #000); */
 }
+
+pre { 
+    white-space: pre-wrap; 
+    word-break: break-word;
+    max-width: 750px;
+}
 </style>
 <div class="content-wrapper">    
     <section class="content-header">
@@ -69,6 +75,7 @@
                   <th>Dimension</th>
                   <th>Reprocess</th>
                   <th>Event Text</th>
+                  <th>Message</th>
                   <th>Records Total</th>
                   <th>Records Processed</th>
                   <th>Start Time</th>
@@ -118,8 +125,9 @@
                       <td><?php echo $record->dimension ?></td>
                       <?php  if ($jenkins_enabled == true) { 
                          if($role == 1 || $role == 2) {  ?>
-                      <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : 'Disabled' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
+                      <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo $record->event_text ?></td>
+                      <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
                       <td><?php echo $record->records_total ?></td>
                       <td><?php echo $record->records_processed ?></td>
                       <td><?php echo date('m-d-Y H:i:s', strtotime($record->start_time)) ?></td>
@@ -130,8 +138,8 @@
                         $interval = $d2->diff($d1);
                         echo $interval->format('%d days, %H hours, %I minutes, %S seconds');
                         ?></td>
-                       <td ><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect"> Show Error </a>' : 'None' ?></td>
-                       <td ><?php echo ($record->warnings == 1) ? '<a href="#" class="btn btn-warning">Warning</a>' : 'None' ?></td>
+                       <td ><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect"> Show Error </a>' : '' ?></td>
+                       <td ><?php echo ($record->warnings == 1) ? '<a href="#" class="btn btn-warning">Warning</a>' : '' ?></td>
                        <td><?php echo $record->hostname ?></td>
                        <td><?php echo $record->username ?></td>
                        <td><?php echo $record->instance_id ?></td>
@@ -152,6 +160,7 @@
                   <th>Dimension</th>
                   <th>Reprocess</th>
                   <th>Event Text</th>
+                  <th>Message</th>
                   <th>Records Total</th>
                   <th>Records Processed</th>
                   <th>Start Time</th>
@@ -199,8 +208,32 @@
             </div>
             <!-- /.modal-content -->
           </div>
-          <!-- /.modal-dialog -->
-        </div>
+      <!-- /.modal-dialog -->
+</div>
+
+<div class="modal modal-primary fade" id="modal-msg" style="display: none;">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">×</span></button>
+                <h4 class="modal-title">Message Description</h4>
+              </div>
+              <div class="modal-body">
+
+              <div id="modal-main-msg">
+                
+              </div>
+
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline pull-left" data-dismiss="modal">Close</button>
+              </div>
+            </div>
+            <!-- /.modal-content -->
+          </div>
+      <!-- /.modal-dialog -->
+</div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script type="text/javascript">
     $(document).ready(function() {
@@ -279,12 +312,47 @@
     
   });
 
+$("#table6").on('click','.msgSelect',function(){
+
+   var currentRow=$(this).closest("tr"); 
+   var id=currentRow.find("td:eq(0)").text();
+
+   var listId = $.parseJSON($.ajax({
+            contentType: "application/json",
+            url:  '<?php echo base_url(); ?>Tmf/listId/' + id,
+            dataType: "json", 
+            async: false,
+            beforeSend: function() {
+             //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
+             $(".destroy-msg").remove();
+            },
+            error: function() {
+               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
+            },
+
+            success: function() {
+            },
+            complete: function(data) {
+                dateRequest = data;
+            }
+
+         }).responseText);
+
+    $.each(listId["data"], function(index, value){
+                // $("#result").append(index + ": " + value.id + '<br>');
+                  $("#modal-main-msg").append('<div class="destroy-msg"><h4>Job Name: <b>' + value.job_name + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ value.instance_id +'</td></tr><tr><td>Job Name</td><td>'+ value.job_name +'</td></tr><tr><td>Message</td><td><pre>'+ value.msg +'</pre></td></tr></tbody></table><br></div>');
+                });
+
+  $('#modal-msg').modal('show');
+
+});  
+
 $("#table6").on('click','.btnSelect',function(){
 
 
          // get the current row Id, job name and instance id
          var currentRow=$(this).closest("tr"); 
-         var instanceId=currentRow.find("td:last-child").text(); 
+         var instanceId=currentRow.find("td:eq(16)").text(); 
          var jobName=currentRow.find("td:eq(2)").text();
          var id=currentRow.find("td:eq(0)").text();
 
