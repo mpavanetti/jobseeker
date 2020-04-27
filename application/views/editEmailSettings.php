@@ -92,7 +92,7 @@
 
                                     <div class="form-group">
                                         <label for="to">To</label>
-                                      <input type="email" class="form-control required" id="to" value="<?php echo $fetch->to; ?>" name="to" maxlength="200" autocomplete="on" required>
+                                      <input type="text" class="form-control required" id="to" value="<?php echo $fetch->to; ?>" name="to" maxlength="200" autocomplete="on" required>
                                     </div>
                                 </div>
 
@@ -100,7 +100,7 @@
 
                                     <div class="form-group">
                                         <label for="from">From</label>
-                                      <input type="email" class="form-control" id="from" value="<?php echo $fetch->from; ?>" name="from" maxlength="200" autocomplete="off" required>
+                                      <input type="text" class="form-control" id="from" value="<?php echo $fetch->from; ?>" name="from" maxlength="200" autocomplete="off">
                                     </div>
                                 </div>
 
@@ -185,7 +185,6 @@
             name :{ required : true },
             smtp :{ required : true },
             to :{ required : true },
-            from :{ required : true },
             subject :{ required : true },
             msg :{ required : true },
             description :{ required : true },
@@ -194,7 +193,6 @@
             name :{ required : "This field is required" },
             smtp :{ required : "This field is required" },
             to :{ required : "This field is required" },    
-            from :{ required : "This field is required" },   
             subject :{ required : "This field is required" },    
             msg :{ required : "This field is required" },    
             description :{ required : "This field is required" },            
