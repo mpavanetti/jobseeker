@@ -91,6 +91,15 @@ class Tmf extends BaseController
           print_r(json_encode($errorList, JSON_PRETTY_PRINT));
     }
 
+     function listId($id)
+    {
+        $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+        $list["data"] = $this->model->listId($id);
+
+        
+          print_r(json_encode($list, JSON_PRETTY_PRINT));
+    }
+
 
      function updateUser($instanceId,$name)
     {

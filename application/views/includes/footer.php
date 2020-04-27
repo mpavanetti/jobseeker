@@ -67,10 +67,10 @@
             "scrollX": true,
 
            columnDefs: [
-            { width: 100, targets: 8 },
             { width: 100, targets: 5 },
             { width: 100, targets: 9 },
-            { width: 100, targets: 10 }
+            { width: 100, targets: 10 },
+            { width: 100, targets: 11 }
         ],
         "order": [[ 0, "desc" ]]
         });

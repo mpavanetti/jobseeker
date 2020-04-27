@@ -90,6 +90,15 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
+    function listId($id) {
+
+        $this->db->select('*');
+        $this->db->from('tmf');
+        $this->db->where('id', $id);
+        $query = $this->db->get();
+        return $query->result();
+    }
+
     function fetchDataStatus($status) {
 
         $this->db->select('*');
