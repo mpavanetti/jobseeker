@@ -34,7 +34,8 @@ class EmailSettings extends BaseController
 
     public function mail() {
 
-        $this->load->library('email');
+        $result = false;
+
         $array = $this->input->post('object');
         $jsonArray = json_encode($array);
         print_r($jsonArray);
@@ -45,68 +46,119 @@ class EmailSettings extends BaseController
         $config['smtp_user'] = $array["username"];
         $config['smtp_pass'] = $array["password"];
         $config['smtp_port'] = $array["smtp_port"]; 
-        $this->email->initialize($config);
+        $config['mailtype'] = 'html';
 
-        $this->email->from($array["from"]);
-        $this->email->to($array["to"]);
-        $this->email->cc($array["cc"]);
-        $this->email->subject($array["subject"]);
-        $this->email->message($array["msg"]); 
+        if($array["ssl"] == "1") {
+            $config['smtp_crypto'] = 'ssl';
+        } else {
+            $config['smtp_crypto'] = 'tls'; 
+        }
 
-        echo "Email Sent";
+        $this->load->library('email', $config);
+        $this->email->set_newline("\r\n");
 
-       
+         $this->email->to($array["to"]);
+         $this->email->from($array["username"],$array["from"]);
+         $this->email->cc($array["cc"]);
+         $this->email->subject($array["subject"]);
+         $this->email->message($array["msg"]); 
+         $this->email->send();
+
+         if ($this->email->send()) {
+          $result = true;
+          echo $result;
+
+      }
+      else {
+          print_r($this->email->print_debugger());
+          echo $result;
+      }
+
+
     }
 
-    public function fetch($id) {
+    public function mail2() {
+
+        $config = array();
+        $config['protocol'] = 'smtp';
+        $config['smtp_host'] = 'smtp.gmail.com';
+        $config['smtp_user'] = 'matheuspavanetti@gmail.com';
+        $config['smtp_pass'] = '6362578Math!';
+        $config['smtp_port'] = '465'; 
+        $config['mailtype'] = 'text';
+        $config['smtp_crypto'] = 'ssl';
+
+        $this->load->library('email', $config);
+
+        $this->email->set_newline("\r\n");
+
+        $this->email->to('matheuspavanetti@hotmail.com');
+        $this->email->from('matheuspavanetti@gmail.com');
+        $this->email->subject('Teste');
+        $this->email->message('Teste'); 
+        $this->email->send();
+
+        if ($this->email->send()) {
+          echo "Email Sent !";
+      }
+      else {
+          print_r($this->email->print_debugger());
+      }
+  
+
+}
+
+
+
+public function fetch($id) {
 
          header('Content-type:application/json;charset=utf-8'); // declaring header
 
-        $this->global['pageTitle'] = 'Job Seeker : Json Parse';
+         $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
-        $listJobsJson["data"] = $this->model->fetch($id);
-        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         $listJobsJson["data"] = $this->model->fetch($id);
+         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
 
-    }
+     }
 
-    public function fetchSMTP() {
-
-         header('Content-type:application/json;charset=utf-8'); // declaring header
-
-        $this->global['pageTitle'] = 'Job Seeker : Json Parse';
-
-        $listJobsJson = $this->model->fetchSMTP();
-        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
-
-    }
-
-    public function fetchXsmtp($id) {
+     public function fetchSMTP() {
 
          header('Content-type:application/json;charset=utf-8'); // declaring header
 
-        $this->global['pageTitle'] = 'Job Seeker : Json Parse';
+         $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
-        $listJobsJson = $this->model->fetchXsmtp($id);
-        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         $listJobsJson = $this->model->fetchSMTP();
+         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
 
+     }
+
+     public function fetchXsmtp($id) {
+
+         header('Content-type:application/json;charset=utf-8'); // declaring header
+
+         $this->global['pageTitle'] = 'Job Seeker : Json Parse';
+
+         $listJobsJson = $this->model->fetchXsmtp($id);
+         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+
+     }
+
+
+     public function addSetting()
+     {
+
+       if($this->isManager() == TRUE)
+       {
+        $this->loadThis();
     }
-
-
-    public function addSetting()
+    else
     {
 
-     if($this->isManager() == TRUE)
-            {
-                $this->loadThis();
-            }
-            else
-            {
-            
-            $this->global['pageTitle'] = 'Job Seeker : Add New Db Setting';
+        $this->global['pageTitle'] = 'Job Seeker : Add New Db Setting';
 
-            $this->loadViews("addEmailSetting", $this->global, NULL, NULL);
-        }
+        $this->loadViews("addEmailSetting", $this->global, NULL, NULL);
     }
+}
 
 
     /**
@@ -137,11 +189,11 @@ class EmailSettings extends BaseController
     public function InsertDbSettings() {
 
         if($this->isManager() == TRUE)
-            {
-                $this->loadThis();
-            }
-            else
-            {
+        {
+            $this->loadThis();
+        }
+        else
+        {
 
             $this->load->library('form_validation');
             
@@ -174,10 +226,10 @@ class EmailSettings extends BaseController
 
 
                 // Check if the data is alredy on table
-                 $validateSetting = $this->model->validateSetting($name, $to, $from, $subject);
+                $validateSetting = $this->model->validateSetting($name, $to, $from, $subject);
 
 
-                 $Info = array(
+                $Info = array(
                     'name'=>$name, 
                     'smtp'=>$smtp, 
                     'to' => $to,
@@ -189,30 +241,30 @@ class EmailSettings extends BaseController
                     'enabled' => $enabled,
                     'creation_date'=>date('Y-m-d H:i:s'),
                     'owner'=>$this->name
-                 );
+                );
 
-                 if($validateSetting > 0){
+                if($validateSetting > 0){
 
                     $this->session->set_flashdata('error', 'This row seems already created, please try changing the input names.');
                 } else {
-                
-                $result = $this->model->insertDbSetting($Info);
-                
-                if($result > 0)
-                {
-                    $this->session->set_flashdata('success', 'New Email Template has successfully created and now is available to be used.');
-                }
-                else
-                {
-                    $this->session->set_flashdata('error', 'Database Setting creation failed !');
+
+                    $result = $this->model->insertDbSetting($Info);
+
+                    if($result > 0)
+                    {
+                        $this->session->set_flashdata('success', 'New Email Template has successfully created and now is available to be used.');
+                    }
+                    else
+                    {
+                        $this->session->set_flashdata('error', 'Database Setting creation failed !');
+                    }
+
                 }
 
-             }
-
-              redirect('EmailSettings/addSetting');
+                redirect('EmailSettings/addSetting');
 
             }
-           
+
         }
 
 
@@ -220,11 +272,11 @@ class EmailSettings extends BaseController
 
     public function UpdateDbSettings() {
         if($this->isManager() == TRUE)
-            {
-                $this->loadThis();
-            }
-            else
-            {
+        {
+            $this->loadThis();
+        }
+        else
+        {
 
             $this->load->library('form_validation');
             $this->form_validation->set_rules('id','Id','trim|required|max_length[11]');
@@ -257,7 +309,7 @@ class EmailSettings extends BaseController
                 $enabled = $this->security->xss_clean($this->input->post('enabled')); 
 
 
-                 $Info = array(
+                $Info = array(
                     'name'=>$name, 
                     'smtp'=>$smtp, 
                     'to' => $to,
@@ -269,7 +321,7 @@ class EmailSettings extends BaseController
                     'enabled' => $enabled,
                     'creation_date'=>date('Y-m-d H:i:s'),
                     'owner'=>$this->name
-                 );
+                );
                 
                 $result = $this->model->updateDbSetting($Info, $id);
                 
@@ -282,16 +334,16 @@ class EmailSettings extends BaseController
                     $this->session->set_flashdata('error', 'Email Template update failed !');
                 }
 
-             
-              redirect('EmailSettings/EditSettingsFetchData');
+
+                redirect('EmailSettings/EditSettingsFetchData');
 
             }
-           
+
         }
 
     }
 
- 
+
 
     public function deleteSetting() {
 
