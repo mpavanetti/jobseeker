@@ -49,6 +49,10 @@ class jobCreation extends BaseController
             // Timestamp Option
             $this->form_validation->set_rules('timestamp','Timestamp','trim|max_length[1]');
 
+            // Trigger Build Periodically Option
+            $this->form_validation->set_rules('checkBuild','Check Build','trim|max_length[1]');
+
+
             //Abort Build
             $this->form_validation->set_rules('abort','Abort','trim|max_length[1]');
             $this->form_validation->set_rules('timeoutStrategy','Time Out Stragegy','trim|max_length[50]');
@@ -72,21 +76,83 @@ class jobCreation extends BaseController
                 // Timestamp Checkbox
                 $timestamp = $this->security->xss_clean($this->input->post('timestamp'));
 
+
+                // -- Trigger Build Periodically Option --
+                 $checkBuild = $this->security->xss_clean($this->input->post('checkBuild'));
+                $action = $this->security->xss_clean($this->input->post('action'));
+
+                // Single Build Options
+                $singleMinute = $this->input->post('singleMinute');
+                $singleHour = $this->input->post('singleHour');
+                $singleDayOfMonth = $this->input->post('singleDayOfMonth');
+                $singleMonth = $this->input->post('singleMonth');
+                $singleDayOfWeek = $this->input->post('singleDayOfWeek');
+
+                
+                // Validation if nothing comes null
+                if ($singleMinute == null || $singleHour == null || $singleDayOfMonth == null || $singleMonth == null || $singleDayOfWeek == null){
+
+                  $this->session->set_flashdata('error', 'You missed to select one field parameter for build periodically function');
+                    redirect('jobCreation');
+                }
+
+                 // Repetitive Build Options
+                $repetitiveMinute = $this->security->xss_clean($this->input->post('repetitiveMinute'));
+                $repetitiveHour = $this->security->xss_clean($this->input->post('repetitiveHour'));
+                $repetitiveDayOfMonth = $this->security->xss_clean($this->input->post('repetitiveDayOfMonth'));
+                $repetitiveMonth = $this->security->xss_clean($this->input->post('repetitiveMonth'));
+                $repetitiveDayOfWeek = $this->security->xss_clean($this->input->post('repetitiveDayOfWeek'));
+
+                // Tag Build Option
+                $tag = $this->security->xss_clean($this->input->post('tag'));
+
+
                 // Abort the build Checkbox
                 $abort = $this->security->xss_clean($this->input->post('abort'));
                 $timeoutStrategy = $this->security->xss_clean($this->input->post('timeoutStrategy'));
                 $timeoutMinutes = $this->security->xss_clean($this->input->post('timeoutMinutes'));
                 $timeoutSeconds = $this->security->xss_clean($this->input->post('timeoutSeconds'));
                 
+
+                  $test = $this->input->post('test');
+
+                //Array of Information.
                 $Info = array(
                     'job_name'=>$job_name, 
                     'description'=>$description, 
+
                     'confirmation' => $confirmation,
+
+                    //Add timestamp Option
                     'timestamp' => $timestamp,
+
+                    // Abort Build Option
                     'abort' => $abort,
                     'timeoutStrategy' => $timeoutStrategy,
                     'timeoutMinutes' => $timeoutMinutes,
                     'timeoutSeconds' => $timeoutMinutes,
+
+                    // Build Job Periodically
+                    'checkBuild' => $checkBuild,
+                    'action' => $action,
+
+                    // Build Job Periodically - Single Build Option
+                    'singleMinute' => $singleMinute,
+                    'singleHour' => $singleHour,
+                    'singleDayOfMonth' => $singleDayOfMonth,
+                    'singleMonth' => $singleMonth,
+                    'singleDayOfWeek' => $singleDayOfWeek,
+
+                    // Build Job Periodically - Repetitive Build Option
+                    'repetitiveMinute' => $repetitiveMinute,
+                    'repetitiveHour' => $repetitiveHour,
+                    'repetitiveDayOfMonth' => $repetitiveDayOfMonth,
+                    'repetitiveMonth' => $repetitiveMonth,
+                    'repetitiveDayOfWeek' => $repetitiveDayOfWeek,
+
+                    // Build Job Periodically - Tag Build Option
+                    'tag' => $tag,
+
                     'creation_date'=> date('Y-m-d H:i:s'),
                     'owner'=> $this->name
                 );
@@ -98,6 +164,18 @@ class jobCreation extends BaseController
                 echo '<br><br><hr><br>';
 
                
+               
+                // Array to String Conversion Section
+                $singleMinuteString = rtrim(implode(',', $singleMinute), ',');
+                $singleHourString = rtrim(implode(',', $singleHour), ',');
+                $singleDayOfMonthString = rtrim(implode(',', $singleDayOfMonth), ',');
+                $singleMonthString = rtrim(implode(',', $singleMonth), ',');
+                $singleDayOfWeekString = rtrim(implode(',', $singleDayOfWeek), ',');
+                // Array to String Conversion Section
+
+
+
+                // XMl Creation Node Section
 
                 $dom = new DOMDocument();
 
@@ -111,24 +189,44 @@ class jobCreation extends BaseController
 
                 $root = $dom->createElement('project');
 
-              //  $movie_node = $dom->createElement('movie');
-
-               // $attr_movie_id = new DOMAttr('movie_id', '5467');
-
-              //  $movie_node->setAttributeNode($attr_movie_id);
-
                 $node_description = $dom->createElement('description', $description);
 
                 $root->appendChild($node_description);
 
 
                 // Create Trigger Elements
-                $triggers = $dom->createElement('triggers');
-                $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
-                $spec = $dom->createElement('spec', 'H/15 * * * *');
-                $hudson_triggers->appendChild($spec);  
-                $triggers->appendChild($hudson_triggers);    
-                $root->appendChild($triggers);
+                if($checkBuild == 1){ // If Build Periodically Build is selected then
+
+                  // If Single Build option is selected then
+                    if($action == "single") {
+                      $triggers = $dom->createElement('triggers');
+                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
+                      $spec = $dom->createElement('spec', $singleMinuteString.' '.$singleHourString.' '.$singleDayOfMonthString.' '.$singleMonthString.' '.$singleDayOfWeekString);
+                      $hudson_triggers->appendChild($spec);  
+                      $triggers->appendChild($hudson_triggers);    
+                      $root->appendChild($triggers);
+                  }
+
+                  // If Repetitive Build option is selected then
+                  if($action == "repetitive") {
+                     $triggers = $dom->createElement('triggers');
+                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
+                      $spec = $dom->createElement('spec', 'H/'.$repetitiveMinute.' '.$repetitiveHour.' '.$repetitiveDayOfMonth.' '.$repetitiveMonth.' '.$repetitiveDayOfWeek);
+                      $hudson_triggers->appendChild($spec);  
+                      $triggers->appendChild($hudson_triggers);    
+                      $root->appendChild($triggers);
+                  }
+
+                  // If Single Tags option is selected then
+                  if($action == "tags") {
+                     $triggers = $dom->createElement('triggers');
+                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
+                      $spec = $dom->createElement('spec', $tag);
+                      $hudson_triggers->appendChild($spec);  
+                      $triggers->appendChild($hudson_triggers);    
+                      $root->appendChild($triggers);
+                  }
+                }
 
 
                 // Create buildWrappers Elements
