@@ -1,3 +1,4 @@
+<link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
 <div class="content-wrapper">    
   <section class="content-header">
     <h1>
@@ -114,7 +115,7 @@
           </div>
           <div class="checkbox">
             <label>
-              <input type="checkbox"> Build Periodicly
+              <input type="checkbox" name="checkBuild" id="checkBuild" value="1"> Build Periodically
             </label>
           </div>
           <div class="checkbox">
@@ -159,7 +160,7 @@
           </div>
           <div class="form-group">
             <div class="form-group">
-              <button type="submit" href="#" class="btn btn-warning"> Build XML</button>
+              <button type="submit" id="send" href="#" class="btn btn-warning"> Build XML</button>
               <?php  
               $xml = $this->session->flashdata('xml');
               if($xml)
@@ -177,6 +178,209 @@
   </div>
 
   <div class="row">
+
+    <div id="build" style="display: none;">
+      <div class="col-lg-6 col-md-6 col-xs-12 removeBuild">
+        <div class="box box-primary">
+          <div class="box-header with-border">
+            <div class="box-tools pull-right">
+              <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+            </div>
+            <h3 class="box-title">
+              <b>Build Job Periodically</b></h3>
+            </div>
+            <div class="box-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="timeoutStrategy">Trigger Action</label>
+                    <select class="form-control" id="action" name="action">
+                      <option value="0">-- Select an action -- </option>
+                      <option value="single">Single Execution</option>
+                      <option value="repetitive">Repetitive Executions</option>
+                      <option value="tags">Execution Tags Options</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row tags" style="display: none;">
+                <hr>
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="tag">Execution Tag Option</label>
+                    <select class="form-control" id="tag" name="tag">
+                      <option value="@hourly">Hourly Executions</option>
+                      <option value="@daily">Daily Executions</option>
+                      <option value="@weekly">Weekly Executions</option>
+                      <option value="@monthly">Monthly Executions</option>
+                      <option value="@annually">Annually Executions</option>
+                      <option value="@yearly">Yearly Executions</option>
+                      <option value="@midnight">Midnight Executions</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="row singleForm" style="display: none;">
+                <hr>
+                 <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12 form-group">
+                  <div class="input-group" style="width: 100%;">
+                    <label for="singleMinute">Every Minute: </label><br>
+                    <select class="form-control select2" id="singleMinute" name="singleMinute[]" multiple="multiple">
+                      <option value="*" selected>All</option>
+                      <?php  
+                          $i = 0;
+                          for ($i=0; $i < 60; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+             
+                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12 form-group">
+                <div class="input-group" style="width: 100%;">
+                  <label>At Hour: </label><br>
+                      <select class="form-control select2" id="singleHour" name="singleHour[]" multiple="multiple">
+                        <option value="*" selected>All</option>
+                        <?php  
+                          $i = 0;
+                          for ($i=0; $i < 24; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                  </select>
+                </div>
+              </div>
+            </div> <!-- Close row -->
+            <div class="row singleForm" style="display: none;">
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="form-group">
+                    <label for="singleDayOfMonth">On Day of month:</label><br>
+                    <select class="form-control select2" id="singleDayOfMonth" name="singleDayOfMonth[]" multiple="multiple">
+                      <option value="*" selected>All</option>
+                      <?php  
+                          $i = 1;
+                          for ($i=1; $i < 32; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="form-group">
+                    <label for="singleMonth">On Month:</label><br>
+                    <select class="form-control select2" id="singleMonth" name="singleMonth[]" multiple="multiple">
+                      <option value="*" selected>All</option>
+                      <?php  
+                          $i = 1;
+                          for ($i=1; $i < 13; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+                </div> <!-- Close row -->
+                <div class="row singleForm" style="display: none;">
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="form-group">
+                    <label for="singleDayOfWeek">On Day of Week:</label><br>
+                    <select class="form-control select2" id="singleDayOfWeek" name="singleDayOfWeek[]" multiple="multiple">
+                      <option value="*" selected>All</option>
+                      <?php  
+                          $i = 0;
+                          for ($i=0; $i < 13; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+              </div> <!-- Close row -->
+              
+
+              <div class="row repetitive" style="display: none;">
+                <hr>
+                 <div class="col-md-3">
+                  <div class="form-group">
+                    <label for="repetitiveMinute">In X Minutes</label><br>
+                    <select class="form-control" id="repetitiveMinute" name="repetitiveMinute">
+                      <option value="*">All</option>
+                      <?php  
+                          $i = 0;
+                          for ($i=0; $i < 60; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-group">
+                    <label for="repetitiveHour">Hour</label>
+                    <select class="form-control" id="repetitiveHour" name="repetitiveHour">
+                      <option value="*">All</option>
+                      <?php  
+                          $i = 0;
+                          for ($i=0; $i < 24; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-group">
+                    <label for="repetitiveDayOfMonth">Day of month</label>
+                    <select class="form-control" id="repetitiveDayOfMonth" name="repetitiveDayOfMonth">
+                      <option value="*">All</option>
+                      <?php  
+                          $i = 1;
+                          for ($i=1; $i < 32; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-group">
+                    <label for="repetitiveMonth">Month</label>
+                    <select class="form-control" id="repetitiveMonth" name="repetitiveMonth">
+                      <option value="*">All</option>
+                      <?php  
+                          $i = 1;
+                          for ($i=1; $i < 13; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="form-group">
+                    <label for="repetitiveDayOfWeek">Day of Week</label>
+                    <select class="form-control" id="repetitiveDayOfWeek" name="repetitiveDayOfWeek">
+                      <option value="*">All</option>
+                      <?php  
+                          $i = 0;
+                          for ($i=0; $i < 13; $i++) { 
+                          echo '<option value="'.$i.'">'.$i.'</option>';    
+                          }
+                      ?>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
        <div id="abortIfStuck" style="display: none;">
       <div class="col-lg-6 col-md-6 col-xs-12 removeAbort">
         <div class="box box-primary">
@@ -248,9 +452,14 @@
 
 </section>
 </div>
-
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
 <script type="text/javascript">
   $(document).ready(function(){
+
+    $('.select2').select2({
+       placeholder: " Click to Select a option to fetch",
+       allowClear: true
+    });
 
     var addUserForm = $("#InsertDbSettings");
     var validator = addUserForm.validate({
@@ -270,9 +479,63 @@
     });
 
 
+
+$('#checkBuild').click(function(){
+      if($(this).is(":checked")){
+
+        $('#build').show();
+
+        $('#action').change(function(){
+          var val = $('#action').val();
+          console.log(val)
+          if (val == 'single') {
+            $('.tags').hide();
+            $('.repetitive').hide();
+            $('.singleForm').show();
+
+            $('#send').hover(function(){
+                var singleMinute = $('#singleMinute').val();
+                var singleHour = $('#singleHour').val();
+                var singleDayOfMonth = $('#singleDayOfMonth').val();
+                var singleMonth = $('#singleMonth').val();
+                var singleDayOfWeek = $('#singleDayOfWeek').val();
+
+                if($('#confirmation').is(":not(:checked)")) {
+                if (singleMinute == '*' && singleHour == '*' && singleDayOfMonth == '*' && singleMonth == '*' && singleDayOfWeek == '*'){
+                  alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
+                  function(){ 
+                   alertify.success('You has agreeded with your choice, be careful !');
+                   $("#confirmation"). prop("checked", true);
+                }, 
+                  function(){ 
+                    alertify.error('Operation Aborted');
+                    $("#confirmation"). prop("checked", false);
+                }
+              );
+            }
+                }
+              });
+
+
+          } else  if (val == 'repetitive'){
+            $('.repetitive').show();
+            $('.singleForm').hide();
+            $('.tags').hide();
+          } else if (val == 'tags'){
+            $('.tags').show();
+            $('.singleForm').hide();
+            $('.repetitive').hide();
+          }
+        }); 
+
+      }
+      else if($(this).is(":not(:checked)")){
+        $('#build').hide();
+      }
+    });
+
     $('#abort').click(function(){
       if($(this).is(":checked")){
-        console.log("Checkbox is checked.");
 
         $('#abortIfStuck').show();
         $("#timeoutMinutes").prop('required',true);
@@ -291,7 +554,6 @@
      
       }
       else if($(this).is(":not(:checked)")){
-        console.log("Checkbox is unchecked.");
         $('#abortIfStuck').hide();
       }
     });
@@ -331,7 +593,6 @@
           $('.overlay').hide();
           
           toastr.success("Your Execution Request has been sent to server.", "Request Sent")
-
         }).fail(function() {
           $('.overlay').hide();
           console.error(arguments);
@@ -341,6 +602,8 @@
         $('.send').remove();
         $('.xml').remove();
         $('.destroy').remove();
+        $("#confirmation"). prop("checked", false);
+        $("#checkBuild"). prop("checked", false);
 
 
 
