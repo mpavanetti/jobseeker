@@ -59,6 +59,14 @@ class BaseController extends CI_Controller {
 			$this->global ['jenkins_token'] = $jsonToArray->jenkins->token;
 			$this->global ['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
 
+			// Set global var to detect OS Version
+			if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+			    $os = "windows";
+			} else {
+			    $os = "linux";
+			}
+			$this->global ['os'] = $os;
+
 		}
 	}
 	

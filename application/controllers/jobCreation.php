@@ -28,6 +28,52 @@ class jobCreation extends BaseController
         $this->loadViews("jobCreation", $this->global, NULL, NULL);
     }
 
+
+    public function do_upload($val,$job_name) {
+
+      $this->global['pageTitle'] = 'Job Seeker : Upload';
+
+     
+
+    $ds = DIRECTORY_SEPARATOR;  //1
+ 
+    $storeFolder = '../../repository/'.$val.'/jobs/'; 
+
+
+    if (!file_exists($storeFolder)) {
+     mkdir($storeFolder);
+    } 
+
+    if (!empty($_FILES)) {
+         
+        $tempFile = $_FILES['file']['tmp_name'];          //3             
+          
+        $targetPath = dirname( __FILE__ ) . $ds. $storeFolder . $ds;  //4
+         
+        $targetFile =  $targetPath. $_FILES['file']['name'];  //5
+     
+        move_uploaded_file($tempFile,$targetFile); //6
+
+        // assuming file.zip is in the same directory as the executing script.
+   
+
+          $zip = new ZipArchive;
+          $res = $zip->open($targetFile);
+          if ($res === TRUE) {
+            // extract it to the path we determined above
+            $zip->extractTo($targetPath.$job_name);
+            $zip->close();
+            echo "WOOT! $file extracted to $path";
+            unlink($targetFile);
+          } else {
+            echo "Doh! I couldn't open $file";
+          }
+
+        }
+
+      }
+
+
     public function send() {
 
         if($this->isManager() == TRUE)
@@ -77,7 +123,7 @@ class jobCreation extends BaseController
                 $timestamp = $this->security->xss_clean($this->input->post('timestamp'));
 
 
-                // -- Trigger Build Periodically Option --
+                // Trigger Build Periodically Option 
                  $checkBuild = $this->security->xss_clean($this->input->post('checkBuild'));
                 $action = $this->security->xss_clean($this->input->post('action'));
 
@@ -88,11 +134,156 @@ class jobCreation extends BaseController
                 $singleMonth = $this->input->post('singleMonth');
                 $singleDayOfWeek = $this->input->post('singleDayOfWeek');
 
+                // Execute a Windows Command Option
+
+                // Start Windows File Upload
+                $executionStrategy = $this->input->post('executionStrategy');
+                $scriptType = $this->input->post('scriptType');
+                $windowsCommandLine = $this->input->post('windowsCommandLine');
+
+                if($executionStrategy == 'script'){
+                  if($scriptType == 'talend'){
+                          $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*");
+                          $file = glob($filelist[0].'/*.bat');
+                          $filePath = realpath($file[0]);
+                          echo 'WINDOWS - TALEND File Path: <b>'.$filePath.'</b>';
+                          echo '<hr><br>';
+                           // checking whether a file is directory or not 
+                          if (is_dir($filePath)) {
+                            echo "My File is a directory";
+                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           redirect('jobCreation');
+                          } else {
+                            if (file_exists($filePath)) {
+                            } else {
+                                echo "The file $filePath does not exists";
+                            }
+                          }
+                  } else if ($scriptType == 'batch') {
+                        $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*.bat");
+                          $file = glob($filelist[0]);
+                          $filePath = realpath($file[0]);
+                          echo 'WINDOWS - BATCH File Path: <b>'.$filePath.'</b>';
+                          echo '<hr><br>';
+                          // checking whether a file is directory or not 
+                          if (is_dir($filePath)) {
+                            echo "My File is a directory";
+                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           redirect('jobCreation');
+                          } else {
+                            if (file_exists($filePath)) {
+                            } else {
+                                echo "The file $filePath does not exists";
+                            }
+                          } 
+                           
+                  } else if ($scriptType == 'python') {
+                        $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*.py");
+                          $file = glob($filelist[0]);
+                          $filePath = realpath($file[0]);
+                          echo 'WINDOWS - PYTHON File Path: <b>'.$filePath.'</b>';
+                          echo '<hr><br>';
+
+                           // checking whether a file is directory or not 
+                          if (is_dir($filePath)) {
+                            echo "My File is a directory";
+                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           redirect('jobCreation');
+                          } else {
+                            if (file_exists($filePath)) {
+                            } else {
+                                echo "The file $filePath does not exists";
+                            }
+                          }
+                  }
+                } else if ($executionStrategy == 'command'){
+
+                  $filePath = $windowsCommandLine;
+                  
+                }
+                // END Windows File Upload
+
+                // Start Windows File Upload
+                $linuxExecutionStrategy = $this->input->post('linuxExecutionStrategy');
+                $linuxScriptType = $this->input->post('linuxScriptType');
+                $linuxCommandLine = $this->input->post('linuxCommandLine');
+
+                if($linuxExecutionStrategy == 'script'){
+                  if($linuxScriptType == 'talend'){
+                          $filelist = glob("repository/".$linuxScriptType."/jobs/".$job_name."/*");
+                          $file = glob($filelist[0].'/*.sh');
+                          $filePath = realpath($file[0]);
+
+                           // checking whether a file is directory or not 
+                          if (is_dir($filePath)) {
+                            echo "My File is a directory";
+                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           redirect('jobCreation');
+                          } else {
+                            if (file_exists($filePath)) {
+                            } else {
+                                echo "The file $filePath does not exists";
+                            }
+                          }
+
+                          $filePath = '.'.$filePath;
+                          echo 'LINUX - TALEND File Path: <b>'.$filePath.'</b>';
+                          echo '<hr><br>';
+                  } else if ($linuxScriptType == 'bash') {
+                        $filelist = glob("repository/".$linuxScriptType."/jobs/".$job_name."/*.sh");
+                          $file = glob($filelist[0]);
+                          $filePath = realpath($file[0]);
+
+                           // checking whether a file is directory or not 
+                          if (is_dir($filePath)) {
+                            echo "My File is a directory";
+                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           redirect('jobCreation');
+                          } else {
+                            if (file_exists($filePath)) {
+                            } else {
+                                echo "The file $filePath does not exists";
+                            }
+                          }
+
+                          $filePath = '.'.$filePath;
+                          echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
+                          echo '<hr><br>';
+                  } else if ($linuxScriptType == 'python') {
+                        $filelist = glob("repository/".$linuxScriptType."/jobs/".$job_name."/*.py");
+                          $file = glob($filelist[0]);
+                          $filePath = realpath($file[0]);
+
+                           // checking whether a file is directory or not 
+                          if (is_dir($filePath)) {
+                            echo "My File is a directory";
+                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           redirect('jobCreation');
+                          } else {
+                            if (file_exists($filePath)) {
+                            } else {
+                                echo "The file $filePath does not exists";
+                            }
+                          }
+
+                          $filePath = '.'.$filePath;
+                          echo 'LINUX - PYTHON File Path: <b>'.$filePath.'</b>';
+                          echo '<hr><br>';
+                  }
+                } else if ($linuxExecutionStrategy == 'command'){
+
+                  $filePath = $linuxCommandLine;  
+                  
+                }
+
+               
+                // END Linux File Upload
+
                 
                 // Validation if nothing comes null
                 if ($singleMinute == null || $singleHour == null || $singleDayOfMonth == null || $singleMonth == null || $singleDayOfWeek == null){
 
-                  $this->session->set_flashdata('error', 'You missed to select one field parameter for build periodically function');
+                  $this->session->set_flashdata('error', 'You missed to select one field value for Build Periodically function');
                     redirect('jobCreation');
                 }
 
@@ -227,6 +418,32 @@ class jobCreation extends BaseController
                       $root->appendChild($triggers);
                   }
                 }
+
+                // Create builders Elements
+                $builders = $dom->createElement('builders');
+
+                // Windows Script Execution
+                if($executionStrategy == 'script' && $scriptType != "0" || $executionStrategy == 'command'){
+
+                  $hudson_task_BatchFile = $dom->createElement('hudson.tasks.BatchFile');
+                  $command = $dom->createElement('command', $filePath);
+                  $hudson_task_BatchFile->appendChild($command);
+                  $builders->appendChild($hudson_task_BatchFile);
+                  
+                }
+
+                // Linux Script Execution
+                if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0" || $linuxExecutionStrategy == 'command'){
+
+                  $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
+                  $command = $dom->createElement('command', $filePath);
+                  $hudson_task_BashFile->appendChild($command);
+                  $builders->appendChild($hudson_task_BashFile);
+                  
+                }
+
+                // Append Builders to root node
+                $root->appendChild($builders);
 
 
                 // Create buildWrappers Elements
