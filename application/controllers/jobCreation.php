@@ -305,7 +305,15 @@ class jobCreation extends BaseController
                 $timeoutSeconds = $this->security->xss_clean($this->input->post('timeoutSeconds'));
                 
 
-                  $test = $this->input->post('test');
+                // Execute another job section
+                $jobList = $this->security->xss_clean($this->input->post('jobList'));
+                $optionsRadios = $this->security->xss_clean($this->input->post('optionsRadios'));
+
+                print_r($jobList);
+                echo '<br><hr>';
+
+                echo $optionsRadios;
+                echo '<br><hr>';
 
                 //Array of Information.
                 $Info = array(
@@ -362,6 +370,10 @@ class jobCreation extends BaseController
                 $singleDayOfMonthString = rtrim(implode(',', $singleDayOfMonth), ',');
                 $singleMonthString = rtrim(implode(',', $singleMonth), ',');
                 $singleDayOfWeekString = rtrim(implode(',', $singleDayOfWeek), ',');
+
+                if ($jobList != null) {
+                  $jobListString = rtrim(implode(', ', $jobList), ',');
+                }
                 // Array to String Conversion Section
 
 
@@ -442,8 +454,44 @@ class jobCreation extends BaseController
                   
                 }
 
+
                 // Append Builders to root node
                 $root->appendChild($builders);
+
+                 // Create Publishers Elements
+                 $publishers = $dom->createElement('publishers');
+
+                if ($jobList != null){
+                  $BuildTrigger = $dom->createElement('hudson.tasks.BuildTrigger');
+                  $publishers->appendChild($BuildTrigger);
+
+                  $childProjects = $dom->createElement('childProjects', $jobListString );
+                  $BuildTrigger->appendChild($childProjects);
+
+                  if ($optionsRadios == "1"){
+                    $threshold = $dom->createElement('threshold');
+                    $thresholdName = $dom->createElement('name', 'SUCCESS' );
+                    $thresholdOrdinal = $dom->createElement('ordinal', '0' );
+                    $thresholdColor = $dom->createElement('color', 'BLUE' );
+                    $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
+                  } else if ($optionsRadios == "2") {
+                    $threshold = $dom->createElement('threshold');
+                    $thresholdName = $dom->createElement('name', 'FAILURE' );
+                    $thresholdOrdinal = $dom->createElement('ordinal', '2' );
+                    $thresholdColor = $dom->createElement('color', 'RED' );
+                    $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
+                  }
+
+                  $threshold->appendChild($thresholdName);
+                  $threshold->appendChild($thresholdOrdinal);
+                  $threshold->appendChild($thresholdColor);
+                  $threshold->appendChild($thresholdCompleteBuild);
+                  $BuildTrigger->appendChild($threshold);
+                }
+
+                // Append Builders to root node
+                $root->appendChild($publishers);
+
 
 
                 // Create buildWrappers Elements
