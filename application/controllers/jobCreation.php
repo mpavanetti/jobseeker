@@ -98,6 +98,15 @@ class jobCreation extends BaseController
             // Trigger Build Periodically Option
             $this->form_validation->set_rules('checkBuild','Check Build','trim|max_length[1]');
 
+            // Execute Windows Command
+            $this->form_validation->set_rules('winCommand','winCommand','trim|max_length[1]');
+
+            // Execute Linux Command
+            $this->form_validation->set_rules('linuxCommand','linuxCommand','trim|max_length[1]');
+
+            // Run another job
+            $this->form_validation->set_rules('runJobCheck','runJobCheck','trim|max_length[1]');
+
 
             //Abort Build
             $this->form_validation->set_rules('abort','Abort','trim|max_length[1]');
@@ -136,7 +145,8 @@ class jobCreation extends BaseController
 
                 // Execute a Windows Command Option
 
-                // Start Windows File Upload
+                // Start Windows File Upload 
+                $winCommand = $this->input->post('winCommand');
                 $executionStrategy = $this->input->post('executionStrategy');
                 $scriptType = $this->input->post('scriptType');
                 $windowsCommandLine = $this->input->post('windowsCommandLine');
@@ -204,6 +214,7 @@ class jobCreation extends BaseController
                 // END Windows File Upload
 
                 // Start Windows File Upload
+                $linuxCommand = $this->input->post('linuxCommand');
                 $linuxExecutionStrategy = $this->input->post('linuxExecutionStrategy');
                 $linuxScriptType = $this->input->post('linuxScriptType');
                 $linuxCommandLine = $this->input->post('linuxCommandLine');
@@ -276,10 +287,9 @@ class jobCreation extends BaseController
                   
                 }
 
-               
                 // END Linux File Upload
 
-                
+          
                 // Validation if nothing comes null
                 if ($singleMinute == null || $singleHour == null || $singleDayOfMonth == null || $singleMonth == null || $singleDayOfWeek == null){
 
@@ -297,72 +307,17 @@ class jobCreation extends BaseController
                 // Tag Build Option
                 $tag = $this->security->xss_clean($this->input->post('tag'));
 
-
                 // Abort the build Checkbox
                 $abort = $this->security->xss_clean($this->input->post('abort'));
                 $timeoutStrategy = $this->security->xss_clean($this->input->post('timeoutStrategy'));
                 $timeoutMinutes = $this->security->xss_clean($this->input->post('timeoutMinutes'));
                 $timeoutSeconds = $this->security->xss_clean($this->input->post('timeoutSeconds'));
-                
-
-                // Execute another job section
+            
+                // Execute another job section 
+                $runJobCheck = $this->security->xss_clean($this->input->post('runJobCheck'));
                 $jobList = $this->security->xss_clean($this->input->post('jobList'));
                 $optionsRadios = $this->security->xss_clean($this->input->post('optionsRadios'));
 
-                print_r($jobList);
-                echo '<br><hr>';
-
-                echo $optionsRadios;
-                echo '<br><hr>';
-
-                //Array of Information.
-                $Info = array(
-                    'job_name'=>$job_name, 
-                    'description'=>$description, 
-
-                    'confirmation' => $confirmation,
-
-                    //Add timestamp Option
-                    'timestamp' => $timestamp,
-
-                    // Abort Build Option
-                    'abort' => $abort,
-                    'timeoutStrategy' => $timeoutStrategy,
-                    'timeoutMinutes' => $timeoutMinutes,
-                    'timeoutSeconds' => $timeoutMinutes,
-
-                    // Build Job Periodically
-                    'checkBuild' => $checkBuild,
-                    'action' => $action,
-
-                    // Build Job Periodically - Single Build Option
-                    'singleMinute' => $singleMinute,
-                    'singleHour' => $singleHour,
-                    'singleDayOfMonth' => $singleDayOfMonth,
-                    'singleMonth' => $singleMonth,
-                    'singleDayOfWeek' => $singleDayOfWeek,
-
-                    // Build Job Periodically - Repetitive Build Option
-                    'repetitiveMinute' => $repetitiveMinute,
-                    'repetitiveHour' => $repetitiveHour,
-                    'repetitiveDayOfMonth' => $repetitiveDayOfMonth,
-                    'repetitiveMonth' => $repetitiveMonth,
-                    'repetitiveDayOfWeek' => $repetitiveDayOfWeek,
-
-                    // Build Job Periodically - Tag Build Option
-                    'tag' => $tag,
-
-                    'creation_date'=> date('Y-m-d H:i:s'),
-                    'owner'=> $this->name
-                );
-
-
-                print_r($Info);
-
-
-                echo '<br><br><hr><br>';
-
-               
                
                 // Array to String Conversion Section
                 $singleMinuteString = rtrim(implode(',', $singleMinute), ',');
@@ -435,25 +390,27 @@ class jobCreation extends BaseController
                 $builders = $dom->createElement('builders');
 
                 // Windows Script Execution
-                if($executionStrategy == 'script' && $scriptType != "0" || $executionStrategy == 'command'){
+                if($winCommand == 1){ // Check if the windows command checkbox is marked
+                  if($executionStrategy == 'script' && $scriptType != "0" || $executionStrategy == 'command'){
 
-                  $hudson_task_BatchFile = $dom->createElement('hudson.tasks.BatchFile');
-                  $command = $dom->createElement('command', $filePath);
-                  $hudson_task_BatchFile->appendChild($command);
-                  $builders->appendChild($hudson_task_BatchFile);
-                  
-                }
+                    $hudson_task_BatchFile = $dom->createElement('hudson.tasks.BatchFile');
+                    $command = $dom->createElement('command', $filePath);
+                    $hudson_task_BatchFile->appendChild($command);
+                    $builders->appendChild($hudson_task_BatchFile);
+                  }
+                }  
 
                 // Linux Script Execution
-                if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0" || $linuxExecutionStrategy == 'command'){
+                if($linuxCommand == 1) {
+                  if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0" || $linuxExecutionStrategy == 'command'){
 
-                  $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
-                  $command = $dom->createElement('command', $filePath);
-                  $hudson_task_BashFile->appendChild($command);
-                  $builders->appendChild($hudson_task_BashFile);
-                  
+                    $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
+                    $command = $dom->createElement('command', $filePath);
+                    $hudson_task_BashFile->appendChild($command);
+                    $builders->appendChild($hudson_task_BashFile);
+                    
+                  }
                 }
-
 
                 // Append Builders to root node
                 $root->appendChild($builders);
@@ -461,34 +418,35 @@ class jobCreation extends BaseController
                  // Create Publishers Elements
                  $publishers = $dom->createElement('publishers');
 
-                if ($jobList != null){
-                  $BuildTrigger = $dom->createElement('hudson.tasks.BuildTrigger');
-                  $publishers->appendChild($BuildTrigger);
+                if($runJobCheck == 1){ // if Run Job Checkbos is marked then   
+                  if ($jobList != null){
+                    $BuildTrigger = $dom->createElement('hudson.tasks.BuildTrigger');
+                    $publishers->appendChild($BuildTrigger);
 
-                  $childProjects = $dom->createElement('childProjects', $jobListString );
-                  $BuildTrigger->appendChild($childProjects);
+                    $childProjects = $dom->createElement('childProjects', $jobListString );
+                    $BuildTrigger->appendChild($childProjects);
 
-                  if ($optionsRadios == "1"){
-                    $threshold = $dom->createElement('threshold');
-                    $thresholdName = $dom->createElement('name', 'SUCCESS' );
-                    $thresholdOrdinal = $dom->createElement('ordinal', '0' );
-                    $thresholdColor = $dom->createElement('color', 'BLUE' );
-                    $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
-                  } else if ($optionsRadios == "2") {
-                    $threshold = $dom->createElement('threshold');
-                    $thresholdName = $dom->createElement('name', 'FAILURE' );
-                    $thresholdOrdinal = $dom->createElement('ordinal', '2' );
-                    $thresholdColor = $dom->createElement('color', 'RED' );
-                    $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
+                    if ($optionsRadios == "1"){
+                      $threshold = $dom->createElement('threshold');
+                      $thresholdName = $dom->createElement('name', 'SUCCESS' );
+                      $thresholdOrdinal = $dom->createElement('ordinal', '0' );
+                      $thresholdColor = $dom->createElement('color', 'BLUE' );
+                      $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
+                    } else if ($optionsRadios == "2") {
+                      $threshold = $dom->createElement('threshold');
+                      $thresholdName = $dom->createElement('name', 'FAILURE' );
+                      $thresholdOrdinal = $dom->createElement('ordinal', '2' );
+                      $thresholdColor = $dom->createElement('color', 'RED' );
+                      $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
+                    }
+
+                    $threshold->appendChild($thresholdName);
+                    $threshold->appendChild($thresholdOrdinal);
+                    $threshold->appendChild($thresholdColor);
+                    $threshold->appendChild($thresholdCompleteBuild);
+                    $BuildTrigger->appendChild($threshold);
                   }
-
-                  $threshold->appendChild($thresholdName);
-                  $threshold->appendChild($thresholdOrdinal);
-                  $threshold->appendChild($thresholdColor);
-                  $threshold->appendChild($thresholdCompleteBuild);
-                  $BuildTrigger->appendChild($threshold);
                 }
-
                 // Append Builders to root node
                 $root->appendChild($publishers);
 
@@ -539,7 +497,6 @@ class jobCreation extends BaseController
                  $buildWrappers->appendChild($hudson_plugins_timeout);
                 }
                 // End Abort Build if Stucks Option
-
 
 
                 $root->appendChild($buildWrappers);

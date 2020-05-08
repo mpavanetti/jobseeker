@@ -122,12 +122,7 @@
         <div class="box-body">
           <div class="checkbox">
             <label>
-              <input type="checkbox"> Trigger Job
-            </label>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="checkBuild" id="checkBuild" value="1"> Build Periodically
+              <input type="checkbox" name="checkBuild" id="checkBuild" value="1"> Schedule Job
             </label>
           </div>
           <div class="checkbox">
@@ -140,40 +135,35 @@
               <input type="checkbox" name="timestamp" id="timestamp" value="1"> Add timestamps to the Console Output
             </label>
           </div>
-          <div class="form-group">
-            <div class="form-group">
-              <div class="btn-group">
-                <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-expanded="false">Add Job Function
-                  <span class="caret"></span>
-                  <span class="sr-only">Toggle Dropdown</span>
-                </button>
-                <ul class="dropdown-menu" role="menu">
-                  <?php if($os == "windows") { ?>
-                    <li><a href="#" id="showWinCommand">Execute a Windows Command</a></li>
-                  <?php } else { ?>
-                    <li><a href="#" id="showLinuxCommand">Execute a Linux Command</a></li>
-                  <?php }?>
-                </ul>
-              </div>
+          <?php if($os == "windows") { ?>
+            <div class="checkbox">
+              <label>
+                <input type="checkbox" name="winCommand" id="winCommand" value="1"> Execute a <b>Windows</b> local command or script
+              </label>
             </div>
-          </div>
-          <div class="form-group">
-            <div class="form-group">
-              <div class="btn-group">
-                <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-expanded="false">Actions After Job Execution
-                  <span class="caret"></span>
-                  <span class="sr-only">Toggle Dropdown</span>
-                </button>
-                <ul class="dropdown-menu" role="menu">
-                  <li><a href="#" id="showRunJob">Execute another job</a></li>
-                  <li><a href="#">Email Notification</a></li>
-                  <li class="divider"></li>
-                  <li><a href="#">Editable Email Notification</a></li>
-                </ul>
-              </div>
+          <?php } else { ?>
+            <div class="checkbox">
+              <label>
+                <input type="checkbox" name="linuxCommand" id="linuxCommand" value="1"> Execute a <b>Linux</b> local command or script
+              </label>
             </div>
+          <?php }?>
+          <div class="checkbox">
+            <label>
+              <input type="checkbox" name="runJobCheck" id="runJobCheck" value="1"> Execute another job after this build
+            </label>
           </div>
-          <div class="form-group">
+          <div class="checkbox">
+            <label>
+              <input type="checkbox" name="emailNotification" id="emailNotification" value="1"> Enable email notification in case of failure
+            </label>
+          </div>
+          <div class="checkbox">
+            <label>
+              <input type="checkbox" name="editableEmailNotification" id="editableEmailNotification" value="1"> Enable editable email notification
+            </label>
+          </div>
+          <div class="form-group" style="margin-top: 30px;">
             <div class="form-group">
               <button type="submit" id="send" href="#" class="btn btn-warning buildXmlBtn"> Build XML</button>
               <?php  
@@ -202,7 +192,7 @@
               <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
             </div>
             <h3 class="box-title">
-              <b>Build Job Periodically</b></h3>
+              <b>Schedule Job</b></h3>
             </div>
             <div class="box-body">
               <div class="row">
@@ -434,11 +424,10 @@
 
         <div id="runWinCommand" style="display: none;">
           <div class="col-lg-6 col-md-6 col-xs-12">
-            <div class="box box-warning">
+            <div class="box box-primary">
               <div class="box-header with-border">
                 <div class="box-tools pull-right">
                   <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
-                  <button id="hideWinCommand" type="button" class="btn btn-box-tool"><i class="fa fa-times"></i></button>
                 </div>
                 <h3 class="box-title">
                   <b>Execute a Windows Command</b></h3>
@@ -472,7 +461,7 @@
                   <div class="row windowsCommandForm" style="display: none;">
                     <div class="col-md-12 ">
                       <div class="form-group">
-                        <label for="timeoutMinutes">Windows Command Line</label>
+                        <label for="windowsCommandLine">Windows Command Line</label>
                         <textarea class="form-control" id="windowsCommandLine" name="windowsCommandLine"  maxlength="5000" autocomplete="off" rows="5"></textarea>
                       </div>
                     </div>
@@ -492,7 +481,7 @@
 
           <div id="runlinuxCommand" style="display: none;">
             <div class="col-lg-6 col-md-6 col-xs-12">
-              <div class="box box-warning">
+              <div class="box box-primary">
                 <div class="box-header with-border">
                   <div class="box-tools pull-right">
                     <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
@@ -553,10 +542,12 @@
             <div id="runJob" style="display: none;">
               <div class="col-lg-6 col-md-6 col-xs-12">
                 <div class="box box-primary">
+                  <div id="overlay" class="overlay" style="display: none;">
+                        <i class="fa fa-refresh fa-spin"></i>
+                      </div>
                   <div class="box-header with-border">
                     <div class="box-tools pull-right">
                       <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
-                      <button id="hideRunJob" type="button" class="btn btn-box-tool"><i class="fa fa-times"></i></button>
                     </div>
                     <h3 class="box-title">
                       <b>Execute another job</b></h3>
@@ -593,9 +584,6 @@
                         </div>    
 
                       </div>
-                      <div class="overlay" style="display:none;">
-                      <i class="fa fa-refresh fa-spin"></i>
-                    </div>
                     </div>
                   </div>
                 </div>
@@ -666,202 +654,232 @@
         });
 
      // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';    
+     var jenkins_url = '<?php echo $jenkins_url; ?>';
+     var jenkins_username = '<?php echo $jenkins_username; ?>';
+     var jenkins_token = '<?php echo $jenkins_token; ?>';
+     var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';    
 
-    // Sho and Hide run next job    
-    $('#showRunJob').click(function(){
-      $('#jobList option').remove();
-       $.ajax({
-          url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
-          method: 'GET',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-          beforeSend: function() {
-           
-            $('.overlay').show();
-            $('#overlay2').show();
+
+     // Logic for run another job after this build function
+     $('#runJobCheck').click(function(){
+      if($(this).is(":checked")){
+         $('#jobList option').remove();
+      $.ajax({
+        url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
+        method: 'GET',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+        beforeSend: function() {
+
+          $('#overlay').show();
         }
-        }).done(function(data) {
+      }).done(function(data) {
 
-           $.each(data["jobs"], function (key, item) {
-               // console.log(item.name);
-                newJson = item.name;
-                
-                $('#jobList').append($('<option>', {
+       $.each(data["jobs"], function (key, item) {
+               newJson = item.name;
+               $('#jobList').append($('<option>', {
                 value: newJson,
                 text: newJson
-                }))
-            });
+              }))
+             });
 
-           $('.overlay').hide();
+       $('#overlay').hide();
 
-        }).fail(function() {
-          console.error(arguments);
-           toastr.error("Failed to fetch available jobs from server", "Fail to fetch jobs")
-        });
-
-      $('#runJob').show();
+     }).fail(function() {
+      console.error(arguments);
+      toastr.error("Failed to fetch available jobs from server", "Fail to fetch jobs")
     });
 
-    $('#hideRunJob').click(function(){
-      $('#runJob').hide();
+     $('#runJob').show();
+    } 
+      else if($(this).is(":not(:checked)")){
+        $('#runJob').hide();
+      }
     });
 
-    // Show and Hide win command div
-    $('#showWinCommand').click(function(){
-      $('#runWinCommand').show();
-    });
+    
 
-    $('#hideWinCommand').click(function(){
-      $('#runWinCommand').hide();
-    });
 
-    //Windows Execution Strategy area script
-    $('#executionStrategy').change(function(){
-      var val = $('#executionStrategy').val();
-      console.log(val)
+    // Logic for Execute a Windows Command or script
+    $('#winCommand').click(function(){ // If checkbox is checked
+      if($(this).is(":checked")){
 
-      if(val == 'command' && val != 0){
-        $('.scriptTypeForm').hide();
-        $('.windowsCommandForm').show();
+        // Show Windows command Div
+        $('#runWinCommand').show();
 
+       //Windows Execution Strategy area script
+       $('#executionStrategy').change(function(){
+        var val = $('#executionStrategy').val();
+
+        // If the option is to execute windows command line
+        if(val == 'command' && val != 0){
+          $('.scriptTypeForm').hide();
+          $('.destroyDropzone').remove();
+          $("#scriptType").val(0);
+          $('.windowsCommandForm').show();
+
+        // If the option is to execute an script
       } else if(val == 'script' && val != 0) {
         $('.scriptTypeForm').show();
         $('.windowsCommandForm').hide();
-      } else if(val == 0){
-        $('.windowsCommandForm').hide();
-        $('.scriptTypeForm').hide();
-      }
 
-    });
+          // Windows Script Execution 
+          $('#scriptType').change(function(){
+            var val = $('#scriptType').val();
+            var job_name = $('#job_name').val();
 
-    // Windows Command execution script
-    $('#scriptType').change(function(){
-      var val = $('#scriptType').val();
-      var job_name = $('#job_name').val();
+            if (val != 0) {
+              if($("#confirmation").is(":checked")){
+                if(job_name != '' && job_name != null){
+                  $('.uploadScript').show();
+                  $('.destroyDropzone').remove();
+                  $('#windowsColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
 
-      if (val != 0) {
-        if($("#confirmation").is(":checked")){
-          if(job_name != null){
-            $('.uploadScript').show();
-            $('.destroyDropzone').remove();
-            $('#windowsColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
+                  $("#mydropzone").dropzone({
+                    maxFiles: 1,
+                    acceptedFiles: ".zip",
+                    url: "<?php echo base_url(); ?>jobCreation/do_upload/" + val + "/" +job_name,
+                    maxFilesize: 100,
+                    sending: function () {
+                      toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
+                      $(".buildXmlBtn").prop('disabled', true);
+                    },
+                    success: function() {
+                      toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
+                      $(".buildXmlBtn").prop('disabled', false);
+                    },
+                    error: function() {
+                      toastr.error("Erro during uploading file.", "File Upload Error")
+                      $(".buildXmlBtn").prop('disabled', false);
+                    }
 
 
-            $("#mydropzone").dropzone({
-              maxFiles: 1,
-              acceptedFiles: ".zip",
-              url: "<?php echo base_url(); ?>jobCreation/do_upload/" + val + "/" +job_name,
-              maxFilesize: 100,
-              sending: function () {
-                toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
-                $(".buildXmlBtn").prop('disabled', true);
-              },
-              success: function() {
-                toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
-                $(".buildXmlBtn").prop('disabled', false);
-              },
-              error: function() {
-                toastr.error("Erro during uploading file.", "File Upload Error")
-                $(".buildXmlBtn").prop('disabled', false);
+                  });
+                } else {
+                  toastr.error("Please Select a job name to upload the file", "File Upload Error")
+                  $("#scriptType").val(0);
+                }
+              } else {
+                toastr.error("Please review your request and confirm the checkbox", "File Upload Error")
+                $("#scriptType").val(0);
               }
 
+            } else {
+              $('.uploadScript').hide();
+              $('.destroyDropzone').remove();
+            }
 
-            });
-          } else {
-            toastr.error("Please Select a job name to upload the file", "File Upload Error")
-          }
-        } else {
-          toastr.error("Please review your request and confirm the checkbox", "File Upload Error")
+          });
+
+        } else if(val == 0){
+          $('.windowsCommandForm').hide();
+          $('.scriptTypeForm').hide();
         }
 
-      } else {
-        $('.uploadScript').hide();
-        $('.destroyDropzone').remove();
+      });
+
+     } 
+      else if($(this).is(":not(:checked)")){ // If checkbox is NOT checked
+
+        // Hide Windows Command Div
+        $('#runWinCommand').hide();
+        
       }
-
     });
 
-     // Show and Hide linux command div
-     $('#showLinuxCommand').click(function(){
-      $('#runlinuxCommand').show();
-    });
-
-     $('#hideLinuxCommand').click(function(){
-      $('#runlinuxCommand').hide();
-    });
-
-    //Linux Execution Strategy area script
-    $('#linuxExecutionStrategy').change(function(){
-      var val = $('#linuxExecutionStrategy').val();
-      console.log(val)
-
-      if(val == 'command' && val != 0){
-        $('.linuxScriptTypeForm').hide();
-        $('.linuxCommandForm').show();
-
-      } else if(val == 'script' && val != 0) {
-        $('.linuxScriptTypeForm').show();
-        $('.linuxCommandForm').hide();
-      } else if(val == 0){
-        $('.linuxScriptTypeForm').hide();
-        $('.linuxCommandForm').hide();
-      }
-
-    });
-
-     // Linux Command execution script
-     $('#linuxScriptType').change(function(){
-      var val = $('#linuxScriptType').val();
-      var job_name = $('#job_name').val();
-
-      if (val != 0) {
-        if($("#confirmation").is(":checked")){
-          if(job_name != null){
-            $('.linuxUploadScript').show();
-            $('.destroyDropzone').remove();
-            $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
 
 
-            $("#mydropzone").dropzone({
-              maxFiles: 1,
-              acceptedFiles: ".zip",
-              url: "<?php echo base_url(); ?>jobCreation/do_upload/" + val + "/" +job_name,
-              maxFilesize: 100,
-              sending: function () {
-                toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
-                $(".buildXmlBtn").prop('disabled', true);
-              },
-              success: function() {
-                toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
-                $(".buildXmlBtn").prop('disabled', false);
-              },
-              error: function() {
-                toastr.error("Erro during uploading file.", "File Upload Error")
-                $(".buildXmlBtn").prop('disabled', false);
-              }
+    // Linux Command / Script execution function
+    $('#linuxCommand').click(function(){
+      if($(this).is(":checked")){
+
+        // Show Linux Command div
+        $('#runlinuxCommand').show();
+
+          //Linux Execution Strategy area script
+          $('#linuxExecutionStrategy').change(function(){
+            var val = $('#linuxExecutionStrategy').val();
+
+            // If the option is to execute a linux command then
+            if(val == 'command' && val != 0){
+              $('.linuxScriptTypeForm').hide();
+              $('.destroyDropzone').remove();
+              $('.linuxCommandForm').show();
+              $("#linuxScriptType").val(0);
+
+            // If the option is to execute a linux script then  
+          } else if(val == 'script' && val != 0) {
+            $('.linuxScriptTypeForm').show();
+            $('.linuxCommandForm').hide();
+
+              // Linux Command execution script
+              $('#linuxScriptType').change(function(){
+                var val = $('#linuxScriptType').val();
+                var job_name = $('#job_name').val();
+                console.log(job_name);
+
+                if (val != 0) {
+                  if($("#confirmation").is(":checked")){
+                    if(job_name != '' && job_name != null){
+                      $('.linuxUploadScript').show();
+                      $('.destroyDropzone').remove();
+                      $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
+
+                      $("#mydropzone").dropzone({
+                        maxFiles: 1,
+                        acceptedFiles: ".zip",
+                        url: "<?php echo base_url(); ?>jobCreation/do_upload/" + val + "/" +job_name,
+                        maxFilesize: 100,
+                        sending: function () {
+                          toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
+                          $(".buildXmlBtn").prop('disabled', true);
+                        },
+                        success: function() {
+                          toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
+                          $(".buildXmlBtn").prop('disabled', false);
+                        },
+                        error: function() {
+                          toastr.error("Erro during uploading file.", "File Upload Error")
+                          $(".buildXmlBtn").prop('disabled', false);
+                        }
 
 
-            });
-          } else {
-            toastr.error("Please Select a job name to upload the file", "File Upload Error")
+                      });
+                    } else {
+                      toastr.error("Please Select a job name to upload the file", "File Upload Error");
+                      $("#linuxScriptType").val(0);
+                    }
+                  } else {
+                    toastr.error("Please review your request and confirm the checkbox", "File Upload Error");
+                    $("#linuxScriptType").val(0);
+                  }
+
+                } else {
+                  $('.linuxUploadScript').hide();
+                  $('.destroyDropzone').remove();
+                }
+
+              });
+
+            // If the option is nothing then   
+          } else if(val == 0){
+            $('.linuxScriptTypeForm').hide();
+            $('.linuxCommandForm').hide();
           }
-        } else {
-          toastr.error("Please review your request and confirm the checkbox", "File Upload Error")
+        });
+
+        } 
+        else if($(this).is(":not(:checked)")){
+
+          // Hide Linux Command div
+          $('#runlinuxCommand').hide();
+
         }
+      });
 
-      } else {
-        $('.linuxUploadScript').hide();
-        $('.destroyDropzone').remove();
-      }
-
-    });
+    
 
 
-
-     $('#checkBuild').click(function(){
+    $('#checkBuild').click(function(){
       if($(this).is(":checked")){
 
         $('#build').show();
@@ -874,7 +892,6 @@
             $('.repetitive').hide();
             $('.singleForm').show();
 
-
             $('#send').hover(function(){
               var val = $('#action').val();
               var singleMinute = $('#singleMinute').val();
@@ -885,7 +902,7 @@
               var action = $('#action').val();
 
               if($('#confirmation').is(":not(:checked)") && action != 0 && val == 'single') {
-                if (singleMinute == '*' && singleHour == '*' && singleDayOfMonth == '*' && singleMonth == '*' && singleDayOfWeek == '*' && val == 'single'){
+                if (singleMinute == '*' && singleHour == '*' && singleDayOfMonth == '*' && singleMonth == '*' && singleDayOfWeek == '*' && val == 'single' && $("#checkBuild").is(":checked")){
                   alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
                     function(){ 
                      alertify.success('You has agreeded with your choice, be careful !');
@@ -900,11 +917,37 @@
               }
             });
             
-
           } else  if (val == 'repetitive'){
             $('.repetitive').show();
             $('.singleForm').hide();
             $('.tags').hide();
+
+            $('#send').hover(function(){
+              var val = $('#action').val();
+              var repetitiveMinute = $('#repetitiveMinute').val();
+              var repetitiveHour = $('#repetitiveHour').val();
+              var repetitiveDayOfMonth = $('#repetitiveDayOfMonth').val();
+              var repetitiveMonth = $('#repetitiveMonth').val();
+              var repetitiveDayOfWeek = $('#repetitiveDayOfWeek').val();
+              var action = $('#action').val();
+
+              if($('#confirmation').is(":not(:checked)") && action != 0 && val == 'repetitive') {
+                if (repetitiveMinute == '*' && repetitiveHour == '*' && repetitiveDayOfMonth == '*' && repetitiveMonth == '*' && repetitiveDayOfWeek == '*' && val == 'repetitive' && $("#checkBuild").is(":checked")){
+                  alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
+                    function(){ 
+                     alertify.success('You has agreeded with your choice, be careful !');
+                     $("#confirmation"). prop("checked", true);
+                   }, 
+                   function(){ 
+                    alertify.error('Operation Aborted');
+                    $("#confirmation"). prop("checked", false);
+                  }
+                  );
+                }
+              }
+            });
+
+
           } else if (val == 'tags'){
             $('.tags').show();
             $('.singleForm').hide();
@@ -918,29 +961,29 @@
       }
     });
 
-     $('#abort').click(function(){
-      if($(this).is(":checked")){
+$('#abort').click(function(){
+  if($(this).is(":checked")){
 
-        $('#abortIfStuck').show();
-        $("#timeoutMinutes").prop('required',true);
+    $('#abortIfStuck').show();
+    $("#timeoutMinutes").prop('required',true);
 
-        $('#timeoutStrategy').change(function(){
-          var val = $('#timeoutStrategy').val();
-          console.log(val)
-          if (val == 'absolute') {
-            $('.timeoutSeconds').hide();
-            $('.timeoutMinutes').show();
-          } else {
-            $('.timeoutSeconds').show();
-            $('.timeoutMinutes').hide();
-          }
-        });
-
-      }
-      else if($(this).is(":not(:checked)")){
-        $('#abortIfStuck').hide();
+    $('#timeoutStrategy').change(function(){
+      var val = $('#timeoutStrategy').val();
+      console.log(val)
+      if (val == 'absolute') {
+        $('.timeoutSeconds').hide();
+        $('.timeoutMinutes').show();
+      } else {
+        $('.timeoutSeconds').show();
+        $('.timeoutMinutes').hide();
       }
     });
+
+  }
+  else if($(this).is(":not(:checked)")){
+    $('#abortIfStuck').hide();
+  }
+});
 
 
   // Starts when click on build job button
@@ -980,8 +1023,10 @@
         $('.send').remove();
         $('.xml').remove();
         $('.destroy').remove();
-        $("#confirmation"). prop("checked", false);
-        $("#checkBuild"). prop("checked", false);
+
+        $('#input-form').each (function(){
+          this.reset();
+        });
 
 
 
