@@ -184,267 +184,12 @@
 
   <div class="row">
 
-    <div id="build" style="display: none;">
-      <div class="col-lg-6 col-md-6 col-xs-12 removeBuild">
-        <div class="box box-primary">
-          <div class="box-header with-border">
-            <div class="box-tools pull-right">
-              <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
-            </div>
-            <h3 class="box-title">
-              <b>Schedule Job</b></h3>
-            </div>
-            <div class="box-body">
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="timeoutStrategy">Trigger Action</label>
-                    <select class="form-control" id="action" name="action">
-                      <option value="0">-- Select an action --</option>
-                      <option value="single">Single Execution</option>
-                      <option value="repetitive">Repetitive Executions</option>
-                      <option value="tags">Execution Tags Options</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
 
-              <div class="row tags" style="display: none;">
-                <hr>
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="tag">Execution Tag Option</label>
-                    <select class="form-control" id="tag" name="tag">
-                      <option value="@hourly">Hourly Executions</option>
-                      <option value="@daily">Daily Executions</option>
-                      <option value="@weekly">Weekly Executions</option>
-                      <option value="@monthly">Monthly Executions</option>
-                      <option value="@annually">Annually Executions</option>
-                      <option value="@yearly">Yearly Executions</option>
-                      <option value="@midnight">Midnight Executions</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-              
-              <div class="row singleForm" style="display: none;">
-                <hr>
-                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12 form-group">
-                  <div class="input-group" style="width: 100%;">
-                    <label for="singleMinute">Every Minute: </label><br>
-                    <select class="form-control select2" id="singleMinute" name="singleMinute[]" multiple="multiple">
-                      <option value="*" selected>All</option>
-                      <?php  
-                      $i = 0;
-                      for ($i=0; $i < 60; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
+    <!-- Row and column for Schedule Job and Execute Windows / Linux Command, Script -->
+    <div class="row">
+      <div class="col-lg-12 col-md-12 col-xs-12">
 
-                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12 form-group">
-                  <div class="input-group" style="width: 100%;">
-                    <label>At Hour: </label><br>
-                    <select class="form-control select2" id="singleHour" name="singleHour[]" multiple="multiple">
-                      <option value="*" selected>All</option>
-                      <?php  
-                      $i = 0;
-                      for ($i=0; $i < 24; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-              </div> <!-- Close row -->
-              <div class="row singleForm" style="display: none;">
-                <div class="col-lg-6 col-md-6 col-xs-12">
-                  <div class="form-group">
-                    <label for="singleDayOfMonth">On Day of month:</label><br>
-                    <select class="form-control select2" id="singleDayOfMonth" name="singleDayOfMonth[]" multiple="multiple">
-                      <option value="*" selected>All</option>
-                      <?php  
-                      $i = 1;
-                      for ($i=1; $i < 32; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-lg-6 col-md-6 col-xs-12">
-                  <div class="form-group">
-                    <label for="singleMonth">On Month:</label><br>
-                    <select class="form-control select2" id="singleMonth" name="singleMonth[]" multiple="multiple">
-                      <option value="*" selected>All</option>
-                      <?php  
-                      $i = 1;
-                      for ($i=1; $i < 13; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-              </div> <!-- Close row -->
-              <div class="row singleForm" style="display: none;">
-                <div class="col-lg-6 col-md-6 col-xs-12">
-                  <div class="form-group">
-                    <label for="singleDayOfWeek">On Day of Week:</label><br>
-                    <select class="form-control select2" id="singleDayOfWeek" name="singleDayOfWeek[]" multiple="multiple">
-                      <option value="*" selected>All</option>
-                      <?php  
-                      $i = 0;
-                      for ($i=0; $i < 13; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-              </div> <!-- Close row -->
-              
-
-              <div class="row repetitive" style="display: none;">
-                <hr>
-                <div class="col-md-3">
-                  <div class="form-group">
-                    <label for="repetitiveMinute">In X Minutes</label><br>
-                    <select class="form-control" id="repetitiveMinute" name="repetitiveMinute">
-                      <option value="*">All</option>
-                      <?php  
-                      $i = 0;
-                      for ($i=0; $i < 60; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-3">
-                  <div class="form-group">
-                    <label for="repetitiveHour">Hour</label>
-                    <select class="form-control" id="repetitiveHour" name="repetitiveHour">
-                      <option value="*">All</option>
-                      <?php  
-                      $i = 0;
-                      for ($i=0; $i < 24; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-3">
-                  <div class="form-group">
-                    <label for="repetitiveDayOfMonth">Day of month</label>
-                    <select class="form-control" id="repetitiveDayOfMonth" name="repetitiveDayOfMonth">
-                      <option value="*">All</option>
-                      <?php  
-                      $i = 1;
-                      for ($i=1; $i < 32; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-3">
-                  <div class="form-group">
-                    <label for="repetitiveMonth">Month</label>
-                    <select class="form-control" id="repetitiveMonth" name="repetitiveMonth">
-                      <option value="*">All</option>
-                      <?php  
-                      $i = 1;
-                      for ($i=1; $i < 13; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-3">
-                  <div class="form-group">
-                    <label for="repetitiveDayOfWeek">Day of Week</label>
-                    <select class="form-control" id="repetitiveDayOfWeek" name="repetitiveDayOfWeek">
-                      <option value="*">All</option>
-                      <?php  
-                      $i = 0;
-                      for ($i=0; $i < 13; $i++) { 
-                        echo '<option value="'.$i.'">'.$i.'</option>';    
-                      }
-                      ?>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <div id="enableEmail" style="display: none;">
-        <div class="col-lg-6 col-md-6 col-xs-12">
-          <div class="box box-primary">
-            <div class="box-header with-border">
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
-              </div>
-              <h3 class="box-title">
-                <b>Enable Email Notification</b></h3>
-              </div><div class="box-body">
-                <div class="col-md-12">
-                  <div class="form-group">
-                    <label for="recipients">Recipients</label>
-                    <input type="text" class="form-control" id="recipients" name="recipients">
-                    <small><b>Example:</b> matheuspavanetti@gmail.com,matheuspavanetti@hotmail.com</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-
-      <div id="abortIfStuck" style="display: none;">
-        <div class="col-lg-6 col-md-6 col-xs-12">
-          <div class="box box-primary">
-            <div class="box-header with-border">
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
-              </div>
-              <h3 class="box-title">
-                <b>Abort the job if its stuck option</b></h3>
-              </div><div class="box-body">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="timeoutStrategy">Timeout Strategy</label>
-                    <select class="form-control" id="timeoutStrategy" name="timeoutStrategy">
-                      <option value="noActivity">No Activity</option>
-                      <option value="absolute">Absolute</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-6 timeoutSeconds">
-                  <div class="form-group">
-                    <label for="timeoutMinutes">Timeout Seconds</label>
-                    <input type="number" class="form-control" id="timeoutSeconds" name="timeoutSeconds" min="60" maxlength="50" autocomplete="off">
-                  </div>
-                </div>
-                <div class="col-md-6 timeoutMinutes" style="display: none;">
-                  <div class="form-group">
-                    <label for="timeoutMinutes">Timeout Minutes</label>
-                    <input type="number" class="form-control" id="timeoutMinutes" name="timeoutMinutes" min="1"  maxlength="50" autocomplete="off">
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <!-- Run Windows Command,Script Area-->
         <div id="runWinCommand" style="display: none;">
           <div class="col-lg-6 col-md-6 col-xs-12">
             <div class="box box-primary">
@@ -466,7 +211,6 @@
                         </select>
                       </div>
                     </div>
-
                     <div class="col-md-6 scriptTypeForm" style="display: none;">
                       <div class="form-group">
                         <label for="scriptType">Script Type</label>
@@ -477,10 +221,8 @@
                         </select>
                       </div>
                     </div>
-
                   </div>
                   <hr>
-
                   <div class="row windowsCommandForm" style="display: none;">
                     <div class="col-md-12 ">
                       <div class="form-group">
@@ -500,8 +242,9 @@
               </div>
             </div>
           </div>
+          <!-- Close Run Windows Command,Script Area -->
 
-
+          <!-- Run Linux Command,Script Area -->
           <div id="runlinuxCommand" style="display: none;">
             <div class="col-lg-6 col-md-6 col-xs-12">
               <div class="box box-primary">
@@ -524,7 +267,6 @@
                           </select>
                         </div>
                       </div>
-
                       <div class="col-md-6 linuxScriptTypeForm" style="display: none;">
                         <div class="form-group">
                           <label for="linuxScriptType">Script Type</label>
@@ -535,10 +277,8 @@
                           </select>
                         </div>
                       </div>
-
                     </div>
                     <hr>
-
                     <div class="row linuxCommandForm" style="display: none;">
                       <div class="col-md-12 ">
                         <div class="form-group">
@@ -547,7 +287,6 @@
                         </div>
                       </div>
                     </div>
-
                     <div class="row linuxUploadScript" style="display: none;">
                       <div class="col-md-12 ">
                         <div class="form-group">
@@ -555,126 +294,403 @@
                         </div>
                       </div>
                     </div>
-
                   </div>
                 </div>
               </div>
             </div>
+            <!--Close Run Liux Command, Script Area-->
 
-
-            <div id="runJob" style="display: none;">
-              <div class="col-lg-6 col-md-6 col-xs-12">
+            <!-- Schedule Job Area-->
+            <div id="build" style="display: none;">
+              <div class="col-lg-6 col-md-6 col-xs-12 removeBuild">
                 <div class="box box-primary">
-                  <div id="overlay" class="overlay" style="display: none;">
-                        <i class="fa fa-refresh fa-spin"></i>
-                      </div>
                   <div class="box-header with-border">
                     <div class="box-tools pull-right">
                       <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                     </div>
                     <h3 class="box-title">
-                      <b>Execute another job</b></h3>
+                      <b>Schedule Job</b></h3>
                     </div>
-                    <div class="box-body">
+                    <div class="box-body" style="padding: 18px;">
                       <div class="row">
                         <div class="col-md-6">
                           <div class="form-group">
-                            <label for="timeoutStrategy">Select next jobs to be executed</label><br>
-                            <select class="form-control select2" id="jobList" name="jobList[]" multiple="multiple" style="width: 200px;">
+                            <label for="timeoutStrategy">Trigger Action</label>
+                            <select class="form-control" id="action" name="action">
+                              <option value="0">-- Select an action --</option>
+                              <option value="single">Single Execution</option>
+                              <option value="repetitive">Repetitive Executions</option>
+                              <option value="tags">Execution Tags Options</option>
                             </select>
                           </div>
                         </div>
                       </div>
 
-                      <div class="row">
+                      <div class="row tags" style="display: none;">
                         <hr>
-                        <div class="col-lg-12 col-md-12 col-xs-12">
-                          <h5><b>Select an option for your next jobs.</b></h5>
+                        <div class="col-md-6">
                           <div class="form-group">
-                            <div class="radio">
-                              <label>
-                                <input type="radio" name="optionsRadios" id="option1" value="1" checked="">
-                                Run next jobs only if this job has been successfully executed.
-                              </label>
-                            </div>
-                            <div class="radio">
-                              <label>
-                                <input type="radio" name="optionsRadios" id="option2" value="2">
-                                Run next jobs even if this job has been failed.
-                              </label>
-                            </div>
+                            <label for="tag">Execution Tag Option</label>
+                            <select class="form-control" id="tag" name="tag">
+                              <option value="@hourly">Hourly Executions</option>
+                              <option value="@daily">Daily Executions</option>
+                              <option value="@weekly">Weekly Executions</option>
+                              <option value="@monthly">Monthly Executions</option>
+                              <option value="@annually">Annually Executions</option>
+                              <option value="@yearly">Yearly Executions</option>
+                              <option value="@midnight">Midnight Executions</option>
+                            </select>
                           </div>
-                        </div>    
+                        </div>
+                      </div>
 
+                      <div class="row singleForm" style="display: none;">
+                        <hr>
+                        <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12 form-group">
+                          <div class="input-group" style="width: 100%;">
+                            <label for="singleMinute">Every Minute: </label><br>
+                            <select class="form-control select2" id="singleMinute" name="singleMinute[]" multiple="multiple">
+                              <option value="*" selected>All</option>
+                              <?php  
+                              $i = 0;
+                              for ($i=0; $i < 60; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12 form-group">
+                          <div class="input-group" style="width: 100%;">
+                            <label>At Hour: </label><br>
+                            <select class="form-control select2" id="singleHour" name="singleHour[]" multiple="multiple">
+                              <option value="*" selected>All</option>
+                              <?php  
+                              $i = 0;
+                              for ($i=0; $i < 24; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                      </div> <!-- Close row -->
+                      <div class="row singleForm" style="display: none;">
+                        <div class="col-lg-6 col-md-6 col-xs-12">
+                          <div class="form-group">
+                            <label for="singleDayOfMonth">On Day of month:</label><br>
+                            <select class="form-control select2" id="singleDayOfMonth" name="singleDayOfMonth[]" multiple="multiple">
+                              <option value="*" selected>All</option>
+                              <?php  
+                              $i = 1;
+                              for ($i=1; $i < 32; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-lg-6 col-md-6 col-xs-12">
+                          <div class="form-group">
+                            <label for="singleMonth">On Month:</label><br>
+                            <select class="form-control select2" id="singleMonth" name="singleMonth[]" multiple="multiple">
+                              <option value="*" selected>All</option>
+                              <?php  
+                              $i = 1;
+                              for ($i=1; $i < 13; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                      </div> <!-- Close row -->
+                      <div class="row singleForm" style="display: none;">
+                        <div class="col-lg-6 col-md-6 col-xs-12">
+                          <div class="form-group">
+                            <label for="singleDayOfWeek">On Day of Week:</label><br>
+                            <select class="form-control select2" id="singleDayOfWeek" name="singleDayOfWeek[]" multiple="multiple">
+                              <option value="*" selected>All</option>
+                              <?php  
+                              $i = 0;
+                              for ($i=0; $i < 13; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                      </div> <!-- Close row -->
+                      <div class="row repetitive" style="display: none;">
+                        <hr>
+                        <div class="col-md-3">
+                          <div class="form-group">
+                            <label for="repetitiveMinute">In X Minutes</label><br>
+                            <select class="form-control" id="repetitiveMinute" name="repetitiveMinute">
+                              <option value="*">All</option>
+                              <?php  
+                              $i = 0;
+                              for ($i=0; $i < 60; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="form-group">
+                            <label for="repetitiveHour">Hour</label>
+                            <select class="form-control" id="repetitiveHour" name="repetitiveHour">
+                              <option value="*">All</option>
+                              <?php  
+                              $i = 0;
+                              for ($i=0; $i < 24; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="form-group">
+                            <label for="repetitiveDayOfMonth">Day of month</label>
+                            <select class="form-control" id="repetitiveDayOfMonth" name="repetitiveDayOfMonth">
+                              <option value="*">All</option>
+                              <?php  
+                              $i = 1;
+                              for ($i=1; $i < 32; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="form-group">
+                            <label for="repetitiveMonth">Month</label>
+                            <select class="form-control" id="repetitiveMonth" name="repetitiveMonth">
+                              <option value="*">All</option>
+                              <?php  
+                              $i = 1;
+                              for ($i=1; $i < 13; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <div class="form-group">
+                            <label for="repetitiveDayOfWeek">Day of Week</label>
+                            <select class="form-control" id="repetitiveDayOfWeek" name="repetitiveDayOfWeek">
+                              <option value="*">All</option>
+                              <?php  
+                              $i = 0;
+                              for ($i=0; $i < 13; $i++) { 
+                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              }
+                              ?>
+                            </select>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-
-
-            </form> <!-- Close Form -->
+              <!-- Close Schedule Job Area-->
+            </div>
           </div>
-          <div id="output"></div>
 
+          <!-- Row and column for Abort Job and Email Notification Divs -->
           <div class="row">
             <div class="col-lg-12 col-md-12 col-xs-12">
-              <div class="box">
-                <div class="box-header with-border">
-                  <div class="box-tools pull-right">
-                    <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                    </button>
-                  </div>
-                  <h3 class="box-title"><b>XML Document</b></h3> 
-                </div>
-                <div class="box-body">
-                  <div>
-                   <?php  
-                   $xml = $this->session->flashdata('xml');
-                   if($xml)
-                   {
-                    ?>
-                    <div>
-                      <pre id="xml" class="xml"><?php echo $this->session->flashdata('xml'); ?> </pre>
+
+             <!-- Email Notification Area -->
+             <div id="enableEmail" style="display: none;">
+              <div class="col-lg-6 col-md-6 col-xs-12">
+                <div class="box box-primary">
+                  <div class="box-header with-border">
+                    <div class="box-tools pull-right">
+                      <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                     </div>
-                  <?php } ?>
+                    <h3 class="box-title">
+                      <b>Enable Email Notification</b></h3>
+                    </div><div class="box-body">
+                      <div class="col-md-12">
+                        <div class="form-group">
+                          <label for="recipients">Recipients</label>
+                          <input type="text" class="form-control" id="recipients" name="recipients">
+                          <small><b>Example:</b> matheuspavanetti@gmail.com,matheuspavanetti@hotmail.com</small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="overlay" style="display:none;">
-                  <i class="fa fa-refresh fa-spin"></i>
+              </div>
+              <!-- Close Email Notification Area -->
+
+              <!-- Abort Job if it Stuck Area -->
+              <div id="abortIfStuck" style="display: none;">
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="box box-primary">
+                    <div class="box-header with-border">
+                      <div class="box-tools pull-right">
+                        <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+                      </div>
+                      <h3 class="box-title">
+                        <b>Abort the job if its stuck option</b></h3>
+                      </div>
+                      <div class="box-body" style="padding: 20px;">
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label for="timeoutStrategy">Timeout Strategy</label>
+                            <select class="form-control" id="timeoutStrategy" name="timeoutStrategy">
+                              <option value="noActivity">No Activity</option>
+                              <option value="absolute">Absolute</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-6 timeoutSeconds">
+                          <div class="form-group">
+                            <label for="timeoutMinutes">Timeout Seconds</label>
+                            <input type="number" class="form-control" id="timeoutSeconds" name="timeoutSeconds" min="60" maxlength="50" autocomplete="off">
+                          </div>
+                        </div>
+                        <div class="col-md-6 timeoutMinutes" style="display: none;">
+                          <div class="form-group">
+                            <label for="timeoutMinutes">Timeout Minutes</label>
+                            <input type="number" class="form-control" id="timeoutMinutes" name="timeoutMinutes" min="1"  maxlength="50" autocomplete="off">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+                <!-- Close Abort Job if it Stuck Area -->
+              </div>
+            </div>
+            <!-- Close Row and column for Abort Job and Email Notification Divs -->
+
+            <!-- Row and column for Job Execution Area and Editable Email Notification -->
+            <div class="row">
+              <div class="col-lg-12 col-md-12 col-xs-12">
+               <!-- Job Execution Area -->
+               <div id="runJob" style="display: none;">
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="box box-primary">
+                    <div id="overlay" class="overlay" style="display: none;">
+                      <i class="fa fa-refresh fa-spin"></i>
+                    </div>
+                    <div class="box-header with-border">
+                      <div class="box-tools pull-right">
+                        <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+                      </div>
+                      <h3 class="box-title">
+                        <b>Execute another job</b></h3>
+                      </div>
+                      <div class="box-body">
+                        <div class="row">
+                          <div class="col-md-6">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">Select next jobs to be executed</label><br>
+                              <select class="form-control select2" id="jobList" name="jobList[]" multiple="multiple" style="width: 200px;">
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="row">
+                          <hr>
+                          <div class="col-lg-12 col-md-12 col-xs-12">
+                            <h5><b>Select an option for your next jobs.</b></h5>
+                            <div class="form-group">
+                              <div class="radio">
+                                <label>
+                                  <input type="radio" name="optionsRadios" id="option1" value="1" checked="">
+                                  Run next jobs only if this job has been successfully executed.
+                                </label>
+                              </div>
+                              <div class="radio">
+                                <label>
+                                  <input type="radio" name="optionsRadios" id="option2" value="2">
+                                  Run next jobs even if this job has been failed.
+                                </label>
+                              </div>
+                            </div>
+                          </div>  
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Close Job Execution Area -->
+              </div>
+            </div>
+            <!-- Close and column for Job Execution Area and Editable Email Notification -->
+
+
+          </form> <!-- Close Form -->
+        </div>
+        <div id="output"></div>
+
+        <div class="row">
+          <div class="col-lg-12 col-md-12 col-xs-12">
+            <div class="box">
+              <div class="box-header with-border">
+                <div class="box-tools pull-right">
+                  <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
+                  </button>
+                </div>
+                <h3 class="box-title"><b>XML Document</b></h3> 
+              </div>
+              <div class="box-body">
+                <div>
+                 <?php  
+                 $xml = $this->session->flashdata('xml');
+                 if($xml)
+                 {
+                  ?>
+                  <div>
+                    <pre id="xml" class="xml"><?php echo $this->session->flashdata('xml'); ?> </pre>
+                  </div>
+                <?php } ?>
+              </div>
+              <div class="overlay" style="display:none;">
+                <i class="fa fa-refresh fa-spin"></i>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-      </section>
-    </div>
-    <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
-    <script type="text/javascript" src="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.js"></script>
-    <script type="text/javascript">
-      $(document).ready(function(){
+    </section>
+  </div>
+  <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
+  <script type="text/javascript" src="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.js"></script>
+  <script type="text/javascript">
+    $(document).ready(function(){
 
-        $('.select2').select2({
-         placeholder: "Click to Select a option",
-         allowClear: true
-       });
+      $('.select2').select2({
+       placeholder: "Click to Select a option",
+       allowClear: true
+     });
 
-        var addUserForm = $("#InsertDbSettings");
-        var validator = addUserForm.validate({
+      var addUserForm = $("#InsertDbSettings");
+      var validator = addUserForm.validate({
 
-          rules:{
-            job_name :{ required : true },
-            confirmation :{ required : true },
-            description :{ required : true },
-            timeoutMinutes :{ required : true }
-          },
-          messages:{
-            job_name :{ required : "This field is required" },
-            confirmation :{ required : "This field is required" },        
-            description :{ required : "This field is required" }, 
-            timeoutMinutes :{ required : "This field is required" }          
-          }
-        });
+        rules:{
+          job_name :{ required : true },
+          confirmation :{ required : true },
+          description :{ required : true },
+          timeoutMinutes :{ required : true }
+        },
+        messages:{
+          job_name :{ required : "This field is required" },
+          confirmation :{ required : "This field is required" },        
+          description :{ required : "This field is required" }, 
+          timeoutMinutes :{ required : "This field is required" }          
+        }
+      });
 
      // get Jenkins credentials
      var jenkins_url = '<?php echo $jenkins_url; ?>';
@@ -686,8 +702,8 @@
      // Logic for run another job after this build function
      $('#runJobCheck').click(function(){
       if($(this).is(":checked")){
-         $('#jobList option').remove();
-      $.ajax({
+       $('#jobList option').remove();
+       $.ajax({
         url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
         method: 'GET',
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
@@ -698,12 +714,12 @@
       }).done(function(data) {
 
        $.each(data["jobs"], function (key, item) {
-               newJson = item.name;
-               $('#jobList').append($('<option>', {
-                value: newJson,
-                text: newJson
-              }))
-             });
+         newJson = item.name;
+         $('#jobList').append($('<option>', {
+          value: newJson,
+          text: newJson
+        }))
+       });
 
        $('#overlay').hide();
 
@@ -713,24 +729,24 @@
     });
 
      $('#runJob').show();
-    } 
-      else if($(this).is(":not(:checked)")){
-        $('#runJob').hide();
-      }
-    });
+   } 
+   else if($(this).is(":not(:checked)")){
+    $('#runJob').hide();
+  }
+});
 
 
      // Logic for enable email notification
      $('#emailCheck').click(function(){
       if($(this).is(":checked")){
         $('#enableEmail').show();
-    } 
+      } 
       else if($(this).is(":not(:checked)")){
         $('#enableEmail').hide();
       }
     });
 
-    
+
 
     // Logic for Execute a Windows Command or script
     $('#winCommand').click(function(){ // If checkbox is checked
@@ -820,7 +836,6 @@
     });
 
 
-
     // Linux Command / Script execution function
     $('#linuxCommand').click(function(){
       if($(this).is(":checked")){
@@ -908,8 +923,6 @@
 
         }
       });
-
-    
 
 
     $('#checkBuild').click(function(){
@@ -1071,7 +1084,6 @@ $('#abort').click(function(){
   } else if($('#confirmation').is(":not(:checked)")){ // confirmation is not marked
     toastr.error("Checkbox is unchecked.");
   }
-
   
 });  
 
