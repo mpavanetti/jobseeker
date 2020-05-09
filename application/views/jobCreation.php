@@ -155,12 +155,12 @@
           </div>
           <div class="checkbox">
             <label>
-              <input type="checkbox" name="emailNotification" id="emailNotification" value="1"> Enable email notification in case of failure
+              <input type="checkbox" name="emailCheck" id="emailCheck" value="1"> Enable email notification in case of failure
             </label>
           </div>
           <div class="checkbox">
             <label>
-              <input type="checkbox" name="editableEmailNotification" id="editableEmailNotification" value="1"> Enable editable email notification
+              <input type="checkbox" name="editEmailCheck" id="editEmailCheck" value="1"> Enable editable email notification
             </label>
           </div>
           <div class="form-group" style="margin-top: 30px;">
@@ -386,8 +386,31 @@
       </div>
 
 
+      <div id="enableEmail" style="display: none;">
+        <div class="col-lg-6 col-md-6 col-xs-12">
+          <div class="box box-primary">
+            <div class="box-header with-border">
+              <div class="box-tools pull-right">
+                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+              </div>
+              <h3 class="box-title">
+                <b>Enable Email Notification</b></h3>
+              </div><div class="box-body">
+                <div class="col-md-12">
+                  <div class="form-group">
+                    <label for="recipients">Recipients</label>
+                    <input type="text" class="form-control" id="recipients" name="recipients">
+                    <small><b>Example:</b> matheuspavanetti@gmail.com,matheuspavanetti@hotmail.com</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
       <div id="abortIfStuck" style="display: none;">
-        <div class="col-lg-6 col-md-6 col-xs-12 removeAbort">
+        <div class="col-lg-6 col-md-6 col-xs-12">
           <div class="box box-primary">
             <div class="box-header with-border">
               <div class="box-tools pull-right">
@@ -696,8 +719,18 @@
       }
     });
 
-    
 
+     // Logic for enable email notification
+     $('#emailCheck').click(function(){
+      if($(this).is(":checked")){
+        $('#enableEmail').show();
+    } 
+      else if($(this).is(":not(:checked)")){
+        $('#enableEmail').hide();
+      }
+    });
+
+    
 
     // Logic for Execute a Windows Command or script
     $('#winCommand').click(function(){ // If checkbox is checked
@@ -952,6 +985,10 @@
             $('.tags').show();
             $('.singleForm').hide();
             $('.repetitive').hide();
+          } else if( val == 0 ){
+            $('.singleForm').hide();
+            $('.repetitive').hide();
+            $('.tags').hide();
           }
         }); 
 
