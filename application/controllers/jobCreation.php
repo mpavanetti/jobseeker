@@ -89,28 +89,6 @@ class jobCreation extends BaseController
             $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[50]');
             $this->form_validation->set_rules('description','Database Type','trim|required|max_length[5000]');
 
-            // Confirmation Flag
-            $this->form_validation->set_rules('confirmation','Confirmation','trim|required|max_length[1]');
-
-            // Timestamp Option
-            $this->form_validation->set_rules('timestamp','Timestamp','trim|max_length[1]');
-
-            // Trigger Build Periodically Option
-            $this->form_validation->set_rules('checkBuild','Check Build','trim|max_length[1]');
-
-            // Execute Windows Command
-            $this->form_validation->set_rules('winCommand','winCommand','trim|max_length[1]');
-
-            // Execute Linux Command
-            $this->form_validation->set_rules('linuxCommand','linuxCommand','trim|max_length[1]');
-
-            // Run another job
-            $this->form_validation->set_rules('runJobCheck','runJobCheck','trim|max_length[1]');
-
-
-            //Abort Build
-            $this->form_validation->set_rules('abort','Abort','trim|max_length[1]');
-            $this->form_validation->set_rules('timeoutStrategy','Time Out Stragegy','trim|max_length[50]');
       
             // Abort Build
             $this->form_validation->set_rules('timeoutMinutes','Time Out in Minutes','trim|max_length[50]');
