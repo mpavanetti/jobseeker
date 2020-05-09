@@ -54,9 +54,6 @@ class jobCreation extends BaseController
      
         move_uploaded_file($tempFile,$targetFile); //6
 
-        // assuming file.zip is in the same directory as the executing script.
-   
-
           $zip = new ZipArchive;
           $res = $zip->open($targetFile);
           if ($res === TRUE) {
@@ -271,7 +268,6 @@ class jobCreation extends BaseController
                 }
 
                 // END Linux File Upload
-
           
                 // Validation if nothing comes null
                 if ($singleMinute == null || $singleHour == null || $singleDayOfMonth == null || $singleMonth == null || $singleDayOfWeek == null){
@@ -317,8 +313,6 @@ class jobCreation extends BaseController
                 }
                 // Array to String Conversion Section
 
-
-
                 // XMl Creation Node Section
 
                 $dom = new DOMDocument();
@@ -336,7 +330,6 @@ class jobCreation extends BaseController
                 $node_description = $dom->createElement('description', $description);
 
                 $root->appendChild($node_description);
-
 
                 // Create Trigger Elements
                 if($checkBuild == 1){ // If Build Periodically Build is selected then
@@ -455,8 +448,6 @@ class jobCreation extends BaseController
                 // Append Builders to root node
                 $root->appendChild($publishers);
 
-
-
                 // Create buildWrappers Elements
                 $buildWrappers = $dom->createElement('buildWrappers');
 
@@ -503,7 +494,6 @@ class jobCreation extends BaseController
                 }
                 // End Abort Build if Stucks Option
 
-
                 $root->appendChild($buildWrappers);
 
                 // Append document to root node
@@ -518,14 +508,10 @@ class jobCreation extends BaseController
                  $this->session->set_flashdata('job_name', $job_name);
                  $this->session->set_flashdata('success', 'Your XML File has been successfully created !');
 
-
                 redirect('jobCreation');
 
             }
-
         }
-
-
     }
 
     public function readXML() {
