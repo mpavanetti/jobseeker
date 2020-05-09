@@ -111,8 +111,13 @@ class jobCreation extends BaseController
             //Abort Build
             $this->form_validation->set_rules('abort','Abort','trim|max_length[1]');
             $this->form_validation->set_rules('timeoutStrategy','Time Out Stragegy','trim|max_length[50]');
+      
+            // Abort Build
             $this->form_validation->set_rules('timeoutMinutes','Time Out in Minutes','trim|max_length[50]');
             $this->form_validation->set_rules('timeoutSeconds','Time Out in Seconds','trim|max_length[50]');
+
+            // Enable Email Notification
+             $this->form_validation->set_rules('recipients','Recipients','trim|max_length[1000]');
 
 
             if($this->form_validation->run() == FALSE)
@@ -318,6 +323,9 @@ class jobCreation extends BaseController
                 $jobList = $this->security->xss_clean($this->input->post('jobList'));
                 $optionsRadios = $this->security->xss_clean($this->input->post('optionsRadios'));
 
+                // Enable Email Notification
+                $emailCheck = $this->security->xss_clean($this->input->post('emailCheck'));
+                $recipients = $this->security->xss_clean($this->input->post('recipients'));
                
                 // Array to String Conversion Section
                 $singleMinuteString = rtrim(implode(',', $singleMinute), ',');
@@ -418,7 +426,25 @@ class jobCreation extends BaseController
                  // Create Publishers Elements
                  $publishers = $dom->createElement('publishers');
 
-                if($runJobCheck == 1){ // if Run Job Checkbos is marked then   
+                 // Email Notification (Mailer)
+                 if ($emailCheck == 1) { // if email notification checkbox is marked then
+                    if ($recipients != '') {
+
+                      $hudson_Mailer = $dom->createElement('hudson.tasks.Mailer');
+                      $attr_hudson_Mailer = new DOMAttr('plugin', 'mailer@1.30');
+                      $hudson_Mailer->setAttributeNode($attr_hudson_Mailer);
+                      $childRecipients = $dom->createElement('recipients', $recipients );
+                      $hudson_Mailer->appendChild($childRecipients);
+                      $childUnstableBuild = $dom->createElement('dontNotifyEveryUnstableBuild', 'false' );
+                      $hudson_Mailer->appendChild($childUnstableBuild);
+                      $sendToIndividuals = $dom->createElement('sendToIndividuals', 'false' );
+                      $hudson_Mailer->appendChild($sendToIndividuals);
+                      $publishers->appendChild($hudson_Mailer);
+                    
+                    }
+                  }
+
+                if($runJobCheck == 1){ // if Run Job Checkbox is marked then   
                   if ($jobList != null){
                     $BuildTrigger = $dom->createElement('hudson.tasks.BuildTrigger');
                     $publishers->appendChild($BuildTrigger);
@@ -447,6 +473,7 @@ class jobCreation extends BaseController
                     $BuildTrigger->appendChild($threshold);
                   }
                 }
+
                 // Append Builders to root node
                 $root->appendChild($publishers);
 
