@@ -108,9 +108,18 @@ class EmailSettings extends BaseController
 
 }
 
+    public function fetchAll($colunm) {
 
+         header('Content-type:application/json;charset=utf-8'); // declaring header
 
-public function fetch($id) {
+         $this->global['pageTitle'] = 'Job Seeker : Json Parse';
+
+         $listJobsJson["data"] = $this->model->fetchAll($colunm);
+         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+
+     }
+
+    public function fetch($id) {
 
          header('Content-type:application/json;charset=utf-8'); // declaring header
 
@@ -154,7 +163,7 @@ public function fetch($id) {
     else
     {
 
-        $this->global['pageTitle'] = 'Job Seeker : Add New Db Setting';
+        $this->global['pageTitle'] = 'Job Seeker : Add New Email Template';
 
         $this->loadViews("addEmailSetting", $this->global, NULL, NULL);
     }
@@ -220,7 +229,7 @@ public function fetch($id) {
                 $from = $this->security->xss_clean($this->input->post('from'));
                 $cc = $this->security->xss_clean($this->input->post('cc'));
                 $subject = $this->security->xss_clean($this->input->post('subject'));
-                $msg = $this->security->xss_clean($this->input->post('msg'));
+                $msg = $this->input->post('msg');
                 $description = $this->security->xss_clean($this->input->post('description')); 
                 $enabled = $this->security->xss_clean($this->input->post('enabled')); 
 
@@ -304,7 +313,7 @@ public function fetch($id) {
                 $from = $this->security->xss_clean($this->input->post('from'));
                 $cc = $this->security->xss_clean($this->input->post('cc'));
                 $subject = $this->security->xss_clean($this->input->post('subject'));
-                $msg = $this->security->xss_clean($this->input->post('msg'));
+                $msg = $this->input->post('msg');
                 $description = $this->security->xss_clean($this->input->post('description')); 
                 $enabled = $this->security->xss_clean($this->input->post('enabled')); 
 
