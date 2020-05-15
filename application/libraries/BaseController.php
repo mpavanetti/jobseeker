@@ -49,7 +49,7 @@ class BaseController extends CI_Controller {
 			$this->global ['last_login'] = $this->lastLogin;
 
 			// load Jenkins credentials
-			$loadJson = file_get_contents(base_url().'application/config/run.json');
+			$loadJson = file_get_contents(base_url().'application/config/config.json');
 			$jsonToArray = json_decode($loadJson);
 
 			// Set global var to be used on Controllers
@@ -58,6 +58,7 @@ class BaseController extends CI_Controller {
 			$this->global ['jenkins_username'] = $jsonToArray->jenkins->username;
 			$this->global ['jenkins_token'] = $jsonToArray->jenkins->token;
 			$this->global ['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
+			$this->global ['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
 
 			// Set global var to detect OS Version
 			if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {

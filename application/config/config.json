@@ -1,0 +1,11 @@
+{
+    "jenkins": {
+    	"enabled": true,
+        "url": "http://localhost:8080/",
+        "username": "matheus",
+        "token": "***REMOVED***",
+        "authorization": "Basic",
+        "jenkins_home": ""
+		
+    }
+}
