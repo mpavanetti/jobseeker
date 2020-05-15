@@ -12,11 +12,33 @@ class emailSettings_model extends CI_Model
         return $query->result();
     }
 
+    function fetchAll($colunm) {
+
+        if($colunm == "all") {
+            $this->db->select('*');
+        } else {
+        $this->db->select($colunm);
+        }
+        $this->db->from('email_settings');
+        $query = $this->db->get();
+        return $query->result();
+
+    }
+
     function fetch($id) {
 
         $this->db->select('*');
         $this->db->from('email_settings');
         $this->db->where('id', $id);
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function fetchName($name) {
+
+        $this->db->select('*');
+        $this->db->from('email_settings');
+        $this->db->where('name', $name);
         $query = $this->db->get();
         return $query->result();
     }

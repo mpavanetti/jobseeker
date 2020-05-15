@@ -10,6 +10,15 @@
     margin-left: auto;
     margin-right: auto;
   }
+
+  .checkbox input {
+
+    transform: scale(1.5);
+  }
+  .checkbox label {
+    
+    font-size: 16px;
+  }
 </style>
 <div class="content-wrapper">    
   <section class="content-header">
@@ -97,7 +106,7 @@
           </div>
           <div class="checkbox">
             <label>
-              <input type="checkbox" name="confirmation" id="confirmation" value="1"> I <b>Confirm</b> this job build is my responsability and has my confidence.
+              <input type="checkbox" name="confirmation" id="confirmation" value="1"> I <b>Confirm</b> this job is my responsability and has my confidence.
             </label>
           </div>
         </div>
@@ -160,10 +169,10 @@
           </div>
           <div class="checkbox">
             <label>
-              <input type="checkbox" name="editEmailCheck" id="editEmailCheck" value="1"> Enable editable email notification
+              <input type="checkbox" name="editableEmailCheck" id="editableEmailCheck" value="1"> Enable editable email notification
             </label>
           </div>
-          <div class="form-group" style="margin-top: 30px;">
+          <div class="form-group" style="margin-top: 20px;">
             <div class="form-group">
               <button type="submit" id="send" href="#" class="btn btn-warning buildXmlBtn"> Build XML</button>
               <?php  
@@ -575,6 +584,7 @@
             <!-- Row and column for Job Execution Area and Editable Email Notification -->
             <div class="row">
               <div class="col-lg-12 col-md-12 col-xs-12">
+
                <!-- Job Execution Area -->
                <div id="runJob" style="display: none;">
                 <div class="col-lg-6 col-md-6 col-xs-12">
@@ -624,6 +634,81 @@
                   </div>
                 </div>
                 <!-- Close Job Execution Area -->
+
+                <!-- Editable Email Notification Area -->
+               <div id="editableEmail" style="display: none;">
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="box box-primary">
+                    <div id="overlay" class="overlay" style="display: none;">
+                      <i class="fa fa-refresh fa-spin"></i>
+                    </div>
+                    <div class="box-header with-border">
+                      <div class="box-tools pull-right">
+                        <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+                      </div>
+                      <h3 class="box-title">
+                        <b>Editable email notification</b></h3>
+                      </div>
+                      <div class="box-body">
+                        <div class="row">
+                          <div class="col-lg-6 col-md-6 col-xs-12">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">On <b class="text-green">Success</b> email Template</label><br>
+                              <select class="form-control fetchEmail" id="onSuccess" name="onSuccess" style="width: 200px;">
+                                <option value="0">Please, select an option</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="col-lg-6 col-md-6 col-xs-12">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">Attach Job Log</label><br>
+                              <select class="form-control" id="attSuccess" name="attSuccess" style="width: 200px;">
+                                <option value="true">Yes</option>
+                                <option value="false" selected>No</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="col-lg-6 col-md-6 col-xs-12">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">On <b class="text-red">Failure</b> email Template</label><br>
+                              <select class="form-control fetchEmail" id="onFailure" name="onFailure" style="width: 200px;">
+                                <option value="0">Please, select an option</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="col-lg-6 col-md-6 col-xs-12">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">Attach Job Log</label><br>
+                              <select class="form-control" id="attFailure" name="attFailure" style="width: 200px;">
+                                <option value="true">Yes</option>
+                                <option value="false" selected>No</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="col-lg-6 col-md-6 col-xs-12">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">On <b class="text-red">Abort</b> email Template</label><br>
+                              <select class="form-control fetchEmail" id="onAbort" name="onAbort" style="width: 200px;">
+                                <option value="0">Please, select an option</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="col-lg-6 col-md-6 col-xs-12">
+                            <div class="form-group">
+                              <label for="timeoutStrategy">Attach Job Log</label><br>
+                              <select class="form-control" id="attAbort" name="attAbort" style="width: 200px;">
+                                <option value="true">Yes</option>
+                                <option value="false" selected>No</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Close Job Execution Area -->
+
               </div>
             </div>
             <!-- Close and column for Job Execution Area and Editable Email Notification -->
@@ -698,6 +783,50 @@
      var jenkins_token = '<?php echo $jenkins_token; ?>';
      var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';    
 
+     // Logic for editable email notification
+
+     $('#editableEmailCheck').click(function(){
+      if($(this).is(":checked")){
+      $('#editableEmail').fadeIn();
+      $('.fetchEmail option').remove();
+      $('.fetchEmail').append($('<option>', {
+                value: 0,
+                text: "Please, select an option"
+                }))
+
+      $.ajax({    //create an ajax request
+        type: "GET",
+        url: "<?php echo base_url(); ?>EmailSettings/fetchall/name",             
+        dataType: "html",    
+        beforeSend: function(){
+          $('.overlay').fadeIn();
+        },
+        success: function(data){  
+          var json = JSON.parse(data);  
+
+           $.each(json["data"], function(i, item) {
+            var newJson = (json["data"][i].name);
+
+            $('.fetchEmail').append($('<option>', {
+                value: newJson,
+                text: newJson
+                }))
+             })
+           $('.overlay').fadeOut();
+        },
+        error: function(arguments){
+          toastr.error('Fail to fetch email template data' + arguments, 'Error to Fech Data')
+          $('.overlay').fadeOut();
+        }
+
+    });
+
+      } 
+        else if($(this).is(":not(:checked)")){
+          $('#editableEmail').fadeOut();
+        }
+      }); 
+
 
      // Logic for run another job after this build function
      $('#runJobCheck').click(function(){
@@ -709,7 +838,7 @@
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
         beforeSend: function() {
 
-          $('#overlay').show();
+          $('#overlay').fadeIn();
         }
       }).done(function(data) {
 
@@ -721,17 +850,17 @@
         }))
        });
 
-       $('#overlay').hide();
+       $('#overlay').fadeOut();
 
      }).fail(function() {
       console.error(arguments);
       toastr.error("Failed to fetch available jobs from server", "Fail to fetch jobs")
     });
 
-     $('#runJob').show();
+     $('#runJob').fadeIn();
    } 
    else if($(this).is(":not(:checked)")){
-    $('#runJob').hide();
+    $('#runJob').fadeOut();
   }
 });
 
@@ -739,10 +868,11 @@
      // Logic for enable email notification
      $('#emailCheck').click(function(){
       if($(this).is(":checked")){
-        $('#enableEmail').show();
+        $('#enableEmail').fadeIn();
+
       } 
       else if($(this).is(":not(:checked)")){
-        $('#enableEmail').hide();
+        $('#enableEmail').fadeOut();
       }
     });
 
@@ -753,7 +883,7 @@
       if($(this).is(":checked")){
 
         // Show Windows command Div
-        $('#runWinCommand').show();
+        $('#runWinCommand').fadeIn();
 
        //Windows Execution Strategy area script
        $('#executionStrategy').change(function(){
@@ -761,15 +891,15 @@
 
         // If the option is to execute windows command line
         if(val == 'command' && val != 0){
-          $('.scriptTypeForm').hide();
+          $('.scriptTypeForm').fadeOut();
           $('.destroyDropzone').remove();
           $("#scriptType").val(0);
-          $('.windowsCommandForm').show();
+          $('.windowsCommandForm').fadeIn();
 
         // If the option is to execute an script
       } else if(val == 'script' && val != 0) {
-        $('.scriptTypeForm').show();
-        $('.windowsCommandForm').hide();
+        $('.scriptTypeForm').fadeIn();
+        $('.windowsCommandForm').fadeOut();
 
           // Windows Script Execution 
           $('#scriptType').change(function(){
@@ -779,7 +909,7 @@
             if (val != 0) {
               if($("#confirmation").is(":checked")){
                 if(job_name != '' && job_name != null){
-                  $('.uploadScript').show();
+                  $('.uploadScript').fadeIn();
                   $('.destroyDropzone').remove();
                   $('#windowsColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
 
@@ -813,15 +943,15 @@
               }
 
             } else {
-              $('.uploadScript').hide();
+              $('.uploadScript').fadeOut();
               $('.destroyDropzone').remove();
             }
 
           });
 
         } else if(val == 0){
-          $('.windowsCommandForm').hide();
-          $('.scriptTypeForm').hide();
+          $('.windowsCommandForm').fadeOut();
+          $('.scriptTypeForm').fadeOut();
         }
 
       });
@@ -830,7 +960,7 @@
       else if($(this).is(":not(:checked)")){ // If checkbox is NOT checked
 
         // Hide Windows Command Div
-        $('#runWinCommand').hide();
+        $('#runWinCommand').fadeOut();
         
       }
     });
@@ -841,7 +971,7 @@
       if($(this).is(":checked")){
 
         // Show Linux Command div
-        $('#runlinuxCommand').show();
+        $('#runlinuxCommand').fadeIn();
 
           //Linux Execution Strategy area script
           $('#linuxExecutionStrategy').change(function(){
@@ -849,15 +979,15 @@
 
             // If the option is to execute a linux command then
             if(val == 'command' && val != 0){
-              $('.linuxScriptTypeForm').hide();
+              $('.linuxScriptTypeForm').fadeOut();
               $('.destroyDropzone').remove();
-              $('.linuxCommandForm').show();
+              $('.linuxCommandForm').fadeIn();
               $("#linuxScriptType").val(0);
 
             // If the option is to execute a linux script then  
           } else if(val == 'script' && val != 0) {
-            $('.linuxScriptTypeForm').show();
-            $('.linuxCommandForm').hide();
+            $('.linuxScriptTypeForm').fadeIn();
+            $('.linuxCommandForm').fadeOut();
 
               // Linux Command execution script
               $('#linuxScriptType').change(function(){
@@ -868,7 +998,7 @@
                 if (val != 0) {
                   if($("#confirmation").is(":checked")){
                     if(job_name != '' && job_name != null){
-                      $('.linuxUploadScript').show();
+                      $('.linuxUploadScript').fadeIn();
                       $('.destroyDropzone').remove();
                       $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
 
@@ -902,7 +1032,7 @@
                   }
 
                 } else {
-                  $('.linuxUploadScript').hide();
+                  $('.linuxUploadScript').fadeOut();
                   $('.destroyDropzone').remove();
                 }
 
@@ -910,8 +1040,8 @@
 
             // If the option is nothing then   
           } else if(val == 0){
-            $('.linuxScriptTypeForm').hide();
-            $('.linuxCommandForm').hide();
+            $('.linuxScriptTypeForm').fadeOut();
+            $('.linuxCommandForm').fadeOut();
           }
         });
 
@@ -919,7 +1049,7 @@
         else if($(this).is(":not(:checked)")){
 
           // Hide Linux Command div
-          $('#runlinuxCommand').hide();
+          $('#runlinuxCommand').fadeOut();
 
         }
       });
@@ -928,15 +1058,15 @@
     $('#checkBuild').click(function(){
       if($(this).is(":checked")){
 
-        $('#build').show();
+        $('#build').fadeIn();
 
         $('#action').change(function(){
           var val = $('#action').val();
           console.log(val)
           if (val == 'single') {
-            $('.tags').hide();
-            $('.repetitive').hide();
-            $('.singleForm').show();
+            $('.tags').fadeOut();
+            $('.repetitive').fadeOut();
+            $('.singleForm').fadeIn();
 
             $('#send').hover(function(){
               var val = $('#action').val();
@@ -964,9 +1094,9 @@
             });
             
           } else  if (val == 'repetitive'){
-            $('.repetitive').show();
-            $('.singleForm').hide();
-            $('.tags').hide();
+            $('.repetitive').fadeIn();
+            $('.singleForm').fadeOut();
+            $('.tags').fadeOut();
 
             $('#send').hover(function(){
               var val = $('#action').val();
@@ -995,43 +1125,43 @@
 
 
           } else if (val == 'tags'){
-            $('.tags').show();
-            $('.singleForm').hide();
-            $('.repetitive').hide();
+            $('.tags').fadeIn();
+            $('.singleForm').fadeOut();
+            $('.repetitive').fadeOut();
           } else if( val == 0 ){
-            $('.singleForm').hide();
-            $('.repetitive').hide();
-            $('.tags').hide();
+            $('.singleForm').fadeOut();
+            $('.repetitive').fadeOut();
+            $('.tags').fadeOut();
           }
         }); 
 
       }
       else if($(this).is(":not(:checked)")){
-        $('#build').hide();
+        $('#build').fadeOut();
       }
     });
 
 $('#abort').click(function(){
   if($(this).is(":checked")){
 
-    $('#abortIfStuck').show();
+    $('#abortIfStuck').fadeIn();
     $("#timeoutMinutes").prop('required',true);
 
     $('#timeoutStrategy').change(function(){
       var val = $('#timeoutStrategy').val();
       console.log(val)
       if (val == 'absolute') {
-        $('.timeoutSeconds').hide();
-        $('.timeoutMinutes').show();
+        $('.timeoutSeconds').fadeOut();
+        $('.timeoutMinutes').fadeIn();
       } else {
-        $('.timeoutSeconds').show();
-        $('.timeoutMinutes').hide();
+        $('.timeoutSeconds').fadeIn();
+        $('.timeoutMinutes').fadeOut();
       }
     });
 
   }
   else if($(this).is(":not(:checked)")){
-    $('#abortIfStuck').hide();
+    $('#abortIfStuck').fadeOut();
   }
 });
 
@@ -1054,18 +1184,18 @@ $('#abort').click(function(){
           dataType: "text",
           headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
-            $('.overlay').show();
+            $('.overlay').fadeIn();
 
             $('#input-form').each (function(){
               this.reset();
             });
           }
         }).done(function(data) {
-          $('.overlay').hide();
+          $('.overlay').fadeOut();
           
           toastr.success("Your Execution Request has been sent to server.", "Request Sent")
         }).fail(function() {
-          $('.overlay').hide();
+          $('.overlay').fadeOut();
           console.error(arguments);
           toastr.error("Your Job Creation Request Has Been Failed", "Request Error")
         });

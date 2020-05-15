@@ -300,6 +300,24 @@ class jobCreation extends BaseController
                 // Enable Email Notification
                 $emailCheck = $this->security->xss_clean($this->input->post('emailCheck'));
                 $recipients = $this->security->xss_clean($this->input->post('recipients'));
+
+                // Enable Editable Email Notification
+                $editableEmailCheck = $this->security->xss_clean($this->input->post('editableEmailCheck'));
+                $onSuccess = $this->security->xss_clean($this->input->post('onSuccess'));
+                $attSuccess = $this->security->xss_clean($this->input->post('attSuccess'));
+                $onFailure = $this->security->xss_clean($this->input->post('onFailure'));
+                $attFailure = $this->security->xss_clean($this->input->post('attFailure'));
+                $onAbort = $this->security->xss_clean($this->input->post('onAbort'));
+                $attAbort = $this->security->xss_clean($this->input->post('attAbort'));
+
+                // Check if some field is missing from editable email notification
+                if($editableEmailCheck == 1){
+                  if($onSuccess == "0" && $onFailure == "0" && $onAbort == "0"){
+                    $this->session->set_flashdata('error', 'You missed to select one field value for Editable email notification.');
+                    redirect('jobCreation');
+                  }
+                }
+
                
                 // Array to String Conversion Section
                 $singleMinuteString = rtrim(implode(',', $singleMinute), ',');
@@ -396,6 +414,201 @@ class jobCreation extends BaseController
 
                  // Create Publishers Elements
                  $publishers = $dom->createElement('publishers');
+
+
+
+
+
+                 // Editable Email Notification
+                 if($editableEmailCheck == 1){ // if enable editable email notification is marked
+
+               
+                  $hudson_ExtendedMailer = $dom->createElement('hudson.plugins.emailext.ExtendedEmailPublisher');
+                  $attr_hudson_ExtendedMailer = new DOMAttr('plugin', 'email-ext@2.68');
+                  $hudson_ExtendedMailer->setAttributeNode($attr_hudson_ExtendedMailer);
+                  $publishers->appendChild($hudson_ExtendedMailer);
+                
+                  $configuredTriggers = $dom->createElement('configuredTriggers');
+                  $hudson_ExtendedMailer->appendChild($configuredTriggers);
+
+                  // On Success
+                  if($onSuccess != "0") { // if On success template is selected
+
+                  // Load EmailSettings Model in order to fech the email template
+                  $this->load->model('emailSettings_model','model');
+                  $listMailTemplates = $this->model->fetchName($onSuccess); 
+
+                  // CC String to array, array to string function
+                  $string = $listMailTemplates[0]->cc;
+                  $array = explode(",", $string);
+                  if($listMailTemplates[0]->cc != ''){
+                   for ($i=0; $i < sizeof($array); $i++) { 
+                    $array2[$i] = ', cc:'.$array[$i];
+                   }
+                  }
+                  $array2String = rtrim(implode('', $array2), ',');
+
+
+                  $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.SuccessTrigger');
+                  $configuredTriggers->appendChild($successTrigger);
+
+                  $email = $dom->createElement('email');
+                  $successTrigger->appendChild($email);
+
+                  $recipientList = $dom->createElement('recipientList', $listMailTemplates[0]->to.$array2String);
+                  $email->appendChild($recipientList);
+
+                  $subject = $dom->createElement('subject', $listMailTemplates[0]->subject);
+                  $email->appendChild($subject);
+
+                  $body = $dom->createElement('body', $listMailTemplates[0]->msg);
+                  $email->appendChild($body);
+
+                  $recipientProviders = $dom->createElement('recipientProviders');
+                  $email->appendChild($recipientProviders);
+
+                  $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
+                  $recipientProviders->appendChild($recipientProvidersPlugin);
+
+                  $attachments = $dom->createElement('attachmentsPattern', '');
+                  $email->appendChild($attachments);
+
+                  $attachBuildLog = $dom->createElement('attachBuildLog', $attSuccess);
+                  $email->appendChild($attachBuildLog);
+
+                  $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
+                  $email->appendChild($compressBuildLog);
+
+                  $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
+                  $email->appendChild($replyTo);
+
+                  $contentType = $dom->createElement('contentType', 'both');
+                  $email->appendChild($contentType);
+
+                  $from = $dom->createElement('from', $listMailTemplates[0]->from);
+                  $hudson_ExtendedMailer->appendChild($from);
+
+                  }
+
+
+                  // On Failure
+                  if($onFailure != "0") { // if On success template is selected
+
+                  // Load EmailSettings Model in order to fech the email template
+                  $this->load->model('emailSettings_model','model');
+                  $listMailTemplates = $this->model->fetchName($onFailure); 
+
+                  // CC String to array, array to string function
+                  $string = $listMailTemplates[0]->cc;
+                  $array = explode(",", $string);
+                  if($listMailTemplates[0]->cc != ''){
+                   for ($i=0; $i < sizeof($array); $i++) { 
+                    $array2[$i] = ', cc:'.$array[$i];
+                   }
+                  }
+                  $array2String = rtrim(implode('', $array2), ',');
+
+                  $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
+                  $configuredTriggers->appendChild($successTrigger);
+
+                  $email = $dom->createElement('email');
+                  $successTrigger->appendChild($email);
+
+                  $recipientList = $dom->createElement('recipientList', $listMailTemplates[0]->to.$array2String);
+                  $email->appendChild($recipientList);
+
+                  $subject = $dom->createElement('subject', $listMailTemplates[0]->subject);
+                  $email->appendChild($subject);
+
+                  $body = $dom->createElement('body', $listMailTemplates[0]->msg);
+                  $email->appendChild($body);
+
+                  $recipientProviders = $dom->createElement('recipientProviders');
+                  $email->appendChild($recipientProviders);
+
+                  $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
+                  $recipientProviders->appendChild($recipientProvidersPlugin);
+
+                  $attachments = $dom->createElement('attachmentsPattern', '');
+                  $email->appendChild($attachments);
+
+                  $attachBuildLog = $dom->createElement('attachBuildLog', $attFailure);
+                  $email->appendChild($attachBuildLog);
+
+                  $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
+                  $email->appendChild($compressBuildLog);
+
+                  $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
+                  $email->appendChild($replyTo);
+
+                  $contentType = $dom->createElement('contentType', 'both');
+                  $email->appendChild($contentType);
+
+                  $from = $dom->createElement('from', $listMailTemplates[0]->from);
+                  $hudson_ExtendedMailer->appendChild($from);
+
+                  }
+
+                   // On Abort
+                  if($onAbort != "0") { // if On success template is selected
+
+                  // Load EmailSettings Model in order to fech the email template
+                  $this->load->model('emailSettings_model','model');
+                  $listMailTemplates = $this->model->fetchName($onAbort);
+
+                   // CC String to array, array to string function
+                  $string = $listMailTemplates[0]->cc;
+                  $array = explode(",", $string);
+                  if($listMailTemplates[0]->cc != ''){
+                   for ($i=0; $i < sizeof($array); $i++) { 
+                    $array2[$i] = ', cc:'.$array[$i];
+                   }
+                  }
+                  $array2String = rtrim(implode('', $array2), ',');
+
+                  $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.AbortedTrigger');
+                  $configuredTriggers->appendChild($successTrigger);
+
+                  $email = $dom->createElement('email');
+                  $successTrigger->appendChild($email);
+
+                  $recipientList = $dom->createElement('recipientList', $listMailTemplates[0]->to.$array2String);
+                  $email->appendChild($recipientList);
+
+                  $subject = $dom->createElement('subject', $listMailTemplates[0]->subject);
+                  $email->appendChild($subject);
+
+                  $body = $dom->createElement('body', $listMailTemplates[0]->msg);
+                  $email->appendChild($body);
+
+                  $recipientProviders = $dom->createElement('recipientProviders');
+                  $email->appendChild($recipientProviders);
+
+                  $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
+                  $recipientProviders->appendChild($recipientProvidersPlugin);
+
+                  $attachments = $dom->createElement('attachmentsPattern', '');
+                  $email->appendChild($attachments);
+
+                  $attachBuildLog = $dom->createElement('attachBuildLog', $attAbort);
+                  $email->appendChild($attachBuildLog);
+
+                  $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
+                  $email->appendChild($compressBuildLog);
+
+                  $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
+                  $email->appendChild($replyTo);
+
+                  $contentType = $dom->createElement('contentType', 'both');
+                  $email->appendChild($contentType);
+
+                  $from = $dom->createElement('from', $listMailTemplates[0]->from);
+                  $hudson_ExtendedMailer->appendChild($from);
+
+                  }
+
+                 }
+
 
                  // Email Notification (Mailer)
                  if ($emailCheck == 1) { // if email notification checkbox is marked then
