@@ -22,23 +22,28 @@ class jobCreation extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Job Creation';
-
-     //   $data["GetJobs"] = $fetchObj;
         
         $this->loadViews("jobCreation", $this->global, NULL, NULL);
+
     }
 
 
     public function do_upload($val,$job_name) {
 
       $this->global['pageTitle'] = 'Job Seeker : Upload';
+      $jenkins_home = $this->global['jenkins_home'];
+      
+     $ds = DIRECTORY_SEPARATOR;  
 
-     
-
-    $ds = DIRECTORY_SEPARATOR;  //1
- 
-    $storeFolder = '../../repository/'.$val.'/jobs/'; 
-
+      // Check if jenkins home variable exist
+     if($jenkins_home != ''){
+      $storeFolder = $jenkins_home.'/'.$val.'/jobs/';
+      if (!file_exists($storeFolder)) {
+       mkdir($storeFolder);
+      } 
+     } else {
+      $storeFolder = '../../repository/'.$val.'/jobs/'; 
+     }
 
     if (!file_exists($storeFolder)) {
      mkdir($storeFolder);
@@ -193,15 +198,25 @@ class jobCreation extends BaseController
                 }
                 // END Windows File Upload
 
-                // Start Windows File Upload
+                // Start Linux File Upload
+                $jenkins_home = $this->global['jenkins_home'];
                 $linuxCommand = $this->input->post('linuxCommand');
                 $linuxExecutionStrategy = $this->input->post('linuxExecutionStrategy');
                 $linuxScriptType = $this->input->post('linuxScriptType');
                 $linuxCommandLine = $this->input->post('linuxCommandLine');
 
                 if($linuxExecutionStrategy == 'script'){
+
+                  // Check if jenkins home variable exist
+                   if($jenkins_home != ''){
+                         $storeFolder = $jenkins_home.'/';
+                         } else {
+                            $storeFolder = 'repository/'; 
+                            }
+
                   if($linuxScriptType == 'talend'){
-                          $filelist = glob("repository/".$linuxScriptType."/jobs/".$job_name."/*");
+
+                          $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*");
                           $file = glob($filelist[0].'/*.sh');
                           $filePath = realpath($file[0]);
 
@@ -221,7 +236,7 @@ class jobCreation extends BaseController
                           echo 'LINUX - TALEND File Path: <b>'.$filePath.'</b>';
                           echo '<hr><br>';
                   } else if ($linuxScriptType == 'bash') {
-                        $filelist = glob("repository/".$linuxScriptType."/jobs/".$job_name."/*.sh");
+                        $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.sh");
                           $file = glob($filelist[0]);
                           $filePath = realpath($file[0]);
 
@@ -241,7 +256,7 @@ class jobCreation extends BaseController
                           echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
                           echo '<hr><br>';
                   } else if ($linuxScriptType == 'python') {
-                        $filelist = glob("repository/".$linuxScriptType."/jobs/".$job_name."/*.py");
+                        $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.py");
                           $file = glob($filelist[0]);
                           $filePath = realpath($file[0]);
 
