@@ -108,6 +108,15 @@ class Tmf extends BaseController
 
     }
 
+     function updateStatus($id,$status)
+    {
+        $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+        $errorList["data"] = $this->model->updateStatus($id,$status);
+
+        echo "Ok";
+
+    }
+
       /**
      * This function is used to delete the data using id
      * @return boolean $result : TRUE / FALSE
