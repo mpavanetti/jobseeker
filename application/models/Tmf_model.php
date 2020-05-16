@@ -165,8 +165,13 @@ class Tmf_model extends CI_Model
     	$this->db->set('username', $name, FALSE);
 		$this->db->where('instance_id', $instanceId);
 		$this->db->update('tmf'); 
+    }
 
+    function updateStatus($id,$status) {
 
+        $this->db->set('status', $status);
+        $this->db->where('id', $id);
+        $this->db->update('tmf'); 
     }
 
 

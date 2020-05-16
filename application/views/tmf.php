@@ -3,6 +3,9 @@
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse')
   });
+  $( function() {
+    $( document ).tooltip();
+  } );
 </script>
 <style>
     .digital-clock {
@@ -105,7 +108,7 @@ pre {
                              $ready = $ready + 1;
                               break;
                           case 'running':
-                             echo '<span class="label label-info">Running</span>';
+                             echo '<a class="btn btn-sm btn-info cancel" title="Click to Cancel this job">Running</a>';
                              $running = $running + 1;
                               break;
                           case 'error':
@@ -311,6 +314,54 @@ pre {
   );
     
   });
+
+// Job Cancel request function
+$("#table6").on('click','.cancel',function(){  
+  var currentRow=$(this).closest("tr"); 
+  var id=currentRow.find("td:eq(0)").text();
+  var job_name=currentRow.find("td:eq(2)").text();
+  var currentRow = $(this);
+
+   alertify.confirm('Job cancelation request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure you want to send a cancelation request to the running job ' + job_name + ' ?</b></p><br></div></div></div>', 
+
+              function(){ 
+                 $.ajax({
+                    url: jenkins_url + 'job/'+ job_name + '/lastBuild/stop',
+                   method: 'POST',
+                   async: false,
+                   headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+                   beforeSend: function() {
+                    
+                  },
+                  success: function(){
+                   toastr.success("Your Stop Request has been sent to server.", "Request Sent")
+                          $.ajax({
+                           url: '<?php echo base_url(); ?>' + 'Tmf/updateStatus/' + id + '/Cancelled',
+                           method: 'POST',
+                           async: false,
+                           beforeSend: function() {
+                          },
+                          success: function(){
+                           toastr.success("Your job flag has been successfully updated", "Flag Updated")
+                          },
+                          error: function(data) {
+                            toastr.error("An error has occured during job flag update request. <br><b> " + data.status + " " + data.statusText + "</b>", "Operation Error")
+                          }
+                        });
+                   currentRow.parents('tr').remove();
+                  },
+                  error: function(data) {
+                    toastr.error("An error has occured during job cancelation request. <br><b> " + data.status + " " + data.statusText + "</b>", "Operation Error")
+                  }
+                });
+
+              }, 
+              function(){ 
+                alertify.error('Operation Aborted')
+              },
+              );
+
+    }); 
 
 $("#table6").on('click','.msgSelect',function(){
 
