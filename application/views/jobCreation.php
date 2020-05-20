@@ -34,15 +34,15 @@
   </section>
   <section class="content">
 
-    <div class="row" style="margin-top: 10px; margin-bottom: 40px;">
+<!--    <div class="row" style="margin-top: 10px; margin-bottom: 40px;">
      <div class="col-lg-12 col-md-12 col-xs-12">
       <div class="text-center">
         <h3>Statistic Content</h3>
       </div>
     </div>
-  </div>
+  </div> -->
 
-  <div class="row" style="margin-top: 10px; margin-bottom: 40px;">
+  <div class="row" style="margin-top: 10px; margin-bottom: 10px;">
    <div class="col-md-12">
     <?php 
     $this->load->helper('form');
