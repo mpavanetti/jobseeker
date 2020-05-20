@@ -232,6 +232,10 @@
               <a href="#" >
                 <i class="fa fa-list"></i>
                 <span>Console Job Logs</span>
+            <li>
+              <a href="<?php echo base_url(); ?>deletejob" >
+                <i class="fa fa-minus-square"></i>
+                <span>Delete Job</span>
               </a>
             </li> -->
           </ul>
