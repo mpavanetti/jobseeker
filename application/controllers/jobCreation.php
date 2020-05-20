@@ -37,7 +37,7 @@ class jobCreation extends BaseController
 
       // Check if jenkins home variable exist
      if($jenkins_home != ''){
-      $storeFolder = $jenkins_home.'/'.$val.'/jobs/';
+      $storeFolder = $jenkins_home.'/repository/'.$val.'/jobs/';
       if (!file_exists($storeFolder)) {
        mkdir($storeFolder);
       } 
@@ -209,7 +209,7 @@ class jobCreation extends BaseController
 
                   // Check if jenkins home variable exist
                    if($jenkins_home != ''){
-                         $storeFolder = $jenkins_home.'/';
+                         $storeFolder = $jenkins_home.'/repository/';
                          } else {
                             $storeFolder = 'repository/'; 
                             }
