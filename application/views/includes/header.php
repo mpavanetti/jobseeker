@@ -217,6 +217,12 @@
           </a>
           <ul class="treeview-menu">
             <li>
+              <a href="<?php echo base_url(); ?>jobList" >
+                <i class="fa fa-list"></i>
+                <span>Job List</span>
+              </a>
+            </li>
+            <li>
               <a href="<?php echo base_url(); ?>jobExecution" >
                 <i class="fa fa-play"></i>
                 <span>Job Execution</span>
@@ -228,16 +234,12 @@
                 <span>Job Creation</span>
               </a>
             </li>
-            <!-- <li>
-              <a href="#" >
-                <i class="fa fa-list"></i>
-                <span>Console Job Logs</span>
             <li>
               <a href="<?php echo base_url(); ?>deletejob" >
                 <i class="fa fa-minus-square"></i>
                 <span>Delete Job</span>
               </a>
-            </li> -->
+            </li>
           </ul>
         </li>
       <?php } } ?>
