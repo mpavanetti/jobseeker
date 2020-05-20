@@ -74,45 +74,6 @@
   </div>
 </div>
 
-<div class="row" style="margin-top: 5px;">
-  <div class="col-xs-12">
-    <div id="box" class="box box-primary collapsed-box">
-      <div class="box-header with-border">
-        <div class="box-tools pull-right">
-          <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-plus"></i>
-          </button>
-        </div>
-        <h3 class="box-title"><b>Available Jobs</b></h3>
-      </div>
-      <!-- /.box-header -->
-      <div class="box-body" style="width: 100%;">
-        <table id="myTable" class="table table-bordered table-striped" style="width: 100%;">
-          <thead>
-            <tr>
-              <th>Build Situation</th>
-            <th>Job Name</th>
-            <th>Url</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-          <tfoot>
-           <tr>
-            <th>Build Situation</th>
-            <th>Job Name</th>
-            <th>Url</th>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-    <!-- /.box-body -->
-  </div>
-  <!-- /.box -->
-</div>
-<!-- /.col -->
-</div>
-<!-- /.row -->
-
 
 <div class="row">
   <div class="col-lg-6 col-md-6 col-xs-12">
@@ -793,7 +754,7 @@
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.js"></script>
   <script type="text/javascript">
     $(document).ready(function(){
-    
+
       $('.select2').select2({
        placeholder: "Click to Select a option",
        allowClear: true
@@ -1232,11 +1193,7 @@ $('#abort').click(function(){
         }).done(function(data) {
           $('.overlay').fadeOut();
           
-          toastr.success("Your job has been successfully created.", "Job Created");
-          $("#confirmation"). prop("checked", false);
-          $('#myTable').DataTable().ajax.reload();
-          $('#box').boxWidget('expand');
-
+          toastr.success("Your Execution Request has been sent to server.", "Request Sent")
         }).fail(function() {
           $('.overlay').fadeOut();
           console.error(arguments);
