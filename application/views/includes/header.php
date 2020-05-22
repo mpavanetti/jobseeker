@@ -223,6 +223,12 @@
               </a>
             </li>
             <li>
+              <a href="<?php echo base_url(); ?>jobList/full" >
+                <i class="fa fa-list-ul"></i>
+                <span>Full List</span>
+              </a>
+            </li>
+            <li>
               <a href="<?php echo base_url(); ?>jobExecution" >
                 <i class="fa fa-play"></i>
                 <span>Job Execution</span>
