@@ -9,7 +9,7 @@
   <!-- Content Header (Page header) -->
   <section class="content-header">
     <h1>
-     <b>Full Job List</b>
+     <b>Full Job Build List</b>
      <small>Quick access to your jobs build logs.</small>
    </h1>
    <ol class="breadcrumb">

@@ -219,13 +219,13 @@
             <li>
               <a href="<?php echo base_url(); ?>jobList" >
                 <i class="fa fa-list"></i>
-                <span>Job List</span>
+                <span>Job Build List</span>
               </a>
             </li>
             <li>
               <a href="<?php echo base_url(); ?>jobList/full" >
                 <i class="fa fa-list-ul"></i>
-                <span>Full List</span>
+                <span>Full Job Build List</span>
               </a>
             </li>
             <li>
