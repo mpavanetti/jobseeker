@@ -10,7 +10,7 @@
   <!-- Content Header (Page header) -->
   <section class="content-header">
     <h1>
-     <b> Job List</b>
+     <b>Job Build List</b>
      <small>Quick access to your jobs.</small>
    </h1>
    <ol class="breadcrumb">
