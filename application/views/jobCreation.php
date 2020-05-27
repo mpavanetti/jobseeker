@@ -1261,6 +1261,33 @@ $('#abort').click(function(){
 });  
 
   Dropzone.autoDiscover = false;
+
+function loadTable () {
+     $(".overlay").show();
+        $("#myTable").dataTable().fnDestroy();
+        $('#myTable').DataTable({
+          "lengthMenu": [3,5,10,13,20,100,200,500,1000,2000,5000],
+          "pageLength": 5,
+          "order": [[ 0, "desc" ]],
+          "ajax": {
+            "url": jenkins_url +'api/json',
+            "type": 'GET',
+            "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+            "dataSrc": "jobs"
+          },
+          "columns": [
+          {"data": "color"},
+          {"data": "name"},
+          {"data": "url"}
+          ],
+           fixedColumns: true
+       });
+  $(".overlay").hide();  
+}  
+
+setTimeout(function(){ loadTable() }, 1000);
+
+ 
 });
 
 </script>
