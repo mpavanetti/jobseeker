@@ -1,9 +1,22 @@
-<script>
+<!-- <script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse');
   });
-</script>
+</script>-->
+<style>
 
+pre { 
+    white-space: pre-wrap; 
+    word-break: break-word;
+    max-width: 750px;
+}
+
+.checkbox {
+
+    transform: scale(1.5);
+  }
+
+</style>
 <!-- Content Wrapper. Contains page content -->
 <div class="content-wrapper">
   <!-- Content Header (Page header) -->
@@ -24,16 +37,6 @@
 
   <div class="row animated fadeIn" style="margin-top: 25px;">
    <form action="<?php echo base_url() ?>Tmf/fetchData" method="POST" id="searchList">
-
-   <!-- <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-      <div class="input-group" style="width: 100%;">
-        <label>Situation</label>
-        <select class="form-control" name="situation" id="situation">
-          <option value=",lastStableBuild">Success</option>
-          <option value=",lastFailedBuild">Fail</option>
-        </select>
-      </div>
-    </div> -->
 
     <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
       <div class="input-group" style="width: 100%;">
@@ -68,12 +71,32 @@
 </form>
 
 
+<div class="modal fade" id="modal-default" style="display: none;">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">×</span></button>
+          <h4 class="modal-title">Job Build Console Log</h4>
+        </div>
+        <div class="modal-body" id="addLog">
+          
+       </div>
+       <div class="modal-footer">
+        <button type="button" class="btn btn-primary pull-left" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+    <!-- /.modal-content -->
+  </div>
+  <!-- /.modal-dialog -->
+</div>
+
 <div class="row" style="margin-top: 5px;">
   <div class="col-xs-12">
     <div id="box" class="box box box-primary collapsed-box">
       <div class="overlay" style="display:none;">
-          <i class="fa fa-refresh fa-spin"></i>
-        </div>
+        <i class="fa fa-refresh fa-spin"></i>
+      </div>
       <div class="box-header with-border">
         <div class="box-tools pull-right">
           <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-plus"></i>
@@ -120,8 +143,6 @@
 </div>
 <!-- /.row -->
 
-
-
 </section>
 <!-- /.content -->
 </div>
@@ -141,10 +162,10 @@
   $(document).ready(function(){
 
         // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+        var jenkins_url = '<?php echo $jenkins_url; ?>',
+            jenkins_username = '<?php echo $jenkins_username; ?>',
+            jenkins_token = '<?php echo $jenkins_token; ?>',
+            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
         $('#reload').click(function(){
           $('.overlay').show();
@@ -152,7 +173,6 @@
           toastr.info('Refreshing Table rows...','Refreshing ')
           $('.overlay').hide();
         });
-
 
         $.ajax({
           url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
@@ -219,14 +239,15 @@
               {"data": "duration"},
               {"data": "url"},
               {"data": "queueId"},
-              {"data": "building"},
+              {"data": "building"}
+
               ],
               columnDefs:[{targets:0, render:function(data){
                 if(data != null){return data} else {return ''}
               }},{targets:1, render:function(data){
-                if(data != null){return data} else {return ''}
+                if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
               }},{targets:2, render:function(data){
-                if(data != null){return data} else {return ''}
+                if(data != null){return '<a class="btn btn-sm btn-info log text-center" href="#" style="margin-left: 20px;" title="Click to check the build console output.">'+ data + '</a>'} else {return ''}
               }},{targets:3, render:function(data){
                 if(data != null){return moment(data).format('MMMM Do YYYY, h:mm:ss a');}else {return '' }
               }},{targets:4, render:function(data){
@@ -252,10 +273,58 @@
           toastr.error('The min rows must be less than max rows !', 'Rows Error');
         }    
 
-
       });
 
-
-
      });
+
+$("#fetch").on('click','.log',function(){
+
+        // get Jenkins credentials
+        var jenkins_url = '<?php echo $jenkins_url; ?>',
+            jenkins_username = '<?php echo $jenkins_username; ?>',
+            jenkins_token = '<?php echo $jenkins_token; ?>',
+            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+
+
+         // get the current row Id, job name and instance id
+         var currentRow=$(this).closest("tr"),
+             job_name=currentRow.find("td:eq(0)").text(),
+             result=currentRow.find("td:eq(1)").text(),
+             build=currentRow.find("td:eq(2)").text(),
+             date=currentRow.find("td:eq(3)").text(),
+             buildNumber = build.substring(1),
+             name = job_name.split("#");
+
+         var log = $.ajax({
+            contentType: "application/text",
+            url: jenkins_url + 'job/'+ name[0].trim() +'/'+ buildNumber +'/consoleText',
+            method: 'GET',
+            headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+            async: false,
+            beforeSend: function() {
+             $(".overlay").show();
+             $(".destroy").remove();
+
+            },
+            error: function() {
+               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
+            },
+
+            success: function() {
+            },
+            complete: function(data) {
+                dateRequest = data;
+                $(".overlay").hide();
+            }
+
+         });
+           
+                  $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ date +'</td></tr><tr><td>Job Name</td><td>'+ job_name +'</td></tr><tr><td>Status</td><td>'+ result +'</td></tr><tr><td>Console Log</td><td><pre>'+ log.responseText +'</pre></td></tr></tbody></table></div>');
+              
+
+         $('#modal-default').modal('show');
+
+    });
+
+
    </script>
