@@ -148,6 +148,7 @@ $('#deleteJob').click(function(){
              toastr.success('Your job has ben successfully deleted !', 'Job Successfully Deleted');
            $('.overlay').hide();
            $('#deleteJobSelect').find('[value="'+job+'"]').remove();
+           $('#deleteRepoSelect').find('[value="'+job+'"]').remove();
 
         },
         error: function(){
@@ -173,6 +174,7 @@ $('#deleteJob').click(function(){
                 if (value.exist == true) {
                 toastr.info('It has found ' + value.system + ' files inside the job repository', 'Repository Found');
                 toastr.success('Your Repository and files has been succesfully Deleted.', 'Repository Successfully Deleted');
+                $('#deleteRepoSelect').find('[value="'+job+'"]').remove();
                 }
              } else {
                 toastr.warning('It has not found any available repository to delete.', 'No Repository found');
@@ -210,8 +212,7 @@ $('#delRepoBtn').click(function(){
         var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
     var job = $('#deleteRepoSelect').val();
-
-    if(job != 0 ){
+    if(job != 0){
 
 
          $.ajax({
@@ -244,6 +245,8 @@ $('#delRepoBtn').click(function(){
 
 
 
+    } else {
+      toastr.error('Please, Select a job to be deleted', 'Select a Job');
     }
 
 });
