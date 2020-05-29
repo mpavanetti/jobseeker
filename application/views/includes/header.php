@@ -235,6 +235,12 @@
               </a>
             </li>
             <li>
+              <a href="<?php echo base_url(); ?>jobView" >
+                <i class="fa fa-eye"></i>
+                <span>View Job</span>
+              </a>
+            </li>
+            <li>
               <a href="<?php echo base_url(); ?>jobCreation" >
                 <i class="fa fa-plus-square"></i>
                 <span>Job Creation</span>
