@@ -1280,7 +1280,19 @@ function loadTable () {
           {"data": "name"},
           {"data": "url"}
           ],
-           fixedColumns: true
+          columnDefs:[{targets:0, render:function(data){
+            if(data != null){
+              if(data == 'red'){
+                return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/bad.png">';
+              } else if (data == 'blue') {
+                return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/good.png">';
+              } else  if (data == 'notbuilt'){
+                return '<b>Never Built</b>';
+              } else {
+                 return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/loading.gif">';
+              }
+            } else {return ''}
+          }}]
        });
   $(".overlay").hide();  
 }  
