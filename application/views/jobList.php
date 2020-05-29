@@ -148,12 +148,12 @@ pre {
           <thead>
             <tr>
               <th>Build Situation</th>
+              <th>Last Build Result</th>
               <th>Job Name</th>
               <th>Last Build Description</th>
-              <th>Last Build Result</th>
-              <th>Last Build Number</th>
               <th>Last Build Time</th>
               <th>Last Build Duration</th>
+              <th>Last Build Number</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
             </tr>
@@ -163,12 +163,12 @@ pre {
           <tfoot>
            <tr>
               <th>Build Situation</th>
+              <th>Last Build Result</th>
               <th>Job Name</th>
               <th>Last Build Description</th>
-              <th>Last Build Result</th>
-              <th>Last Build Number</th>
               <th>Last Build Time</th>
               <th>Last Build Duration</th>
+              <th>Last Build Number</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
             </tr>
@@ -315,12 +315,12 @@ pre {
           },
           "columns": [
           {"data": "color"},
+          {"data": "builds[].result"},
           {"data": "name"},
           {"data": "description"},
-          {"data": "builds[].result"},
-          {"data": "builds[].number"},
           {"data": "builds[].timestamp"},
           {"data": "builds[].duration"},
+          {"data": "builds[].number"},
           {"data": "fullName"},
           {"data": "name"}
 
@@ -337,11 +337,11 @@ pre {
                  return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/loading.gif">';
               }
             } else {return ''}
-          }},{targets:5, render:function(data){
-            if(data != ''){return data;} else {return ''}
-          }},{targets:6, render:function(data){
-            if(data != ''){return data;} else {return ''}      
-          }},{targets:3, render:function(data){
+          }},{targets:4, render:function(data){
+                if(data != ''){return moment(parseInt(data)).format('MMMM Do YYYY, h:mm:ss a');}else {return '<b>Never Built</b>' }
+              }},{targets:5, render:function(data){
+                if(data != ''){return moment(parseInt(data)).utc().format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]');} else {return '<b>Never Built</b>'}      
+              }},{targets:1, render:function(data){
             if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
           }},{targets:7, render:function(data){
             if(data != null){return '<button class="btn btn-sm btn-primary run" href="#" value="'+ data +'" title="click to trigger this job build">Build</button>'} else {return ''}
@@ -479,7 +479,7 @@ pre {
             $('#listTable').DataTable().ajax.reload();
             $('#listSuccessTable').DataTable().ajax.reload();
             $('#listFailedTable').DataTable().ajax.reload();
-         }, 3000);
+         }, 2500);
             $('.overlay').hide();
           })
     }, 
@@ -502,10 +502,10 @@ $("#listTable").on('click','.log',function(){
 
          // get the current row Id, job name and instance id
          var currentRow=$(this).closest("tr"),
-             name=currentRow.find("td:eq(1)").text(),
-             result=currentRow.find("td:eq(3)").text(),
-             buildNumber=currentRow.find("td:eq(4)").text(),
-             date=currentRow.find("td:eq(5)").text();
+             name=currentRow.find("td:eq(2)").text(),
+             result=currentRow.find("td:eq(1)").text(),
+             buildNumber=currentRow.find("td:eq(6)").text(),
+             date=currentRow.find("td:eq(4)").text();
 
          var log = $.ajax({
             contentType: "application/text",
