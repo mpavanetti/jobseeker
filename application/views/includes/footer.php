@@ -1,10 +1,8 @@
-
-
     <footer class="main-footer">
         <div class="pull-right hidden-xs">
           <b>Job Seeker</b> Admin System | Version 1.0
         </div>
-        <strong>Copyright &copy; 2019-2020 <a href="<?php echo base_url(); ?>">Matheus Pavanetti</a>.</strong> All rights reserved.
+        <strong>Copyright &copy; 2019-2020 <a href="https://www.linkedin.com/in/matheuspavanetti/">Matheus Pavanetti</a>.</strong> All rights reserved.<span style="margin-left: 100px;">Trust in god, he belives in you !</span>
     </footer>
     
     <script src="<?php echo base_url(); ?>assets/bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
@@ -79,6 +77,7 @@
            
         });
     </script>
+ 
 
     <script type="text/javascript">
         var windowURL = window.location.href;
