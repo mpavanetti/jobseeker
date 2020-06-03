@@ -16,9 +16,9 @@
         </div>
         <div class="row">
             <div class="col-xs-12">
-              <div class="box">
+              <div class="box box-primary">
                 <div class="box-header">
-                    <h3 class="box-title">Users List</h3>
+                    <h3 class="box-title"><b>Users List</b></h3>
                     <div class="box-tools">
                         <form action="<?php echo base_url() ?>userListing" method="POST" id="searchList">
                             <div class="input-group">
@@ -30,16 +30,19 @@
                         </form>
                     </div>
                 </div><!-- /.box-header -->
-                <div class="box-body table-responsive no-padding">
-                  <table class="table table-hover">
+                <div class="box-body table-responsive">
+                  <table class="table table-striped table-bordered">
+                    <thead>
                     <tr>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Mobile</th>
                         <th>Role</th>
+                        <th>Group</th>
                         <th>Created On</th>
                         <th class="text-center">Actions</th>
                     </tr>
+                    </thead>
                     <?php
                     if(!empty($userRecords))
                     {
@@ -51,6 +54,7 @@
                         <td><?php echo $record->email ?></td>
                         <td><?php echo $record->mobile ?></td>
                         <td><?php echo $record->role ?></td>
+                        <td><?php echo $record->group ?></td>
                         <td><?php echo date("d-m-Y", strtotime($record->createdDtm)) ?></td>
                         <td class="text-center">
                             <a class="btn btn-sm btn-primary" href="<?= base_url().'login-history/'.$record->userId; ?>" title="Login history"><i class="fa fa-history"></i></a> | 
@@ -62,6 +66,17 @@
                         }
                     }
                     ?>
+                     <tfoot>
+                        <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Mobile</th>
+                        <th>Role</th>
+                        <th>Group</th>
+                        <th>Created On</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                    </tfoot>  
                   </table>
                   
                 </div><!-- /.box-body -->

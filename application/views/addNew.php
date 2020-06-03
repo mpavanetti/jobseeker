@@ -78,7 +78,25 @@
                                             ?>
                                         </select>
                                     </div>
-                                </div>    
+                                </div>  
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="role">Groups</label>
+                                          <select id="group" class="form-control required" name="group">
+                                            <?php
+                                            if(!empty($groups))
+                                            {
+                                                foreach ($groups as $gp)
+                                                {
+                                                    ?>
+                                                    <option value="<?php echo $gp->name ?>"><?php echo $gp->name ?></option>
+                                                    <?php
+                                                }
+                                            }
+                                            ?>
+                                        </select>
+                                    </div>
+                                </div>  
                             </div>
                         </div><!-- /.box-body -->
     

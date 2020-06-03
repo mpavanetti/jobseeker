@@ -35,9 +35,10 @@ class User_model extends CI_Model
      */
     function userListing($searchText = '', $page, $segment)
     {
-        $this->db->select('BaseTbl.userId, BaseTbl.email, BaseTbl.name, BaseTbl.mobile, BaseTbl.createdDtm, Role.role');
+        $this->db->select('BaseTbl.userId, BaseTbl.email, BaseTbl.name, BaseTbl.mobile, BaseTbl.createdDtm, Role.role, Group.name AS group');
         $this->db->from('tbl_users as BaseTbl');
         $this->db->join('tbl_roles as Role', 'Role.roleId = BaseTbl.roleId','left');
+        $this->db->join('tbl_groups as Group', 'Group.id = BaseTbl.groupId','left');
         if(!empty($searchText)) {
             $likeCriteria = "(BaseTbl.email  LIKE '%".$searchText."%'
                             OR  BaseTbl.name  LIKE '%".$searchText."%'
@@ -45,7 +46,7 @@ class User_model extends CI_Model
             $this->db->where($likeCriteria);
         }
         $this->db->where('BaseTbl.isDeleted', 0);
-        $this->db->where('BaseTbl.roleId !=', 1);
+         $this->db->where('BaseTbl.roleId !=', 1);
         $this->db->order_by('BaseTbl.userId', 'DESC');
         $this->db->limit($page, $segment);
         $query = $this->db->get();
@@ -66,6 +67,24 @@ class User_model extends CI_Model
         $query = $this->db->get();
         
         return $query->result();
+    }
+
+     function getUserGroups()
+    {
+        $this->db->select('id, name,owner,creation_date');
+        $this->db->from('tbl_groups');
+        $query = $this->db->get();
+        
+        return $query->result();
+    }
+
+     function validateGroup($name)
+    {
+        $this->db->select('id');
+        $this->db->from('tbl_groups');
+        $this->db->where('name =', $name);
+        $query = $this->db->get();
+        return $query->num_rows();
     }
 
     /**
@@ -104,6 +123,23 @@ class User_model extends CI_Model
         
         return $insert_id;
     }
+
+
+    /**
+     * This function is used to add new group to system
+     * @return number $insert_id : This is last inserted id
+     */
+    function addNewGroup($userInfo)
+    {
+        $this->db->trans_start();
+        $this->db->insert('tbl_groups', $userInfo);
+        
+        $insert_id = $this->db->insert_id();
+        
+        $this->db->trans_complete();
+        
+        return $insert_id;
+    }
     
     /**
      * This function used to get user information by id
@@ -112,7 +148,7 @@ class User_model extends CI_Model
      */
     function getUserInfo($userId)
     {
-        $this->db->select('userId, name, email, mobile, roleId');
+        $this->db->select('userId, name, email, mobile, roleId, groupId');
         $this->db->from('tbl_users');
         $this->db->where('isDeleted', 0);
 		$this->db->where('roleId !=', 1);
@@ -147,6 +183,16 @@ class User_model extends CI_Model
     {
         $this->db->where('userId', $userId);
         $this->db->update('tbl_users', $userInfo);
+        
+        return $this->db->affected_rows();
+    }
+
+    function deleteGroup($id)
+    {
+        
+        $this->db->where('id', $id);
+        $this->db->delete('tbl_groups');
+
         
         return $this->db->affected_rows();
     }
@@ -276,9 +322,10 @@ class User_model extends CI_Model
      */
     function getUserInfoWithRole($userId)
     {
-        $this->db->select('BaseTbl.userId, BaseTbl.email, BaseTbl.name, BaseTbl.mobile, BaseTbl.roleId, Roles.role');
+        $this->db->select('BaseTbl.userId, BaseTbl.email, BaseTbl.name, BaseTbl.mobile, BaseTbl.roleId, Roles.role, Group.name AS group');
         $this->db->from('tbl_users as BaseTbl');
         $this->db->join('tbl_roles as Roles','Roles.roleId = BaseTbl.roleId');
+        $this->db->join('tbl_groups as Group', 'Group.id = BaseTbl.groupId','left');
         $this->db->where('BaseTbl.userId', $userId);
         $this->db->where('BaseTbl.isDeleted', 0);
         $query = $this->db->get();

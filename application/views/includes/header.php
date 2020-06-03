@@ -302,6 +302,12 @@
                 <span>Users</span>
               </a>
             </li>
+            <li>
+              <a href="<?php echo base_url(); ?>User/groupsListing">
+                <i class="fa fa-users"></i>
+                <span>Groups</span>
+              </a>
+            </li>
             <?php
             }
             ?>
