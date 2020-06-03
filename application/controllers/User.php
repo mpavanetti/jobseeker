@@ -53,6 +53,25 @@ class User extends BaseController
         }
     }
 
+      /**
+     * This function is used to load the groups list
+     */
+    function groupsListing()
+    {
+        if($this->isAdmin() == TRUE)
+        {
+            $this->loadThis();
+        }
+        else
+        {  
+            $this->global['pageTitle'] = 'Job Seeker : Group Listing';
+
+            $data['groups'] = $this->user_model->getUserGroups();
+            
+            $this->loadViews("groups", $this->global, $data, NULL);
+        }
+    }
+
     /**
      * This function is used to load the add new form
      */
@@ -66,6 +85,7 @@ class User extends BaseController
         {
             $this->load->model('user_model');
             $data['roles'] = $this->user_model->getUserRoles();
+            $data['groups'] = $this->user_model->getUserGroups();
             
             $this->global['pageTitle'] = 'Job Seeker : Add New User';
 
@@ -122,8 +142,9 @@ class User extends BaseController
                 $password = $this->input->post('password');
                 $roleId = $this->input->post('role');
                 $mobile = $this->security->xss_clean($this->input->post('mobile'));
+                $group = $this->security->xss_clean($this->input->post('group'));
                 
-                $userInfo = array('email'=>$email, 'password'=>getHashedPassword($password), 'roleId'=>$roleId, 'name'=> $name,
+                $userInfo = array('email'=>$email, 'password'=>getHashedPassword($password), 'roleId'=>$roleId, 'groupId' => $group, 'name'=> $name,
                                     'mobile'=>$mobile, 'createdBy'=>$this->vendorId, 'createdDtm'=>date('Y-m-d H:i:s'));
                 
                 $this->load->model('user_model');
@@ -139,6 +160,57 @@ class User extends BaseController
                 }
                 
                 redirect('addNew');
+            }
+        }
+    }
+
+
+    /**
+     * This function is used to add new group to the system
+     */
+    function addNewGroup()
+    {
+        if($this->isAdmin() == TRUE)
+        {
+            $this->loadThis();
+        }
+        else
+        {
+            $this->load->library('form_validation');
+            
+            $this->form_validation->set_rules('name','Group Name','trim|required|max_length[30]');
+            
+            if($this->form_validation->run() == FALSE)
+            {
+                $this->groupsListing();
+            }
+            else
+            {
+                $name = ucwords(strtolower($this->security->xss_clean($this->input->post('name'))));
+
+                $userInfo = array('name'=> $name,'owner'=>$this->name, 'creation_date'=>date('Y-m-d H:i:s'));
+                
+                $this->load->model('user_model');
+                $validate = $this->user_model->validateGroup($name);
+
+                if ($validate >=  1) {
+                   $this->session->set_flashdata('error', 'Group creation failed - This group name already exist');
+                } else {
+                    
+                     $result = $this->user_model->addNewGroup($userInfo);
+                     if($result > 0)
+                {
+                    $this->session->set_flashdata('success', 'New Group created successfully');
+                }
+                else
+                {
+                    $this->session->set_flashdata('error', 'Group creation failed');
+                }
+
+                }
+                
+                
+                redirect('User/groupsListing');
             }
         }
     }
@@ -162,6 +234,7 @@ class User extends BaseController
             }
             
             $data['roles'] = $this->user_model->getUserRoles();
+            $data['groups'] = $this->user_model->getUserGroups();
             $data['userInfo'] = $this->user_model->getUserInfo($userId);
             
             $this->global['pageTitle'] = 'Job Seeker : Edit User';
@@ -204,13 +277,13 @@ class User extends BaseController
                 $password = $this->input->post('password');
                 $roleId = $this->input->post('role');
                 $mobile = $this->security->xss_clean($this->input->post('mobile'));
+                $group = $this->security->xss_clean($this->input->post('group'));
                 
                 $userInfo = array();
                 
                 if(empty($password))
                 {
-                    $userInfo = array('email'=>$email, 'roleId'=>$roleId, 'name'=>$name,
-                                    'mobile'=>$mobile, 'updatedBy'=>$this->vendorId, 'updatedDtm'=>date('Y-m-d H:i:s'));
+                    $userInfo = array('email'=>$email, 'roleId'=>$roleId, 'name' => $name,'groupId' => $group,'mobile'=>$mobile, 'updatedBy'=>$this->vendorId, 'updatedDtm'=>date('Y-m-d H:i:s'));
                 }
                 else
                 {
@@ -252,6 +325,27 @@ class User extends BaseController
             $userInfo = array('isDeleted'=>1,'updatedBy'=>$this->vendorId, 'updatedDtm'=>date('Y-m-d H:i:s'));
             
             $result = $this->user_model->deleteUser($userId, $userInfo);
+            
+            if ($result > 0) { echo(json_encode(array('status'=>TRUE))); }
+            else { echo(json_encode(array('status'=>FALSE))); }
+        }
+    }
+
+        /**
+     * This function is used to delete the group using userId
+     * @return boolean $result : TRUE / FALSE
+     */
+    function deleteGroup()
+    {
+        if($this->isAdmin() == TRUE)
+        {
+            echo(json_encode(array('status'=>'access')));
+        }
+        else
+        {
+            $userId = $this->input->post('userId');
+            
+            $result = $this->user_model->deleteGroup($userId);
             
             if ($result > 0) { echo(json_encode(array('status'=>TRUE))); }
             else { echo(json_encode(array('status'=>FALSE))); }

@@ -5,6 +5,7 @@ $email = $userInfo->email;
 $mobile = $userInfo->mobile;
 $roleId = $userInfo->roleId;
 $role = $userInfo->role;
+$group = $userInfo->group;
 ?>
 
 <div class="content-wrapper">
@@ -20,23 +21,26 @@ $role = $userInfo->role;
     
         <div class="row">
             <!-- left column -->
-            <div class="col-md-3">
+            <div class="col-md-4">
               <!-- general form elements -->
 
 
-                <div class="box box-warning">
+                <div class="box box-warning" style="padding-bottom: 0px;">
                     <div class="box-body box-profile">
                         <img class="profile-user-img img-responsive img-circle" src="<?php echo base_url(); ?>assets/dist/img/avatar.png" alt="User profile picture">
                         <h3 class="profile-username text-center"><?= $name ?></h3>
 
                         <p class="text-muted text-center"><?= $role ?></p>
 
-                        <ul class="list-group list-group-unbordered">
-                            <li class="list-group-item">
+                        <ul class="list-group">
+                            <li class="list-group-item" style="padding-bottom: 30px;">
                                 <b>Email</b> <a class="pull-right"><?= $email ?></a>
                             </li>
-                            <li class="list-group-item">
+                            <li class="list-group-item" style="margin-top: 15px;">
                                 <b>Mobile</b> <a class="pull-right"><?= $mobile ?></a>
+                            </li>
+                            <li class="list-group-item" style="margin-top: 15px;">
+                                <b>Group</b> <a class="pull-right"><?= $group ?></a>
                             </li>
                         </ul>
                     </div>
@@ -54,7 +58,7 @@ $role = $userInfo->role;
                         <div class="<?= ($active == "details")? "active" : "" ?> tab-pane" id="details">
                             <form action="<?php echo base_url() ?>profileUpdate" method="post" id="editProfile" role="form">
                                 <?php $this->load->helper('form'); ?>
-                                <div class="box-body">
+                                <div class="box-body" style="padding-bottom: 35px;">
                                     <div class="row">
                                         <div class="col-md-12">                                
                                             <div class="form-group">
@@ -90,7 +94,7 @@ $role = $userInfo->role;
                         <div class="<?= ($active == "changepass")? "active" : "" ?> tab-pane" id="changepass">
                             <form role="form" action="<?php echo base_url() ?>changePassword" method="post">
                                 <div class="box-body">
-                                    <div class="row">
+                                    <div class="row" style="padding-bottom: 25px;">
                                         <div class="col-md-12">
                                             <div class="form-group">
                                                 <label for="inputPassword1">Old Password</label>
@@ -98,7 +102,6 @@ $role = $userInfo->role;
                                             </div>
                                         </div>
                                     </div>
-                                    <hr>
                                     <div class="row">
                                         <div class="col-md-12">
                                             <div class="form-group">
