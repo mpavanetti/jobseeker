@@ -169,9 +169,8 @@
             <div class="box-footer">
               <div class="row">
                 <div class="col-sm-12 col-xs-12">
-                  <span class="text-center"><h5><b>Growth X Decline in 30 days</b></h5></span>
+                  <span class="text-center"><h5><b>Growth X Decline in 30 days (1 Month)</b></h5></span>
                 </div>
-                
                 <hr>
                 <div class="col-sm-3 col-xs-6">
                   <div class="description-block border-right">
@@ -203,6 +202,92 @@
                 <div class="col-sm-3 col-xs-6">
                   <div class="description-block border-right">
                     <span class="description-percentage" id="runningGrowthDecline"> </span>
+                    
+                    <span class="description-text text-blue">Running</span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+              </div>
+              <!-- /.row -->
+              <hr>
+              <div class="row">
+                <div class="col-sm-12 col-xs-12">
+                  <span class="text-center"><h5><b>Growth X Decline in 90 days (3 Month)</b></h5></span>
+                </div>
+                <hr>
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="readyGrowthDeclineX90"> </span>
+                    
+                    <span class="description-text text-green">Ready </span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+                <!-- /.col -->
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="errorGrowthDeclineX90"> </span>
+                    
+                    <span class="description-text text-red">Error</span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+                <!-- /.col -->
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="warningGrowthDeclineX90"></span>
+                    
+                    <span class="description-text text-yellow">Warning</span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+                <!-- /.col -->
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="runningGrowthDeclineX90"> </span>
+                    
+                    <span class="description-text text-blue">Running</span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+              </div>
+              <!-- /.row -->
+              <hr>
+              <div class="row">
+                <div class="col-sm-12 col-xs-12">
+                  <span class="text-center"><h5><b>Growth X Decline in 180 days (6 Month)</b></h5></span>
+                </div>
+                <hr>
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="readyGrowthDeclineX180"> </span>
+                    
+                    <span class="description-text text-green">Ready </span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+                <!-- /.col -->
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="errorGrowthDeclineX180"> </span>
+                    
+                    <span class="description-text text-red">Error</span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+                <!-- /.col -->
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="warningGrowthDeclineX180"></span>
+                    
+                    <span class="description-text text-yellow">Warning</span> Growth
+                  </div>
+                  <!-- /.description-block -->
+                </div>
+                <!-- /.col -->
+                <div class="col-sm-3 col-xs-6">
+                  <div class="description-block border-right">
+                    <span class="description-percentage" id="runningGrowthDeclineX180"> </span>
                     
                     <span class="description-text text-blue">Running</span> Growth
                   </div>
@@ -673,5 +758,5 @@ $(document).ready(function(){
     }
 });
 </script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=20"></script>
 

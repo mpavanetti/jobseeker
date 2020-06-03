@@ -71,22 +71,62 @@ class Dashboard_model extends CI_Model
     }
 
     function readyGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "READY" AND MONTH(last_Activity) - 1 GROUP BY STATUS, MONTH(last_activity)');
+    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
     function errorGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "ERROR" AND MONTH(last_Activity) - 1 GROUP BY STATUS, MONTH(last_activity)');
+    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
     function warningGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "WARNING" AND MONTH(last_Activity) - 1 GROUP BY STATUS, MONTH(last_activity)');
+    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
     function runningGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "RUNNING" AND MONTH(last_Activity) - 1 GROUP BY STATUS, MONTH(last_activity)');
+    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function readyGrowthX90(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function errorGrowthX90(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function warningGrowthX90(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function runningGrowthX90(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function readyGrowthX180(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function errorGrowthX180(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function warningGrowthX180(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+        return $query->result();
+    }
+
+    function runningGrowthX180(){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 

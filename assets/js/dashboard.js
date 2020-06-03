@@ -335,7 +335,7 @@ var months = request2.data.months.map(function(e) {
      return e.MONTH;
   });
 
-//GROWTHS
+//GROWTHS X 30 Days
 var readyGrowth = request2.data.readyGrowth.map(function(e) {
      return e.AMOUNT;
   });
@@ -352,6 +352,43 @@ var runningGrowth = request2.data.runningGrowth.map(function(e) {
      return e.AMOUNT;
   });
 
+
+//GROWTHS X 90 Days
+var readyGrowthX90 = request2.data.readyGrowthX90.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var errorGrowthX90 = request2.data.errorGrowthX90.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var warningGrowthX90 = request2.data.warningGrowthX90.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var runningGrowthX90 = request2.data.runningGrowthX90.map(function(e) {
+     return e.AMOUNT;
+  });
+
+//GROWTHS X 180 Days
+var readyGrowthX180 = request2.data.readyGrowthX180.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var errorGrowthX180 = request2.data.errorGrowthX180.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var warningGrowthX180 = request2.data.warningGrowthX180.map(function(e) {
+     return e.AMOUNT;
+  });
+
+var runningGrowthX180 = request2.data.runningGrowthX180.map(function(e) {
+     return e.AMOUNT;
+  });
+
+
+
 var statusLabel = request2.data.statusGraph.map(function(e) {
      return e.STATUS;
   });
@@ -361,16 +398,20 @@ var statusAmount = request2.data.statusGraph.map(function(e) {
   });
 
 
-// Logic for Ready Growth or Decline
-if (readyGrowth[1] != null && readyGrowth[0] != null){
-    if(readyGrowth[1] > readyGrowth[0]){
+// Logic for Ready Growth or Decline x 30 days
+if (readyGrowth[0] != null && readyGrowth[readyGrowth.length -1] != null){
+
+    readyGrowth[0] = parseInt(readyGrowth[0]);
+    readyGrowth[readyGrowth.length -1] = parseInt(readyGrowth[readyGrowth.length -1]);
+
+    if(readyGrowth[0] > readyGrowth[readyGrowth.length -1]){
       var readyGrowthPercent = 0;
-      readyGrowthPercent = Math.round((((readyGrowth[1] / readyGrowth[0])  - 1 ) * 100));
+      readyGrowthPercent = Math.round((((readyGrowth[0] / readyGrowth[readyGrowth.length -1])  - 1 ) * 100));
 
       $('#readyGrowthDecline').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + readyGrowthPercent + ' %</h4>')
     } else {
       var readyDeclinePercent = 0;
-      readyDeclinePercent = ((1 - (readyGrowth[0]/readyGrowth[1]))*100);
+      readyDeclinePercent = Math.round(((1 - (readyGrowth[0] / readyGrowth[readyGrowth.length -1]))*100));
 
       $('#readyGrowthDecline').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + readyDeclinePercent + ' %</h4>')
     } 
@@ -380,15 +421,20 @@ if (readyGrowth[1] != null && readyGrowth[0] != null){
  }
 
 
+
 // Logic for Error Growth or Decline
-if (errorGrowth[1] != null && errorGrowth[0] != null){
-    if(errorGrowth[1] > errorGrowth[0]){
+if (errorGrowth[0] != null && errorGrowth[errorGrowth.length -1] != null){
+
+    errorGrowth[0] = parseInt(errorGrowth[0]);
+    errorGrowth[errorGrowth.length -1] = parseInt(errorGrowth[errorGrowth.length -1]);
+
+    if(errorGrowth[0] > errorGrowth[errorGrowth.length -1]){
       var errorGrowthPercent = 0;
-      errorGrowthPercent = (((errorGrowth[1] / errorGrowth[0])  - 1 ) * 100);
+      errorGrowthPercent = Math.round((((errorGrowth[0] / errorGrowth[errorGrowth.length -1])  - 1 ) * 100));
       $('#errorGrowthDecline').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + errorGrowthPercent + ' %</h4>')
     }  else {
       var errorGrowthPercent = 0;
-      errorGrowthPercent = ((1 - (errorGrowth[0]/errorGrowth[1]))*100);
+      errorGrowthPercent = Math.round(((1 - (errorGrowth[0] / errorGrowth[errorGrowth.length -1]))*100));
       $('#errorGrowthDecline').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + errorGrowthPercent + ' %</h4>')
 
     } 
@@ -397,15 +443,20 @@ if (errorGrowth[1] != null && errorGrowth[0] != null){
 }
 
 
+
 // Logic for Warning Growth or Decline
-if (warningGrowth[1] != null && warningGrowth[0] != null){
-    if(warningGrowth[1] > warningGrowth[0]){
+if (warningGrowth[0] != null && warningGrowth[warningGrowth.length -1] != null){
+
+    warningGrowth[0] = parseInt(warningGrowth[0]);
+    warningGrowth[warningGrowth.length -1] = parseInt(warningGrowth[warningGrowth.length -1]);
+
+    if(warningGrowth[0] > warningGrowth[warningGrowth.length -1]){
       var warningGrowthPercent = 0;
-      warningGrowthPercent = (((warningGrowth[1] / warningGrowth[0])  - 1 ) * 100);
+      warningGrowthPercent = Math.round((((warningGrowth[0] / warningGrowth[warningGrowth.length -1])  - 1 ) * 100));
       $('#warningGrowthDecline').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + warningGrowthPercent + ' %</h4>')
     }  else {
       var warningGrowthPercent = 0;
-      warningGrowthPercent = ((1 - (warningGrowth[0]/warningGrowth[1]))*100);
+      warningGrowthPercent = Math.round(((1 - (warningGrowth[0] / warningGrowth[warningGrowth.length -1]))*100));
       $('#warningGrowthDecline').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + warningGrowthPercent + ' %</h4>')
 
     } 
@@ -413,15 +464,21 @@ if (warningGrowth[1] != null && warningGrowth[0] != null){
    $('#warningGrowthDecline').append('<h4 class="description-header">Not Available</h4>')
 }
 
+
+
 // Logic for Running Growth or Decline
-if (runningGrowth[1] != null && runningGrowth[0] != null){
-    if(runningGrowth[1] > runningGrowth[0]){
+if (runningGrowth[0] != null && runningGrowth[runningGrowth.length -1] != null){
+
+    runningGrowth[0] = parseInt(runningGrowth[0]);
+    runningGrowth[runningGrowth.length -1] = parseInt(runningGrowth[runningGrowth.length -1]);
+
+    if(runningGrowth[0] > runningGrowth[runningGrowth.length -1]){
       var runningGrowthPercent = 0;
-      runningGrowthPercent = (((runningGrowth[1] / runningGrowth[0])  - 1 ) * 100);
+      runningGrowthPercent = Math.round((((runningGrowth[0] / runningGrowth[runningGrowth.length -1])  - 1 ) * 100));
       $('#runningGrowthDecline').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + runningGrowthPercent + ' %</h4>')
     }  else {
       var runningGrowthPercent = 0;
-      runningGrowthPercent = ((1 - (runningGrowth[0]/runningGrowth[1]))*100);
+      runningGrowthPercent = Math.round(((1 - (runningGrowth[0] / runningGrowth[runningGrowth.length -1]))*100));
       $('#runningGrowthDecline').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + runningGrowthPercent + ' %</h4>')
 
     } 
@@ -430,6 +487,186 @@ if (runningGrowth[1] != null && runningGrowth[0] != null){
 }
 
 
+
+
+// Logic for Ready Growth or Decline x 90 days
+if (readyGrowthX90[0] != null && readyGrowthX90[readyGrowthX90.length -1] != null){
+
+    readyGrowthX90[0] = parseInt(readyGrowthX90[0]);
+    readyGrowthX90[readyGrowthX90.length -1] = parseInt(readyGrowthX90[readyGrowthX90.length -1]);
+
+    if(readyGrowthX90[0] > readyGrowthX90[readyGrowthX90.length -1]){
+      var readyGrowthPercentX90 = 0;
+      readyGrowthPercentX90 = Math.round((((readyGrowthX90[0] / readyGrowthX90[readyGrowthX90.length -1])  - 1 ) * 100));
+
+      $('#readyGrowthDeclineX90').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + readyGrowthPercentX90 + ' %</h4>')
+    } else {
+      var readyDeclinePercentX90 = 0;
+      readyDeclinePercentX90 = Math.round(((1 - (readyGrowthX90[0] / readyGrowthX90[readyGrowthX90.length -1]))*100));
+
+      $('#readyGrowthDeclineX90').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + readyDeclinePercentX90 + ' %</h4>')
+    } 
+
+ } else {
+   $('#readyGrowthDeclineX90').append('<h4 class="description-header">Not Available</h4>')
+ }
+
+
+
+// Logic for Error Growth or Decline
+if (errorGrowthX90[0] != null && errorGrowthX90[errorGrowthX90.length -1] != null){
+
+    errorGrowthX90[0] = parseInt(errorGrowthX90[0]);
+    errorGrowthX90[errorGrowthX90.length -1] = parseInt(errorGrowthX90[errorGrowthX90.length -1]);
+
+    if(errorGrowthX90[0] > errorGrowthX90[errorGrowthX90.length -1]){
+      var errorGrowthPercentX90 = 0;
+      errorGrowthPercentX90 = Math.round((((errorGrowthX90[0] / errorGrowthX90[errorGrowthX90.length -1])  - 1 ) * 100));
+      $('#errorGrowthDeclineX90').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + errorGrowthPercentX90 + ' %</h4>')
+    }  else {
+      var errorGrowthPercentX90 = 0;
+      errorGrowthPercentX90 = Math.round(((1 - (errorGrowthX90[0]/errorGrowthX90[errorGrowthX90.length -1]))*100));
+      $('#errorGrowthDeclineX90').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + errorGrowthPercentX90 + ' %</h4>')
+
+    } 
+} else {
+   $('#errorGrowthDeclineX90').append('<h4 class="description-header">Not Available</h4>')
+}
+
+
+
+
+// Logic for Warning Growth or Decline
+if (warningGrowthX90[0] != null && warningGrowthX90[warningGrowthX90.length -1] != null){
+
+    warningGrowthX90[0] = parseInt(warningGrowthX90[0]);
+    warningGrowthX90[warningGrowthX90.length -1] = parseInt(warningGrowthX90[warningGrowthX90.length -1]);
+
+    if(warningGrowthX90[0] > warningGrowthX90[warningGrowthX90.length -1]){
+      var warningGrowthPercentX90 = 0;
+      warningGrowthPercentX90 = Math.round((((warningGrowthX90[0] / warningGrowthX90[warningGrowthX90.length -1])  - 1 ) * 100));
+      $('#warningGrowthDeclineX90').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + warningGrowthPercentX90 + ' %</h4>')
+    }  else {
+      var warningGrowthPercentX90 = 0;
+      warningGrowthPercentX90 = Math.round(((1 - (warningGrowthX90[0]/ warningGrowthX90[warningGrowthX90.length -1]))*100));
+      $('#warningGrowthDeclineX90').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + warningGrowthPercentX90 + ' %</h4>')
+
+    } 
+} else {
+   $('#warningGrowthDeclineX90').append('<h4 class="description-header">Not Available</h4>')
+}
+
+
+
+// Logic for Running Growth or Decline
+if (runningGrowthX90[0] != null && runningGrowthX90[runningGrowthX90.length -1] != null){
+
+    runningGrowthX90[0] = parseInt(runningGrowthX90[0]);
+    runningGrowthX90[runningGrowthX90.length -1] = parseInt(runningGrowthX90[runningGrowthX90.length -1]);
+
+    if(runningGrowthX90[0] > runningGrowthX90[runningGrowthX90.length -1]){
+      var runningGrowthPercentX90 = 0;
+      runningGrowthPercentX90 = Math.round((((runningGrowthX90[0] / runningGrowthX90[runningGrowthX90.length -1])  - 1 ) * 100));
+      $('#runningGrowthDeclineX90').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + runningGrowthPercentX90 + ' %</h4>')
+    }  else {
+      var runningGrowthPercentX90 = 0;
+      runningGrowthPercentX90 = Math.round(((1 - (runningGrowthX90[0]/ runningGrowthX90[runningGrowthX90.length -1]))*100));
+      $('#runningGrowthDeclineX90').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + runningGrowthPercentX90 + ' %</h4>')
+
+    } 
+} else {
+   $('#runningGrowthDeclineX90').append('<h4 class="description-header">Not Available</h4>')
+}
+
+
+// Logic for Ready Growth or Decline x 180 days
+if (readyGrowthX180[0] != null && readyGrowthX180[readyGrowthX180.length -1] != null){
+
+    readyGrowthX180[0] = parseInt(readyGrowthX180[0]);
+    readyGrowthX180[readyGrowthX180.length -1] = parseInt(readyGrowthX180[readyGrowthX180.length -1]);
+
+    if(readyGrowthX180[0] > readyGrowthX180[readyGrowthX180.length -1]){
+      var readyGrowthPercentX180 = 0;
+      readyGrowthPercentX180 = Math.round((((readyGrowthX180[0] / readyGrowthX180[readyGrowthX180.length -1])  - 1 ) * 100));
+
+      $('#readyGrowthDeclineX180').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + readyGrowthPercentX180 + ' %</h4>')
+    } else {
+      var readyDeclinePercentX180 = 0;
+      readyDeclinePercentX180 = Math.round(((1 - (readyGrowthX180[0] / readyGrowthX180[readyGrowthX180.length -1]))*100));
+
+      $('#readyGrowthDeclineX180').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + readyDeclinePercentX180 + ' %</h4>')
+    } 
+
+ } else {
+   $('#readyGrowthDeclineX180').append('<h4 class="description-header">Not Available</h4>')
+ }
+
+
+
+// Logic for Error Growth or Decline
+if (errorGrowthX180[0] != null && errorGrowthX180[errorGrowthX180.length -1] != null){
+
+    errorGrowthX180[0] = parseInt(errorGrowthX180[0]);
+    errorGrowthX180[errorGrowthX180.length -1] = parseInt(errorGrowthX180[errorGrowthX180.length -1]);
+
+    if(errorGrowthX180[0] > errorGrowthX180[errorGrowthX180.length -1]){
+      var errorGrowthPercentX180 = 0;
+      errorGrowthPercentX180 = Math.round((((errorGrowthX180[0] / errorGrowthX180[errorGrowthX180.length -1])  - 1 ) * 100));
+      $('#errorGrowthDeclineX180').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + errorGrowthPercentX180 + ' %</h4>')
+    }  else {
+      var errorGrowthPercentX180 = 0;
+      errorGrowthPercentX180 = Math.round(((1 - (errorGrowthX180[0]/errorGrowthX180[errorGrowthX180.length -1]))*100));
+      $('#errorGrowthDeclineX180').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + errorGrowthPercentX180 + ' %</h4>')
+
+    } 
+} else {
+   $('#errorGrowthDeclineX180').append('<h4 class="description-header">Not Available</h4>')
+}
+
+
+
+
+// Logic for Warning Growth or Decline
+if (warningGrowthX180[0] != null && warningGrowthX180[warningGrowthX180.length -1] != null){
+
+    warningGrowthX180[0] = parseInt(warningGrowthX180[0]);
+    warningGrowthX180[warningGrowthX180.length -1] = parseInt(warningGrowthX180[warningGrowthX180.length -1]);
+
+    if(warningGrowthX180[0] > warningGrowthX180[warningGrowthX180.length -1]){
+      var warningGrowthPercentX180 = 0;
+      warningGrowthPercentX180 = Math.round((((warningGrowthX180[0] / warningGrowthX180[warningGrowthX180.length -1])  - 1 ) * 100));
+      $('#warningGrowthDeclineX180').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + warningGrowthPercentX180 + ' %</h4>')
+    }  else {
+      var warningGrowthPercentX180 = 0;
+      warningGrowthPercentX180 = Math.round(((1 - (warningGrowthX180[0]/ warningGrowthX180[warningGrowthX180.length -1]))*100));
+      $('#warningGrowthDeclineX180').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + warningGrowthPercentX180 + ' %</h4>')
+
+    } 
+} else {
+   $('#warningGrowthDeclineX180').append('<h4 class="description-header">Not Available</h4>')
+}
+
+
+
+// Logic for Running Growth or Decline
+if (runningGrowthX180[0] != null && runningGrowthX180[runningGrowthX180.length -1] != null){
+
+    runningGrowthX180[0] = parseInt(runningGrowthX180[0]);
+    runningGrowthX180[runningGrowthX180.length -1] = parseInt(runningGrowthX180[runningGrowthX180.length -1]);
+
+    if(runningGrowthX180[0] > runningGrowthX180[runningGrowthX180.length -1]){
+      var runningGrowthPercentX180 = 0;
+      runningGrowthPercentX180 = Math.round((((runningGrowthX180[0] / runningGrowthX180[runningGrowthX180.length -1])  - 1 ) * 100));
+      $('#runningGrowthDeclineX180').append('<h4 class="description-header text-green"><i class="fa fa-caret-up"></i> ' + runningGrowthPercentX180 + ' %</h4>')
+    }  else {
+      var runningGrowthPercentX180 = 0;
+      runningGrowthPercentX180 = Math.round(((1 - (runningGrowthX180[0]/ runningGrowthX180[runningGrowthX180.length -1]))*100));
+      $('#runningGrowthDeclineX180').append('<h4 class="description-header text-red"><i class="fa fa-caret-down"></i> ' + runningGrowthPercentX180 + ' %</h4>')
+
+    } 
+} else {
+   $('#runningGrowthDeclineX180').append('<h4 class="description-header">Not Available</h4>')
+}
 
 
 var ctx = document.getElementById('chart').getContext('2d');
