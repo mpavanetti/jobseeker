@@ -217,7 +217,7 @@ pre {
 
         if(minRows < maxRows){
 
-          if(job_name != '' || job_name != null){
+          if(job_name != '' && job_name != null){
             $('.overlay').show();
             $("#fetch").dataTable().fnDestroy();
             $('#fetch').DataTable({
