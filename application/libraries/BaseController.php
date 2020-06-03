@@ -52,6 +52,12 @@ class BaseController extends CI_Controller {
 			$loadJson = file_get_contents(base_url().'application/config/config.json');
 			$jsonToArray = json_decode($loadJson);
 
+			// Load reports with user permision
+			$this->load->model('Visualization_model');
+			$this->global ['allowedReports'] =$this->Visualization_model->allowedUser($this->name);
+
+		//$allowedUser = $this->Visualization_model->allowedUser($name);
+
 			// Set global var to be used on Controllers
 			$this->global ['jenkins_enabled'] = $jsonToArray->jenkins->enabled;
 			$this->global ['jenkins_url'] = $jsonToArray->jenkins->url;
@@ -114,6 +120,8 @@ class BaseController extends CI_Controller {
 		$this->load->view ( 'access' );
 		$this->load->view ( 'includes/footer' );
 	}
+
+		
 	
 	/**
 	 * This function is used to logged out user from system
