@@ -75,6 +75,16 @@ class Dashboard extends BaseController
         $runningGrowth = $this->model->runningGrowth();
         $statusGraph = $this->model->statusGraph();
 
+        $readyGrowthX90 = $this->model->readyGrowthX90();
+        $errorGrowthX90 = $this->model->errorGrowthX90();
+        $warningGrowthX90 = $this->model->warningGrowthX90();
+        $runningGrowthX90 = $this->model->runningGrowthX90();
+
+        $readyGrowthX180 = $this->model->readyGrowthX180();
+        $errorGrowthX180 = $this->model->errorGrowthX180();
+        $warningGrowthX180 = $this->model->warningGrowthX180();
+        $runningGrowthX180 = $this->model->runningGrowthX180();
+
         $result["data"] = array(
 
             'ready' => $graphReady,
@@ -82,10 +92,22 @@ class Dashboard extends BaseController
             'warning' => $graphWarning,
             'running' => $graphRunning,
             'months' => $months,
+
             'readyGrowth' => $readyGrowth,
             'errorGrowth' => $errorGrowth,
             'warningGrowth' => $warningGrowth,
             'runningGrowth' => $runningGrowth,
+
+            'readyGrowthX90' => $readyGrowthX90,
+            'errorGrowthX90' => $errorGrowthX90,
+            'warningGrowthX90' => $warningGrowthX90,
+            'runningGrowthX90' => $runningGrowthX90,
+
+            'readyGrowthX180' => $readyGrowthX180,
+            'errorGrowthX180' => $errorGrowthX180,
+            'warningGrowthX180' => $warningGrowthX180,
+            'runningGrowthX180' => $runningGrowthX180,
+
             'statusGraph' => $statusGraph
 
         );
