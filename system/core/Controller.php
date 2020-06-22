@@ -93,4 +93,19 @@ class CI_Controller {
 		return self::$instance;
 	}
 
+	public function setup() {
+	// load json config file
+	$loadJson = file_get_contents(base_url().'application/config/config.json');
+	$jsonToArray = json_decode($loadJson);
+
+	// Setup Wizard
+	$this->global ['setup'] = $jsonToArray->setup->enabled;
+	$setup = $jsonToArray->setup->enabled;
+
+	if($setup == true){
+		redirect ( 'setup' );
+	} 
+
+	}
+
 }

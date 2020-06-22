@@ -7,5 +7,9 @@
         "authorization": "Basic",
         "jenkins_home": ""
 		
+    },
+    "setup": {
+    	"enabled": true,
+    	"env": "dev"
     }
 }
