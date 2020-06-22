@@ -3,9 +3,9 @@
 /**
  * Class : BaseController
  * Base Class to control over all the classes
- * @author : Kishor Mali
+ * @author : Matheus Pavanetti
  * @version : 1.1
- * @since : 15 November 2016
+ * @since : 2019
  */
 class BaseController extends CI_Controller {
 	protected $role = '';
@@ -14,7 +14,6 @@ class BaseController extends CI_Controller {
 	protected $roleText = '';
 	protected $global = array ();
 	protected $lastLogin = '';
-	
 	/**
 	 * Takes mixed data and optionally a status code, then creates the response
 	 *
@@ -27,7 +26,7 @@ class BaseController extends CI_Controller {
 		$this->output->set_status_header ( 200 )->set_content_type ( 'application/json', 'utf-8' )->set_output ( json_encode ( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) )->_display ();
 		exit ();
 	}
-	
+
 	/**
 	 * This function used to check the user is logged in or not
 	 */
@@ -48,15 +47,13 @@ class BaseController extends CI_Controller {
 			$this->global ['role_text'] = $this->roleText;
 			$this->global ['last_login'] = $this->lastLogin;
 
-			// load Jenkins credentials
+			// load json config file
 			$loadJson = file_get_contents(base_url().'application/config/config.json');
 			$jsonToArray = json_decode($loadJson);
 
 			// Load reports with user permision
 			$this->load->model('Visualization_model');
 			$this->global ['allowedReports'] =$this->Visualization_model->allowedUser($this->name);
-
-		//$allowedUser = $this->Visualization_model->allowedUser($name);
 
 			// Set global var to be used on Controllers
 			$this->global ['jenkins_enabled'] = $jsonToArray->jenkins->enabled;
@@ -65,6 +62,7 @@ class BaseController extends CI_Controller {
 			$this->global ['jenkins_token'] = $jsonToArray->jenkins->token;
 			$this->global ['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
 			$this->global ['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
+
 
 			// Set global var to detect OS Version
 			if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
@@ -145,6 +143,13 @@ class BaseController extends CI_Controller {
         $this->load->view('includes/header', $headerInfo);
         $this->load->view($viewName, $pageInfo);
         $this->load->view('includes/footer', $footerInfo);
+    }
+
+    function loadViewsSetup($viewName = "", $headerInfo = NULL, $pageInfo = NULL, $footerInfo = NULL){
+
+        $this->load->view('includes/setupHeader', $headerInfo);
+        $this->load->view($viewName, $pageInfo);
+        $this->load->view('includes/setupFooter', $footerInfo);
     }
 	
 	/**
