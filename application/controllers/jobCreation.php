@@ -3,7 +3,7 @@
 require APPPATH . '/libraries/BaseController.php';
 
 
-class jobCreation extends BaseController
+class JobCreation extends BaseController
 {
     /**
      * This is default constructor of the class
@@ -30,24 +30,23 @@ class jobCreation extends BaseController
 
     public function do_upload($val,$job_name) {
 
+      header('Content-Type: text/html; charset=utf-8');
+
       $this->global['pageTitle'] = 'Job Seeker : Upload';
       $jenkins_home = $this->global['jenkins_home'];
       
      $ds = DIRECTORY_SEPARATOR;  
 
       // Check if jenkins home variable exist
-     if($jenkins_home != ''){
-      $storeFolder = $jenkins_home.'/repository/'.$val.'/jobs/';
-      if (!file_exists($storeFolder)) {
-       mkdir($storeFolder);
-      } 
-     } else {
+     if($jenkins_home === '' || $jenkins_home === null){
       $storeFolder = '../../repository/'.$val.'/jobs/'; 
+
+     } else {
+
+      $storeFolder = $jenkins_home.'/repository/'.$val.'/jobs/';
+      
      }
 
-    if (!file_exists($storeFolder)) {
-     mkdir($storeFolder);
-    } 
 
     if (!empty($_FILES)) {
          
@@ -65,10 +64,10 @@ class jobCreation extends BaseController
             // extract it to the path we determined above
             $zip->extractTo($targetPath.$job_name);
             $zip->close();
-            echo "WOOT! $file extracted to $path";
+            // echo "WOOT! $file extracted to $path";
             unlink($targetFile);
           } else {
-            echo "Doh! I couldn't open $file";
+            // // echo "Doh! I couldn't open $file";
           }
 
         }
@@ -84,6 +83,7 @@ class jobCreation extends BaseController
         }
         else
         {
+            header('Content-Type: text/html; charset=utf-8');
 
             $this->load->library('form_validation');
 
@@ -141,34 +141,34 @@ class jobCreation extends BaseController
                           $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*");
                           $file = glob($filelist[0].'/*.bat');
                           $filePath = realpath($file[0]);
-                          echo 'WINDOWS - TALEND File Path: <b>'.$filePath.'</b>';
-                          echo '<hr><br>';
+                          // // echo 'WINDOWS - TALEND File Path: <b>'.$filePath.'</b>';
+                          // // echo '<hr><br>';
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
-                            echo "My File is a directory";
+                            // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
-                           redirect('jobCreation');
+                           redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
                             } else {
-                                echo "The file $filePath does not exists";
+                                // // echo "The file $filePath does not exists";
                             }
                           }
                   } else if ($scriptType == 'batch') {
                         $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*.bat");
                           $file = glob($filelist[0]);
                           $filePath = realpath($file[0]);
-                          echo 'WINDOWS - BATCH File Path: <b>'.$filePath.'</b>';
-                          echo '<hr><br>';
+                          // // echo 'WINDOWS - BATCH File Path: <b>'.$filePath.'</b>';
+                          // // echo '<hr><br>';
                           // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
-                            echo "My File is a directory";
+                            // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
-                           redirect('jobCreation');
+                           redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
                             } else {
-                                echo "The file $filePath does not exists";
+                                // // echo "The file $filePath does not exists";
                             }
                           } 
                            
@@ -176,18 +176,18 @@ class jobCreation extends BaseController
                         $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*.py");
                           $file = glob($filelist[0]);
                           $filePath = realpath($file[0]);
-                          echo 'WINDOWS - PYTHON File Path: <b>'.$filePath.'</b>';
-                          echo '<hr><br>';
+                          // // echo 'WINDOWS - PYTHON File Path: <b>'.$filePath.'</b>';
+                          // // echo '<hr><br>';
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
-                            echo "My File is a directory";
+                            // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
-                           redirect('jobCreation');
+                           redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
                             } else {
-                                echo "The file $filePath does not exists";
+                                // // echo "The file $filePath does not exists";
                             }
                           }
                   }
@@ -222,19 +222,18 @@ class jobCreation extends BaseController
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
-                            echo "My File is a directory";
+                            // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
-                           redirect('jobCreation');
+                           redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
                             } else {
-                                echo "The file $filePath does not exists";
+                                // // echo "The file $filePath does not exists";
                             }
                           }
 
-                          $filePath = '.'.$filePath;
-                          echo 'LINUX - TALEND File Path: <b>'.$filePath.'</b>';
-                          echo '<hr><br>';
+                          // // echo 'LINUX - TALEND File Path: <b>'.$filePath.'</b>';
+                          // // echo '<hr><br>';
                   } else if ($linuxScriptType == 'bash') {
                         $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.sh");
                           $file = glob($filelist[0]);
@@ -242,19 +241,19 @@ class jobCreation extends BaseController
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
-                            echo "My File is a directory";
+                            // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
-                           redirect('jobCreation');
+                           redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
                             } else {
-                                echo "The file $filePath does not exists";
+                                // echo "The file $filePath does not exists";
                             }
                           }
 
-                          $filePath = '.'.$filePath;
-                          echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
-                          echo '<hr><br>';
+                         
+                          // echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
+                          // echo '<hr><br>';
                   } else if ($linuxScriptType == 'python') {
                         $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.py");
                           $file = glob($filelist[0]);
@@ -262,19 +261,19 @@ class jobCreation extends BaseController
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
-                            echo "My File is a directory";
+                            // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
-                           redirect('jobCreation');
+                           redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
                             } else {
-                                echo "The file $filePath does not exists";
+                                // echo "The file $filePath does not exists";
                             }
                           }
 
-                          $filePath = '.'.$filePath;
-                          echo 'LINUX - PYTHON File Path: <b>'.$filePath.'</b>';
-                          echo '<hr><br>';
+                          
+                          // echo 'LINUX - PYTHON File Path: <b>'.$filePath.'</b>';
+                          // echo '<hr><br>';
                   }
                 } else if ($linuxExecutionStrategy == 'command'){
 
@@ -288,7 +287,7 @@ class jobCreation extends BaseController
                 if ($singleMinute == null || $singleHour == null || $singleDayOfMonth == null || $singleMonth == null || $singleDayOfWeek == null){
 
                   $this->session->set_flashdata('error', 'You missed to select one field value for Build Periodically function');
-                    redirect('jobCreation');
+                    redirect('JobCreation');
                 }
 
                  // Repetitive Build Options
@@ -329,7 +328,7 @@ class jobCreation extends BaseController
                 if($editableEmailCheck == 1){
                   if($onSuccess == "0" && $onFailure == "0" && $onAbort == "0"){
                     $this->session->set_flashdata('error', 'You missed to select one field value for Editable email notification.');
-                    redirect('jobCreation');
+                    redirect('JobCreation');
                   }
                 }
 
@@ -417,7 +416,7 @@ class jobCreation extends BaseController
                   if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0" || $linuxExecutionStrategy == 'command'){
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
-                    $command = $dom->createElement('command', $filePath);
+                    $command = $dom->createElement('command', 'sh '.$filePath);
                     $hudson_task_BashFile->appendChild($command);
                     $builders->appendChild($hudson_task_BashFile);
                     
@@ -736,7 +735,7 @@ class jobCreation extends BaseController
                  $this->session->set_flashdata('job_name', $job_name);
                  $this->session->set_flashdata('success', 'Your XML File has been successfully created !');
 
-                redirect('jobCreation');
+                redirect('JobCreation');
 
             }
         }
@@ -746,7 +745,7 @@ class jobCreation extends BaseController
 
         header("Content-Type: text/xml");
         $content = file_get_contents("xml/config.xml");
-        echo $content;
+        // // echo $content;
 
     }
 
