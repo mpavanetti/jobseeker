@@ -225,7 +225,7 @@ pre {
               "pageLength": 5,
               "order": [[ 2, "desc" ]],
               "ajax": {
-                "url": jenkins_url +'job/'+ job_name +'/api/json?tree=builds[number,displayName,fullDisplayName,result,timestamp,duration,url,queueId,building]{'+ minRows +','+maxRows+'}',
+                "url": jenkins_url +'job/'+ job_name +'/api/json?tree=builds[number,number,fullDisplayName,result,timestamp,duration,url,queueId,building]{'+ minRows +','+maxRows+'}',
                 "type": 'GET',
                 "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
                 "dataSrc": "builds",
@@ -234,7 +234,7 @@ pre {
               "columns": [
               {"data": "fullDisplayName"},
               {"data": "result"},
-              {"data": "displayName"},
+              {"data": "number"},
               {"data": "timestamp"},
               {"data": "duration"},
               {"data": "url"},
@@ -292,12 +292,12 @@ $("#fetch").on('click','.log',function(){
              result=currentRow.find("td:eq(1)").text(),
              build=currentRow.find("td:eq(2)").text(),
              date=currentRow.find("td:eq(3)").text(),
-             buildNumber = build.substring(1),
+             //buildNumber = build.substring(1),
              name = job_name.split("#");
 
          var log = $.ajax({
             contentType: "application/text",
-            url: jenkins_url + 'job/'+ name[0].trim() +'/'+ buildNumber +'/consoleText',
+            url: jenkins_url + 'job/'+ name[0].trim() +'/'+ build +'/consoleText',
             method: 'GET',
             headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
             async: false,
