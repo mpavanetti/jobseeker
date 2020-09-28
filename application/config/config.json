@@ -1,15 +1,14 @@
 {
     "jenkins": {
-    	"enabled": true,
-        "url": "http://localhost:8080/",
+        "enabled": true,
+        "url": "http:\/\/localhost:8080\/",
         "username": "matheus",
         "token": "***REMOVED***",
         "authorization": "Basic",
         "jenkins_home": ""
-		
     },
     "setup": {
-    	"enabled": true,
-    	"env": "dev"
+        "enabled": false,
+        "env": ""
     }
 }
