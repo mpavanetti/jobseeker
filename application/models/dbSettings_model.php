@@ -1,7 +1,7 @@
 <?php if(!defined('BASEPATH')) exit('No direct script access allowed');
 
 
-class dbSettings_model extends CI_Model
+class DbSettings_model extends CI_Model
 {
 
     function listSettings() {

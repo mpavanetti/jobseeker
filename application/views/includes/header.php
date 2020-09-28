@@ -286,7 +286,7 @@
                   </a>
                 </li>
                 <li>
-                  <a href="<?php echo base_url(); ?>deletejob" >
+                  <a href="<?php echo base_url(); ?>deleteJob" >
                     <i class="fa fa-minus-square"></i>
                     <span>Delete Job</span>
                   </a>
