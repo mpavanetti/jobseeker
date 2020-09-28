@@ -3,7 +3,7 @@
 require APPPATH . '/libraries/BaseController.php';
 
 
-class jobView extends BaseController
+class JobView extends BaseController
 {
     /**
      * This is default constructor of the class

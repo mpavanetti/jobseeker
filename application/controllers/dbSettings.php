@@ -3,7 +3,7 @@
 require APPPATH . '/libraries/BaseController.php';
 
 
-class dbSettings extends BaseController
+class DbSettings extends BaseController
 {
     /**
      * This is default constructor of the class
