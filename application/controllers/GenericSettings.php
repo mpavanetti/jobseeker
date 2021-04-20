@@ -85,14 +85,14 @@ class GenericSettings extends BaseController
             
             $this->load->library('form_validation');
             
-            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[30]');
+            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[255]');
+            $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[255]');
             $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[3000]');
             $this->form_validation->set_rules('value2','Value 2','trim|max_length[3000]');
             $this->form_validation->set_rules('value3','Value 3','trim|max_length[3000]');
             $this->form_validation->set_rules('value4','Value 4','trim|max_length[3000]');
             $this->form_validation->set_rules('value5','Value 5','trim|max_length[3000]');
-            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[3000]');
+            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[5000]');
 
             if($this->form_validation->run() == FALSE)
             {
