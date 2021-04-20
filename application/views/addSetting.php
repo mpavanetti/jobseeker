@@ -64,7 +64,7 @@
                                 <div class="col-md-3">                                
                                     <div class="form-group">
                                         <label for="job_name">Job Name</label>
-                                        <input type="text" class="form-control required" value="<?php echo set_value('job_name'); ?>" id="job_name" name="job_name" maxlength="20" required autocomplete="off">
+                                        <input type="text" class="form-control required" value="<?php echo set_value('job_name'); ?>" id="job_name" name="job_name" maxlength="255" required autocomplete="off">
                                     </div>
                                 </div>
 
@@ -72,7 +72,7 @@
 
                                     <div class="form-group">
                                         <label for="setting_name">Setting Name</label>
-                                      <input type="text" class="form-control required" id="setting" value="<?php echo set_value('setting'); ?>" name="setting" maxlength="20" autocomplete="off" required>
+                                      <input type="text" class="form-control required" id="setting" value="<?php echo set_value('setting'); ?>" name="setting" maxlength="255" autocomplete="off" required>
                                     </div>
                                 </div>
 
@@ -85,7 +85,7 @@
 
                                     <div class="form-group">
                                         <label for="value1">Value 1</label>
-                                      <input type="text" class="form-control required" id="value1" value="<?php echo set_value('value1'); ?>" name="value1" maxlength="200" autocomplete="off" required>
+                                      <input type="text" class="form-control required" id="value1" value="<?php echo set_value('value1'); ?>" name="value1" maxlength="3000" autocomplete="off" required>
                                     </div>
                                 </div>
 
@@ -93,7 +93,7 @@
 
                                     <div class="form-group">
                                         <label for="value2">Value 2</label>
-                                      <input type="text" class="form-control" id="value2" value="<?php echo set_value('value2'); ?>" name="value2" maxlength="200" autocomplete="off">
+                                      <input type="text" class="form-control" id="value2" value="<?php echo set_value('value2'); ?>" name="value2" maxlength="3000" autocomplete="off">
                                     </div>
                                 </div>
 
@@ -101,14 +101,14 @@
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value3">Value 3</label>
-                                        <input type="text" class="form-control" id="value3" value="<?php echo set_value('value3'); ?>" name="value3" maxlength="200" autocomplete="off">
+                                        <input type="text" class="form-control" id="value3" value="<?php echo set_value('value3'); ?>" name="value3" maxlength="3000" autocomplete="off">
                                     </div>
                                 </div> 
 
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value4">Value 4</label>
-                                        <input type="text" class="form-control" id="value4" value="<?php echo set_value('value4'); ?>" name="value4" maxlength="200" autocomplete="off">
+                                        <input type="text" class="form-control" id="value4" value="<?php echo set_value('value4'); ?>" name="value4" maxlength="3000" autocomplete="off">
                                     </div>
                                 </div> 
 
@@ -117,7 +117,7 @@
                                     <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value5">Value 5</label>
-                                        <input type="text" class="form-control" id="value5" value="<?php echo set_value('value5'); ?>" name="value5" maxlength="200" autocomplete="off">
+                                        <input type="text" class="form-control" id="value5" value="<?php echo set_value('value5'); ?>" name="value5" maxlength="3000" autocomplete="off">
                                     </div>
                                 </div> 
                                 </div>
@@ -128,7 +128,7 @@
                                  <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="description">Description</label>
-                                        <textarea class="form-control" id="description" value="<?php echo set_value('description'); ?>" name="description" maxlength="500" rows="5"></textarea>
+                                        <textarea class="form-control" id="description" value="<?php echo set_value('description'); ?>" name="description" maxlength="5000" rows="5"></textarea>
                                     </div>
                                 </div> 
                                 
