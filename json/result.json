@@ -1,12 +1,15 @@
 [
     {
-        "id": "1",
-        "job_name": "ExcelToJson",
+        "id": "108",
+        "job_name": "Carga_stg_vendedor",
         "job_component": "tFileInputExcel_1",
-        "component_type": "xlsx",
-        "creation_date": "2020-01-04 15:14:38.824706",
-        "file_path": "new",
+        "component_type": ".xlsx",
+        "creation_date": "2020-07-07 22:37:53.000000",
+        "file_path": "rep",
+        "file_name": "vendedor",
         "file": "1",
-        "file_uploaded": "43"
+        "path": "\/repository\/talend\/input\/rep\/vendedor.xlsx",
+        "file_uploaded": "0",
+        "owner": "Matheus"
     }
 ]

@@ -1,2 +1,14 @@
+.htaccess/
+repository/
+json/result.json
+talend.sql
+old/cias.sql
 .htaccess
-cias.sql
+repository/Talend/input/jobInfo.xlsx
+repository/Talend/output/jobInfo.json
+*.xlsx
+json/result.json
+assets/bower_components/
+repository/Talend/input/jobInfo.xlsx
+xml/
+assets/bower_components/chart.js/bower.json
