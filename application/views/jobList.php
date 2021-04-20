@@ -156,6 +156,7 @@ pre {
               <th>Last Build Number</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
+              <th>Abort Job</th>
             </tr>
           </thead>
           <tbody>
@@ -171,6 +172,7 @@ pre {
               <th>Last Build Number</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
+              <th>Abort Job</th>
             </tr>
         </tfoot> 
       </table>
@@ -304,8 +306,8 @@ pre {
       
         $("#listTable").dataTable().fnDestroy();
         $('#listTable').DataTable({
-          "lengthMenu": [3,5,10,13,20,100,200,500,1000],
-          "pageLength": 10,
+          "lengthMenu": [3,5,10,15,20,100,200,500,1000],
+          "pageLength": 20,
           "order": [[ 1, "asc" ]],
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,color,description,fullName,builds[number,timestamp,duration,result]{0,1}]',
@@ -322,11 +324,15 @@ pre {
           {"data": "builds[].duration"},
           {"data": "builds[].number"},
           {"data": "fullName"},
-          {"data": "name"}
+          {"data": "name"},
+          {"data": "color"}
 
           ],
            columnDefs:[{targets:0, render:function(data){
             if(data != null){
+              if(data == 'aborted'){
+                return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/bad.png">';
+              }
               if(data == 'red'){
                 return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/bad.png">';
               } else if (data == 'blue') {
@@ -347,14 +353,20 @@ pre {
             if(data != null){return '<button class="btn btn-sm btn-primary run" href="#" value="'+ data +'" title="click to trigger this job build">Build</button>'} else {return ''}
           }},{targets:8, render:function(data){
             if(data != null){return '<button class="btn btn-sm btn-info log" href="#" value="'+ data +'" title="click check this job console output">Check</button>'} else {return ''}
+          }},{targets:9, render:function(data){
+            if(data != null){
+              if(data != 'aborted' && data != 'red' && data != 'blue' && data != 'notbuilt'){
+                return '<button class="btn btn-sm btn-danger abort" href="#" value="'+ data +'" title="Click to cancel this job execution">Abort</button>';
+              } else {return ''}
+            }
           }}]
        });
       $('#box2').boxWidget('expand');
 
         $("#listFailedTable").dataTable().fnDestroy();
         $('#listFailedTable').DataTable({
-          "lengthMenu": [3,5,10,13,20,100,200,500,1000],
-          "pageLength": 10,
+          "lengthMenu": [3,5,10,15,20,100,200,500,1000],
+          "pageLength": 20,
           "order": [[ 3, "desc" ]],
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,lastFailedBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
@@ -394,8 +406,8 @@ pre {
 
         $("#listSuccessTable").dataTable().fnDestroy();
         $('#listSuccessTable').DataTable({
-          "lengthMenu": [3,5,10,13,20,100,200,500,1000],
-          "pageLength": 10,
+          "lengthMenu": [3,5,10,15,20,100,200,500,1000],
+          "pageLength": 20,
           "order": [[ 3, "desc" ]],
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,lastStableBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
@@ -446,11 +458,66 @@ pre {
 
           } else if($(this).is(":not(:checked)")){
         }
-         }, 5000);
+         }, 1000);
        } else if($(this).is(":not(:checked)")){
         }
            
   })
+
+ $('.abort').click(function(){
+                  $.ajax({
+                    url: jenkins_url + 'job/'+ job + '/' + data.id + '/stop',
+                    method: 'POST',
+                    async: false,
+                    headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+                    beforeSend: function() {
+                      toastr.warning("Your Stop Request has been sent to server.", "Request Sent")
+                  }
+                  }).done(function(data) {
+                      toastr.error("Your Stop Request has been sent to server.", "Operation Aborted")
+                  });
+              }); 
+
+
+
+ $("#listTable").on('click','.abort',function(){
+
+       var jenkins_url = '<?php echo $jenkins_url; ?>',
+           jenkins_username = '<?php echo $jenkins_username; ?>',
+           jenkins_token = '<?php echo $jenkins_token; ?>',
+           jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+
+       var currentRow=$(this).closest("tr"),
+        job=currentRow.find("td:eq(8) button").val();
+         
+
+            alertify.confirm('Job <b style="color:red;">'+ job +'</b> Abort Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to Abort the job <b>'+ job +' ?</b></p></div></div></div>', 
+      function(){ 
+
+         $.ajax({
+                    url: jenkins_url + 'job/'+ job + '/lastBuild/stop',
+                    method: 'POST',
+                    async: false,
+                    headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+                    beforeSend: function() {
+                      toastr.warning("Your Stop Request has been sent to server.", "Request Sent")
+                  }
+                  }).done(function(data) {
+                toastr.warning("Your Abort Request has been sent to server.", "Request Sent")
+                 setTimeout(function(){
+                $('#listTable').DataTable().ajax.reload();
+                $('#listSuccessTable').DataTable().ajax.reload();
+                $('#listFailedTable').DataTable().ajax.reload();
+             }, 1000);
+                $('.overlay').hide();
+              })
+    }, 
+      function(){ 
+        alertify.error('Operation Aborted')
+    }
+  );
+    
+});
 
  $("#listTable").on('click','.run',function(){
 
@@ -479,7 +546,7 @@ pre {
             $('#listTable').DataTable().ajax.reload();
             $('#listSuccessTable').DataTable().ajax.reload();
             $('#listFailedTable').DataTable().ajax.reload();
-         }, 2500);
+         }, 1000);
             $('.overlay').hide();
           })
     }, 
