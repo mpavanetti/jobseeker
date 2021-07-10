@@ -461,7 +461,7 @@
                               <option value="*" selected>All</option>
                               <?php  
                               $i = 0;
-                              for ($i=0; $i < 13; $i++) { 
+                              for ($i=1; $i < 8; $i++) { 
                                 echo '<option value="'.$i.'">'.$i.'</option>';    
                               }
                               ?>
@@ -534,7 +534,7 @@
                               <option value="*">All</option>
                               <?php  
                               $i = 0;
-                              for ($i=0; $i < 13; $i++) { 
+                              for ($i=1; $i < 8; $i++) { 
                                 echo '<option value="'.$i.'">'.$i.'</option>';    
                               }
                               ?>
