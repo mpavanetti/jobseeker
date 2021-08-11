@@ -59,6 +59,17 @@ class Context extends BaseController
   }
 }
 
+public function fetchEnvironments() {
+
+         header('Content-type:application/json;charset=utf-8'); // declaring header
+
+         $this->global['pageTitle'] = 'Job Seeker : Json Parse';
+
+         $listJobsJson["data"] = $this->model->listEnvironments();
+         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+
+     }
+
 public function contextDetails() {
 
    if($this->isManager() == TRUE)

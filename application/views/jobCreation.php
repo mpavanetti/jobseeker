@@ -116,11 +116,11 @@
 
 <div class="row">
   <div class="col-lg-6 col-md-6 col-xs-12">
-    <div class="box box-primary">
+    <div class="box box-primary" style="padding-bottom: 15px;">
       <div class="overlay" style="display:none;">
         <i class="fa fa-refresh fa-spin"></i>
       </div>
-      <div class="box-header with-border">
+      <div class="box-header with-border" style="padding-top: 15px;">
         <div class="box-tools pull-right">
           <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
           </button>
@@ -132,12 +132,12 @@
       <!-- form start -->
       <?php $this->load->helper("form"); ?>
       <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post" role="form">
-        <div class="box-body">
+        <div class="box-body" style="padding-top: 15px;">
           <div class="form-group">
             <label for="exampleInputEmail1">Job Name</label>
             <input type="text" name ="job_name" class="form-control" id="job_name" placeholder="Enter Job name" onkeypress="return event.charCode != 32">
           </div>
-          <div class="form-group">
+          <div class="form-group" style="padding-top: 5px;">
             <div class="form-group">
               <label for="description">Description</label>
               <textarea class="form-control" id="description" value="" name="description" maxlength="500" rows="5" required></textarea>
@@ -171,6 +171,11 @@
           <div class="checkbox">
             <label>
               <input type="checkbox" name="checkBuild" id="checkBuild" value="1"> Schedule Job
+            </label>
+          </div>
+          <div class="checkbox">
+            <label>
+              <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1"> Choose Environment
             </label>
           </div>
           <div class="checkbox">
@@ -748,6 +753,34 @@
                 </div>
                 <!-- Close Job Execution Area -->
 
+                <!-- Open Environment Area -->
+                <div id="environmentBox" style="display: none;">
+                <div class="col-lg-6 col-md-6 col-xs-12">
+                  <div class="box box-primary">
+                    <div class="overlay" style="display:none;">
+                        <i class="fa fa-refresh fa-spin"></i>
+                    </div>
+                    <div class="box-header with-border">
+                      <div class="box-tools pull-right">
+                        <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+                      </div>
+                      <h3 class="box-title">
+                        <b>Select an Environment</b></h3>
+                      </div>
+                      <div class="box-body" style="padding: 20px;">
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label for="environment">Environment</label>
+                            <select class="form-control env" id="environment" name="environment">
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Close Environment Area -->
+
               </div>
             </div>
             <!-- Close and column for Job Execution Area and Editable Email Notification -->
@@ -1201,6 +1234,51 @@ $('#abort').click(function(){
   }
   else if($(this).is(":not(:checked)")){
     $('#abortIfStuck').fadeOut();
+  }
+});
+
+$('#checkEnvironment').click(function(){
+  if($(this).is(":checked")){
+
+    $('#environmentBox').fadeIn();
+    $("#environment").prop('required',true);
+
+    $('.env option').remove();
+      $('.env').append($('<option>', {
+                value: 0,
+                text: "Please, select an option"
+                }))
+
+    $.ajax({    //create an ajax request
+        type: "GET",
+        url: "<?php echo base_url(); ?>Context/fetchEnvironments",             
+        dataType: "html",    
+        beforeSend: function(){
+          $('.overlay').fadeIn();
+        },
+        success: function(data){  
+          var json = JSON.parse(data);  
+
+           $.each(json["data"], function(i, item) {
+            var newJson = (json["data"][i].Environment);
+
+            $('.env').append($('<option>', {
+                value: newJson,
+                text: newJson
+                }))
+             })
+           $('.overlay').fadeOut();
+        },
+        error: function(arguments){
+          toastr.error('Fail to fetch environments data' + arguments, 'Error to Fech Data')
+          $('.overlay').fadeOut();
+        }
+
+    });  
+
+  }
+  else if($(this).is(":not(:checked)")){
+    $('#environmentBox').fadeOut();
   }
 });
 

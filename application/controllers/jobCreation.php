@@ -119,7 +119,7 @@ class JobCreation extends BaseController
 
                 // Trigger Build Periodically Option 
                  $checkBuild = $this->security->xss_clean($this->input->post('checkBuild'));
-                $action = $this->security->xss_clean($this->input->post('action'));
+                 $action = $this->security->xss_clean($this->input->post('action'));
 
                 // Single Build Options
                 $singleMinute = $this->input->post('singleMinute');
@@ -136,11 +136,22 @@ class JobCreation extends BaseController
                 $scriptType = $this->input->post('scriptType');
                 $windowsCommandLine = $this->input->post('windowsCommandLine');
 
+                //Environment
+                $environment = $this->input->post('environment');
+                $checkEnvironment = $this->security->xss_clean($this->input->post('checkEnvironment'));
+
                 if($executionStrategy == 'script'){
                   if($scriptType == 'talend'){
                           $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*");
                           $file = glob($filelist[0].'/*.bat');
-                          $filePath = realpath($file[0]);
+
+                          // Check if using environemnt
+                          if($environment != '0' && $checkEnvironment == 1){
+                              $filePath = realpath($file[0]).' --context='.$environment;  
+                          } else {
+                            $filePath = realpath($file[0]);
+                          }
+                          
                           // // echo 'WINDOWS - TALEND File Path: <b>'.$filePath.'</b>';
                           // // echo '<hr><br>';
                            // checking whether a file is directory or not 
@@ -157,7 +168,13 @@ class JobCreation extends BaseController
                   } else if ($scriptType == 'batch') {
                         $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*.bat");
                           $file = glob($filelist[0]);
-                          $filePath = realpath($file[0]);
+
+                          // Check if using environemnt
+                          if($environment != '0' && $checkEnvironment == 1){
+                              $filePath = realpath($file[0]).' --context='.$environment;  
+                          } else {
+                            $filePath = realpath($file[0]);
+                          }
                           // // echo 'WINDOWS - BATCH File Path: <b>'.$filePath.'</b>';
                           // // echo '<hr><br>';
                           // checking whether a file is directory or not 
@@ -175,7 +192,13 @@ class JobCreation extends BaseController
                   } else if ($scriptType == 'python') {
                         $filelist = glob("repository/".$scriptType."/jobs/".$job_name."/*.py");
                           $file = glob($filelist[0]);
-                          $filePath = realpath($file[0]);
+
+                          // Check if using environemnt
+                          if($environment != '0' && $checkEnvironment == 1){
+                              $filePath = realpath($file[0]).' '.$environment;  
+                          } else {
+                            $filePath = realpath($file[0]);
+                          }
                           // // echo 'WINDOWS - PYTHON File Path: <b>'.$filePath.'</b>';
                           // // echo '<hr><br>';
 
@@ -218,7 +241,13 @@ class JobCreation extends BaseController
 
                           $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*");
                           $file = glob($filelist[0].'/*.sh');
-                          $filePath = realpath($file[0]);
+                          
+                          // Check if using environemnt
+                          if($environment != '0' && $checkEnvironment == 1){
+                              $filePath = realpath($file[0]).' --context='.$environment;  
+                          } else {
+                            $filePath = realpath($file[0]);
+                          }
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
@@ -237,7 +266,13 @@ class JobCreation extends BaseController
                   } else if ($linuxScriptType == 'bash') {
                         $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.sh");
                           $file = glob($filelist[0]);
-                          $filePath = realpath($file[0]);
+
+                          // Check if using environemnt
+                          if($environment != '0' && $checkEnvironment == 1){
+                              $filePath = realpath($file[0]).' -context "'.$environment.'"';  
+                          } else {
+                            $filePath = realpath($file[0]);
+                          }
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
@@ -257,7 +292,13 @@ class JobCreation extends BaseController
                   } else if ($linuxScriptType == 'python') {
                         $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.py");
                           $file = glob($filelist[0]);
-                          $filePath = realpath($file[0]);
+
+                          // Check if using environemnt
+                          if($environment != '0' && $checkEnvironment == 1){
+                              $filePath = realpath($file[0]).' '.$environment;  
+                          } else {
+                            $filePath = realpath($file[0]);
+                          }
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
