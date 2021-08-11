@@ -1,15 +1,15 @@
 [
     {
-        "id": "108",
-        "job_name": "Carga_stg_vendedor",
-        "job_component": "tFileInputExcel_1",
-        "component_type": ".xlsx",
-        "creation_date": "2020-07-07 22:37:53.000000",
-        "file_path": "rep",
-        "file_name": "vendedor",
-        "file": "1",
-        "path": "\/repository\/talend\/input\/rep\/vendedor.xlsx",
-        "file_uploaded": "0",
+        "id": "102",
+        "job_name": "livraria",
+        "job_component": "tFileInputXML_1",
+        "component_type": ".xml",
+        "creation_date": "2020-05-25 19:54:04.897347",
+        "file_path": "tantofaz",
+        "file_name": null,
+        "file": "2",
+        "path": "\/repository\/talend\/input\/tantofaz\/",
+        "file_uploaded": "5",
         "owner": "Matheus"
     }
 ]
