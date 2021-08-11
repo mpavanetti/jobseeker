@@ -59,6 +59,29 @@ class Context extends BaseController
   }
 }
 
+public function contextDetails() {
+
+   if($this->isManager() == TRUE)
+   {
+    $this->loadThis();
+  }
+  else
+  {
+
+    $this->global['pageTitle'] = 'Job Seeker : ContextDetails Config';
+    $user = $this->global['name'];
+
+    $data["user"] = $user;
+    $data["list"] = $this->model->listContexts();
+    $data["listProjects"] = $this->model->listProjects();
+    $data["listEnvironments"] = $this->model->listEnvironments();
+    $data["contexts"] = $this->model->listAvailableContexts();
+    $data["activeContexts"] = $this->model->listActiveContexts();
+
+    $this->loadViews("contextDetails", $this->global, $data, NULL);
+  }
+}
+
 public function addProject() {
 
   if($this->isManager() == TRUE)
@@ -194,6 +217,91 @@ public function addEnvironment() {
 
 }
 
+public function addContext() {
+
+  if($this->isManager() == TRUE)
+  {
+    $this->loadThis();
+  }
+  else
+  {
+    $user = $this->global['name'];
+    $this->load->library('form_validation');
+
+    $this->form_validation->set_rules('contextValue','Context Value','required|max_length[255]');
+    $this->form_validation->set_rules('contextKey','Context Key','required|max_length[1000]');
+    $this->form_validation->set_rules('active','Active Context','required|max_length[1]');
+    $this->form_validation->set_rules('encrypted','Encrypted Context','required|max_length[1]');
+    $this->form_validation->set_rules('projectName','Project Name','required|max_length[255]');
+    $this->form_validation->set_rules('environmentName','Environment Name','required|max_length[255]');
+    $this->form_validation->set_rules('description','Description','trim|max_length[2000]');
+
+    if($this->form_validation->run() == FALSE)
+    {
+      $this->projectDetails();
+    }
+    else
+    {
+
+      $contextValue = $this->security->xss_clean($this->input->post('contextValue'));
+      $contextKey = $this->security->xss_clean($this->input->post('contextKey'));
+      $active = $this->security->xss_clean($this->input->post('active'));
+      $encrypted = $this->security->xss_clean($this->input->post('encrypted'));
+      $projectName = $this->security->xss_clean($this->input->post('projectName'));
+      $environmentName = $this->security->xss_clean($this->input->post('environmentName'));
+      $description = $this->security->xss_clean($this->input->post('description'));
+
+      if ($contextKey == null || $contextValue == null || $projectName == null || $environmentName == null) {
+       $this->session->set_flashdata('error', 'Context Creation failed ! You must type a context key, value, project and environment.');
+       redirect('Context/contextDetails');
+     }
+
+     // Check if the data is alredy on table
+     $validateSetting = $this->model->validateContext($contextKey,$projectName,$environmentName);
+     $projectIdReturn = $this->model->getProjectId($projectName);
+     $environmentIdReturn = $this->model->getEnvironmentId($environmentName);
+     $projectId = $projectIdReturn[0]->id;
+     $environmentId = $environmentIdReturn[0]->id;
+
+
+     $Info = array(
+      'ContextKey'=>$contextKey, 
+      'ContextValue'=>$contextValue, 
+      'IsActive' => $active,
+      'IsEncrypted' => $encrypted,
+      'CreatedBy' => $user,
+      'EnvironmentFK' => $environmentId,
+      'ProjectDetailsFK' => $projectId,
+      'Description' => $description,
+      'CreatedOn'=>date('Y-m-d H:i:s')
+    );
+
+     if($validateSetting > 0){
+
+      $this->session->set_flashdata('error', 'This row seems already created, please try changing the context key, project and environment name.');
+    } else {
+
+      $result = $this->model->insertContext($Info);
+
+      if($result > 0)
+      {
+        $this->session->set_flashdata('success', 'New Context has successfully created and now is available to be used.');
+      }
+      else
+      {
+        $this->session->set_flashdata('error', 'Context creation failed !');
+      }
+
+    }
+
+    redirect('Context/contextDetails');
+
+  }
+
+}
+
+}
+
   public function deleteProject() {
 
     if($this->isManager() == TRUE)
@@ -222,6 +330,23 @@ public function addEnvironment() {
       $id = $this->input->post('userId');
 
       $result = $this->model->deleteEnvironment($id);
+
+      if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
+      else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
+    }
+  }
+
+  public function deleteContext() {
+
+    if($this->isManager() == TRUE)
+    {
+      echo(json_encode(array('status'=>'access')));
+    }
+    else
+    {
+      $id = $this->input->post('userId');
+
+      $result = $this->model->deleteContext($id);
 
       if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
       else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
@@ -276,6 +401,35 @@ public function addEnvironment() {
         $this->global['pageTitle'] = 'Job Seeker : Edit Data';
 
         $this->loadViews("environmentEdit", $this->global, $data, NULL);
+      }
+    }
+
+    /**
+     * Edit Input Component 
+     */
+     function editContext($id = NULL)
+     {
+      if($this->isManager() == TRUE )
+      {
+        $this->loadThis();
+      }
+      else
+      {
+        if($id == null)
+        {
+          redirect('Context/contextDetails');
+        }
+
+
+        $data["list"] = $this->model->listContextId($id);
+        $data["listProjects"] = $this->model->listProjects();
+        $data["listEnvironments"] = $this->model->listEnvironments();
+        $data["contexts"] = $this->model->listAvailableContexts();
+        $data["activeContexts"] = $this->model->listActiveContexts();
+
+        $this->global['pageTitle'] = 'Job Seeker : Edit Data';
+
+        $this->loadViews("contextDetailsEdit", $this->global, $data, NULL);
       }
     }
 
@@ -391,6 +545,86 @@ public function addEnvironment() {
       }
 
     redirect('Context/environment');
+
+  }
+
+}
+
+}
+
+public function editContextUpdate() {
+
+  if($this->isManager() == TRUE)
+  {
+    $this->loadThis();
+  }
+  else
+  {
+    $user = $this->global['name'];
+    $this->load->library('form_validation');
+
+    $this->form_validation->set_rules('contextValue','Context Value','required|max_length[255]');
+    $this->form_validation->set_rules('contextKey','Context Key','required|max_length[1000]');
+    $this->form_validation->set_rules('active','Active Context','required|max_length[1]');
+    $this->form_validation->set_rules('encrypted','Encrypted Context','required|max_length[1]');
+    $this->form_validation->set_rules('projectName','Project Name','required|max_length[255]');
+    $this->form_validation->set_rules('environmentName','Environment Name','required|max_length[255]');
+    $this->form_validation->set_rules('description','Description','trim|max_length[2000]');
+
+    if($this->form_validation->run() == FALSE)
+    {
+      $this->projectDetails();
+    }
+    else
+    {
+
+      $Id = $this->security->xss_clean($this->input->post('ContextId'));
+      $contextValue = $this->security->xss_clean($this->input->post('contextValue'));
+      $contextKey = $this->security->xss_clean($this->input->post('contextKey'));
+      $active = $this->security->xss_clean($this->input->post('active'));
+      $encrypted = $this->security->xss_clean($this->input->post('encrypted'));
+      $projectName = $this->security->xss_clean($this->input->post('projectName'));
+      $environmentName = $this->security->xss_clean($this->input->post('environmentName'));
+      $description = $this->security->xss_clean($this->input->post('description'));
+
+      if ($contextKey == null || $contextValue == null || $projectName == null || $environmentName == null) {
+       $this->session->set_flashdata('error', 'Context Creation failed ! You must type a context key, value, project and environment.');
+       redirect('Context/contextDetails');
+     }
+
+     // Check if the data is alredy on table
+     $projectIdReturn = $this->model->getProjectId($projectName);
+     $environmentIdReturn = $this->model->getEnvironmentId($environmentName);
+     $projectId = $projectIdReturn[0]->id;
+     $environmentId = $environmentIdReturn[0]->id;
+
+
+     $Info = array(
+      'ContextKey'=>$contextKey, 
+      'ContextValue'=>$contextValue, 
+      'IsActive' => $active,
+      'IsEncrypted' => $encrypted,      
+      'EnvironmentFK' => $environmentId,
+      'ProjectDetailsFK' => $projectId,
+      'Description' => $description,
+      'ModifiedBy' => $user,
+      'ModifiedOn'=>date('Y-m-d H:i:s')
+    );
+
+      $result = $this->model->updatedContext($Info,$Id);
+
+      if($result > 0)
+      {
+        $this->session->set_flashdata('success', 'New Context has successfully updated and now is available to be used.');
+      }
+      else
+      {
+        $this->session->set_flashdata('error', 'Context update failed !');
+      }
+
+    
+
+    redirect('Context/contextDetails');
 
   }
 

@@ -251,6 +251,7 @@
             <ul class="treeview-menu">
               <li><a href="<?php echo base_url(); ?>Context/projectDetails"><i class="fa fa-table"></i><span>Project Details</span></a></li>
               <li><a href="<?php echo base_url(); ?>Context/environment"><i class="fa fa-table"></i><span>Environment Details</span></a></li>
+              <li><a href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-table"></i><span>Context Details</span></a></li>
             </ul>
           </li>
           </ul>
