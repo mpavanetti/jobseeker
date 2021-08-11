@@ -129,7 +129,8 @@ class User extends BaseController
             $this->form_validation->set_rules('password','Password','required|max_length[20]');
             $this->form_validation->set_rules('cpassword','Confirm Password','trim|required|matches[password]|max_length[20]');
             $this->form_validation->set_rules('role','Role','trim|required|numeric');
-            $this->form_validation->set_rules('mobile','Mobile Number','required|min_length[10]');
+            $this->form_validation->set_rules('group','Group Name','trim|required|max_length[128]');
+            $this->form_validation->set_rules('mobile','Mobile Number','required|min_length[12]');
             
             if($this->form_validation->run() == FALSE)
             {
@@ -265,6 +266,7 @@ class User extends BaseController
             $this->form_validation->set_rules('cpassword','Confirm Password','matches[password]|max_length[20]');
             $this->form_validation->set_rules('role','Role','trim|required|numeric');
             $this->form_validation->set_rules('mobile','Mobile Number','required|min_length[10]');
+            $this->form_validation->set_rules('group','Group Name','trim|required|max_length[128]');
             
             if($this->form_validation->run() == FALSE)
             {
@@ -277,7 +279,7 @@ class User extends BaseController
                 $password = $this->input->post('password');
                 $roleId = $this->input->post('role');
                 $mobile = $this->security->xss_clean($this->input->post('mobile'));
-                $group = $this->security->xss_clean($this->input->post('group'));
+                $group = $this->input->post('group');
                 
                 $userInfo = array();
                 

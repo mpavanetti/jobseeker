@@ -57,7 +57,7 @@
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="mobile">Mobile Number</label>
-                                        <input type="text" class="form-control required digits" id="mobile" value="<?php echo set_value('mobile'); ?>" name="mobile" maxlength="10">
+                                        <input type="text" class="form-control required digits" id="mobile" value="<?php echo set_value('mobile'); ?>" name="mobile" maxlength="12">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -89,7 +89,7 @@
                                                 foreach ($groups as $gp)
                                                 {
                                                     ?>
-                                                    <option value="<?php echo $gp->name ?>"><?php echo $gp->name ?></option>
+                                                    <option value="<?php echo $gp->id ?>"><?php echo $gp->name ?></option>
                                                     <?php
                                                 }
                                             }
