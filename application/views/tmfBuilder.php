@@ -122,6 +122,26 @@
                 </div>
               </div>
 
+              <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
+                <div class="input-group" style="width: 100%;">
+                  <label>Available Environments</label>
+                      <select class="form-control select2" name="environment[]" multiple="multiple">
+                        <option value="*" selected>All</option>
+                           <?php
+                          if(!empty($listEnvironment))
+                          {
+                              foreach($listEnvironment as $record)
+                              {
+                          ?>
+                           <option value="<?php echo $record->environment ?>"><?php echo $record->environment ?></option>
+                         <?php
+                           }
+                         }
+                        ?>
+                  </select>
+                </div>
+              </div>
+
                <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Dimension (DW / DM)</label>
@@ -138,17 +158,6 @@
                            }
                          }
                         ?>
-                  </select>
-                </div>
-              </div>
-
-              <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>Reprocess</label>
-                      <select class="form-control" name="reprocess">
-                        <option value="*">All</option>
-                        <option value="0">Disabled</option>
-                        <option value="1">Enabled</option>
                   </select>
                 </div>
               </div>
@@ -170,10 +179,24 @@
               <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
                 <input id="searchText" type="text" name="eventText" value="" class="form-control" placeholder="Event Text"/>
               </div>
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group">
+              
+
+            </div>
+            <div class="row animated fadeIn" style="margin-top: 25px;">
+              <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
+                <div class="input-group" style="width: 100%;">
+                  <label>Reprocess</label>
+                      <select class="form-control" name="reprocess">
+                        <option value="*">All</option>
+                        <option value="0">Disabled</option>
+                        <option value="1">Enabled</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group" style="margin-top: 25px;">
                 <button type="submit" class="btn btn-md btn-primary btn-block searchList pull-right"><i class="fa fa-search" aria-hidden="true"></i></button> 
               </div>
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group">
+              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group" style="margin-top: 25px;">
                 <button type="reset" class="btn btn-md btn-default btn-block pull-right resetFilters"><i class="fa fa-refresh" aria-hidden="true"></i></button>
               </div>
 

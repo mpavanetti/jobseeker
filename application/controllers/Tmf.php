@@ -30,6 +30,7 @@ class Tmf extends BaseController
           $data["listJobName"] = $this->model->listJobName();
           $data["listDimension"] = $this->model->listDimension();
           $data["listReprocess"] = $this->model->listReprocess();
+          $data["listEnvironment"] = $this->model->listEnvironment();
 
       
         
@@ -56,8 +57,9 @@ class Tmf extends BaseController
             $fromDate = $this->input->post('fromDate');
             $toDate = $this->input->post('toDate');
             $eventText = $this->input->post('eventText');
+            $environment = $this->input->post('environment');
 
-            $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate);
+            $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment);
 
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);

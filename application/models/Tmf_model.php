@@ -4,7 +4,7 @@
 class Tmf_model extends CI_Model
 {
 
-    function listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate) {
+    function listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment) {
 
         $this->db->select('*');
         $this->db->from('tmf');
@@ -37,6 +37,14 @@ class Tmf_model extends CI_Model
         } else {
         	$this->db->where_in('reprocess',$reprocess);
         }
+
+        // Check Environment
+             if ($environment != null) {
+                if($environment[0] == "*"){
+                } else {
+                    $this->db->where_in('environment',$environment);
+                }
+             }
 
         // Check Event Text
         if($eventText == " " || $eventText == null || $eventText == ""){
@@ -147,6 +155,12 @@ class Tmf_model extends CI_Model
     function listReprocess() {
 
      $query = $this->db->query('SELECT DISTINCT(JOB_NAME),REPROCESS FROM tmf WHERE REPROCESS = 1');
+        return $query->result();
+    }
+
+    function listEnvironment() {
+
+     $query = $this->db->query('SELECT DISTINCT(environment) FROM tmf');
         return $query->result();
     }
 
