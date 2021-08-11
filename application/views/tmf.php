@@ -406,7 +406,7 @@ $("#table6").on('click','.btnSelect',function(){
 
          // get the current row Id, job name and instance id
          var currentRow=$(this).closest("tr"); 
-         var instanceId=currentRow.find("td:eq(16)").text(); 
+         var instanceId=currentRow.find("td:eq(17)").text(); 
          var jobName=currentRow.find("td:eq(2)").text();
          var id=currentRow.find("td:eq(0)").text();
 
