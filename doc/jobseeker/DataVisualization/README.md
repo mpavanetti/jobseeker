@@ -67,7 +67,7 @@ Here is your embebed qlik sense dashboard.
 
 Here is your embebed Power BI dashboard.
 
-![Data Vis](img/datavis7.JPG)
+![Data Vis](img/datavis7.jpg)
 <br>
 <br>
 
