@@ -78,6 +78,7 @@ pre {
                   <th>Dimension</th>
                   <th>Reprocess</th>
                   <th>Event Text</th>
+                  <th>Environment</th>
                   <th>Message</th>
                   <th>Records Total</th>
                   <th>Records Processed</th>
@@ -130,6 +131,7 @@ pre {
                          if($role == 1 || $role == 2) {  ?>
                       <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo $record->event_text ?></td>
+                      <td><?php echo $record->environment ?></td>
                       <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
                       <td><?php echo $record->records_total ?></td>
                       <td><?php echo $record->records_processed ?></td>
@@ -163,6 +165,7 @@ pre {
                   <th>Dimension</th>
                   <th>Reprocess</th>
                   <th>Event Text</th>
+                  <th>Environment</th>
                   <th>Message</th>
                   <th>Records Total</th>
                   <th>Records Processed</th>
