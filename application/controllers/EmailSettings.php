@@ -83,7 +83,7 @@ class EmailSettings extends BaseController
         $config['protocol'] = 'smtp';
         $config['smtp_host'] = 'smtp.gmail.com';
         $config['smtp_user'] = 'matheuspavanetti@gmail.com';
-        $config['smtp_pass'] = '6362578Math!';
+        $config['smtp_pass'] = 'YOURPASSWORD';
         $config['smtp_port'] = '465'; 
         $config['mailtype'] = 'text';
         $config['smtp_crypto'] = 'ssl';
