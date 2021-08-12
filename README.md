@@ -171,7 +171,7 @@ Jobseeker Home:
 
 ### Brazilian Portuguese JobSeeker Demonstration Video:
 
-[![Portuguese JobSeeker Demonstration Video](doc/img/youtube2.JPG)](https://www.youtube.com/watch?v=p9Qusad2Kc0&t)
+[![Portuguese JobSeeker Demonstration Video](doc/img/youtube2.JPG)](https://www.youtube.com/watch?v=Pms98qTvfA0)
 <br>
 
 <br>
