@@ -1,3 +1,8 @@
+ <script>
+  $(document).ready(function(){
+    $('body').addClass('sidebar-collapse')
+  });
+</script>
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.css">
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->
