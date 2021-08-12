@@ -7,6 +7,7 @@
       </h1>
     </section>
     <section class="content">
+      <div class="container">
         <form action="<?php echo base_url() ?>User/addNewGroup" method="POST" id="groupAdd">
             <div class="row" style="margin-top: 25px;">
                   <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
@@ -101,6 +102,7 @@
               </div><!-- /.box -->
             </div>
         </div>
+      </div>
     </section>
 </div>
 

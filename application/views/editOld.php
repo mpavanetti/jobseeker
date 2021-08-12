@@ -17,7 +17,7 @@ $groupId = $userInfo->groupId;
     </section>
     
     <section class="content">
-    
+        <div class="container">
         <div class="row">
             <!-- left column -->
             <div class="col-md-8">
@@ -146,7 +146,8 @@ $groupId = $userInfo->groupId;
                     </div>
                 </div>
             </div>
-        </div>    
+        </div>  
+        </div>  
     </section>
 </div>
 

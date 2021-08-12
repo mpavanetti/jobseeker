@@ -8,6 +8,7 @@
       </h1>
     </section>
     <section class="content">
+      <div class="container">
         <div class="row">
           <form action="<?php echo base_url() ?>login-history" method="POST" id="searchList">
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
@@ -78,6 +79,7 @@
               </div><!-- /.box -->
             </div>
         </div>
+      </div>
     </section>
 </div>
 <script src="<?php echo base_url(); ?>assets/bower_components/bootstrap-datepicker/dist/js/bootstrap-datepicker.min.js"></script>

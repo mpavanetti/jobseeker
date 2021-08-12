@@ -18,6 +18,7 @@
     </ol>
 </section>
 <section class="content">
+  <div class="container">
     <div class="row" style="margin-top: 15px;">
        <div class="col-lg-6 col-md-6 col-xs-12">
          <div class="box box-primary">
@@ -77,6 +78,7 @@
  <a id="delRepoBtn" href="#" class="btn btn-primary"><i class="fa fa-save"></i>  Delete Repository</a>
 </div>
 </form> 
+</div>
 </div>
 </div>
 </div>

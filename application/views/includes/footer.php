@@ -35,7 +35,7 @@
             "order": [[ 1, "desc" ]],
             lengthMenu:  [ 10, 20, 50, 100, 200, 500],
             columnDefs: [
-             { width: 120, targets: 12 }
+             { width: 50, targets: 12 }
             ]
         });
 

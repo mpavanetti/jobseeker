@@ -30,7 +30,7 @@
     </section>
 
     <section class="content">
-
+      <div class="container">
       <div class="container">
         <div class="row" style="padding-top: 15px;">
         <div class="col-md-3 col-sm-6 col-xs-12">
@@ -260,7 +260,7 @@
 
          
     </div>
-      
+      </div>
     </section>
 
     <!-- Main content -->

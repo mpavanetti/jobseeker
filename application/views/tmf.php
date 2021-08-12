@@ -56,6 +56,7 @@ pre {
 
     <!-- Main content -->
     <section id="main" class="content">
+      <div class="container">
         <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning" style="margin-top: 15px;"><i class="fa fa-arrow-left"></i> Back to Query </a>
         <div class="digital-clock pull-right" >00:00:00</div>
       <div class="row" style="margin-top: 30px;">
@@ -189,6 +190,7 @@ pre {
         <!-- /.col -->
       </div>
       <!-- /.row -->
+      </div>
     </section>
     <!-- /.content -->
 </div> 
