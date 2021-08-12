@@ -8,6 +8,7 @@
 </section>
 
 <section class="content">
+    <div class="container">
     <div class="row">
         <div class="col-xs-12 text-left">
             <div class="form-group">
@@ -174,7 +175,8 @@
 </form>
 </div>
 </div>
-</div>    
+</div>   
+</div> 
 </section>
 </div>
 

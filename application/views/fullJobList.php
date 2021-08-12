@@ -34,7 +34,7 @@ pre {
 
 <!-- Main content -->
 <section class="content">
-
+<div class="container">
   <div class="row animated fadeIn" style="margin-top: 25px;">
    <form action="<?php echo base_url() ?>Tmf/fetchData" method="POST" id="searchList">
 
@@ -142,7 +142,7 @@ pre {
 <!-- /.col -->
 </div>
 <!-- /.row -->
-
+</div>
 </section>
 <!-- /.content -->
 </div>

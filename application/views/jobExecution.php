@@ -11,7 +11,7 @@
       </ol>
     </section>
     <section class="content">
-       
+      <div class="container">
       <div class="row" style="margin-top: 10px;">
          <div class="col-lg-6 col-md-6 col-xs-12">
                 <div class="box box-primary">
@@ -82,8 +82,7 @@
               <div id="console">
               </div>
           </div>
-          
-
+          </div>
     </section>
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>

@@ -22,6 +22,7 @@
 
     <!-- Main content -->
     <section class="content">
+      <div class="container">
    <?php if($role != 1) {  ?>
     <div class="row">
             <div class="col-xs-12 text-left">
@@ -104,6 +105,7 @@
         <!-- /.col -->
       </div>
       <!-- /.row -->
+      </div>
     </section>
     <!-- /.content -->
   </div>

@@ -7,6 +7,7 @@
       </h1>
     </section>
     <section class="content">
+        <div class="container">
         <div class="row">
             <div class="col-xs-12 text-left">
                 <div class="form-group">
@@ -86,6 +87,7 @@
               </div><!-- /.box -->
             </div>
         </div>
+    </div>
     </section>
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/common.js" charset="utf-8"></script>

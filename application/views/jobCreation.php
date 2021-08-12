@@ -33,7 +33,7 @@
     </ol>
   </section>
   <section class="content">
-
+    <div class="container">
 <!--    <div class="row" style="margin-top: 10px; margin-bottom: 40px;">
      <div class="col-lg-12 col-md-12 col-xs-12">
       <div class="text-center">
@@ -819,7 +819,7 @@
           </div>
         </div>
       </div>
-
+    </div>
     </section>
   </div>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
