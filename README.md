@@ -185,4 +185,4 @@ New Contributors are always welcome !
 
 ## Notes
 As this is a beta version, bugs may be found, if you find some, please report immediatly !
-Thanks.
+Thanks
