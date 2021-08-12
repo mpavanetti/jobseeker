@@ -122,18 +122,18 @@ If you are implementing the system in a docker container and your jenkins is als
 1) [[Data Visualization Instructions]](doc/jobseeker/DataVisualization)
 2) [[Transaction Monitoring]](doc/jobseeker/TransactionMonitoring)
 3) [[Extract, Transform and Load. Helpers]](doc/jobseeker/ETL)
-4) [[Job Management]](doc/jobseeker/JobManagement)
-5) [[File Manager]](doc/jobseeker/FileManager)
-6) [[Database Manager]](doc/jobseeker/DatabaseManager)
-7) [[Users Management]](doc/jobseeker/Users)
-8) [[Groups Management]](doc/jobseeker/Groups)
+4) [[Job Management]](doc/jobseeker/JobManagement) (Coming Soon)
+5) [[File Manager]](doc/jobseeker/FileManager) (Coming Soon)
+6) [[Database Manager]](doc/jobseeker/DatabaseManager) (Coming Soon)
+7) [[Users Management]](doc/jobseeker/Users) (Coming Soon)
+8) [[Groups Management]](doc/jobseeker/Groups) (Coming Soon)
 
 ### Use Cases
 1) [[Talend Data Integration Use Case]](doc/Talend)
-2) [[Python Use Case]]() (Coming Soon)
-3) [[Python Spark Use Case]]() (Coming Soon)
-4) [[Windows Batch Script Use Case]]() (Coming Soon)
-5) [[Linux Bash Script Use Case]]() (Coming Soon)
+2) [[Python Use Case]](doc/Python) (Coming Soon)
+3) [[Python Spark Use Case]](doc/Spark) (Coming Soon)
+4) [[Windows Batch Script Use Case]](doc/batch) (Coming Soon)
+5) [[Linux Bash Script Use Case]](doc/bash) (Coming Soon)
 
 ## Some Screenshots
 Jobseeker Home:
