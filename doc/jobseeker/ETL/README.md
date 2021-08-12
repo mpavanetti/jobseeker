@@ -13,8 +13,8 @@
 5) [Generic Settings](genericsettings)
 6) [Email Settings](emailsettings)
 7) [Smtp Settings](smtpsettings)
-8) [Context Settings - Projects](projectsettings)
-9) [Context Settings - Environments](envsettings)
+8) [Context Settings - Projects](contextsettings)
+9) [Context Settings - Environments](contextsettings)
 10) [Context Settings - Context Details](contextsettings)
 
 Sidebar Menu Options:
