@@ -160,6 +160,22 @@ Jobseeker Home:
 <br>JobSeeker DW and DM Dashboard:
 ![JobSeeker DW and DM Dashboard](doc/img/JobSeeker7.png)
 
+<br>
+
+## Youtube Videos
+### English JobSeeker Demonstration Video:
+
+[![English JobSeeker Demonstration Video](doc/img/youtube1.JPG)](https://www.youtube.com/watch?v=p9Qusad2Kc0&t)
+<br>
+<br>
+
+### Brazilian Portuguese JobSeeker Demonstration Video:
+
+[![Portuguese JobSeeker Demonstration Video](doc/img/youtube2.JPG)](https://www.youtube.com/watch?v=p9Qusad2Kc0&t)
+<br>
+
+<br>
+
 ## Credits
 Matheus Pavanetti - 2021  
 (matheuspavanetti@gmail.com)
