@@ -56,6 +56,3 @@ Locate the API Token tab, click on Add new Token, write jobseeker in the field a
 The generated token will appear, take it, save it , we'll be using in the next step, adding the jenkins user token into the jobseeker/application/config/config.json file
 
 ![JenkinsToken2](img/token.JPG)
-
-### Go back to the home dir
-[Home](../../)
