@@ -130,7 +130,7 @@ If you are implementing the system in a docker container and your jenkins is als
 
 ### Use Cases
 1) [[Talend Data Integration Use Case]](doc/Talend)
-2) [[Python Use Case]](doc/Python) (Coming Soon)
+2) [[Python Use Case]](doc/Python) 
 3) [[Python Spark Use Case]](doc/Spark) (Coming Soon)
 4) [[Windows Batch Script Use Case]](doc/batch) (Coming Soon)
 5) [[Linux Bash Script Use Case]](doc/bash) (Coming Soon)
