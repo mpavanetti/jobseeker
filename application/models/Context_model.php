@@ -15,7 +15,7 @@ class Context_model extends CI_Model
     function listContexts() {
 
         $this->db->select('env.Environment,pd.ProjectName,cd.*');
-        $this->db->from('ContextDetails cd');
+        $this->db->from('contextdetails cd');
         $this->db->join('environment env','env.id=cd.environmentFK');
         $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
         $query = $this->db->get();
@@ -25,7 +25,7 @@ class Context_model extends CI_Model
     function listContextId($Id) {
 
         $this->db->select('env.Environment,pd.ProjectName,cd.*');
-        $this->db->from('ContextDetails cd');
+        $this->db->from('contextdetails cd');
         $this->db->join('environment env','env.id=cd.environmentFK');
         $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
         $this->db->where('cd.Id', $Id);
@@ -54,7 +54,7 @@ class Context_model extends CI_Model
 
         $this->db->distinct();
         $this->db->select('ContextKey');
-        $this->db->from('contextDetails');
+        $this->db->from('contextdetails');
         $query = $this->db->get();
         return $query->num_rows();
     }
@@ -80,7 +80,7 @@ class Context_model extends CI_Model
     function listActiveContexts() {
 
         $this->db->select('IsActive');
-        $this->db->from('contextDetails');
+        $this->db->from('contextdetails');
         $this->db->where('IsActive', '1');
         $query = $this->db->get();
         return $query->num_rows();
@@ -138,7 +138,7 @@ class Context_model extends CI_Model
      function validateContext($contextKey,$projectName,$environmentName) {
 
         $this->db->select('env.Environment,pd.ProjectName,cd.ContextKey');
-        $this->db->from('ContextDetails cd');
+        $this->db->from('contextdetails cd');
         $this->db->join('environment env','env.id=cd.environmentFK');
         $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
         $this->db->where('cd.ContextKey', $contextKey);
@@ -255,7 +255,7 @@ class Context_model extends CI_Model
     function updatedContext($Info, $Id)
     {
         $this->db->where('Id', $Id);
-        $this->db->update('ContextDetails', $Info);
+        $this->db->update('contextdetails', $Info);
         
         return TRUE;
     }
