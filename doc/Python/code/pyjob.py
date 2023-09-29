@@ -1,7 +1,7 @@
 from script.jobseeker import jobSeeker
 import sys
 from os import path
-import pandas as pd
+import pandas as pd # pip install pandas
 
 # Declaring job name as file name
 jobName = path.basename(__file__).replace(".py","")
