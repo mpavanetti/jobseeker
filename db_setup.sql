@@ -19,14 +19,12 @@ USE `jobseeker`;
 
 -- Copiando estrutura para tabela jobseeker.ci_sessions
 CREATE TABLE IF NOT EXISTS `ci_sessions` (
-  `session_id` varchar(40) NOT NULL DEFAULT '0',
-  `ip_address` varchar(45) NOT NULL DEFAULT '0',
-  `user_agent` varchar(120) NOT NULL,
-  `last_activity` int(10) unsigned NOT NULL DEFAULT 0,
-  `user_data` text NOT NULL,
-  PRIMARY KEY (`session_id`),
-  KEY `last_activity_idx` (`last_activity`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+`id` varchar(40) NOT NULL,
+`ip_address` varchar(45) NOT NULL,
+`timestamp` int(10) unsigned DEFAULT 0 NOT NULL,
+`data` blob NOT NULL,
+PRIMARY KEY (id),
+KEY `ci_sessions_timestamp` (`timestamp`));
 
 -- Copiando dados para a tabela jobseeker.ci_sessions: ~0 rows (aproximadamente)
 /*!40000 ALTER TABLE `ci_sessions` DISABLE KEYS */;
@@ -400,3 +398,6 @@ AND cd.EnvironmentFK = env.Id ;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+
+-- Grant Privilleges
+GRANT SELECT, INSERT, UPDATE, DELETE ON jobseeker.* TO 'mysql'@'%';
