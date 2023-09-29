@@ -2,7 +2,7 @@
     "jenkins": {
         "enabled": true,
         "url": "http:\/\/localhost:8080\/",
-        "username": "matheus",
+        "username": "admin",
         "token": "***REMOVED***",
         "authorization": "Basic",
         "jenkins_home": ""
