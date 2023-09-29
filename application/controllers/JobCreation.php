@@ -454,13 +454,20 @@ class JobCreation extends BaseController
 
                 // Linux Script Execution
                 if($linuxCommand == 1) {
-                  if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0" || $linuxExecutionStrategy == 'command'){
+                  if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0"){
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
                     $command = $dom->createElement('command', 'sh '.$filePath);
                     $hudson_task_BashFile->appendChild($command);
                     $builders->appendChild($hudson_task_BashFile);
                     
+                  } else if($linuxExecutionStrategy == 'command') {
+
+                    $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
+                    $command = $dom->createElement('command', $filePath);
+                    $hudson_task_BashFile->appendChild($command);
+                    $builders->appendChild($hudson_task_BashFile);
+
                   }
                 }
 
@@ -767,9 +774,9 @@ class JobCreation extends BaseController
                 // Append document to root node
                 $dom->appendChild($root);
                 // Save XML file
-                $dom->save('xml/'.$xml_file_name);
+                $dom->save('/php/data/'.$xml_file_name);
                 // Read XML File to obtain xml text
-                $content = htmlentities(file_get_contents('xml/'.$xml_file_name));
+                $content = htmlentities(file_get_contents('/php/data/'.$xml_file_name));
 
                 // Create flash data to send to view
                  $this->session->set_flashdata('xml', $content);
