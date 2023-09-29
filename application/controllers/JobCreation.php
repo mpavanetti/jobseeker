@@ -49,6 +49,7 @@ class JobCreation extends BaseController
 
 
     if (!empty($_FILES)) {
+      echo "File Found";
          
         $tempFile = $_FILES['file']['tmp_name'];          //3             
           
@@ -64,12 +65,14 @@ class JobCreation extends BaseController
             // extract it to the path we determined above
             $zip->extractTo($targetPath.$job_name);
             $zip->close();
-            // echo "WOOT! $file extracted to $path";
+             echo "WOOT! $tempFile extracted to $targetFile";
             unlink($targetFile);
           } else {
-            // // echo "Doh! I couldn't open $file";
+             echo "Doh! I couldn't open ";
           }
 
+        } else {
+          echo "No FIle";
         }
 
       }
