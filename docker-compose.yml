@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+    privileged: true
+    user: root
     ports: 
       - "80:80"
     networks:
@@ -49,6 +51,7 @@ services:
       - 50000:50000
     volumes:
       - ./jenkins:/var/jenkins_home
+      - ./repository:/var/jenkins_home/repository/
     networks:
         - internal
 
