@@ -1,0 +1,42 @@
+version: "3"
+services:
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports: 
+      - "8080:80"
+    networks:
+      - internal
+    volumes:
+      - ./:/var/www/html/
+     # - ./logs/nginx:/var/log/nginx/
+
+  php:
+    build:
+      context: .
+    networks:
+      - internal
+    volumes:
+      - ./:/var/www/html/
+      #- ./logs/php.log:/var/log/fpm-php.www.log
+
+  mariadb:
+    image: mariadb:10.7
+    ports:
+      - 3306:3306
+    volumes:
+      - "./config/mariadb:/var/lib/mysql"
+      - "./db_setup.sql:/docker-entrypoint-initdb.d/1.sql"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_PASSWORD=mysql
+      - MYSQL_USER=mysql
+      - MYSQL_DATABASE=data
+    restart: on-failure
+    networks:
+      - internal
+networks:
+  internal:
+    driver: bridge

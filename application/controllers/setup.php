@@ -37,7 +37,7 @@ class Setup extends BaseController
 
         $this->global['pageTitle'] = 'Setup Wizard : Jenkins';
 
-        $loadJson = file_get_contents(base_url().'application/config/config.json');
+        $loadJson = file_get_contents('/var/www/html/application/config/config.json');
         $jsonToArray = json_decode($loadJson);
         $data = array();
 
