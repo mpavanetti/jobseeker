@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     ports: 
-      - "8080:80"
+      - "80:80"
     networks:
       - internal
     volumes:
@@ -16,6 +16,8 @@ services:
   php:
     build:
       context: .
+    privileged: true
+    user: root
     networks:
       - internal
     volumes:
@@ -37,6 +39,19 @@ services:
     restart: on-failure
     networks:
       - internal
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    privileged: true
+    user: root
+    ports:
+      - 8080:8080
+      - 50000:50000
+    volumes:
+      - ./jenkins:/var/jenkins_home
+    networks:
+        - internal
+
 networks:
   internal:
     driver: bridge
