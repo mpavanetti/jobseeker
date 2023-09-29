@@ -12,7 +12,7 @@ class SmtpSettings extends BaseController
     {
         parent::__construct();
         $this->load->helper('url','form');
-        $this->load->model('smtpSettings_model','model');
+        $this->load->model('SmtpSettings_model','model');
         $this->load->library('session');
         $this->isLoggedIn();  
         date_default_timezone_set('America/Sao_Paulo'); 
