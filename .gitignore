@@ -11,3 +11,4 @@ json/result.json
 repository/Talend/input/jobInfo.xlsx
 xml/
 config/*
+jenkins/*
