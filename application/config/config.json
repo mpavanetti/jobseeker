@@ -2,8 +2,8 @@
     "jenkins": {
         "enabled": true,
         "url": "http:\/\/localhost:8080\/",
-        "username": "matheus",
-        "token": "11883b9bbf07ade64064dc291d899c34cc",
+        "username": "admin",
+        "token": "1114a54685a06daaeeb740126989c86d97",
         "authorization": "Basic",
         "jenkins_home": ""
     },
