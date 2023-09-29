@@ -12,3 +12,4 @@ assets/bower_components/
 repository/Talend/input/jobInfo.xlsx
 xml/
 assets/bower_components/chart.js/bower.json
+config/*

@@ -48,7 +48,7 @@ class BaseController extends CI_Controller {
 			$this->global ['last_login'] = $this->lastLogin;
 
 			// load json config file
-			$loadJson = file_get_contents(base_url().'application/config/config.json');
+			$loadJson = file_get_contents('/var/www/html/application/config/config.json');
 			$jsonToArray = json_decode($loadJson);
 
 			// Load reports with user permision
