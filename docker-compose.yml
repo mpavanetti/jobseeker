@@ -38,7 +38,7 @@ services:
       - MYSQL_PASSWORD=mysql
       - MYSQL_USER=mysql
       - MYSQL_DATABASE=data
-    restart: on-failure
+   # restart: on-failure
     networks:
       - internal
 
