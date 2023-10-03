@@ -40,10 +40,12 @@ class JobCreation extends BaseController
       // Check if jenkins home variable exist
      if($jenkins_home === '' || $jenkins_home === null){
       $storeFolder = '../../repository/'.$val.'/jobs/'; 
+      $targetPath = dirname( __FILE__ ) . $ds. $storeFolder . $ds; 
 
      } else {
 
       $storeFolder = $jenkins_home.'/repository/'.$val.'/jobs/';
+      $targetPath = $storeFolder;
       
      }
 
@@ -52,10 +54,13 @@ class JobCreation extends BaseController
       echo "File Found";
          
         $tempFile = $_FILES['file']['tmp_name'];          //3             
-          
-        $targetPath = dirname( __FILE__ ) . $ds. $storeFolder . $ds;  //4
          
         $targetFile =  $targetPath. $_FILES['file']['name'];  //5
+
+        // Create Path
+        if ( ! is_dir($targetPath)) {
+           mkdir($targetPath, 0777, true);
+        }
      
         move_uploaded_file($tempFile,$targetFile); //6
 
@@ -460,7 +465,12 @@ class JobCreation extends BaseController
                   if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0"){
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
-                    $command = $dom->createElement('command', 'sh '.$filePath);
+                    if($linuxScriptType == 'python'){
+                      $command = $dom->createElement('command', 'python3 '.$filePath);
+                    } else {
+                      $command = $dom->createElement('command', 'sh '.$filePath);
+                    }
+                    
                     $hudson_task_BashFile->appendChild($command);
                     $builders->appendChild($hudson_task_BashFile);
                     

@@ -2,10 +2,10 @@
     "jenkins": {
         "enabled": true,
         "url": "http:\/\/localhost:8080\/",
-        "username": "admin",
+        "username": "jobseeker",
         "token": "***REMOVED***",
         "authorization": "Basic",
-        "jenkins_home": ""
+        "jenkins_home": "/php"
     },
     "setup": {
         "enabled": false,
