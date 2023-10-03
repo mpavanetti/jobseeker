@@ -7,11 +7,11 @@ RUN docker-php-ext-configure zip
 RUN docker-php-ext-install zip
 
 
-RUN mkdir /php && mkdir /php/data
+RUN mkdir /php && mkdir /php/data && mkdir /php/repository
 
-RUN chown -R www-data:www-data /php/data
+RUN chown -R www-data:www-data /php
 
-RUN chmod -R 755 /php/data
+RUN chmod -R 777 /php
 
 
 RUN addgroup --gid 1000 mygroup

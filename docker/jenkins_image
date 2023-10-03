@@ -1,0 +1,15 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+RUN apt-get update
+RUN apt-get install -y python3-pip
+
+# Install app dependencies
+RUN pip install --upgrade pip --break-system-packages
+
+COPY docker/requirements.txt ./
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+USER jenkins
+RUN jenkins-plugin-cli --plugins cors-filter:1.1
