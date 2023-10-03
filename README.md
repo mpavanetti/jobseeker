@@ -66,6 +66,7 @@ Jenkins UI: http://localhost:8080/
 
 ## Automated Installation (Docker)
 
+Make sure you have docker and docker-compose installed.  
 **[Check Out]**: Download or git clone this repository into your http server.
 ```
 git clone https://github.com/mpavanetti/jobseeker.git
