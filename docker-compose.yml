@@ -4,7 +4,7 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: nginx/Dockerfile
+      dockerfile: docker/ngnix_image
     privileged: true
     user: root
     ports: 
@@ -12,19 +12,42 @@ services:
     networks:
       - internal
     volumes:
-      - ./:/var/www/html/
+      - ./adminer:/var/www/html/adminer
+      - ./application:/var/www/html/application
+      - ./assets:/var/www/html/assets
+      - ./elfinder:/var/www/html/elfinder
+      - ./json:/var/www/html/json
+      - ./serverstatistics:/var/www/html/serverstatistics
+      - ./system:/var/www/html/system
+      - ./.project:/var/www/html/.project
+      - ./index.php:/var/www/html/index.php
+      - ./repository:/php/repository
      # - ./logs/nginx:/var/log/nginx/
+    environment:
+     - GRANT_SUDO=yes
 
   php:
     build:
       context: .
+      dockerfile: docker/php_image
     privileged: true
     user: root
     networks:
       - internal
     volumes:
-      - ./:/var/www/html/
+      - ./adminer:/var/www/html/adminer
+      - ./application:/var/www/html/application
+      - ./assets:/var/www/html/assets
+      - ./elfinder:/var/www/html/elfinder
+      - ./json:/var/www/html/json
+      - ./serverstatistics:/var/www/html/serverstatistics
+      - ./system:/var/www/html/system
+      - ./.project:/var/www/html/.project
+      - ./index.php:/var/www/html/index.php
+      - ./repository:/php/repository
       #- ./logs/php.log:/var/log/fpm-php.www.log
+    environment:
+      - GRANT_SUDO=yes
 
   mariadb:
     image: mariadb:10.7
@@ -43,7 +66,9 @@ services:
       - internal
 
   jenkins:
-    image: jenkins/jenkins:lts
+    build:
+      context: .
+      dockerfile: docker/jenkins_image
     privileged: true
     user: root
     ports:
@@ -51,9 +76,11 @@ services:
       - 50000:50000
     volumes:
       - ./jenkins:/var/jenkins_home
-      - ./repository:/var/jenkins_home/repository/
+      - ./repository:/php/repository
     networks:
         - internal
+    environment:
+     - GRANT_SUDO=yes
 
 networks:
   internal:
