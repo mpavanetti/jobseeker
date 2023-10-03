@@ -401,3 +401,18 @@ AND cd.EnvironmentFK = env.Id ;
 
 -- Grant Privilleges
 GRANT SELECT, INSERT, UPDATE, DELETE ON jobseeker.* TO 'mysql'@'%';
+
+-- pre defined contexts
+INSERT INTO `projectdetails` (`Id`, `ProjectName`, `GitPath`, `IsActive`, `CreatedOn`, `ModifiedOn`) VALUES
+(1,	'PoC',	'',	1,	CURRENT_TIMESTAMP(), NULL);
+
+INSERT INTO `jobseeker`.`environment` (`Id`, `Environment`, `Description`, `IsActive`, `CreatedOn`, `ModifiedOn`) VALUES
+(1,	'LOCAL',	'',	1,	CURRENT_TIMESTAMP(),	NULL),
+(2,	'DEV',	'',	1,	CURRENT_TIMESTAMP(),	NULL),
+(3,	'QA',	'',	1,	CURRENT_TIMESTAMP(),	NULL),
+(4,	'UAT',	'',	1,	CURRENT_TIMESTAMP(),	NULL),
+(5,	'PREPROD',	'',	1,	CURRENT_TIMESTAMP(),	NULL),
+(6,	'PROD',	'',	1,	CURRENT_TIMESTAMP(),	NULL);
+
+INSERT INTO `jobseeker`.`contextdetails` (`Id`, `ProjectDetailsFK`, `ContextKey`, `ContextValue`, `isEncrypted`, `EnvironmentFK`, `Description`, `IsActive`, `CreatedOn`, `CreatedBy`, `ModifiedOn`, `ModifiedBy`) VALUES
+(1,	1,	'rows',	'100',	0,	1,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
