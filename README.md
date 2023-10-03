@@ -51,6 +51,11 @@ System Administrator | admin@example.com | 123456 | Admin User
 Developer | developer@example.com | 123456 | Developer User
 Key User | keyuser@example.com | 123456 | Key User 
 
+    
+JobSeeker UI: http://localhost/  
+
+Jenkins UI: http://localhost:8080/
+
 <br>Remember to change the default user and password once you implement the system.
 
 ### Explaining the available roles:
@@ -59,7 +64,18 @@ Key User | keyuser@example.com | 123456 | Key User
 **Developer**: A developer user has permissions to manage files, upload files, create job builds, query logs, adding data visualizations, view jobs, delete jobs, manage jobs, run jobs, schedule jobs, query jobs status and more.<br>
 **Key User**: A Key User or also called as Business user has permissions to query job build logs, analyze job run history, check dashboard, check all kind of logs.
 
-## Installation
+## Automated Installation (Docker)
+
+**[Check Out]**: Download or git clone this repository into your http server.
+```
+git clone https://github.com/mpavanetti/jobseeker.git
+cd jobseeker
+
+sudo docker-compose up -d
+```
+
+
+## Manual Installation
 
 **[Check Out]**: Download or git clone this repository into your http server.
 
