@@ -11,7 +11,7 @@ class jobSeeker:
     
     # JobSeeker MySQL(MariaDB) database 
     connection = {
-        "host": "localhost",
+        "host": "mariadb",
         "port": 3306,
         "user": "mysql",
         "password": "mysql",
