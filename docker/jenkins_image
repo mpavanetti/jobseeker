@@ -8,8 +8,15 @@ RUN apt-get install -y python3-pip
 # Install app dependencies
 RUN pip install --upgrade pip --break-system-packages
 
-COPY docker/requirements.txt ./
+COPY docker/jenkins/requirements.txt ./
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
 USER jenkins
-RUN jenkins-plugin-cli --plugins cors-filter:1.1
+ENV JAVA_OPTS -Djenkins.install.runSetupWizard=false
+
+COPY docker/jenkins/casc.yaml /var/jenkins_home/casc.yaml
+ENV CASC_JENKINS_CONFIG /var/jenkins_home/casc.yaml
+
+# Install plugins
+RUN jenkins-plugin-cli --plugins ant:latest antisamy-markup-formatter:latest build-timeout:latest cloudbees-folder:latest configuration-as-code:latest credentials-binding:latest email-ext:latest git:latest mailer:latest matrix-auth:latest pam-auth:latest ssh-slaves:latest timestamper:latest workflow-aggregator:latest ws-cleanup:latest cors-filter:latest
+
