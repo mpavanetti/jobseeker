@@ -69,6 +69,8 @@ git clone https://github.com/mpavanetti/jobseeker.git
 cd jobseeker
 
 sudo docker-compose up -d
+
+chmod -R 777 ./jobseeker/repository/
 ```
 
 Access to JobSeeker UI: http://localhost/  
