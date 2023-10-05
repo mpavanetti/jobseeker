@@ -1,22 +1,26 @@
 FROM jenkins/jenkins:lts
 
+# Initialize directories, update image 
 USER root
-
+WORKDIR /var/jenkins_home/
+RUN mkdir /var/jenkins_files/ && chown -R jenkins /var/jenkins_files
 RUN apt-get update
+
+
+# Install python dependencies
 RUN apt-get install -y python3-pip
-
-# Install app dependencies
 RUN pip install --upgrade pip --break-system-packages
+COPY docker/jenkins/requirements.txt /var/jenkins_files/
+RUN pip install --no-cache-dir --break-system-packages -r /var/jenkins_files/requirements.txt
 
-COPY docker/jenkins/requirements.txt ./
-RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
-
+# Set jenkins configurations.
 USER jenkins
 ENV JAVA_OPTS -Djenkins.install.runSetupWizard=false
-
-COPY docker/jenkins/casc.yaml /var/jenkins_home/casc.yaml
-ENV CASC_JENKINS_CONFIG /var/jenkins_home/casc.yaml
+COPY docker/jenkins/casc.yaml /var/jenkins_files/
+ENV CASC_JENKINS_CONFIG /var/jenkins_files/casc.yaml
 
 # Install plugins
 RUN jenkins-plugin-cli --plugins ant:latest antisamy-markup-formatter:latest build-timeout:latest cloudbees-folder:latest configuration-as-code:latest credentials-binding:latest email-ext:latest git:latest mailer:latest matrix-auth:latest pam-auth:latest ssh-slaves:latest timestamper:latest workflow-aggregator:latest ws-cleanup:latest cors-filter:latest
+
+
 
