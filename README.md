@@ -51,20 +51,16 @@ System Administrator | admin@example.com | 123456 | Admin User
 Developer | developer@example.com | 123456 | Developer User
 Key User | keyuser@example.com | 123456 | Key User 
 
-    
-JobSeeker UI: http://localhost/  
-
-Jenkins UI: http://localhost:8080/
 
 <br>Remember to change the default user and password once you implement the system.
 
-### Explaining the available roles:
+## Explaining the available roles:
 
 **System Administrator**: This is an infrastructure system administrator, wich access of creating users, groups, granting permissions, acessing to jenkins manager, database manager, server statistics.<br>
 **Developer**: A developer user has permissions to manage files, upload files, create job builds, query logs, adding data visualizations, view jobs, delete jobs, manage jobs, run jobs, schedule jobs, query jobs status and more.<br>
 **Key User**: A Key User or also called as Business user has permissions to query job build logs, analyze job run history, check dashboard, check all kind of logs.
 
-## Automated Installation (Docker)
+# Automated Installation (Docker)
 
 Make sure you have docker and docker-compose installed.  
 **[Check Out]**: Download or git clone this repository into your http server.
@@ -75,8 +71,55 @@ cd jobseeker
 sudo docker-compose up -d
 ```
 
+Access to JobSeeker UI: http://localhost/  
 
-## Manual Installation
+Access Jenkins UI: http://localhost:8080/  
+User: jobseeker   
+Pass: jobseeker
+## Setting Up Jenkins Cors-Filters and User token
+Go to jenkins config area at http://localhost:8080/manage/configure  
+
+At **CORS Filter** section, fill up with the following info:  
+
+**Is Enabled**: Flag this option  
+**Access-Control-Allow-Origins**: *  
+**Access-Control-Allow-Methods**: GET,POST,PUT,DELETE,PATCH  
+**Acess-Control-Allow-Headers**: Origin, X-Requested-With, Content-Type, Accept, Authorization  
+Click Save and you are all done here.
+
+![Jenkins](doc/img/jenkins-cors-filters.jpg)  
+
+## Setting Up jobseeker user access token
+Go to jenkins user config at http://localhost:8080/user/jobseeker/configure  
+User: jobseeker  
+Password: jobseeker  
+
+On the API Token section, type a name "jobseeker" and click in generate token. copy the token to the clipboard and click in Save.
+
+![Jenkins](doc/img/jenkins-token.jpg)  
+
+After generating the token, edit the config.json at [application/config/config.json](application/config/config.json) 
+In the json file, add your token and save.  
+```
+{
+    "jenkins": {
+        "enabled": true,
+        "url": "http:\/\/localhost:8080\/",
+        "username": "jobseeker",
+        "token": "ADD Your Token Here",
+        "authorization": "Basic",
+        "jenkins_home": "/php"
+    },
+    "setup": {
+        "enabled": false,
+        "env": ""
+    }
+}
+```  
+You are all done here. now your jenkins should be fully functional with jobseeker.
+
+           
+# Manual Installation
 
 **[Check Out]**: Download or git clone this repository into your http server.
 
@@ -133,9 +176,9 @@ If you choose to use jenkins, which I recommend, change the enabled parameter to
 If you are implementing the system in a docker container and your jenkins is also in a docker container, you can specify the jenkins home as your container mapping directory.
 <br><br>
 
-## Instructions and Use Cases
+# Instructions and Use Cases
 
-### Instructions 
+## Instructions 
 1) [[Data Visualization Instructions]](doc/jobseeker/DataVisualization)
 2) [[Transaction Monitoring]](doc/jobseeker/TransactionMonitoring)
 3) [[Extract, Transform and Load. Helpers]](doc/jobseeker/ETL)
@@ -145,7 +188,7 @@ If you are implementing the system in a docker container and your jenkins is als
 7) [[Users Management]](doc/jobseeker/Users) (Coming Soon)
 8) [[Groups Management]](doc/jobseeker/Groups) (Coming Soon)
 
-### Use Cases
+## Use Cases
 1) [[Talend Data Integration Use Case]](doc/Talend)
 2) [[Python Use Case]](doc/Python) 
 3) [[Python Spark Use Case]](doc/Spark) (Coming Soon)
