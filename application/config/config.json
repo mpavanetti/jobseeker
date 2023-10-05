@@ -3,7 +3,7 @@
         "enabled": true,
         "url": "http:\/\/localhost:8080\/",
         "username": "jobseeker",
-        "token": "",
+        "token": "ADD Your Token Here",
         "authorization": "Basic",
         "jenkins_home": "/php"
     },
