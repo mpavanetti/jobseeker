@@ -1,7 +1,18 @@
 jenkins:
+  systemMessage: "Jenkins engine provided for jobseeker etl framework.\n\nBy: Matheus Pavanetti"
+  numExecutors: 1
+  scmCheckoutRetryCount: 2
+  mode: NORMAL
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
   securityRealm:
     local:
       allowsSignup: false
       users:
        - id: jobseeker
          password: jobseeker
+  #mailer:
+    #replyToAddress: do-not-reply@acme.org
+    #smtpHost: smtp.acme.org
+    #smtpPort: 4441
