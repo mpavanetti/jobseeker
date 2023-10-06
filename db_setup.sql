@@ -418,7 +418,7 @@ INSERT INTO `jobseeker`.`contextdetails` (`Id`, `ProjectDetailsFK`, `ContextKey`
 (1,	1,	'rows',	'100',	0,	1,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
 
 INSERT INTO `jobseeker`.`contextdetails` (`Id`, `ProjectDetailsFK`, `ContextKey`, `ContextValue`, `isEncrypted`, `EnvironmentFK`, `Description`, `IsActive`, `CreatedOn`, `CreatedBy`, `ModifiedOn`, `ModifiedBy`) VALUES
-(1,	2,	'Custom',	'This is a custom context from jobseeker LOCAL',	0,	1,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
+(2,	1,	'Custom',	'This is a custom context from jobseeker LOCAL',	0,	1,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
 
 INSERT INTO `jobseeker`.`contextdetails` (`Id`, `ProjectDetailsFK`, `ContextKey`, `ContextValue`, `isEncrypted`, `EnvironmentFK`, `Description`, `IsActive`, `CreatedOn`, `CreatedBy`, `ModifiedOn`, `ModifiedBy`) VALUES
-(1,	3,	'Custom',	'This is a custom context from jobseeker LOCAL',	0,	2,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
+(3,	1,	'Custom',	'This is a custom context from jobseeker DEV',	0,	2,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
