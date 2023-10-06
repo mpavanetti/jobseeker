@@ -394,7 +394,13 @@ var statusLabel = request2.data.statusGraph.map(function(e) {
   });
 
 var statusAmount = request2.data.statusGraph.map(function(e) {
-     return e.AMOUNT;
+     return {"labels": [e.STATUS],
+             "values": [e.AMOUNT],
+             "colors": [e.STATUS == 'ready' ? 'rgba(0, 166, 90, 1)': 
+                        e.STATUS == 'error' ? 'rgba(221, 75, 57, 1)': 
+                        e.STATUS == 'running' ? 'rgba(0, 192, 239, 1)':
+                        e.STATUS == 'warning' ? 'rgba(243, 156, 18, 1)':
+                        'white']};
   });
 
 
@@ -754,29 +760,39 @@ var myChart = new Chart(ctx, {
 });
 
 
+
+
+
  // Pie Chart 
-    var ctx1 = document.getElementById('pieChart').getContext('2d');
+  var ctx1 = document.getElementById('pieChart').getContext('2d');
+
+  labels = [];
+  values = [];
+  colors = [];
+  for (i = 0; i < statusAmount.length; i++) {
+    let label = statusAmount[i].labels
+    let value = statusAmount[i].values
+    let color = statusAmount[i].colors
+    for(j = 0; j < label.length; j++){
+        labels.push(label[j]);
+    }
+    for(k = 0; k < value.length; k++){
+      values.push(value[k]);
+    }
+    for(l = 0; l < color.length; l++){
+      colors.push(color[l]);
+  }
+  }
+
   var myChart = new Chart(ctx1, {
     type: 'doughnut',
     data: {
-        labels: ['Error','Ready','Running','Warning'],
+        labels: labels,
         datasets: [{
-            label: 'Top Updaters',
-            data: statusAmount,
-            backgroundColor: [
-                'rgba(221, 75, 57, 1)',
-                'rgba(0, 166, 90, 1)',
-                'rgba(0, 192, 239, 1)',
-                'rgba(243, 156, 18, 1)'
-                
-            ],
-            borderColor: [
-                'rgba(221, 75, 57, 1)',
-                'rgba(0, 166, 90, 1)',
-                'rgba(0, 192, 239, 1)',
-                'rgba(243, 156, 18, 1)'
-                
-            ],
+            label: 'Summary',
+            data: values,
+            backgroundColor: colors,
+            borderColor: colors,
             borderWidth: 1
         }]
     },
