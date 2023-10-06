@@ -2,7 +2,7 @@
         <div class="pull-right hidden-xs">
           <b>Job Seeker</b> Admin System | Version 1.0
         </div>
-        <strong>Copyright &copy; 2019-2020 <a href="https://www.linkedin.com/in/matheuspavanetti/">Matheus Pavanetti</a>.</strong> All rights reserved.<span style="margin-left: 100px;">Trust in god, he belives in you !</span>
+        <strong>Copyright &copy; 2019-<?php echo date("Y")?> <a href="https://www.linkedin.com/in/matheuspavanetti/">Matheus Pavanetti</a>.</strong> All rights reserved.<span style="margin-left: 100px;"></span>
     </footer>
     
     <script src="<?php echo base_url(); ?>assets/bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
