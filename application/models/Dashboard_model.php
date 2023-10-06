@@ -131,7 +131,7 @@ class Dashboard_model extends CI_Model
     }
 
     function statusGraph(){
-    	$query = $this->db->query('SELECT STATUS, COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY STATUS');
+    	$query = $this->db->query('SELECT STATUS, COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY STATUS ORDER BY STATUS');
         return $query->result();
     }
 
@@ -161,17 +161,17 @@ class Dashboard_model extends CI_Model
     }
 
     function dwAmount() {
-    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  job_name LIKE UPPER("%DW%")');
+    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  dimension LIKE UPPER("%DW%")');
     	return $query->num_rows();
     }
 
     function dmAmount() {
-    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  job_name LIKE UPPER("%DM%")');
+    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  dimension LIKE UPPER("%DM%")');
     	return $query->num_rows();
     }
 
     function dmAmountExec() {
-    	$query = $this->db->query('SELECT DIMENSION, COUNT(DIMENSION) AS AMOUNT FROM tmf WHERE  job_name LIKE UPPER("%DW%") GROUP BY DIMENSION');
+    	$query = $this->db->query('SELECT DIMENSION, COUNT(DIMENSION) AS AMOUNT FROM tmf WHERE  dimension LIKE UPPER("%DW%") GROUP BY DIMENSION');
     	return $query->result();
     }
 
