@@ -134,8 +134,8 @@ $opts = array(
 		// Items volume
 		array(
 			'driver'        => 'LocalFileSystem',           // driver for accessing file system (REQUIRED)
-			'path'          => '../../repository',                 // path to files (REQUIRED)
-			'URL'           => dirname($_SERVER['PHP_SELF']) . '../../repository/', // URL to files (REQUIRED)
+			'path'          => '/php/repository',                 // path to files (REQUIRED)
+			'URL'           => dirname($_SERVER['PHP_SELF']) . '/../../repository/', // URL to files (REQUIRED)
 			'trashHash'     => 't1_Lw',                     // elFinder's hash of trash folder
 			'winHashFix'    => DIRECTORY_SEPARATOR !== '/', // to make hash same to Linux one on windows too
 			'uploadDeny'    => array('all'),                // All Mimetypes not allowed to upload
