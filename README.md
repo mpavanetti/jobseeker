@@ -67,7 +67,7 @@ Make sure you have docker and docker-compose installed.
 ```
 git clone https://github.com/mpavanetti/jobseeker.git
 cd jobseeker
-chmod -R 777 ./jobseeker/repository/
+sudo chmod -R 777 ./repository/
 
 sudo docker-compose up -d
 ```
