@@ -1,5 +1,6 @@
 from script.jobseeker import jobSeeker
 import sys
+import time
 from os import path
 import pandas as pd # pip install pandas
 
@@ -39,11 +40,15 @@ def operation():
         # Convert to HTML Table
         html = df.to_html()
         msg = "<h4>This is a HTML table generated from python pandas</h4><br>"+html
-
+        
+        
+        print(f"Sleeping {rows} seconds.")
+        time.sleep(rows)
         # Jobseeker End Transaction
         js.end(rows,rows,msg)
         return True
 
+        #raise Exception("This is an ERROR test.")
     except Exception as e:
         js.error(str(e))
         return False
