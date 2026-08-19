@@ -21,10 +21,14 @@ jQuery(document).ready(function(){
 			data : { userId : userId } 
 			}).done(function(data){
 				console.log(data);
-				currentRow.parents('tr').remove();
-				if(data.status = true) { alert("User successfully deleted"); }
-				else if(data.status = false) { alert("User deletion failed"); }
+				if(data.status === true) {
+					currentRow.parents('tr').remove();
+					alert("User successfully deleted");
+				}
+				else if(data.status === false) { alert("User deletion failed"); }
 				else { alert("Access denied..!"); }
+			}).fail(function(){
+				alert("User deletion request failed");
 			});
 		}
 	});

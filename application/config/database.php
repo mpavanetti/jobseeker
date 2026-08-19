@@ -75,10 +75,10 @@ $query_builder = TRUE;
 
 $db['default'] = array(
 	'dsn'	=> '',
-	'hostname' => 'mariadb',
-	'username' => 'mysql',
-	'password' => 'mysql',
-	'database' => 'jobseeker',
+	'hostname' => getenv('JOBSEEKER_DB_HOST') ?: 'mariadb',
+	'username' => getenv('JOBSEEKER_DB_USER') ?: 'mysql',
+	'password' => getenv('JOBSEEKER_DB_PASSWORD') ?: 'mysql',
+	'database' => getenv('JOBSEEKER_DB_NAME') ?: 'jobseeker',
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,

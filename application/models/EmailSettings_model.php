@@ -53,6 +53,16 @@ class EmailSettings_model extends CI_Model
 
     function fetchXsmtp($id) {
 
+        $this->db->select('email_settings.*, smtp_settings.smtp_host, smtp_settings.smtp_port, smtp_settings.username, smtp_settings.ssl');
+        $this->db->from('email_settings');
+        $this->db->where('email_settings.id', $id);
+        $this->db->join('smtp_settings', 'smtp_settings.name = email_settings.smtp');
+        $query = $this->db->get();
+        return $query->result();
+    }
+
+    function fetchXsmtpCredentials($id) {
+
         $this->db->select('email_settings.*, smtp_settings.smtp_host, smtp_settings.smtp_port, smtp_settings.username, smtp_settings.password, smtp_settings.ssl');
         $this->db->from('email_settings');
         $this->db->where('email_settings.id', $id);

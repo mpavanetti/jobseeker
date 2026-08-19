@@ -9,78 +9,49 @@ class Tmf_model extends CI_Model
         $this->db->select('*');
         $this->db->from('tmf');
 
+        $status = (array) $status;
+        $job_name = (array) $job_name;
+        $dimension = (array) $dimension;
+        $environment = (array) $environment;
+
     // Check Status
-     if ($status != null) {    
-        if($status[0] == "*"){
-        } else {
-        	$this->db->where_in('status',$status);
-        } 
- 	}
+     if (!empty($status) && !in_array('*', $status, TRUE)) {
+	        $this->db->where_in('status',$status);
+	}
 
  	// Check Job Name
-    if ($job_name != null) {
-        if($job_name[0] == "*"){
-        } else {
-        	$this->db->where_in('job_name',$job_name);
-        }
+    if (!empty($job_name) && !in_array('*', $job_name, TRUE)) {
+	        $this->db->where_in('job_name',$job_name);
      }
 
      // Check Dimension
-     if ($dimension != null) {
-        if($dimension[0] == "*"){
-        } else {
-        	$this->db->where_in('dimension',$dimension);
-        }
+     if (!empty($dimension) && !in_array('*', $dimension, TRUE)) {
+	        $this->db->where_in('dimension',$dimension);
      }
         // Check Reprocess
-        if($reprocess == "*"){
-        } else {
-        	$this->db->where_in('reprocess',$reprocess);
+        if($reprocess !== null && $reprocess !== '' && $reprocess !== "*"){
+	        $this->db->where('reprocess',$reprocess);
         }
 
         // Check Environment
-             if ($environment != null) {
-                if($environment[0] == "*"){
-                } else {
+             if (!empty($environment) && !in_array('*', $environment, TRUE)) {
                     $this->db->where_in('environment',$environment);
-                }
              }
 
         // Check Event Text
-        if($eventText == " " || $eventText == null || $eventText == ""){
-        } else {
+        if(trim((string) $eventText) !== ""){
         	$this->db->like('event_text',$eventText);
         }
 
-         // Check Dates From date up to today (Interval between dates)
-       
-        if ($fromDate != null  && $toDate == null) {
-        	$fromDate = date('Y-m-d 00:00:00', strtotime($fromDate));
-        	$toDate =  date('Y-m-d 23:59:59');
-			$this->db->where('start_time >=',$fromDate);
-			$this->db->where('start_time <=',$toDate); 
-
-        } else {}
-
-        // Check Dates From Inicial date up to toDate (Interval between dates)
-       
-        if ($fromDate == null  && $toDate != null) {
-        	$fromDate = date('2010-01-01 00:00:00');
-        	$toDate =  date('Y-m-d 23:59:59', strtotime($toDate));
-			$this->db->where('start_time >=',$fromDate);
-			$this->db->where('start_time <=',$toDate); 
-
-        } else {}
-        
+        $fromDate = trim((string) $fromDate);
+        $toDate = trim((string) $toDate);
 
         // Check Dates From date and To Date (Interval between dates)
-      
-        if ($fromDate == null  && $toDate == null) {
-        } else {
-        	$fromDate = date('Y-m-d 00:00:00', strtotime($fromDate));
-        	$toDate =  date('Y-m-d 23:59:59', strtotime($toDate));
-			$this->db->where('start_time >=',$fromDate);
-			$this->db->where('start_time <=',$toDate);
+        if ($fromDate !== '' || $toDate !== '') {
+	        $startDate = $fromDate !== '' ? date('Y-m-d 00:00:00', strtotime($fromDate)) : date('2010-01-01 00:00:00');
+	        $endDate = $toDate !== '' ? date('Y-m-d 23:59:59', strtotime($toDate)) : date('Y-m-d 23:59:59');
+			$this->db->where('start_time >=',$startDate);
+			$this->db->where('start_time <=',$endDate);
         }
 
        
@@ -176,16 +147,16 @@ class Tmf_model extends CI_Model
 
     function updateUser($instanceId,$name) {
 
-    	$this->db->set('username', $name, FALSE);
-		$this->db->where('instance_id', $instanceId);
-		$this->db->update('tmf'); 
+        $this->db->set('username', $name);
+        $this->db->where('instance_id', $instanceId);
+        $this->db->update('tmf');
     }
 
     function updateStatus($id,$status) {
 
         $this->db->set('status', $status);
         $this->db->where('id', $id);
-        $this->db->update('tmf'); 
+        $this->db->update('tmf');
     }
 
 

@@ -1,3 +1,73 @@
+function dashboardNumber(value) {
+  var number = parseInt(value, 10);
+  return isNaN(number) ? 0 : number;
+}
+
+function dashboardAjaxJson(url) {
+  return $.ajax({
+    type: 'GET',
+    url: url,
+    dataType: 'json'
+  });
+}
+
+function dashboardJenkinsApiUrl(path) {
+  var baseUrl = window.jobseekerJenkinsUrl || '';
+  return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
+}
+
+function dashboardJenkinsStats(computerData) {
+  var totalExecutors = 0;
+  var busyExecutors = 0;
+
+  $.each(computerData && computerData.computer ? computerData.computer : [], function(index, node) {
+    var executors = node.executors || [];
+    totalExecutors += dashboardNumber(node.numExecutors || executors.length);
+
+    $.each(executors, function(executorIndex, executor) {
+      if (executor && executor.idle === false) {
+        busyExecutors++;
+      }
+    });
+  });
+
+  return {
+    total: totalExecutors,
+    busy: busyExecutors
+  };
+}
+
+function dashboardBuildLabel(value) {
+  return dashboardNumber(value) === 1 ? 'build' : 'builds';
+}
+
+function loadDashboardJenkinsOverview() {
+  if (! window.jobseekerJenkinsUrl) {
+    $('#dashboardJenkinsCapacity').text('--');
+    $('#dashboardJenkinsQueue').text('--');
+    $('#dashboardJenkinsDetail').text('Jenkins integration is unavailable.');
+    return;
+  }
+
+  var computerUrl = dashboardJenkinsApiUrl('computer/api/json?tree=computer[displayName,numExecutors,executors[idle,currentExecutable[fullDisplayName]]]');
+  var queueUrl = dashboardJenkinsApiUrl('queue/api/json?tree=items[id,task[name],why]');
+
+  $.when(dashboardAjaxJson(computerUrl), dashboardAjaxJson(queueUrl)).done(function(computerResponse, queueResponse) {
+    var computerData = computerResponse[0] || {};
+    var queueData = queueResponse[0] || {};
+    var stats = dashboardJenkinsStats(computerData);
+    var queued = queueData.items ? queueData.items.length : 0;
+
+    $('#dashboardJenkinsCapacity').text(stats.busy + ' / ' + stats.total);
+    $('#dashboardJenkinsQueue').text(queued);
+    $('#dashboardJenkinsDetail').text(stats.busy + ' ' + dashboardBuildLabel(stats.busy) + ' running across ' + stats.total + ' executors. Last updated ' + moment().format('h:mm:ss a') + '.');
+  }).fail(function() {
+    $('#dashboardJenkinsCapacity').text('N/A');
+    $('#dashboardJenkinsQueue').text('N/A');
+    $('#dashboardJenkinsDetail').text('Unable to reach Jenkins.');
+  });
+}
+
  function running() {
       
       $.ajax({    //create an ajax request
@@ -187,6 +257,9 @@ function errorGraph(result) {
   $(document).ready(function(){
 
     var result;
+
+    loadDashboardJenkinsOverview();
+    window.dashboardJenkinsRefreshTimer = window.dashboardJenkinsRefreshTimer || setInterval(loadDashboardJenkinsOverview, 30000);
 
       $.ajax({
         type: "GET",
@@ -394,13 +467,15 @@ var statusLabel = request2.data.statusGraph.map(function(e) {
   });
 
 var statusAmount = request2.data.statusGraph.map(function(e) {
+     var status = String(e.STATUS || '').toLowerCase();
      return {"labels": [e.STATUS],
              "values": [e.AMOUNT],
-             "colors": [e.STATUS == 'ready' ? 'rgba(0, 166, 90, 1)': 
-                        e.STATUS == 'error' ? 'rgba(221, 75, 57, 1)': 
-                        e.STATUS == 'running' ? 'rgba(0, 192, 239, 1)':
-                        e.STATUS == 'warning' ? 'rgba(243, 156, 18, 1)':
-                        'white']};
+             "colors": [status == 'ready' ? 'rgba(0, 166, 90, 1)':
+                        status == 'error' ? 'rgba(221, 75, 57, 1)':
+      status == 'running' ? 'rgba(0, 192, 239, 1)':
+      status == 'warning' ? 'rgba(243, 156, 18, 1)':
+      status == 'cancelled' ? 'rgba(108, 117, 125, 1)':
+      'rgba(120, 130, 140, 1)']};
   });
 
 

@@ -131,7 +131,7 @@ class Dashboard_model extends CI_Model
     }
 
     function statusGraph(){
-    	$query = $this->db->query('SELECT STATUS, COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY STATUS ORDER BY STATUS');
+        $query = $this->db->query('SELECT LOWER(STATUS) AS STATUS, COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY LOWER(STATUS) ORDER BY LOWER(STATUS)');
         return $query->result();
     }
 

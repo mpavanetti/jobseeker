@@ -8,16 +8,11 @@ RUN docker-php-ext-install zip
 
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/
 
-RUN mkdir /php && mkdir /php/data 
-
-RUN chown -R www-data:www-data /php
-
-RUN chmod -R 777 /php
-
-
 RUN addgroup --gid 1000 mygroup
 RUN adduser --system --no-create-home --disabled-password --uid 1000 --ingroup mygroup myuser
 
-RUN chown -R myuser:mygroup /var/www
+RUN mkdir -p /php/data /php/repository \
+	&& chown -R myuser:mygroup /php /var/www \
+	&& chmod -R 775 /php
 
 USER myuser

@@ -64,16 +64,17 @@ class Login extends CI_Controller
             if(!empty($result))
             {
                 $lastLogin = $this->login_model->lastLoginInfo($result->userId);
+                $lastLoginTime = empty($lastLogin) ? '' : $lastLogin->createdDtm;
 
                 $sessionArray = array('userId'=>$result->userId,                    
                                         'role'=>$result->roleId,
                                         'roleText'=>$result->role,
                                         'name'=>$result->name,
-                                        'lastLogin'=> $lastLogin->createdDtm,
+                                        'lastLogin'=> $lastLoginTime,
                                         'isLoggedIn' => TRUE
                                 );
-                print_r($sessionArray);
 
+                            $this->session->sess_regenerate(TRUE);
                 $this->session->set_userdata($sessionArray);
 
                 unset($sessionArray['userId'], $sessionArray['isLoggedIn'], $sessionArray['lastLogin']);

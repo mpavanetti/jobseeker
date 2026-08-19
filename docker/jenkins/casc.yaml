@@ -1,6 +1,6 @@
 jenkins:
   systemMessage: "Jenkins engine provided for jobseeker etl framework.\n\nBy: Matheus Pavanetti"
-  numExecutors: 1
+  numExecutors: ${JENKINS_NUM_EXECUTORS}
   scmCheckoutRetryCount: 2
   mode: NORMAL
   authorizationStrategy:
@@ -10,8 +10,8 @@ jenkins:
     local:
       allowsSignup: false
       users:
-       - id: jobseeker
-         password: jobseeker
+       - id: "${JENKINS_ADMIN_ID}"
+         password: "${JENKINS_ADMIN_PASSWORD}"
   #mailer:
     #replyToAddress: do-not-reply@acme.org
     #smtpHost: smtp.acme.org

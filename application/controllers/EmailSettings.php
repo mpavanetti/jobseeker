@@ -34,11 +34,28 @@ class EmailSettings extends BaseController
 
     public function mail() {
 
-        $result = false;
+        $this->output->set_content_type('application/json');
 
-        $array = $this->input->post('object');
-        $jsonArray = json_encode($array);
-        print_r($jsonArray);
+        $id = $this->input->post('id');
+        if ($id === NULL || ! ctype_digit((string) $id)) {
+            $this->output->set_status_header(400);
+            echo json_encode(array('status' => FALSE, 'message' => 'Invalid email template.'));
+            return;
+        }
+
+        $records = $this->model->fetchXsmtpCredentials($id);
+        if (empty($records)) {
+            $this->output->set_status_header(404);
+            echo json_encode(array('status' => FALSE, 'message' => 'Email template was not found.'));
+            return;
+        }
+
+        $array = (array) $records[0];
+        if ((int) $array['enabled'] === 0) {
+            $this->output->set_status_header(400);
+            echo json_encode(array('status' => FALSE, 'message' => 'Email template is disabled.'));
+            return;
+        }
 
         $config = array();
         $config['protocol'] = 'smtp';
@@ -62,17 +79,13 @@ class EmailSettings extends BaseController
          $this->email->cc($array["cc"]);
          $this->email->subject($array["subject"]);
          $this->email->message($array["msg"]); 
-         $this->email->send();
 
-         if ($this->email->send()) {
-          $result = true;
-          echo $result;
+         $sent = $this->email->send();
+         if (! $sent) {
+          log_message('error', 'Email template send failed for ID '.$id.': '.$this->email->print_debugger(array('headers')));
+      }
 
-      }
-      else {
-          print_r($this->email->print_debugger());
-          echo $result;
-      }
+      echo json_encode(array('status' => $sent));
 
 
     }
@@ -96,13 +109,12 @@ class EmailSettings extends BaseController
         $this->email->from('YourEmail@gmail.com');
         $this->email->subject('Teste');
         $this->email->message('Teste'); 
-        $this->email->send();
 
-        if ($this->email->send()) {
+                if ($this->email->send()) {
           echo "Email Sent !";
       }
       else {
-          print_r($this->email->print_debugger());
+          log_message('error', 'Sample email send failed: '.$this->email->print_debugger(array('headers')));
       }
   
 
@@ -115,7 +127,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->model->fetchAll($colunm);
-         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }
 
@@ -126,7 +138,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->model->fetch($id);
-         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }
 
@@ -137,7 +149,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson = $this->model->fetchSMTP();
-         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }
 
@@ -148,7 +160,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson = $this->model->fetchXsmtp($id);
-         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }
 

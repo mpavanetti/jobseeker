@@ -79,14 +79,14 @@ class Visualization_model extends CI_Model
       // Validate if the record already exists.
      function permission($name,$user) {
 
-        $query = $this->db->query("SELECT NAME 'report',type FROM reports r WHERE r.name = '$name' AND r.groups = (SELECT DISTINCT g.name 'group' FROM tbl_users u, tbl_groups g WHERE u.groupId = g.id AND u.name ='$user') UNION SELECT NAME 'report',type FROM reports r WHERE r.users LIKE '%*%'");
+                $query = $this->db->query("SELECT name AS report, type FROM reports r WHERE r.name = ? AND r.groups = (SELECT DISTINCT g.name AS user_group FROM tbl_users u, tbl_groups g WHERE u.groupId = g.id AND u.name = ?) UNION SELECT name AS report, type FROM reports r WHERE r.users LIKE ?", array($name, $user, '%*%'));
         return $query->num_rows();
     }
 
 
      function allowedUser($user) {
 
-        $query = $this->db->query("SELECT NAME 'report',type FROM reports r WHERE r.groups = (SELECT DISTINCT g.name 'group' FROM tbl_users u, tbl_groups g WHERE u.groupId = g.id AND u.name ='$user') UNION SELECT NAME 'report',type FROM reports r WHERE r.users LIKE '%*%'");
+                $query = $this->db->query("SELECT name AS report, type FROM reports r WHERE r.groups = (SELECT DISTINCT g.name AS user_group FROM tbl_users u, tbl_groups g WHERE u.groupId = g.id AND u.name = ?) UNION SELECT name AS report, type FROM reports r WHERE r.users LIKE ?", array($user, '%*%'));
         return $query->result();
     }
 

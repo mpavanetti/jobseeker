@@ -72,23 +72,26 @@ This simple [pyjob.py](code/pyjob.py) python script, basically query context fro
 
 Note that you can run this python script in your local machine in case you have python installed, otherwise you can deploy to jobseeker server.
 
-After editing the db connection params as mentioned, go to the [code](code) folder you have downloaded, select both [pyjob.py](code/pyjob.py) and [code/script](code/script)  folder , right mouse button click, go to send to and zipped folder and rename it to pyjob.zip
+For a single Python file, upload the `.py` file directly. In the Docker runtime, JobSeeker exposes the shared helper on `PYTHONPATH`, so scripts can import it with `from jobseeker import jobSeeker` without bundling `script/jobseeker.py`.
+
+For multi-file Python jobs, you can upload a ZIP, point JobSeeker at an existing repository path, or provide a Git repository URL plus the entry Python file. When Jenkins runs the job, it runs from the source directory, adds the source directory and shared helper to `PYTHONPATH`, and installs a local `.jobseeker-python-libs` dependency folder when `requirements.txt` is present.
+
+If you still want to upload a ZIP, go to the [code](code) folder you have downloaded, select both [pyjob.py](code/pyjob.py) and [code/script](code/script) folder, right mouse button click, go to send to and zipped folder and rename it to pyjob.zip.
 
 ![Context](img/context2.JPG)
 
 ![Context](img/files.JPG)
 
-You'll find a pyjob.zip file, save this, we will input into jobseeker this file.
+You'll find a pyjob.zip file. Use that ZIP for uploaded multi-file jobs, upload a single `.py` file when no extra files need to travel with the job, or use a repository path/Git URL when Jenkins should pull the Python source itself.
 
 ## Creating a jobseeker job
 
 Go to the jobseeker home page, navigate under job management, and click on Job Creation. <br>
-Type in Job Name field "pyjob" <br>
-Description you can type anthing which describes your job,<br>
+Type in Job Name field "pyjob", or leave it blank to let JobSeeker generate one. <br>
+Description is optional.<br>
 Check the box "Execute a windows local command or script"<br>
-Click on the checkbox "I confirm this job is my responsaibility and has my confidence."
-Below at execute a windows command, for Execution strategy, select "Script execution" and for Script Type select "python Script".<br>
-A dropzone box will appear, drag the zip file we just created (pyjob.zip) or click into the dropzone area and upload the file.<br>
+Below at execute a Linux command, for Execution strategy, select "Script execution" and for Script Type select "python Script".<br>
+Choose the Python source: upload a Python `.py`/`.zip`, point to a path under the JobSeeker repository, or enter a Git repository URL and entry Python file.<br>
 
 ![Context](img/context3.JPG)
 
@@ -104,9 +107,7 @@ Below in the "Select an Environment" box, select "PROD".
 
 ### Publishing Job
 
-Click on button "Build XML" <br>
-Click on the checkbox "I confirm this job is my responsaibility and has my confidence." <br>
-Click on the button "Send Job".
+Click on the button "Save Job".
 
 
 ![Context](img/context6.JPG)

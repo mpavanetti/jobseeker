@@ -121,21 +121,25 @@ pre {
                              echo '<span class="label label-warning">Warning</span>';
                              $warning = $warning + 1;
                               break;
+                            case 'cancelled':
+                            case 'Cancelled':
+                             echo '<span class="label label-default">Cancelled</span>';
+                              break;
                           default:
-                              echo $record->status;
+                              echo html_escape($record->status);
                               break;
                         }
                       ?></td>
-                      <td><?php echo $record->job_name ?></td>
-                      <td><?php echo $record->dimension ?></td>
+                          <td><?php echo html_escape($record->job_name); ?></td>
+                          <td><?php echo html_escape($record->dimension); ?></td>
                       <?php  if ($jenkins_enabled == true) { 
                          if($role == 1 || $role == 2) {  ?>
                       <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
-                      <td><?php echo $record->event_text ?></td>
-                      <td><?php echo $record->environment ?></td>
+                      <td><?php echo html_escape($record->event_text); ?></td>
+                      <td><?php echo html_escape($record->environment); ?></td>
                       <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
-                      <td><?php echo $record->records_total ?></td>
-                      <td><?php echo $record->records_processed ?></td>
+                      <td><?php echo (int) $record->records_total; ?></td>
+                      <td><?php echo (int) $record->records_processed; ?></td>
                       <td><?php echo date('m-d-Y H:i:s', strtotime($record->start_time)) ?></td>
                       <td><?php echo date('m-d-Y H:i:s', strtotime($record->last_activity)) ?></td>
                        <td><?php
@@ -146,11 +150,11 @@ pre {
                         ?></td>
                        <td ><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect"> Show Error </a>' : '' ?></td>
                        <td ><?php echo ($record->warnings == 1) ? '<a href="#" class="btn btn-warning">Warning</a>' : '' ?></td>
-                       <td><?php echo $record->hostname ?></td>
-                       <td><?php echo $record->username ?></td>
-                       <td><?php echo $record->instance_id ?></td>
+                         <td><?php echo html_escape($record->hostname); ?></td>
+                         <td><?php echo html_escape($record->username); ?></td>
+                         <td><?php echo html_escape($record->instance_id); ?></td>
                       <?php if($role == 1 || $role == 2) {  ?> <td class="text-center">
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                          <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php
@@ -291,6 +295,48 @@ pre {
 
 });
 
+function escapeHtml(value) {
+  return $('<div>').text(value == null ? '' : value).html();
+}
+
+function renderJobMessage(value) {
+  var raw = value == null ? '' : String(value);
+  if (raw.indexOf('<') === -1) {
+    return '<pre>' + escapeHtml(raw) + '</pre>';
+  }
+
+  var allowedTags = {
+    TABLE: true, THEAD: true, TBODY: true, TFOOT: true, TR: true, TH: true, TD: true,
+    BR: true, P: true, DIV: true, SPAN: true, B: true, STRONG: true, I: true, EM: true,
+    U: true, UL: true, OL: true, LI: true, PRE: true, CODE: true
+  };
+  var removedTags = { SCRIPT: true, STYLE: true, IFRAME: true, OBJECT: true, EMBED: true };
+  var allowedAttrs = { class: true, colspan: true, rowspan: true };
+  var $container = $('<div>').html(raw);
+
+  $container.find('*').each(function() {
+    if (removedTags[this.tagName]) {
+      $(this).remove();
+      return;
+    }
+
+    if (! allowedTags[this.tagName]) {
+      $(this).replaceWith(escapeHtml($(this).text()));
+      return;
+    }
+
+    var node = this;
+    $.each($.makeArray(node.attributes), function(index, attr) {
+      var attrName = attr.name.toLowerCase();
+      if (! allowedAttrs[attrName]) {
+        node.removeAttribute(attr.name);
+      }
+    });
+  });
+
+  return $container.html();
+}
+
   jQuery(document).on("click", ".deleteUser", function(){
     
     var userId = $(this).data("userid"),
@@ -306,9 +352,11 @@ pre {
       data : { userId : userId } 
       }).done(function(data){
        // console.log(data);
-        currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your record has been successfully deleted !'); }
-        else if(data.status = false) { alertify.error("data deletion failed"); }
+        if(data.status === true) {
+          currentRow.parents('tr').remove();
+          alertify.success('Your record has been successfully deleted !');
+        }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
 
@@ -327,11 +375,11 @@ $("#table6").on('click','.cancel',function(){
   var job_name=currentRow.find("td:eq(2)").text();
   var currentRow = $(this);
 
-   alertify.confirm('Job cancelation request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure you want to send a cancelation request to the running job ' + job_name + ' ?</b></p><br></div></div></div>', 
+  alertify.confirm('Job cancelation request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure you want to send a cancelation request to the running job ' + escapeHtml(job_name) + ' ?</b></p><br></div></div></div>',
 
               function(){ 
                  $.ajax({
-                    url: jenkins_url + 'job/'+ job_name + '/lastBuild/stop',
+              url: jenkins_url + 'job/'+ encodeURIComponent(job_name) + '/lastBuild/stop',
                    method: 'POST',
                    async: false,
                    headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
@@ -396,7 +444,7 @@ $("#table6").on('click','.msgSelect',function(){
 
     $.each(listId["data"], function(index, value){
                 // $("#result").append(index + ": " + value.id + '<br>');
-                  $("#modal-main-msg").append('<div class="destroy-msg"><h4>Job Name: <b>' + value.job_name + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ value.instance_id +'</td></tr><tr><td>Job Name</td><td>'+ value.job_name +'</td></tr><tr><td>Message</td><td><pre>'+ value.msg +'</pre></td></tr></tbody></table><br></div>');
+                  $("#modal-main-msg").append('<div class="destroy-msg"><h4>Job Name: <b>' + escapeHtml(value.job_name) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.instance_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name) +'</td></tr><tr><td>Message</td><td><div class="job-message-content">'+ renderJobMessage(value.msg) +'</div></td></tr></tbody></table><br></div>');
                 });
 
   $('#modal-msg').modal('show');
@@ -436,7 +484,7 @@ $("#table6").on('click','.btnSelect',function(){
 
          $.each(ErrorList["data"], function(index, value){
                 // $("#result").append(index + ": " + value.id + '<br>');
-                  $("#modal-main").append('<div class="destroy"><h4>Error Id: <b>' + value.id + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ value.tmf_id +'</td></tr><tr><td>Job Name</td><td>'+ value.job_name +'</td></tr><tr><td>Moment</td><td>'+ moment(value.moment).format('dddd, MMMM Do YYYY, h:mm:ss') +'</td></tr><tr><td>Type</td><td>'+ value.type +'</td></tr><tr><td>Origin</td><td>'+ value.origin +'</td></tr><tr><td>Message</td><td>'+ value.message +'</td></tr></tbody></table><br></div>');
+                  $("#modal-main").append('<div class="destroy"><h4>Error Id: <b>' + escapeHtml(value.id) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.tmf_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name) +'</td></tr><tr><td>Moment</td><td>'+ escapeHtml(moment(value.moment).format('dddd, MMMM Do YYYY, h:mm:ss')) +'</td></tr><tr><td>Type</td><td>'+ escapeHtml(value.type) +'</td></tr><tr><td>Origin</td><td>'+ escapeHtml(value.origin) +'</td></tr><tr><td>Message</td><td>'+ escapeHtml(value.message) +'</td></tr></tbody></table><br></div>');
                 });
 
          $('#modal-danger').modal('show');
@@ -445,10 +493,10 @@ $("#table6").on('click','.btnSelect',function(){
 
 
         // get Jenkins credentials
-    var name = '<?php echo $name; ?>';
+    var name = <?php echo json_encode($name); ?>;
     var jenkins_url = '<?php echo $jenkins_url; ?>';
-    var jenkins_username = '<?php echo $jenkins_username; ?>';
-    var jenkins_token = '<?php echo $jenkins_token; ?>';
+    var jenkins_username = '';
+    var jenkins_token = '';
     var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
       $.ajax({
@@ -473,11 +521,11 @@ $("#table6").on('click','.btnSelect',function(){
          var id=currentRow.find("td:eq(0)").text();
 
 
-         alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + jobName + '</b> ID (' + id +') ? \n \n *Please choose your option with caution.', 
+         alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + escapeHtml(jobName) + '</b> ID (' + escapeHtml(id) +') ? \n \n *Please choose your option with caution.',
           function(){ 
 
              $.ajax({
-          url: jenkins_url + '/job/'+ jobName +'/build',
+         url: jenkins_url + '/job/'+ encodeURIComponent(jobName) +'/build',
           method: 'POST',
           headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {

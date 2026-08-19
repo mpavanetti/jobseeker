@@ -94,8 +94,8 @@
 
         // get Jenkins credentials
         var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
+        var jenkins_username = '';
+        var jenkins_token = '';
         var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
     $.ajax({
@@ -137,9 +137,10 @@
         if(job == '0'){
             toastr.error("Please, Select an avaiable job to execute.", "Error");
         } else {
+             var encodedJob = encodeURIComponent(job);
              $('.overlay').show();
              $.ajax({
-          url: jenkins_url + 'job/'+ job +'/build',
+          url: jenkins_url + 'job/'+ encodedJob +'/build',
           method: 'POST',
           headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
@@ -156,7 +157,7 @@
 
          var timer = setTimeout(function() {    
           $.ajax({
-              url: jenkins_url + 'job/'+ job +'/lastBuild/api/json?pretty=true',
+            url: jenkins_url + 'job/'+ encodedJob +'/lastBuild/api/json?pretty=true',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               beforeSend: function() {
@@ -173,9 +174,8 @@
 
                $('#stop').click(function(){
                   $.ajax({
-                    url: jenkins_url + 'job/'+ job + '/' + data.id + '/stop',
+                    url: jenkins_url + 'job/'+ encodedJob + '/' + encodeURIComponent(data.id) + '/stop',
                     method: 'POST',
-                    async: false,
                     headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
                     beforeSend: function() {
                       toastr.warning("Your Stop Request has been sent to server.", "Request Sent")
@@ -200,7 +200,7 @@
         var info = function() {
 
             $.ajax({
-              url: jenkins_url + 'job/'+ job +'/lastBuild/api/json?pretty=true',
+              url: jenkins_url + 'job/'+ encodedJob +'/lastBuild/api/json?pretty=true',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               beforeSend: function() {
@@ -215,24 +215,24 @@
                    $('#info').append($('<div class="col-xs-12 info animated fadeInLeft"><div id="boxHeader" class="box box-success"><div class="box-header with-border"><div class="box-tools pull-right"><button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i> </button></div><h3 class="box-title"><b>Build Execution Info</b></h3></div><div class="box-body"><table class="table table-striped"><tbody><tr><th style="width: 140px">Summary</th><th>Info</th><th>Progress</th><th style="width: 40px">Label</th></tr><tr><td>Status:</td><td><b><span id="status"> </span></b></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr><tr><td>Building:</td><td><span id="building"> </span></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr><tr><td>Build Id:</td><td><span id="buildId"> </span></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr><tr><td>Queue Id:</td><td><span id="queueId"> </span></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></tr><tr><td>URL:</td><td><span id="url"> </span></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr><tr><td>Description:</td><td><span id="description"></span></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr><tr><td>Display Name:</td><td><span id="name"> </span></td><td><div class="progress progress-xs progress-striped active"><div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr><tr><td>Elapsed Time:</td><td><span id="duration"> </span></td><td><div class="progress progress-xs progress-striped active"> <div class="progress-bar progress-bar-success" style="width: 100%"></div></div></td><td><span class="badge bg-green">100%</span></td></tr></tbody></table></div></div></div>'))
              
 
-               $('#status').html(data.result);
+               $('#status').text(data.result);
                
                if(data.building == false) {
-                $('#building').html("Ready");
+                $('#building').text("Ready");
                }
-               $('#buildId').html(data.id);
-               $('#queueId').html(data.queueId);
-               $('#url').html(data.url);
+               $('#buildId').text(data.id);
+               $('#queueId').text(data.queueId);
+               $('#url').text(data.url);
 
                if(data.description == null){
-                $('#description').html("Empty")
+                $('#description').text("Empty")
                } else {
-                $('#description').html(data.description); 
+                $('#description').text(data.description);
                }
                
 
-               $('#name').html(data.fullDisplayName);
-               $('#duration').html(moment.utc(data.duration).format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]'));
+               $('#name').text(data.fullDisplayName);
+               $('#duration').text(moment.utc(data.duration).format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]'));
             
 
                if(data.result != 'SUCCESS'){
@@ -253,16 +253,15 @@
                $('#repeat').show();
 
                $.ajax({
-              url: jenkins_url + 'job/'+ job +'/lastBuild/consoleText',
+              url: jenkins_url + 'job/'+ encodedJob +'/lastBuild/consoleText',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               beforeSend: function() {
 
             }
             }).done(function(data) {
-
                    $('#console').append($('<div class="col-xs-12 console animated fadeInLeft" style="margin-bottom: 30px;"><div class="box"><div class="box-header with-border"><div class="box-tools pull-right"><button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button></div><h3 class="box-title"><b>Console Log Output</b></h3></div><div class="box-body text-center"><div class="log" style="padding: 10px;"><pre class="text-left" id="write"></pre></div></div></div></div>'));
-                 $('#write').html(data);
+                 $('#write').text(data);
 
                 $('.overlay').fadeOut();
                 $('#gif').fadeOut();
@@ -281,7 +280,7 @@
 
                }
 
-            }).fail(function() {
+                               $('#write').text(data);
               console.error(arguments);
             });
         }

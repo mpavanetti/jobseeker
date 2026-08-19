@@ -177,9 +177,11 @@
       url : hitURL,
       data : { userId : userId } 
       }).done(function(data){
-        currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your Email Template has been successfully deleted !'); }
-        else if(data.status = false) { alertify.error("data deletion failed"); }
+        if(data.status === true) {
+          currentRow.parents('tr').remove();
+          alertify.success('Your Email Template has been successfully deleted !');
+        }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
 
@@ -202,10 +204,10 @@ $("#table4").on('click','.sendEmail',function(){
          // get id row value to select from table
          var id=currentRow.find("td:eq(1)").text();
 
-         // Get email info
+        // Get email info
          var showMail = $.parseJSON($.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>EmailSettings/fetchXsmtp/' + id,
+          url:  '<?php echo base_url(); ?>EmailSettings/fetch/' + id,
             dataType: "json", 
             async: false,
             beforeSend: function() {
@@ -226,25 +228,9 @@ $("#table4").on('click','.sendEmail',function(){
 
 
          // Get all email info
-         var id = showMail[0].id;
-         var name = showMail[0].name;
-         var to = showMail[0].to;
-         var from = showMail[0].from;
-         var cc = showMail[0].cc;
-         var subject = showMail[0].subject;
-         var msg = showMail[0].msg;
-         var enabled = showMail[0].enabled;
-
-         //Get SMTP Info
-         var smtp = showMail[0].smtp;
-         var smtp_host = showMail[0].smtp_host;
-         var smtp_port = showMail[0].smtp_port;
-         var username = showMail[0].username;
-         var password = showMail[0].password;
-         var ssl = showMail[0].ssl;
-
-        
-        var object = {to:to, from:from, cc:cc, subject:subject, msg:msg, smtp:smtp, smtp_host:smtp_host, smtp_port:smtp_port, username:username, password:password, ssl:ssl};
+         var id = showMail["data"][0].id;
+         var name = showMail["data"][0].name;
+         var enabled = showMail["data"][0].enabled;
 
          if (enabled != 0) {
           alertify.confirm('Email Sending Confirmation', 'Are you sure you want to send the email  <b>'+ name + '</b> ?', 
@@ -253,8 +239,8 @@ $("#table4").on('click','.sendEmail',function(){
             $.ajax({    //create an ajax request
               type: "POST",
               url: "EmailSettings/mail/",
-              data: {object: object},             
-              dataType: "html",   //expect html to be returned   
+              data: {id: id},
+              dataType: "json",
               beforeSend: function() {
                 toastr.info('Your email request has been sent to server queue.')
             },
@@ -262,9 +248,12 @@ $("#table4").on('click','.sendEmail',function(){
              alertify.error('Some Error has been occured')
                
               },             
-              success: function(data){ 
-                console.log(data)
-               alertify.success('Your email has been succesfully send !')
+              success: function(data){
+                if (data.status === true) {
+                  alertify.success('Your email has been succesfully send !')
+                } else {
+                  alertify.error(data.message || 'Email sending failed')
+                }
               }
           });
 

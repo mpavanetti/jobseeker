@@ -50,7 +50,7 @@ class JobsTable extends BaseController
         $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
 
         $listJobsJson["data"] = $this->model->listJobs();
-        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+        echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      
     }
@@ -62,7 +62,7 @@ class JobsTable extends BaseController
         $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
 
         $listJobsJson["data"] = $this->model->listJobsName();
-        print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+        echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      
     }
@@ -319,8 +319,8 @@ class JobsTable extends BaseController
                 $file = $this->security->xss_clean($this->input->post('file'));
                 $file_name = $this->input->post('file_name');   
 
-            if( $file_name == '' || $file_name == ' '){
-                $file_name == NULL;
+            if(trim((string) $file_name) === ''){
+                $file_name = NULL;
             }
                      
             // Test if string contains the word 
@@ -353,12 +353,6 @@ class JobsTable extends BaseController
                     'path' => '/repository/talend/input/'.$file_path.'/'.$file_name.$newComponent_Type,
                     'file_uploaded' => 0, 'owner'=>$this->name);
 
-                  if($validateComponent > 0){
-
-                    $this->session->set_flashdata('error', 'Component Input creation failed, The component seems to be already registered, Please choose another fill another value on form.');
-                } else {
-
-                
                 $result = $this->model->editUser($Info, $id);
               
                 
@@ -369,8 +363,6 @@ class JobsTable extends BaseController
                 else
                 {
                     $this->session->set_flashdata('error', 'Job updation failed');
-                }
-                
                 }
                 redirect('JobsTable');
             }
@@ -490,8 +482,8 @@ class JobsTable extends BaseController
                 $file_path = strtolower($this->security->xss_clean($this->input->post('file_path')));
                 $file_name = $this->input->post('file_name');   
 
-            if( $file_name == '' || $file_name == ' '){
-                $file_name == NULL;
+            if(trim((string) $file_name) === ''){
+                $file_name = NULL;
             }
                      
             // Test if string contains the word 
@@ -517,11 +509,6 @@ class JobsTable extends BaseController
                     'path' => '/repository/talend/output/'.$file_path.'/'.$file_name.$component_type,
                     'file_downloaded' => 0, 'owner'=>$this->name);
 
-                 if($validateComponent > 0){
-
-                    $this->session->set_flashdata('error', 'Component Input creation failed, The component seems to be already registered, Please choose another fill another value on form.');
-                } else {
-                
                 $result = $this->model->editOutput($Info, $id);
                 
                 if($result > 0)
@@ -532,7 +519,6 @@ class JobsTable extends BaseController
                 {
                     $this->session->set_flashdata('error', 'Component Input creation failed');
                 }
-            }
                 
                 redirect('JobsTable/editOldOutput');
             }

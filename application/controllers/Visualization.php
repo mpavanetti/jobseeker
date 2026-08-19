@@ -56,7 +56,7 @@ class Visualization extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->model->fetch($id);
-         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
      }
 
      }

@@ -159,17 +159,57 @@ pre {
 
 <script type="text/javascript">
 
+  function buildsFromJenkinsResponse(json) {
+    return json && Array.isArray(json.builds) ? json.builds : [];
+  }
+
+  function destroyDataTable(selector) {
+    if ($.fn.DataTable.isDataTable(selector)) {
+      $(selector).DataTable().clear().destroy();
+    }
+  }
+
+  function reloadFetchTable() {
+    if ($.fn.DataTable.isDataTable('#fetch')) {
+      $('#fetch').DataTable().ajax.reload(null, false);
+    }
+  }
+
+  function renderBuildTime(data) {
+    return data != null && data !== '' ? moment(parseInt(data, 10)).format('MMMM Do YYYY, h:mm:ss a') : '';
+  }
+
+  function renderDuration(data) {
+    return data != null && data !== '' ? moment(parseInt(data, 10)).utc().format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]') : '';
+  }
+
+  function renderText(data) {
+    return data == null ? '' : data;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#039;',
+        '"': '&quot;'
+      }[character];
+    });
+  }
+
   $(document).ready(function(){
 
         // get Jenkins credentials
         var jenkins_url = '<?php echo $jenkins_url; ?>',
-            jenkins_username = '<?php echo $jenkins_username; ?>',
-            jenkins_token = '<?php echo $jenkins_token; ?>',
+          jenkins_username = '',
+          jenkins_token = '',
             jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
         $('#reload').click(function(){
           $('.overlay').show();
-          $('#fetch').DataTable().ajax.reload();
+          reloadFetchTable();
           toastr.info('Refreshing Table rows...','Refreshing ')
           $('.overlay').hide();
         });
@@ -219,50 +259,50 @@ pre {
 
           if(job_name != '' && job_name != null){
             $('.overlay').show();
-            $("#fetch").dataTable().fnDestroy();
+            destroyDataTable('#fetch');
             $('#fetch').DataTable({
               "lengthMenu": [3,5,10,13,20,100,200,500,1000],
               "pageLength": 5,
               "order": [[ 2, "desc" ]],
               "ajax": {
-                "url": jenkins_url +'job/'+ job_name +'/api/json?tree=builds[number,number,fullDisplayName,result,timestamp,duration,url,queueId,building]{'+ minRows +','+maxRows+'}',
+                "url": jenkins_url +'job/'+ encodeURIComponent(job_name) +'/api/json?tree=builds[number,number,fullDisplayName,result,timestamp,duration,url,queueId,building]{'+ minRows +','+maxRows+'}',
                 "type": 'GET',
                 "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-                "dataSrc": "builds",
+                "dataSrc": buildsFromJenkinsResponse,
                 "bDestroy": true
               },
               "columns": [
-              {"data": "fullDisplayName"},
-              {"data": "result"},
-              {"data": "number"},
-              {"data": "timestamp"},
-              {"data": "duration"},
-              {"data": "url"},
-              {"data": "queueId"},
-              {"data": "building"}
+              {"data": "fullDisplayName", "defaultContent": ""},
+              {"data": "result", "defaultContent": ""},
+              {"data": "number", "defaultContent": ""},
+              {"data": "timestamp", "defaultContent": ""},
+              {"data": "duration", "defaultContent": ""},
+              {"data": "url", "defaultContent": ""},
+              {"data": "queueId", "defaultContent": ""},
+              {"data": "building", "defaultContent": ""}
 
               ],
               columnDefs:[{targets:0, render:function(data){
-                if(data != null){return data} else {return ''}
+                return renderText(data);
               }},{targets:1, render:function(data){
                 if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
               }},{targets:2, render:function(data){
                 if(data != null){return '<a class="btn btn-sm btn-info log text-center" href="#" style="margin-left: 20px;" title="Click to check the build console output.">'+ data + '</a>'} else {return ''}
               }},{targets:3, render:function(data){
-                if(data != null){return moment(data).format('MMMM Do YYYY, h:mm:ss a');}else {return '' }
+                return renderBuildTime(data);
               }},{targets:4, render:function(data){
-                if(data != null){return moment(data).utc().format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]');} else {return ''}      
+                return renderDuration(data);
               }},{targets:5, render:function(data){
-                if(data != null){return data} else {return ''}
+                return renderText(data);
               }},{targets:6, render:function(data){
-                if(data != null){return data} else {return ''}
+                return renderText(data);
               }},{targets:7, render:function(data){
-                if(data != null){return data} else {return ''}
+                return renderText(data);
               }}]
           });
 
             $('#box').boxWidget('expand');
-            $('#fetch').DataTable().ajax.reload();
+            reloadFetchTable();
             $('.overlay').hide();
 
           } else {
@@ -281,8 +321,8 @@ $("#fetch").on('click','.log',function(){
 
         // get Jenkins credentials
         var jenkins_url = '<?php echo $jenkins_url; ?>',
-            jenkins_username = '<?php echo $jenkins_username; ?>',
-            jenkins_token = '<?php echo $jenkins_token; ?>',
+          jenkins_username = '',
+          jenkins_token = '',
             jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
 
@@ -295,22 +335,22 @@ $("#fetch").on('click','.log',function(){
              //buildNumber = build.substring(1),
              name = job_name.split("#");
 
-         var log = $.ajax({
+        $.ajax({
             contentType: "application/text",
-            url: jenkins_url + 'job/'+ name[0].trim() +'/'+ build +'/consoleText',
+          url: jenkins_url + 'job/'+ encodeURIComponent(name[0].trim()) +'/'+ encodeURIComponent(build) +'/consoleText',
             method: 'GET',
             headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-            async: false,
             beforeSend: function() {
              $(".overlay").show();
              $(".destroy").remove();
 
             },
             error: function() {
-               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
+            toastr.error("Error during console log query.", "Query Data Error");
             },
-
-            success: function() {
+          success: function(output) {
+              $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(job_name) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
+              $('#modal-default').modal('show');
             },
             complete: function(data) {
                 dateRequest = data;
@@ -318,11 +358,6 @@ $("#fetch").on('click','.log',function(){
             }
 
          });
-           
-                  $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ date +'</td></tr><tr><td>Job Name</td><td>'+ job_name +'</td></tr><tr><td>Status</td><td>'+ result +'</td></tr><tr><td>Console Log</td><td><pre>'+ log.responseText +'</pre></td></tr></tbody></table></div>');
-              
-
-         $('#modal-default').modal('show');
 
     });
 

@@ -14,10 +14,11 @@ class User_model extends CI_Model
         $this->db->from('tbl_users as BaseTbl');
         $this->db->join('tbl_roles as Role', 'Role.roleId = BaseTbl.roleId','left');
         if(!empty($searchText)) {
-            $likeCriteria = "(BaseTbl.email  LIKE '%".$searchText."%'
-                            OR  BaseTbl.name  LIKE '%".$searchText."%'
-                            OR  BaseTbl.mobile  LIKE '%".$searchText."%')";
-            $this->db->where($likeCriteria);
+            $this->db->group_start();
+            $this->db->like('BaseTbl.email', $searchText);
+            $this->db->or_like('BaseTbl.name', $searchText);
+            $this->db->or_like('BaseTbl.mobile', $searchText);
+            $this->db->group_end();
         }
         $this->db->where('BaseTbl.isDeleted', 0);
         $this->db->where('BaseTbl.roleId !=', 1);
@@ -40,10 +41,11 @@ class User_model extends CI_Model
         $this->db->join('tbl_roles as Role', 'Role.roleId = BaseTbl.roleId','left');
         $this->db->join('tbl_groups as Group', 'Group.id = BaseTbl.groupId','left');
         if(!empty($searchText)) {
-            $likeCriteria = "(BaseTbl.email  LIKE '%".$searchText."%'
-                            OR  BaseTbl.name  LIKE '%".$searchText."%'
-                            OR  BaseTbl.mobile  LIKE '%".$searchText."%')";
-            $this->db->where($likeCriteria);
+            $this->db->group_start();
+            $this->db->like('BaseTbl.email', $searchText);
+            $this->db->or_like('BaseTbl.name', $searchText);
+            $this->db->or_like('BaseTbl.mobile', $searchText);
+            $this->db->group_end();
         }
         $this->db->where('BaseTbl.isDeleted', 0);
          $this->db->where('BaseTbl.roleId !=', 1);
@@ -245,16 +247,13 @@ class User_model extends CI_Model
     {
         $this->db->select('BaseTbl.userId, BaseTbl.sessionData, BaseTbl.machineIp, BaseTbl.userAgent, BaseTbl.agentString, BaseTbl.platform, BaseTbl.createdDtm');
         if(!empty($searchText)) {
-            $likeCriteria = "(BaseTbl.sessionData LIKE '%".$searchText."%')";
-            $this->db->where($likeCriteria);
+            $this->db->like('BaseTbl.sessionData', $searchText);
         }
         if(!empty($fromDate)) {
-            $likeCriteria = "DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) >= '".date('Y-m-d', strtotime($fromDate))."'";
-            $this->db->where($likeCriteria);
+            $this->db->where("DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) >=", date('Y-m-d', strtotime($fromDate)));
         }
         if(!empty($toDate)) {
-            $likeCriteria = "DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) <= '".date('Y-m-d', strtotime($toDate))."'";
-            $this->db->where($likeCriteria);
+            $this->db->where("DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) <=", date('Y-m-d', strtotime($toDate)));
         }
         if($userId >= 1){
             $this->db->where('BaseTbl.userId', $userId);
@@ -277,16 +276,13 @@ class User_model extends CI_Model
         $this->db->select('BaseTbl.userId, BaseTbl.sessionData, BaseTbl.machineIp, BaseTbl.userAgent, BaseTbl.agentString, BaseTbl.platform, BaseTbl.createdDtm');
         $this->db->from('tbl_last_login as BaseTbl');
         if(!empty($searchText)) {
-            $likeCriteria = "(BaseTbl.sessionData  LIKE '%".$searchText."%')";
-            $this->db->where($likeCriteria);
+            $this->db->like('BaseTbl.sessionData', $searchText);
         }
         if(!empty($fromDate)) {
-            $likeCriteria = "DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) >= '".date('Y-m-d', strtotime($fromDate))."'";
-            $this->db->where($likeCriteria);
+            $this->db->where("DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) >=", date('Y-m-d', strtotime($fromDate)));
         }
         if(!empty($toDate)) {
-            $likeCriteria = "DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) <= '".date('Y-m-d', strtotime($toDate))."'";
-            $this->db->where($likeCriteria);
+            $this->db->where("DATE_FORMAT(BaseTbl.createdDtm, '%Y-%m-%d' ) <=", date('Y-m-d', strtotime($toDate)));
         }
         if($userId >= 1){
             $this->db->where('BaseTbl.userId', $userId);

@@ -90,7 +90,7 @@ class Tmf extends BaseController
         $errorList["data"] = $this->model->getError($instanceId);
 
         
-          print_r(json_encode($errorList, JSON_PRETTY_PRINT));
+          echo json_encode($errorList, JSON_PRETTY_PRINT);
     }
 
      function listId($id)
@@ -99,7 +99,7 @@ class Tmf extends BaseController
         $list["data"] = $this->model->listId($id);
 
         
-          print_r(json_encode($list, JSON_PRETTY_PRINT));
+          echo json_encode($list, JSON_PRETTY_PRINT);
     }
 
 

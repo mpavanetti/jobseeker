@@ -42,7 +42,7 @@ class Dashboard extends BaseController
 
        $newQuery = json_encode($query,JSON_PRETTY_PRINT);
 
-       print_r($newQuery);
+    echo $newQuery;
 
     }
 
@@ -55,7 +55,7 @@ class Dashboard extends BaseController
 
         $newQuery = json_encode($query,JSON_PRETTY_PRINT);
 
-        print_r($newQuery);
+        echo $newQuery;
 
     }
 
@@ -112,7 +112,7 @@ class Dashboard extends BaseController
 
         );
 
-        print_r(JSON_encode($result, JSON_PRETTY_PRINT));
+        echo json_encode($result, JSON_PRETTY_PRINT);
 
     }
 
@@ -129,7 +129,7 @@ class Dashboard extends BaseController
 
         );
 
-        print_r(JSON_encode($result, JSON_PRETTY_PRINT));
+        echo json_encode($result, JSON_PRETTY_PRINT);
 
     }
 
@@ -161,7 +161,7 @@ class Dashboard extends BaseController
 
         );
 
-        print_r(JSON_encode($result, JSON_PRETTY_PRINT));
+        echo json_encode($result, JSON_PRETTY_PRINT);
 
     }
 

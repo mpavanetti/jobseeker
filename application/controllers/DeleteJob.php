@@ -41,84 +41,58 @@ class DeleteJob extends BaseController
         }
         else
         {
-
-         $jenkins_home = $this->global['jenkins_home'];
-
-         function delete ($system, $job_name, $jenkins_home){
-
-             $result = array();
-             $exist = false;
-
-             if($jenkins_home != ''){
-
-              $storeFolder = $jenkins_home.'/repository/'.$system.'/jobs/'.$job_name;
-
-              if (file_exists($storeFolder)) {
-                $exist = true;
-                $result = array('system' => $system, 'exist' => $exist);
-
-                  function rrmdir($src) {
-                        $dir = opendir($src);
-                        while(false !== ( $file = readdir($dir)) ) {
-                            if (( $file != '.' ) && ( $file != '..' )) {
-                                $full = $src . '/' . $file;
-                                if ( is_dir($full) ) {
-                                    rrmdir($full);
-                                }
-                                else {
-                                    unlink($full);
-                                }
-                            }
-                        }
-                        closedir($dir);
-                        rmdir($src);
-                    }
-
-                    rrmdir($storeFolder);
-              } 
-
-             } else {
-              $storeFolder = 'repository/'.$system.'/jobs/'.$job_name; 
-              if (file_exists($storeFolder)) {
-
-                $exist = true;
-                $result = array('system' => $system, 'exist' => $exist);
-
-                  function rrmdir($src) {
-                        $dir = opendir($src);
-                        while(false !== ( $file = readdir($dir)) ) {
-                            if (( $file != '.' ) && ( $file != '..' )) {
-                                $full = $src . '/' . $file;
-                                if ( is_dir($full) ) {
-                                    rrmdir($full);
-                                }
-                                else {
-                                    unlink($full);
-                                }
-                            }
-                        }
-                        closedir($dir);
-                        rmdir($src);
-                    }
-
-                    rrmdir($storeFolder);
-                    
-                 }
-
-             }
-
-             if(count($result) != 0) {
-                print_r(json_encode($result, JSON_PRETTY_PRINT));
-            }
-
+          $jobName = $this->safePathSegment(rawurldecode($job_name));
+          if ($jobName === FALSE) {
+            $this->output->set_status_header(400)->set_content_type('application/json')->set_output(json_encode(array('exist' => false, 'error' => 'Invalid job name.')));
+            return;
           }
 
-          delete("batch",$job_name, $jenkins_home);
-          delete("bash",$job_name, $jenkins_home);
-          delete("talend",$job_name, $jenkins_home);
-          delete("python",$job_name, $jenkins_home);
+          $deletedSystems = array();
+          foreach (array('batch', 'bash', 'talend', 'python') as $system) {
+            if ($this->deleteRepositoryPath($system, $jobName)) {
+              $deletedSystems[] = $system;
+            }
+          }
+
+          $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode(array('exist' => ! empty($deletedSystems), 'systems' => $deletedSystems), JSON_PRETTY_PRINT));
 
         }
+    }
+
+    private function deleteRepositoryPath($system, $jobName)
+    {
+        $jenkinsHome = $this->global['jenkins_home'];
+        $repositoryRoot = $jenkinsHome != '' ? rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository' : FCPATH.'repository';
+        $jobsRoot = $repositoryRoot.DIRECTORY_SEPARATOR.$system.DIRECTORY_SEPARATOR.'jobs';
+        $targetPath = $jobsRoot.DIRECTORY_SEPARATOR.$jobName;
+
+        if (! $this->pathWithinBase($targetPath, $jobsRoot) || ! is_dir($targetPath)) {
+            return false;
+        }
+
+        return $this->removeDirectory($targetPath);
+    }
+
+    private function removeDirectory($path)
+    {
+        foreach (scandir($path) as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $itemPath = $path.DIRECTORY_SEPARATOR.$item;
+            if (is_dir($itemPath) && ! is_link($itemPath)) {
+                if (! $this->removeDirectory($itemPath)) {
+                    return false;
+                }
+            } elseif (! unlink($itemPath)) {
+                return false;
+            }
+        }
+
+        return rmdir($path);
     }
 
    

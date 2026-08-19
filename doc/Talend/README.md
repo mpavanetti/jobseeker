@@ -122,7 +122,7 @@ Check the option "Add timestamps to the console output" to timestamp time in you
 
 <br><br>
 
-Flag the option "Execute a Windows local command or script" and flag the option "I confirm this job is my responsability and has my confidence" then a new window will show up.<br>
+Flag the option "Execute a Windows local command or script" and a new window will show up.<br>
 For Execution Strategy, select Script Execution and for Type, select "Talend Data Integration Script"<br>
 For the Dropzone,drag and drop the talend build zip file or click to upload the file.
 This is what we have so far:
@@ -138,8 +138,7 @@ we are going to be skipping the "editable email notification" option for now, bu
 
 ![jobcreation](img/create7.JPG)
 
-Finally, click on "Build XML" to build the xml config for us.<br>
-the xml document will be created and now , click again in the flag "I confirm this job is my responsability and has my confidence" and then in the green button "Send Job" to create a jenkins build.
+Finally, click on "Save Job" to create or update the Jenkins build.
 
 ![jobcreation](img/create8.JPG)
 

@@ -1,53 +1,46 @@
-version: "3"
 services:
 
   nginx:
     build:
       context: .
       dockerfile: docker/ngnix_image
-    privileged: true
-    user: root
     ports: 
-      - "80:80"
+      - "80:8080"
     networks:
       - internal
     volumes:
-      - ./adminer:/var/www/html/adminer
       - ./application:/var/www/html/application
       - ./assets:/var/www/html/assets
-      - ./elfinder:/var/www/html/elfinder
-      - ./json:/var/www/html/json
-      - ./serverstatistics:/var/www/html/serverstatistics
       - ./system:/var/www/html/system
       - ./.project:/var/www/html/.project
       - ./index.php:/var/www/html/index.php
-      - ./repository:/php/repository
      # - ./logs/nginx:/var/log/nginx/
-    environment:
-     - GRANT_SUDO=yes
 
   php:
     build:
       context: .
       dockerfile: docker/php_image
-    privileged: true
-    user: root
     networks:
       - internal
     volumes:
-      - ./adminer:/var/www/html/adminer
       - ./application:/var/www/html/application
       - ./assets:/var/www/html/assets
-      - ./elfinder:/var/www/html/elfinder
-      - ./json:/var/www/html/json
-      - ./serverstatistics:/var/www/html/serverstatistics
       - ./system:/var/www/html/system
       - ./.project:/var/www/html/.project
       - ./index.php:/var/www/html/index.php
       - ./repository:/php/repository
       #- ./logs/php.log:/var/log/fpm-php.www.log
     environment:
-      - GRANT_SUDO=yes
+      - CI_ENV=${CI_ENV:-production}
+      - JOBSEEKER_DB_HOST=mariadb
+      - JOBSEEKER_DB_USER=${JOBSEEKER_DB_USER:-mysql}
+      - JOBSEEKER_DB_PASSWORD=${JOBSEEKER_DB_PASSWORD:-mysql}
+      - JOBSEEKER_DB_NAME=${JOBSEEKER_DB_NAME:-jobseeker}
+      - JOBSEEKER_ENCRYPTION_KEY=${JOBSEEKER_ENCRYPTION_KEY:-change-this-local-development-key-before-shared-use}
+      - JOBSEEKER_COOKIE_SECURE=${JOBSEEKER_COOKIE_SECURE:-false}
+      - JOBSEEKER_JENKINS_INTERNAL_URL=http://jenkins:8080/
+      - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
+      - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
 
   mariadb:
     image: mariadb:10.7
@@ -57,10 +50,10 @@ services:
       - "./config/mariadb:/var/lib/mysql"
       - "./db_setup.sql:/docker-entrypoint-initdb.d/1.sql"
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_PASSWORD=mysql
-      - MYSQL_USER=mysql
-      - MYSQL_DATABASE=data
+      - MYSQL_ROOT_PASSWORD=${JOBSEEKER_MYSQL_ROOT_PASSWORD:-root}
+      - MYSQL_PASSWORD=${JOBSEEKER_DB_PASSWORD:-mysql}
+      - MYSQL_USER=${JOBSEEKER_DB_USER:-mysql}
+      - MYSQL_DATABASE=${JOBSEEKER_DB_NAME:-jobseeker}
    # restart: on-failure
     networks:
       - internal
@@ -69,8 +62,6 @@ services:
     build:
       context: .
       dockerfile: docker/jenkins_image
-    privileged: true
-    user: root
     ports:
       - 8080:8080
       - 50000:50000
@@ -80,7 +71,9 @@ services:
     networks:
         - internal
     environment:
-     - GRANT_SUDO=yes
+      - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-jobseeker}
+      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-jobseeker}
+      - JENKINS_NUM_EXECUTORS=${JENKINS_NUM_EXECUTORS:-5}
 
 networks:
   internal:

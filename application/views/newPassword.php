@@ -43,6 +43,7 @@
         <?php } ?>
         
         <form action="<?php echo base_url(); ?>createPasswordUser" method="post">
+          <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
           <div class="form-group has-feedback">
             <input type="email" class="form-control" placeholder="Email" name="email" value="<?php echo $email; ?>" readonly required />
             <span class="glyphicon glyphicon-envelope form-control-feedback"></span>

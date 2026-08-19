@@ -37,6 +37,113 @@
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
+  window.jobseekerCsrf = {
+    name: <?php echo json_encode($this->security->get_csrf_token_name()); ?>,
+    hash: <?php echo json_encode($this->security->get_csrf_hash()); ?>
+  };
+  window.jobseekerJenkinsUrl = <?php echo json_encode($jenkins_url); ?>;
+  window.jobseekerJenkinsProxyUrl = <?php echo json_encode(base_url() . 'jenkins/proxy'); ?>;
+
+  function addJobseekerCsrfToForm(form) {
+    if (! window.jobseekerCsrf || ! window.jobseekerCsrf.name || ! window.jobseekerCsrf.hash) {
+      return;
+    }
+
+    var $form = $(form);
+    if (($form.attr('method') || '').toLowerCase() !== 'post') {
+      return;
+    }
+
+    var selector = 'input[name="' + window.jobseekerCsrf.name + '"]';
+    if ($form.find(selector).length === 0) {
+      $('<input>', { type: 'hidden', name: window.jobseekerCsrf.name, value: window.jobseekerCsrf.hash }).appendTo($form);
+    }
+  }
+
+  function addJobseekerCsrfToForms(root) {
+    $(root).find('form').addBack('form').each(function() {
+      addJobseekerCsrfToForm(this);
+    });
+  }
+
+  function appendJobseekerCsrfToUrl(url) {
+    var separator = url.indexOf('?') === -1 ? '?' : '&';
+    return url + separator + encodeURIComponent(window.jobseekerCsrf.name) + '=' + encodeURIComponent(window.jobseekerCsrf.hash);
+  }
+
+  function addJobseekerCsrfToAjax(options) {
+    var method = (options.type || options.method || 'GET').toUpperCase();
+    if ($.inArray(method, ['GET', 'HEAD', 'OPTIONS', 'TRACE']) !== -1 || ! window.jobseekerCsrf) {
+      return;
+    }
+
+    if (window.FormData && options.data instanceof FormData) {
+      if (! options.data.has(window.jobseekerCsrf.name)) {
+        options.data.append(window.jobseekerCsrf.name, window.jobseekerCsrf.hash);
+      }
+      return;
+    }
+
+    if (typeof options.data === 'string') {
+      if (options.data.indexOf(encodeURIComponent(window.jobseekerCsrf.name) + '=') === -1 && options.data.indexOf(window.jobseekerCsrf.name + '=') === -1) {
+        options.data += (options.data.length ? '&' : '') + encodeURIComponent(window.jobseekerCsrf.name) + '=' + encodeURIComponent(window.jobseekerCsrf.hash);
+      }
+      return;
+    }
+
+    if ($.isPlainObject(options.data)) {
+      options.data[window.jobseekerCsrf.name] = window.jobseekerCsrf.hash;
+      return;
+    }
+
+    options.data = encodeURIComponent(window.jobseekerCsrf.name) + '=' + encodeURIComponent(window.jobseekerCsrf.hash);
+  }
+
+  $.ajaxPrefilter(function(options) {
+    var jenkinsUrl = window.jobseekerJenkinsUrl || '';
+
+    if (typeof options.url !== 'string') {
+      return;
+    }
+
+    var normalizedUrl = jenkinsUrl.charAt(jenkinsUrl.length - 1) === '/' ? jenkinsUrl : jenkinsUrl + '/';
+
+    if (jenkinsUrl && options.url.indexOf(normalizedUrl) === 0) {
+      options.url = window.jobseekerJenkinsProxyUrl + '?path=' + encodeURIComponent(options.url.substring(normalizedUrl.length));
+
+      var method = (options.type || options.method || 'GET').toUpperCase();
+      if ($.inArray(method, ['GET', 'HEAD', 'OPTIONS', 'TRACE']) === -1 && window.jobseekerCsrf) {
+        options.url = appendJobseekerCsrfToUrl(options.url);
+      }
+
+      if (options.headers) {
+        delete options.headers.Authorization;
+        delete options.headers.authorization;
+      }
+      return;
+    }
+
+    addJobseekerCsrfToAjax(options);
+  });
+
+  $(function() {
+    addJobseekerCsrfToForms(document);
+    $(document).on('submit', 'form', function() {
+      addJobseekerCsrfToForm(this);
+    });
+
+    if (window.MutationObserver) {
+      new MutationObserver(function(mutations) {
+        $.each(mutations, function(index, mutation) {
+          $.each(mutation.addedNodes, function(nodeIndex, node) {
+            if (node.nodeType === 1) {
+              addJobseekerCsrfToForms(node);
+            }
+          });
+        });
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+  });
 </script>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
@@ -103,7 +210,7 @@
             <li class="dropdown user user-menu">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown">
                 <img src="<?php echo base_url(); ?>assets/dist/img/avatar.png" class="user-image" alt="User Image"/>
-                <span class="hidden-xs"><?php echo $name; ?></span>
+                <span class="hidden-xs"><?php echo html_escape($name); ?></span>
               </a>
               <ul class="dropdown-menu">
                 <!-- User image -->
@@ -111,8 +218,8 @@
 
                   <img src="<?php echo base_url(); ?>assets/dist/img/avatar.png" class="img-circle" alt="User Image" />
                   <p>
-                    <?php echo $name; ?>
-                    <small><?php echo $role_text; ?></small>
+                    <?php echo html_escape($name); ?>
+                    <small><?php echo html_escape($role_text); ?></small>
                   </p>
 
                 </li>
@@ -158,9 +265,9 @@
                   {
                     ?>
                     <li>
-                      <a href="<?php echo base_url(); ?>Visualization/view/<?php echo $record->report ?>" >
+                      <a href="<?php echo base_url(); ?>Visualization/view/<?php echo rawurlencode($record->report); ?>" >
                         <i class="fa fa-dashboard"></i>
-                        <span><?php echo $record->report ?></span>
+                        <span><?php echo html_escape($record->report); ?></span>
                       </a>
                     </li>
                     <?php

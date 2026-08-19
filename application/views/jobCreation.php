@@ -92,6 +92,7 @@
               <th>Build Situation</th>
             <th>Job Name</th>
             <th>Url</th>
+            <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -101,6 +102,7 @@
             <th>Build Situation</th>
             <th>Job Name</th>
             <th>Url</th>
+            <th>Actions</th>
           </tr>
         </tfoot>
       </table>
@@ -112,8 +114,13 @@
 <!-- /.col -->
 </div>
 <!-- /.row -->
-
-
+<?php $this->load->helper("form"); ?>
+<form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post">
+<div class="alert alert-info editJobBanner" style="display: none;">
+  <i class="fa fa-pencil"></i>
+  Editing <b class="editJobName"></b>. Saving will update this Jenkins job unless you change the job name.
+  <button type="button" id="clearEditJob" class="btn btn-default btn-xs pull-right"><i class="fa fa-plus"></i> New Job</button>
+</div>
 <div class="row">
   <div class="col-lg-6 col-md-6 col-xs-12">
     <div class="box box-primary" style="padding-bottom: 15px;">
@@ -129,24 +136,17 @@
       </div>
 
       <!-- /.box-header -->
-      <!-- form start -->
-      <?php $this->load->helper("form"); ?>
-      <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post" role="form">
+      <!-- input fields -->
         <div class="box-body" style="padding-top: 15px;">
           <div class="form-group">
             <label for="exampleInputEmail1">Job Name</label>
-            <input type="text" name ="job_name" class="form-control" id="job_name" placeholder="Enter Job name" onkeypress="return event.charCode != 32">
+            <input type="text" name ="job_name" class="form-control" id="job_name" maxlength="50" placeholder="Auto-generated if empty" onkeypress="return event.charCode != 32">
           </div>
           <div class="form-group" style="padding-top: 5px;">
             <div class="form-group">
               <label for="description">Description</label>
-              <textarea class="form-control" id="description" value="" name="description" maxlength="500" rows="5" required></textarea>
+              <textarea class="form-control" id="description" value="" name="description" maxlength="500" rows="5"></textarea>
             </div>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="confirmation" id="confirmation" value="1"> I <b>Confirm</b> this job is my responsability and has my confidence.
-            </label>
           </div>
         </div>
         <!-- /.box-body -->
@@ -163,7 +163,7 @@
             <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
             </button>
           </div>
-          <h3 class="box-title"><b>Options Control Panel</b></h3> 
+          <h3 class="box-title"><b>Job Options</b></h3>
         </div>
         <!-- /.box-header -->
         <!-- form start -->
@@ -218,14 +218,10 @@
           </div>
           <div class="form-group" style="margin-top: 20px;">
             <div class="form-group">
-              <button type="submit" id="send" href="#" class="btn btn-warning buildXmlBtn"> Build XML</button>
-              <?php  
-              $xml = $this->session->flashdata('xml');
-              if($xml)
-              {
-                ?>
-                <a href="#" class="btn btn-success send"><i class="fa fa-save"></i> Send Job</a>
-              <?php } ?>
+              <input type="hidden" name="trigger_after_save" id="trigger_after_save" value="0">
+              <button type="submit" id="send" href="#" class="btn btn-success buildXmlBtn"><i class="fa fa-save"></i> Save Job</button>
+              <button type="submit" id="saveAndTrigger" class="btn btn-primary buildXmlBtn"><i class="fa fa-play"></i> Save And Trigger</button>
+              <span class="saveJobStatus text-muted" style="display: none; margin-left: 10px;"></span>
             </div>
           </div>
         </div>
@@ -328,6 +324,46 @@
                             <option value="talend">Talend Data Integration Script</option>
                             <option value="python">Python Script</option>
                           </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="row pythonSourceForm" style="display: none;">
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="pythonSourceMode">Python Source</label>
+                          <select class="form-control" id="pythonSourceMode" name="pythonSourceMode">
+                            <option value="upload" selected>Uploaded File or Archive</option>
+                            <option value="path">Repository Path</option>
+                            <option value="git">Git Repository URL</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="col-md-8">
+                        <div class="form-group">
+                          <label for="pythonEntryPoint">Entry Python File</label>
+                          <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" placeholder="main.py">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="row pythonPathSourceForm" style="display: none;">
+                      <div class="col-md-12">
+                        <div class="form-group">
+                          <label for="pythonSourcePath">Repository Path</label>
+                          <input type="text" class="form-control" id="pythonSourcePath" name="pythonSourcePath" maxlength="1000" autocomplete="off" placeholder="python/jobs/my-job or /php/repository/python/jobs/my-job">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="row pythonGitSourceForm" style="display: none;">
+                      <div class="col-md-8">
+                        <div class="form-group">
+                          <label for="pythonRepositoryUrl">Git Repository URL</label>
+                          <input type="text" class="form-control" id="pythonRepositoryUrl" name="pythonRepositoryUrl" maxlength="1000" autocomplete="off" placeholder="https://github.com/org/project.git">
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="pythonRepositoryBranch">Branch or Tag</label>
+                          <input type="text" class="form-control" id="pythonRepositoryBranch" name="pythonRepositoryBranch" maxlength="200" autocomplete="off" placeholder="main">
                         </div>
                       </div>
                     </div>
@@ -784,13 +820,16 @@
               </div>
             </div>
             <!-- Close and column for Job Execution Area and Editable Email Notification -->
-
-
-          </form> <!-- Close Form -->
         </div>
+      </form> <!-- Close Form -->
         <div id="output"></div>
 
-        <div class="row">
+        <?php
+        $xml = $this->session->flashdata('xml');
+        if($xml)
+        {
+        ?>
+        <div class="row generatedXmlPanel">
           <div class="col-lg-12 col-md-12 col-xs-12">
             <div class="box">
               <div class="box-header with-border">
@@ -798,19 +837,10 @@
                   <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
                   </button>
                 </div>
-                <h3 class="box-title"><b>XML Document</b></h3> 
+                <h3 class="box-title"><b>Generated Jenkins XML</b></h3>
               </div>
               <div class="box-body">
-                <div>
-                 <?php  
-                 $xml = $this->session->flashdata('xml');
-                 if($xml)
-                 {
-                  ?>
-                  <div>
-                    <pre id="xml" class="xml"><?php echo $this->session->flashdata('xml'); ?> </pre>
-                  </div>
-                <?php } ?>
+                <pre id="xml" class="xml"><?php echo $xml; ?> </pre>
               </div>
               <div class="overlay" style="display:none;">
                 <i class="fa fa-refresh fa-spin"></i>
@@ -818,10 +848,10 @@
             </div>
           </div>
         </div>
-      </div>
+        <?php } ?>
     </div>
-    </section>
-  </div>
+  </section>
+</div>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.js"></script>
   <script type="text/javascript">
@@ -836,24 +866,508 @@
       var validator = addUserForm.validate({
 
         rules:{
-          job_name :{ required : true },
-          confirmation :{ required : true },
-          description :{ required : true },
-          timeoutMinutes :{ required : true }
+          job_name :{ maxlength : 50 },
+          description :{ maxlength : 500 }
         },
         messages:{
-          job_name :{ required : "This field is required" },
-          confirmation :{ required : "This field is required" },        
-          description :{ required : "This field is required" }, 
-          timeoutMinutes :{ required : "This field is required" }          
+          job_name :{ maxlength : "Job name can contain up to 50 characters" },
+          description :{ maxlength : "Description can contain up to 500 characters" }
+        }
+      });
+
+      $('#send').click(function(){
+        $('#trigger_after_save').val('0');
+      });
+
+      $('#saveAndTrigger').click(function(){
+        $('#trigger_after_save').val('1');
+      });
+
+      var petNamePrefixes = ['milo', 'luna', 'piper', 'nova', 'ruby', 'jasper', 'olive', 'cosmo'];
+      var petNameSuffixes = ['sunny', 'maple', 'pixel', 'river', 'coco', 'sage', 'mango', 'ember'];
+      var singleEveryMinuteAcknowledged = false;
+      var repetitiveEveryMinuteAcknowledged = false;
+
+      function randomJobNameToken() {
+        return ('000' + Math.floor(Math.random() * 46656).toString(36)).slice(-3);
+      }
+
+      function generateJobName() {
+        var prefix = petNamePrefixes[Math.floor(Math.random() * petNamePrefixes.length)];
+        var suffix = petNameSuffixes[Math.floor(Math.random() * petNameSuffixes.length)];
+
+        return prefix + '-' + suffix + '-' + randomJobNameToken();
+      }
+
+      function ensureJobName() {
+        var jobName = $.trim($('#job_name').val());
+
+        if (jobName == '') {
+          jobName = generateJobName();
+          $('#job_name').val(jobName);
+          toastr.info('Generated job name: ' + jobName, 'Job Name');
+        }
+
+        return jobName;
+      }
+
+      function updatePythonSourceControls() {
+        var isPythonScript = $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python';
+        var sourceMode = $('#pythonSourceMode').val() || 'upload';
+
+        $('.pythonSourceForm').toggle(isPythonScript);
+        $('.pythonPathSourceForm').toggle(isPythonScript && sourceMode == 'path');
+        $('.pythonGitSourceForm').toggle(isPythonScript && sourceMode == 'git');
+
+        if (! isPythonScript || sourceMode != 'upload') {
+          $('.linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+        }
+      }
+
+      $('#pythonSourceMode').change(function() {
+        updatePythonSourceControls();
+        if ($('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python' && $('#pythonSourceMode').val() == 'upload') {
+          $('#linuxScriptType').trigger('change');
         }
       });
 
      // get Jenkins credentials
      var jenkins_url = '<?php echo $jenkins_url; ?>';
-     var jenkins_username = '<?php echo $jenkins_username; ?>';
-     var jenkins_token = '<?php echo $jenkins_token; ?>';
+    var jenkins_username = '';
+    var jenkins_token = '';
      var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';    
+
+     function escapeHtml(value) {
+      return $('<div>').text(value == null ? '' : value).html();
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function firstXmlElement(xmlDoc, tagName, root) {
+      var elements = (root || xmlDoc).getElementsByTagName(tagName);
+      return elements.length ? elements[0] : null;
+    }
+
+    function firstXmlText(xmlDoc, tagName, root) {
+      var element = firstXmlElement(xmlDoc, tagName, root);
+      return element ? $.trim(element.textContent || '') : '';
+    }
+
+    function ensureSelectOption(selector, value) {
+      if (value == null || value === '') {
+        return;
+      }
+
+      var select = $(selector);
+      var exists = select.find('option').filter(function() {
+        return this.value == value;
+      }).length > 0;
+
+      if (!exists) {
+        select.append($('<option>', { value: value, text: value }));
+      }
+    }
+
+    function setSelectValue(selector, value) {
+      ensureSelectOption(selector, value);
+      $(selector).val(value).trigger('change');
+    }
+
+    function setSelectValues(selector, values) {
+      values = $.grep(values || [], function(value) {
+        return value != null && value !== '';
+      });
+
+      $.each(values, function(index, value) {
+        ensureSelectOption(selector, value);
+      });
+
+      $(selector).val(values).trigger('change');
+    }
+
+    function cronValues(value) {
+      return $.grep(($.trim(value || '')).split(','), function(part) {
+        return part !== '';
+      });
+    }
+
+    function resetJobCreationForm() {
+      var form = $('#InsertDbSettings')[0];
+      if (form) {
+        form.reset();
+      }
+
+      $('#trigger_after_save').val('0');
+      $('.editJobBanner').hide();
+      $('.editJobName').text('');
+      $('.saveJobStatus').hide().text('');
+      $('.select2').val(null).trigger('change');
+      $('#action').val('0');
+      $('#linuxExecutionStrategy').val('0');
+      $('#linuxScriptType').val('0');
+      $('#executionStrategy').val('0');
+      $('#scriptType').val('0');
+      $('.singleForm, .repetitive, .tags, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonPathSourceForm, .pythonGitSourceForm, #enableEmail, #abortIfStuck, #runJob, #environmentBox, #editableEmail').hide();
+      $('#timeoutMinutes, #timeoutSeconds, #environment').prop('required', false);
+      $('.destroyDropzone').remove();
+    }
+
+    function showEditBanner(jobName) {
+      $('.editJobName').text(jobName);
+      $('.editJobBanner').show();
+    }
+
+    function hydrateSchedule(xmlDoc) {
+      var spec = firstXmlText(xmlDoc, 'spec');
+
+      if (spec === '') {
+        $('#checkBuild').prop('checked', false);
+        $('#build').hide();
+        return;
+      }
+
+      $('#checkBuild').prop('checked', true);
+      $('#build').show();
+
+      if (spec.charAt(0) == '@') {
+        setSelectValue('#action', 'tags');
+        setSelectValue('#tag', spec);
+        $('.tags').show();
+        $('.singleForm, .repetitive').hide();
+        return;
+      }
+
+      var parts = spec.split(/\s+/);
+      if (parts.length < 5) {
+        return;
+      }
+
+      if (/^H\/\d+$/.test(parts[0])) {
+        setSelectValue('#action', 'repetitive');
+        setSelectValue('#repetitiveMinute', parts[0].replace('H/', ''));
+        setSelectValue('#repetitiveHour', parts[1]);
+        setSelectValue('#repetitiveDayOfMonth', parts[2]);
+        setSelectValue('#repetitiveMonth', parts[3]);
+        setSelectValue('#repetitiveDayOfWeek', parts[4]);
+        $('.repetitive').show();
+        $('.singleForm, .tags').hide();
+        return;
+      }
+
+      setSelectValue('#action', 'single');
+      setSelectValues('#singleMinute', cronValues(parts[0]));
+      setSelectValues('#singleHour', cronValues(parts[1]));
+      setSelectValues('#singleDayOfMonth', cronValues(parts[2]));
+      setSelectValues('#singleMonth', cronValues(parts[3]));
+      setSelectValues('#singleDayOfWeek', cronValues(parts[4]));
+      $('.singleForm').show();
+      $('.repetitive, .tags').hide();
+    }
+
+    function unquoteShellValue(value) {
+      value = $.trim(value || '');
+      if (value.length >= 2 && value.charAt(0) == "'" && value.charAt(value.length - 1) == "'") {
+        return value.substring(1, value.length - 1).replace(/'\\''/g, "'");
+      }
+
+      if (value.length >= 2 && value.charAt(0) == '"' && value.charAt(value.length - 1) == '"') {
+        return value.substring(1, value.length - 1);
+      }
+
+      return value;
+    }
+
+    function shellExportValue(command, variableName) {
+      var prefix = 'export ' + variableName + '=';
+      var lines = command.split(/\r?\n/);
+
+      for (var index = 0; index < lines.length; index++) {
+        if (lines[index].indexOf(prefix) === 0) {
+          return unquoteShellValue(lines[index].substring(prefix.length));
+        }
+      }
+
+      return '';
+    }
+
+    function relativeScriptPath(sourceDirectory, scriptPath) {
+      if (sourceDirectory !== '' && scriptPath.indexOf(sourceDirectory + '/') === 0) {
+        return scriptPath.substring(sourceDirectory.length + 1);
+      }
+
+      return scriptPath.split('/').pop();
+    }
+
+    function loadEnvironmentOptions(selectedEnvironment) {
+      selectedEnvironment = selectedEnvironment || '';
+
+      $('.env option').remove();
+      $('.env').append($('<option>', {
+        value: 0,
+        text: "Please, select an option"
+      }));
+
+      if (selectedEnvironment !== '') {
+        setSelectValue('#environment', selectedEnvironment);
+      }
+
+      return $.ajax({
+        type: "GET",
+        url: "<?php echo base_url(); ?>Context/fetchEnvironments",
+        dataType: "html",
+        beforeSend: function(){
+          $('.overlay').fadeIn();
+        },
+        success: function(data){
+          var json = JSON.parse(data);
+
+          $('.env option').remove();
+          $('.env').append($('<option>', {
+            value: 0,
+            text: "Please, select an option"
+          }));
+
+          $.each(json["data"], function(i, item) {
+            var newJson = item.Environment;
+
+            $('.env').append($('<option>', {
+              value: newJson,
+              text: newJson
+            }));
+          });
+
+          if (selectedEnvironment !== '') {
+            setSelectValue('#environment', selectedEnvironment);
+          }
+
+          $('.overlay').fadeOut();
+        },
+        error: function(arguments){
+          toastr.error('Fail to fetch environments data' + arguments, 'Error to Fech Data')
+          $('.overlay').fadeOut();
+        }
+      });
+    }
+
+    function showEnvironmentEditor(selectedEnvironment) {
+      $('#checkEnvironment').prop('checked', true);
+      $('#environmentBox').show();
+      $('#environment').prop('required', true);
+      loadEnvironmentOptions(selectedEnvironment);
+    }
+
+    function hydrateEnvironmentFromPythonCommand(command) {
+      var runLine = '';
+      var lines = command.split(/\r?\n/);
+
+      $.each(lines, function(index, line) {
+        if ($.trim(line).indexOf('python3 "$JOBSEEKER_SCRIPT_PATH"') === 0) {
+          runLine = $.trim(line);
+        }
+      });
+
+      var match = runLine.match(/^python3 "\$JOBSEEKER_SCRIPT_PATH"\s+(.+)$/);
+      if (!match) {
+        return;
+      }
+
+      var environment = unquoteShellValue(match[1]);
+      if (environment !== '') {
+        showEnvironmentEditor(environment);
+      }
+    }
+
+    function hydratePythonCommand(jobName, command) {
+      $('#linuxCommand').prop('checked', true);
+      $('#runlinuxCommand').show();
+      setSelectValue('#linuxExecutionStrategy', 'script');
+      $('.linuxScriptTypeForm').show();
+      $('.linuxCommandForm').hide();
+      setSelectValue('#linuxScriptType', 'python');
+      $('.pythonSourceForm').show();
+
+      var cloneLine = '';
+      $.each(command.split(/\r?\n/), function(index, line) {
+        if (line.indexOf('git clone --depth 1') === 0) {
+          cloneLine = line;
+        }
+      });
+
+      if (cloneLine !== '') {
+        var branchMatch = cloneLine.match(/--branch '([^']+)'/);
+        var urlMatch = cloneLine.match(/'([^']+)' "\$WORKSPACE\/jobseeker-python-source"$/);
+        setSelectValue('#pythonSourceMode', 'git');
+        $('#pythonRepositoryUrl').val(urlMatch ? urlMatch[1] : '');
+        $('#pythonRepositoryBranch').val(branchMatch ? branchMatch[1] : '');
+        $('#pythonEntryPoint').val(shellExportValue(command, 'JOBSEEKER_ENTRYPOINT'));
+        $('.pythonGitSourceForm').show();
+        $('.pythonPathSourceForm, .linuxUploadScript').hide();
+        hydrateEnvironmentFromPythonCommand(command);
+        return;
+      }
+
+      var sourceDirectory = shellExportValue(command, 'JOBSEEKER_SOURCE_DIR');
+      var scriptPath = shellExportValue(command, 'JOBSEEKER_SCRIPT_PATH');
+      var entryPoint = relativeScriptPath(sourceDirectory, scriptPath);
+      var uploadPath = '/python/jobs/' + jobName;
+
+      if (sourceDirectory.indexOf(uploadPath) !== -1) {
+        setSelectValue('#pythonSourceMode', 'upload');
+        $('#pythonEntryPoint').val(entryPoint);
+        $('.linuxUploadScript').show();
+        $('.pythonPathSourceForm, .pythonGitSourceForm').hide();
+      } else {
+        setSelectValue('#pythonSourceMode', 'path');
+        $('#pythonSourcePath').val(sourceDirectory);
+        $('#pythonEntryPoint').val(entryPoint);
+        $('.pythonPathSourceForm').show();
+        $('.pythonGitSourceForm, .linuxUploadScript').hide();
+      }
+
+      hydrateEnvironmentFromPythonCommand(command);
+    }
+
+    function hydrateBuilders(xmlDoc, jobName) {
+      var shell = firstXmlElement(xmlDoc, 'hudson.tasks.Shell');
+      var batch = firstXmlElement(xmlDoc, 'hudson.tasks.BatchFile');
+
+      if (shell) {
+        var shellCommand = firstXmlText(xmlDoc, 'command', shell);
+        if (shellCommand.indexOf('JOBSEEKER_SCRIPT_PATH') !== -1) {
+          hydratePythonCommand(jobName, shellCommand);
+        } else if ($.trim(shellCommand).indexOf('sh ') === 0) {
+          $('#linuxCommand').prop('checked', true);
+          $('#runlinuxCommand').show();
+          setSelectValue('#linuxExecutionStrategy', 'script');
+          $('.linuxScriptTypeForm').show();
+          $('.linuxCommandForm').hide();
+          setSelectValue('#linuxScriptType', 'bash');
+        } else if (shellCommand !== '') {
+          $('#linuxCommand').prop('checked', true);
+          $('#runlinuxCommand').show();
+          setSelectValue('#linuxExecutionStrategy', 'command');
+          $('.linuxCommandForm').show();
+          $('.linuxScriptTypeForm, .pythonSourceForm, .linuxUploadScript').hide();
+          $('#linuxCommandLine').val(shellCommand);
+        }
+      }
+
+      if (batch) {
+        var batchCommand = firstXmlText(xmlDoc, 'command', batch);
+        $('#winCommand').prop('checked', true);
+        $('#runWinCommand').show();
+        setSelectValue('#executionStrategy', 'command');
+        $('.windowsCommandForm').show();
+        $('.scriptTypeForm, .uploadScript').hide();
+        $('#windowsCommandLine').val(batchCommand);
+      }
+    }
+
+    function hydratePublishers(xmlDoc) {
+      var mailer = firstXmlElement(xmlDoc, 'hudson.tasks.Mailer');
+      if (mailer) {
+        $('#emailCheck').prop('checked', true);
+        $('#enableEmail').show();
+        $('#recipients').val(firstXmlText(xmlDoc, 'recipients', mailer));
+      }
+
+      var buildTrigger = firstXmlElement(xmlDoc, 'hudson.tasks.BuildTrigger');
+      if (buildTrigger) {
+        var childProjects = $.map(firstXmlText(xmlDoc, 'childProjects', buildTrigger).split(','), function(value) {
+          return $.trim(value);
+        });
+        $('#runJobCheck').prop('checked', true);
+        $('#runJob').show();
+        setSelectValues('#jobList', childProjects);
+
+        var threshold = firstXmlElement(xmlDoc, 'threshold', buildTrigger);
+        var thresholdName = firstXmlText(xmlDoc, 'name', threshold);
+        $('input[name="optionsRadios"][value="' + (thresholdName == 'FAILURE' ? '2' : '1') + '"]').prop('checked', true);
+      }
+
+      if (firstXmlElement(xmlDoc, 'hudson.plugins.emailext.ExtendedEmailPublisher')) {
+        toastr.warning('Editable email templates cannot be restored from Jenkins XML. Select templates again before saving if you want to keep editable email notifications.', 'Edit Job');
+      }
+    }
+
+    function hydrateBuildWrappers(xmlDoc) {
+      $('#timestamp').prop('checked', !!firstXmlElement(xmlDoc, 'hudson.plugins.timestamper.TimestamperBuildWrapper'));
+
+      var timeoutWrapper = firstXmlElement(xmlDoc, 'hudson.plugins.build__timeout.BuildTimeoutWrapper');
+      if (!timeoutWrapper) {
+        return;
+      }
+
+      $('#abort').prop('checked', true);
+      $('#abortIfStuck').show();
+      var strategy = firstXmlElement(xmlDoc, 'strategy', timeoutWrapper);
+      var strategyClass = strategy ? strategy.getAttribute('class') || '' : '';
+
+      if (strategyClass.indexOf('AbsoluteTimeOutStrategy') !== -1) {
+        setSelectValue('#timeoutStrategy', 'absolute');
+        $('#timeoutMinutes').val(firstXmlText(xmlDoc, 'timeoutMinutes', timeoutWrapper)).prop('required', true);
+        $('.timeoutMinutes').show();
+        $('.timeoutSeconds').hide();
+      } else {
+        setSelectValue('#timeoutStrategy', 'noActivity');
+        $('#timeoutSeconds').val(firstXmlText(xmlDoc, 'timeoutSecondsString', timeoutWrapper)).prop('required', true);
+        $('.timeoutSeconds').show();
+        $('.timeoutMinutes').hide();
+      }
+    }
+
+    function hydrateJobFormFromXml(jobName, xmlText) {
+      var xmlDoc = $.parseXML(xmlText);
+
+      resetJobCreationForm();
+      $('#job_name').val(jobName);
+      $('#description').val(firstXmlText(xmlDoc, 'description'));
+      hydrateSchedule(xmlDoc);
+      hydrateBuilders(xmlDoc, jobName);
+      hydratePublishers(xmlDoc);
+      hydrateBuildWrappers(xmlDoc);
+      showEditBanner(jobName);
+
+      toastr.info('Loaded ' + jobName + ' for editing.', 'Edit Job');
+      $('html, body').animate({ scrollTop: $('#InsertDbSettings').offset().top - 70 }, 300);
+    }
+
+    function loadJobForEdit(jobName) {
+      setSaveJobState(true, 'Loading job...');
+      $('.overlay').fadeIn();
+
+      $.ajax({
+        url: jenkins_url + jenkinsJobPath(jobName) + '/config.xml',
+        method: 'GET',
+        dataType: 'text',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      }).done(function(xmlText) {
+        try {
+          hydrateJobFormFromXml(jobName, xmlText);
+        } catch (error) {
+          console.error(error);
+          toastr.error('Unable to read this job configuration.', 'Edit Job');
+        }
+      }).fail(function() {
+        console.error(arguments);
+        toastr.error('Unable to load this job from Jenkins.', 'Edit Job');
+      }).always(function() {
+        $('.overlay').fadeOut();
+        setSaveJobState(false, '');
+      });
+    }
+
+    $('#clearEditJob').click(function() {
+      resetJobCreationForm();
+      toastr.info('Ready to create a new job.', 'New Job');
+    });
+
+    $('#myTable').on('click', '.editJob', function() {
+      loadJobForEdit($(this).data('job'));
+    });
 
      // Logic for editable email notification
 
@@ -979,16 +1493,19 @@
             var job_name = $('#job_name').val();
 
             if (val != 0) {
-              if($("#confirmation").is(":checked")){
+              job_name = ensureJobName();
+
                 if(job_name != '' && job_name != null){
-                  $('.uploadScript').fadeIn();
+                  var acceptedFiles = val == 'python' ? ".py,.zip" : ".zip";
+                  var uploadMessage = val == 'python' ? "Drop Python .py or .zip files here or click to upload." : "Drop zip files here or click to upload.";
+                  $('.uploadScript').show();
                   $('.destroyDropzone').remove();
-                  $('#windowsColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
+                  $('#windowsColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>' + uploadMessage + '</b></h3><BR></DIV></form></DIV>'));
 
                   $("#mydropzone").dropzone({
                     maxFiles: 1,
-                    acceptedFiles: ".zip",
-                    url: "<?php echo base_url(); ?>jobCreation/do_upload/" + val + "/" +job_name,
+                    acceptedFiles: acceptedFiles,
+                    url: "<?php echo base_url(); ?>jobCreation/do_upload/" + encodeURIComponent(val) + "/" + encodeURIComponent(job_name),
                     maxFilesize: 100,
                     sending: function () {
                       toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
@@ -1013,10 +1530,6 @@
                   toastr.error("Please Select a job name to upload the file", "File Upload Error")
                   $("#scriptType").val(0);
                 }
-              } else {
-                toastr.error("Please review your request and confirm the checkbox", "File Upload Error")
-                $("#scriptType").val(0);
-              }
 
             } else {
               $('.uploadScript').fadeOut();
@@ -1059,6 +1572,7 @@
               $('.destroyDropzone').remove();
               $('.linuxCommandForm').fadeIn();
               $("#linuxScriptType").val(0);
+              updatePythonSourceControls();
 
             // If the option is to execute a linux script then  
           } else if(val == 'script' && val != 0) {
@@ -1070,18 +1584,28 @@
                 var val = $('#linuxScriptType').val();
                 var job_name = $('#job_name').val();
                 console.log(job_name);
+                updatePythonSourceControls();
 
                 if (val != 0) {
-                  if($("#confirmation").is(":checked")){
+                  job_name = ensureJobName();
+
                     if(job_name != '' && job_name != null){
-                      $('.linuxUploadScript').fadeIn();
+                      if (val == 'python' && $('#pythonSourceMode').val() != 'upload') {
+                        $('.linuxUploadScript').fadeOut();
+                        $('.destroyDropzone').remove();
+                        return;
+                      }
+
+                      var acceptedFiles = val == 'python' ? ".py,.zip" : ".zip";
+                      var uploadMessage = val == 'python' ? "Drop Python .py or .zip files here or click to upload." : "Drop zip files here or click to upload.";
+                      $('.linuxUploadScript').show();
                       $('.destroyDropzone').remove();
-                      $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>Drop zip files here or click to upload.</b></h3><BR></DIV></form></DIV>'));
+                      $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>' + uploadMessage + '</b></h3><BR></DIV></form></DIV>'));
 
                       $("#mydropzone").dropzone({
                         maxFiles: 1,
-                        acceptedFiles: ".zip",
-                        url: "<?php echo base_url(); ?>jobCreation/do_upload/" + val + "/" +job_name,
+                        acceptedFiles: acceptedFiles,
+                        url: "<?php echo base_url(); ?>jobCreation/do_upload/" + encodeURIComponent(val) + "/" + encodeURIComponent(job_name),
                         maxFilesize: 100,
                         sending: function () {
                           toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
@@ -1106,10 +1630,6 @@
                       toastr.error("Please Select a job name to upload the file", "File Upload Error");
                       $("#linuxScriptType").val(0);
                     }
-                  } else {
-                    toastr.error("Please review your request and confirm the checkbox", "File Upload Error");
-                    $("#linuxScriptType").val(0);
-                  }
 
                 } else {
                   $('.linuxUploadScript').fadeOut();
@@ -1122,6 +1642,7 @@
           } else if(val == 0){
             $('.linuxScriptTypeForm').fadeOut();
             $('.linuxCommandForm').fadeOut();
+            updatePythonSourceControls();
           }
         });
 
@@ -1157,16 +1678,16 @@
               var singleDayOfWeek = $('#singleDayOfWeek').val();
               var action = $('#action').val();
 
-              if($('#confirmation').is(":not(:checked)") && action != 0 && val == 'single') {
+              if(!singleEveryMinuteAcknowledged && action != 0 && val == 'single') {
                 if (singleMinute == '*' && singleHour == '*' && singleDayOfMonth == '*' && singleMonth == '*' && singleDayOfWeek == '*' && val == 'single' && $("#checkBuild").is(":checked")){
                   alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
                     function(){ 
                      alertify.success('You has agreeded with your choice, be careful !');
-                     $("#confirmation"). prop("checked", true);
+                     singleEveryMinuteAcknowledged = true;
                    }, 
                    function(){ 
                     alertify.error('Operation Aborted');
-                    $("#confirmation"). prop("checked", false);
+                    singleEveryMinuteAcknowledged = false;
                   }
                   );
                 }
@@ -1187,16 +1708,16 @@
               var repetitiveDayOfWeek = $('#repetitiveDayOfWeek').val();
               var action = $('#action').val();
 
-              if($('#confirmation').is(":not(:checked)") && action != 0 && val == 'repetitive') {
+              if(!repetitiveEveryMinuteAcknowledged && action != 0 && val == 'repetitive') {
                 if (repetitiveMinute == '*' && repetitiveHour == '*' && repetitiveDayOfMonth == '*' && repetitiveMonth == '*' && repetitiveDayOfWeek == '*' && val == 'repetitive' && $("#checkBuild").is(":checked")){
                   alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
                     function(){ 
                      alertify.success('You has agreeded with your choice, be careful !');
-                     $("#confirmation"). prop("checked", true);
+                     repetitiveEveryMinuteAcknowledged = true;
                    }, 
                    function(){ 
                     alertify.error('Operation Aborted');
-                    $("#confirmation"). prop("checked", false);
+                    repetitiveEveryMinuteAcknowledged = false;
                   }
                   );
                 }
@@ -1222,10 +1743,16 @@
     });
 
 $('#abort').click(function(){
+  function updateTimeoutRequiredFields() {
+    var isAbsolute = $('#timeoutStrategy').val() == 'absolute';
+    $('#timeoutMinutes').prop('required', isAbsolute);
+    $('#timeoutSeconds').prop('required', !isAbsolute);
+  }
+
   if($(this).is(":checked")){
 
     $('#abortIfStuck').fadeIn();
-    $("#timeoutMinutes").prop('required',true);
+    updateTimeoutRequiredFields();
 
     $('#timeoutStrategy').change(function(){
       var val = $('#timeoutStrategy').val();
@@ -1237,11 +1764,14 @@ $('#abort').click(function(){
         $('.timeoutSeconds').fadeIn();
         $('.timeoutMinutes').fadeOut();
       }
+      updateTimeoutRequiredFields();
     });
 
   }
   else if($(this).is(":not(:checked)")){
     $('#abortIfStuck').fadeOut();
+    $('#timeoutMinutes').prop('required', false);
+    $('#timeoutSeconds').prop('required', false);
   }
 });
 
@@ -1250,39 +1780,7 @@ $('#checkEnvironment').click(function(){
 
     $('#environmentBox').fadeIn();
     $("#environment").prop('required',true);
-
-    $('.env option').remove();
-      $('.env').append($('<option>', {
-                value: 0,
-                text: "Please, select an option"
-                }))
-
-    $.ajax({    //create an ajax request
-        type: "GET",
-        url: "<?php echo base_url(); ?>Context/fetchEnvironments",             
-        dataType: "html",    
-        beforeSend: function(){
-          $('.overlay').fadeIn();
-        },
-        success: function(data){  
-          var json = JSON.parse(data);  
-
-           $.each(json["data"], function(i, item) {
-            var newJson = (json["data"][i].Environment);
-
-            $('.env').append($('<option>', {
-                value: newJson,
-                text: newJson
-                }))
-             })
-           $('.overlay').fadeOut();
-        },
-        error: function(arguments){
-          toastr.error('Fail to fetch environments data' + arguments, 'Error to Fech Data')
-          $('.overlay').fadeOut();
-        }
-
-    });  
+    loadEnvironmentOptions($('#environment').val() != '0' ? $('#environment').val() : '');
 
   }
   else if($(this).is(":not(:checked)")){
@@ -1291,60 +1789,114 @@ $('#checkEnvironment').click(function(){
 });
 
 
-  // Starts when click on build job button
-  $('.send').click(function() {
-    // Check if the confirmation checkbox is marked
-    if($('#confirmation').is(":checked")){ // confirmation is maked
-     var job_name = "<?php echo $this->session->flashdata('job_name'); ?>";
-     console.log(job_name);
-     var xml = $('#xml').text();
-
-
-        //Ajax request to post the xml to jenkins api
-        $.ajax({
-          url: jenkins_url + 'createItem?name='+ job_name ,
-          data: xml, 
-          method: 'POST',
-          contentType: "text/xml",
-          dataType: "text",
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-          beforeSend: function() {
-            $('.overlay').fadeIn();
-
-            $('#input-form').each (function(){
-              this.reset();
-            });
-          }
-        }).done(function(data) {
-          $('.overlay').fadeOut();
-          
-          toastr.success("Your job has been successfully created.", "Job Created");
-          $("#confirmation"). prop("checked", false);
-          $('#myTable').DataTable().ajax.reload();
-          $('#box').boxWidget('expand');
-
-        }).fail(function() {
-          $('.overlay').fadeOut();
-          console.error(arguments);
-          toastr.error("Your Job Creation Request Has Been Failed", "Request Error")
-        });
-
-        $('.send').remove();
-        $('.xml').remove();
-        $('.destroy').remove();
-
-        $('#input-form').each (function(){
-          this.reset();
-        });
-
-
-
-    // Confirmation box is not checked
-  } else if($('#confirmation').is(":not(:checked)")){ // confirmation is not marked
-    toastr.error("Checkbox is unchecked.");
+  function jenkinsJobPath(jobName) {
+    return 'job/' + encodeURIComponent(jobName);
   }
-  
-});  
+
+  function setSaveJobState(isSaving, message) {
+    $('.buildXmlBtn').prop('disabled', isSaving);
+    $('.saveJobStatus').text(message || '').toggle(!!message);
+  }
+
+  function refreshJobTable() {
+    if ($.fn.DataTable.isDataTable('#myTable')) {
+      $('#myTable').DataTable().ajax.reload(null, false);
+    } else {
+      loadTable();
+    }
+    $('#box').boxWidget('expand');
+  }
+
+  function saveJenkinsConfig(jobName, xml, isUpdate) {
+    return $.ajax({
+      url: isUpdate ? jenkins_url + jenkinsJobPath(jobName) + '/config.xml' : jenkins_url + 'createItem?name=' + encodeURIComponent(jobName),
+      data: xml,
+      method: 'POST',
+      contentType: 'text/xml',
+      dataType: 'text',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+    });
+  }
+
+  function triggerJenkinsJob(jobName) {
+    return $.ajax({
+      url: jenkins_url + jenkinsJobPath(jobName) + '/build',
+      method: 'POST',
+      dataType: 'text',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+    });
+  }
+
+  function completeGeneratedJobSave(jobName, isUpdate, triggerAfterSave) {
+    toastr.success('Your job has been successfully ' + (isUpdate ? 'updated' : 'created') + '.', isUpdate ? 'Job Updated' : 'Job Created');
+    refreshJobTable();
+    $('.generatedXmlPanel').remove();
+
+    if (!triggerAfterSave) {
+      $('.overlay').fadeOut();
+      setSaveJobState(false, '');
+      return;
+    }
+
+    setSaveJobState(true, 'Triggering job...');
+    triggerJenkinsJob(jobName).done(function() {
+      toastr.success('Your job has been triggered.', 'Job Triggered');
+    }).fail(function() {
+      console.error(arguments);
+      toastr.error('The job was saved, but the trigger request failed.', 'Trigger Error');
+    }).always(function() {
+      $('.overlay').fadeOut();
+      setSaveJobState(false, '');
+    });
+  }
+
+  function saveGeneratedJob() {
+    var jobName = <?php echo json_encode($this->session->flashdata('job_name')); ?>;
+    var triggerAfterSave = <?php echo json_encode($this->session->flashdata('trigger_after_save') == '1'); ?>;
+    var xml = $('#xml').text();
+
+    if (!jobName || !xml) {
+      return;
+    }
+
+    setSaveJobState(true, 'Saving job...');
+    $('.overlay').fadeIn();
+
+    $.ajax({
+      url: jenkins_url + jenkinsJobPath(jobName) + '/api/json',
+      method: 'GET',
+      dataType: 'json',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+    }).done(function() {
+      saveJenkinsConfig(jobName, xml, true).done(function() {
+        completeGeneratedJobSave(jobName, true, triggerAfterSave);
+      }).fail(function() {
+        console.error(arguments);
+        toastr.error('Your Job Update Request Has Failed', 'Request Error');
+        $('.overlay').fadeOut();
+        setSaveJobState(false, '');
+      });
+    }).fail(function(response) {
+      if (response.status == 404) {
+        saveJenkinsConfig(jobName, xml, false).done(function() {
+          completeGeneratedJobSave(jobName, false, triggerAfterSave);
+        }).fail(function() {
+          console.error(arguments);
+          toastr.error('Your Job Creation Request Has Failed', 'Request Error');
+          $('.overlay').fadeOut();
+          setSaveJobState(false, '');
+        });
+        return;
+      }
+
+      $('.overlay').fadeOut();
+      setSaveJobState(false, '');
+      console.error(arguments);
+      toastr.error('Unable to check whether this job already exists.', 'Request Error');
+    });
+  }
+
+  saveGeneratedJob();
 
   Dropzone.autoDiscover = false;
 
@@ -1364,7 +1916,8 @@ function loadTable () {
           "columns": [
           {"data": "color"},
           {"data": "name"},
-          {"data": "url"}
+          {"data": "url"},
+          {"data": "name"}
           ],
           columnDefs:[{targets:0, render:function(data){
             if(data != null){
@@ -1378,6 +1931,8 @@ function loadTable () {
                  return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/loading.gif">';
               }
             } else {return ''}
+          }}, {targets:3, orderable:false, searchable:false, render:function(data){
+            return '<button type="button" class="btn btn-info btn-xs editJob" data-job="' + escapeAttribute(data) + '"><i class="fa fa-pencil"></i> Edit</button>';
           }}]
        });
   $(".overlay").hide();  

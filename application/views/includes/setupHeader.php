@@ -30,6 +30,32 @@
   <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
   <script type="text/javascript">
    var baseURL = "<?php echo base_url(); ?>";
+   window.jobseekerCsrf = {
+     name: <?php echo json_encode($this->security->get_csrf_token_name()); ?>,
+     hash: <?php echo json_encode($this->security->get_csrf_hash()); ?>
+   };
+
+   $(function() {
+     $('form[method="post"], form[method="POST"]').each(function() {
+       if ($(this).find('input[name="' + window.jobseekerCsrf.name + '"]').length === 0) {
+         $('<input>', { type: 'hidden', name: window.jobseekerCsrf.name, value: window.jobseekerCsrf.hash }).appendTo($(this));
+       }
+     });
+
+     $.ajaxPrefilter(function(options) {
+       var method = (options.type || options.method || 'GET').toUpperCase();
+       if ($.inArray(method, ['GET', 'HEAD', 'OPTIONS', 'TRACE']) !== -1) {
+         return;
+       }
+
+       if (typeof options.data === 'string') {
+         options.data += (options.data.length ? '&' : '') + encodeURIComponent(window.jobseekerCsrf.name) + '=' + encodeURIComponent(window.jobseekerCsrf.hash);
+       } else {
+         options.data = options.data || {};
+         options.data[window.jobseekerCsrf.name] = window.jobseekerCsrf.hash;
+       }
+     });
+   });
   </script>
 </head>
 

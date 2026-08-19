@@ -59,6 +59,7 @@ $route['translate_uri_dashes'] = FALSE;
 
 $route['loginMe'] = 'login/loginMe';
 $route['dashboard'] = 'Dashboard';
+$route['jenkins/proxy'] = 'JenkinsProxy/proxy';
 $route['logout'] = 'user/logout';
 $route['userListing'] = 'user/userListing';
 $route['userListing/(:num)'] = "user/userListing/$1";
@@ -88,6 +89,7 @@ $route['resetPasswordConfirmUser'] = "login/resetPasswordConfirmUser";
 $route['resetPasswordConfirmUser/(:any)'] = "login/resetPasswordConfirmUser/$1";
 $route['resetPasswordConfirmUser/(:any)/(:any)'] = "login/resetPasswordConfirmUser/$1/$2";
 $route['createPasswordUser'] = "login/createPasswordUser";
+$route['setup/testJenkinsApi'] = "Setup/testJenkinsApi";
 
 #Input and Output Settings
 

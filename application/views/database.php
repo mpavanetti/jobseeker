@@ -1,21 +1,10 @@
-<style>
-    body {
-      margin: 0;
-    }
-    iframe {
-      height:calc(89vh - 4px);
-      width:calc(100vw - 4px);
-      box-sizing: border-box;
-    }
-</style>
-<script>
-	$(document).ready(function(){
-
-		$('body').addClass('sidebar-collapse');
-
-	});
-	
-</script>
-<div class="content-wrapper">   
-      <iframe src="<?php echo base_url() ?>adminer/" frameborder="0" allowfullscreen></iframe>
+<div class="content-wrapper">
+  <section class="content-header">
+    <h1>Database Manager</h1>
+  </section>
+  <section class="content">
+    <div class="alert alert-warning">
+      The bundled database manager is disabled in this Docker runtime. Use a dedicated, authenticated database administration tool outside the public JobSeeker web root.
+    </div>
+  </section>
 </div>
