@@ -37,14 +37,13 @@ class Setup extends BaseController
 
         $this->global['pageTitle'] = 'Setup Wizard : Jenkins';
 
-        $loadJson = file_get_contents('/var/www/html/application/config/config.json');
-        $jsonToArray = json_decode($loadJson);
+        $jsonToArray = $this->getRuntimeConfig();
         $data = array();
 
         $data['jenkins_enabled'] = $jsonToArray->jenkins->enabled;
         $data['jenkins_url'] = $jsonToArray->jenkins->url;
-        $data['jenkins_username'] = $jsonToArray->jenkins->username;
-        $data['jenkins_token'] = $jsonToArray->jenkins->token;
+        $data['jenkins_username'] = '';
+        $data['jenkins_token'] = '';
         $data['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
         $data['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
         
@@ -56,17 +55,18 @@ class Setup extends BaseController
         $this->global['pageTitle'] = 'Setup Wizard : Jenkins';
 
         $jenkins = $this->input->post('jenkins');
-        $username = $this->input->post('username');
-        $token = $this->input->post('token');
-        $auth = $this->input->post('auth');
-        $home = $this->input->post('home');
-        $url = $this->input->post('url');
-        $port = $this->input->post('port');
+        $username = trim($this->input->post('username'));
+        $token = trim($this->input->post('token'));
+        $auth = trim($this->input->post('auth'));
+        $home = trim($this->input->post('home'));
+        $host = trim($this->input->post('url'));
+        $port = (int) $this->input->post('port');
+        $jenkinsEnabled = ($jenkins == "true");
 
         $file = array(
            'jenkins' => array(
-            'enabled' => true,
-            'url' => 'http://'.$url.':'.$port.'/',
+            'enabled' => $jenkinsEnabled,
+            'url' => 'http://'.$host.':'.$port.'/',
             'username' => $username,
             'token' => $token,
             'authorization' => $auth,
@@ -78,15 +78,19 @@ class Setup extends BaseController
            ) 
         );
 
-        print_r($file);
-        echo '<Br><hr><Br>';
-
         // Validate if selected using jenkins = true
-        if ($jenkins == "true") {
+        if ($jenkinsEnabled) {
             $connected = false;
+            $connectionError = '';
 
             // Test connection with given url and port
-            if($socket =@ fsockopen('tcp://'.$host, $port, $errno, $errstr, 30)) {
+            set_error_handler(function($severity, $message) use (&$connectionError) {
+                $connectionError = $message;
+            });
+            $socket = fsockopen($host, $port, $errno, $errstr, 10);
+            restore_error_handler();
+
+            if($socket) {
                 $connected = true;
                 fclose($socket);
                 } else {
@@ -98,14 +102,33 @@ class Setup extends BaseController
                  redirect('setup/jenkins');
             } else {
 
-               $fp = fopen('application/config/config.json', 'w');
-                fwrite($fp, json_encode($file,JSON_PRETTY_PRINT));
-                fclose($fp);
+                if (file_put_contents(JOBSEEKER_CONFIG_PATH, json_encode($file, JSON_PRETTY_PRINT), LOCK_EX) === FALSE) {
+                    $this->session->set_flashdata('error', '<b>Config File Error</b>, Unable to write the Jenkins configuration file.');
+                    redirect('setup/jenkins');
+                }
               $this->session->set_flashdata('success', '<b>Config File Written</b>, The given information has been written to system config file, now able to consume jenkins api.');
                  redirect('Setup/jenkins');  
-            }      
+            }
+        } else {
+            if (file_put_contents(JOBSEEKER_CONFIG_PATH, json_encode($file, JSON_PRETTY_PRINT), LOCK_EX) === FALSE) {
+                $this->session->set_flashdata('error', '<b>Config File Error</b>, Unable to write the Jenkins configuration file.');
+                redirect('setup/jenkins');
+            }
+
+            $this->session->set_flashdata('success', '<b>Config File Written</b>, Jenkins integration is disabled.');
+            redirect('setup/env');
         }
      }
+
+     public function testJenkinsApi()
+    {
+        $response = $this->requestJenkins('GET', 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true');
+
+        $this->output
+            ->set_status_header($response['status'])
+            ->set_content_type($response['content_type'])
+            ->set_output($response['body']);
+    }
 
      public function env()
     {

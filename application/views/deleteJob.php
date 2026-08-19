@@ -91,16 +91,11 @@ $(document).ready(function(){
 
     $("#deleteRepoCheck"). prop("checked", true);
 
-      // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+        var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
 
     $.ajax({
           url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
           method: 'GET',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
            
             $('.overlay').show();
@@ -108,7 +103,7 @@ $(document).ready(function(){
         }).done(function(data) {
 
            $.each(data["jobs"], function (key, item) {
-                newJson = item.name;
+          var newJson = item.name;
                 $('.selector').append($('<option>', {
                 value: newJson,
                 text: newJson
@@ -123,14 +118,12 @@ $(document).ready(function(){
 
 });
 
-$('#deleteJob').click(function(){
-    // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+$('#deleteJob').click(function(event){
+  event.preventDefault();
+    var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
 
     var job = $('#deleteJobSelect').val();
+  var encodedJob = encodeURIComponent(job);
 
     if(job != 0 ){
 
@@ -138,9 +131,8 @@ $('#deleteJob').click(function(){
       function(){ 
        
          $.ajax({
-          url: jenkins_url + 'job/'+ job + '/doDelete',
+          url: jenkins_url + 'job/'+ encodedJob + '/doDelete',
           method: 'POST',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
            
             $('.overlay').show();
@@ -149,8 +141,8 @@ $('#deleteJob').click(function(){
 
              toastr.success('Your job has ben successfully deleted !', 'Job Successfully Deleted');
            $('.overlay').hide();
-           $('#deleteJobSelect').find('[value="'+job+'"]').remove();
-           $('#deleteRepoSelect').find('[value="'+job+'"]').remove();
+           $('#deleteJobSelect option').filter(function() { return this.value === job; }).remove();
+           $('#deleteRepoSelect option').filter(function() { return this.value === job; }).remove();
 
         },
         error: function(){
@@ -164,20 +156,18 @@ $('#deleteJob').click(function(){
             console.log("Delete Repo Selected")
 
             $.ajax({
-          url: '<?php echo base_url(); ?>DeleteJob/deleteRepository/' + job ,
+       url: '<?php echo base_url(); ?>DeleteJob/deleteRepository/' + encodedJob,
           method: 'POST',
+       dataType: 'json',
           beforeSend: function() {
            
             $('.overlay').show();
         },
         success: function(data) {
-             if(data != '' && data != value) {
-                var value = JSON.parse(data);
-                if (value.exist == true) {
-                toastr.info('It has found ' + value.system + ' files inside the job repository', 'Repository Found');
+         if(data && data.exist == true) {
+           toastr.info('It has found files inside the job repository: ' + data.systems.join(', '), 'Repository Found');
                 toastr.success('Your Repository and files has been succesfully Deleted.', 'Repository Successfully Deleted');
-                $('#deleteRepoSelect').find('[value="'+job+'"]').remove();
-                }
+                 $('#deleteRepoSelect option').filter(function() { return this.value === job; }).remove();
              } else {
                 toastr.warning('It has not found any available repository to delete.', 'No Repository found');
              }
@@ -206,31 +196,24 @@ $('#deleteJob').click(function(){
 
 });
 
-$('#delRepoBtn').click(function(){
-    // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
-
+$('#delRepoBtn').click(function(event){
+  event.preventDefault();
     var job = $('#deleteRepoSelect').val();
     if(job != 0){
 
 
          $.ajax({
-          url: '<?php echo base_url(); ?>DeleteJob/deleteRepository/' + job ,
+         url: '<?php echo base_url(); ?>DeleteJob/deleteRepository/' + encodeURIComponent(job),
           method: 'POST',
+         dataType: 'json',
           beforeSend: function() {
            
             $('.overlay').show();
         },
         success: function(data) {
-             if(data != '' && data != value) {
-                var value = JSON.parse(data);
-                if (value.exist == true) {
-                toastr.info('It has found ' + value.system + ' files inside the job repository', 'Repository Found');
+           if(data && data.exist == true) {
+             toastr.info('It has found files inside the job repository: ' + data.systems.join(', '), 'Repository Found');
                 toastr.success('Your Repository and files has been succesfully Deleted.', 'Repository Successfully Deleted');
-                }
              } else {
                 toastr.warning('It has not found any available repository to delete.', 'No Repository found');
              }

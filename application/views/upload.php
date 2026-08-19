@@ -363,7 +363,7 @@
               $("#mydropzone").dropzone({
                       maxFiles: 20000,
                       acceptedFiles: type,
-                      url: "<?php echo base_url(); ?>upload/do_upload/",
+                      url: "<?php echo base_url(); ?>upload/do_upload/" + encodeURIComponent(name) + "/" + encodeURIComponent(component) + "/" + encodeURIComponent(kind),
 
                      accept: function(file, done) {
                     if(fileType == 2){

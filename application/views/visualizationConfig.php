@@ -227,14 +227,14 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->id ?></td>
+                      <td><?php echo (int) $record->id; ?></td>
                       <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
-                        <td><?php echo $record->name ?></td>
-                        <td><?php echo $record->type ?></td>
-                        <td><?php echo $record->users ?></td>
-                        <td><?php echo $record->groups ?></td>
+                        <td><?php echo html_escape($record->name); ?></td>
+                        <td><?php echo html_escape($record->type); ?></td>
+                        <td><?php echo html_escape($record->users); ?></td>
+                        <td><?php echo html_escape($record->groups); ?></td>
                         <td class="text-center show"><a href="#" class="btn btn-sm btn-info">Check</a></td>
-                        <td><?php echo $record->owner ?></td>
+                        <td><?php echo html_escape($record->owner); ?></td>
                        <?php if($role != 1) {  ?> <td>
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
@@ -327,9 +327,11 @@
       data : { userId : userId } 
       }).done(function(data){
         console.log(data);
-        currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your Record has been successfully deleted !'); }
-        else if(data.status = false) { alertify.error("data deletion failed"); }
+        if(data.status === true) {
+          currentRow.parents('tr').remove();
+          alertify.success('Your Record has been successfully deleted !');
+        }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
 

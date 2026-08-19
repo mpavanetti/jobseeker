@@ -4,14 +4,13 @@ FROM jenkins/jenkins:lts
 USER root
 WORKDIR /var/jenkins_home/
 RUN mkdir /var/jenkins_files/ && chown -R jenkins /var/jenkins_files
-RUN apt-get update
-
 
 # Install python dependencies
-RUN apt-get install -y python3-pip
-RUN pip install --upgrade pip --break-system-packages
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends python3-pip \
+	&& rm -rf /var/lib/apt/lists/*
 COPY docker/jenkins/requirements.txt /var/jenkins_files/
-RUN pip install --no-cache-dir --break-system-packages -r /var/jenkins_files/requirements.txt
+RUN python3 -m pip install --no-cache-dir --break-system-packages -r /var/jenkins_files/requirements.txt
 
 # Set jenkins configurations.
 USER jenkins

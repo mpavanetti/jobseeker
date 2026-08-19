@@ -11,7 +11,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | of this setting
 |
 */
-defined('SHOW_DEBUG_BACKTRACE') OR define('SHOW_DEBUG_BACKTRACE', TRUE);
+defined('SHOW_DEBUG_BACKTRACE') OR define('SHOW_DEBUG_BACKTRACE', FALSE);
 
 /*
 |--------------------------------------------------------------------------
@@ -92,6 +92,7 @@ define('ROLE_MANAGER',                         	'2');
 define('ROLE_EMPLOYEE',                         '3');
 
 define('SEGMENT',								2);
+defined('JOBSEEKER_CONFIG_PATH') OR define('JOBSEEKER_CONFIG_PATH', APPPATH . 'config/config.json');
 
 /************************** EMAIL CONSTANTS *****************************/
 

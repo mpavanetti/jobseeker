@@ -4,6 +4,90 @@
   });
 </script>
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.css">
+<style type="text/css">
+  .dashboard-jenkins-panel {
+    border: 1px solid #dbe3eb;
+    border-left: 4px solid #587c9f;
+    box-shadow: 0 1px 2px rgba(31, 45, 61, 0.06);
+  }
+
+  .dashboard-jenkins-panel .box-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-jenkins-title {
+    color: #2f4054;
+    font-weight: 600;
+    margin: 0 0 3px;
+  }
+
+  .dashboard-jenkins-detail {
+    color: #66727f;
+    margin: 0;
+  }
+
+  .dashboard-jenkins-stats {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-jenkins-stat {
+    min-width: 108px;
+  }
+
+  .dashboard-jenkins-stat strong {
+    display: block;
+    color: #2f4054;
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .dashboard-jenkins-stat span {
+    color: #66727f;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  .dashboard-status-row .small-box {
+    border: 1px solid #dbe3eb;
+    box-shadow: 0 1px 2px rgba(31, 45, 61, 0.06);
+    color: #2f4054 !important;
+  }
+
+  .dashboard-status-row .small-box .icon {
+    color: rgba(47, 64, 84, 0.16);
+  }
+
+  .dashboard-status-row .small-box-footer {
+    background: rgba(255, 255, 255, 0.55) !important;
+    color: #44627d !important;
+  }
+
+  .dashboard-status-row .bg-aqua {
+    background: #eaf3f8 !important;
+  }
+
+  .dashboard-status-row .bg-green {
+    background: #eaf4ef !important;
+  }
+
+  .dashboard-status-row .bg-yellow {
+    background: #f7f0e4 !important;
+  }
+
+  .dashboard-status-row .bg-red {
+    background: #f8e8e5 !important;
+  }
+
+  .dashboard-chart-panel canvas {
+    max-width: 100%;
+  }
+</style>
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->
     <section class="content-header">
@@ -28,23 +112,36 @@
       <div class="container">
 
       <div class="row">
-        <div class="col-lg-12 col-xs-12">
-          <div class="box box-solid" style="padding: 10px; box-shadow: 10px 10px 5px -4px rgba(0,0,0,0.75);">
-            <div class="text-center">
-              <h4>Welcome <b><?php echo $name; ?></b> You're a <b><?php echo $role_text ?></b> user and today is <b><?php echo date("Y-m-d"); ?></b> at <b><?php echo date("h:i:sa"); ?></b></h4>
+        <div class="col-xs-12">
+          <div class="box box-solid dashboard-jenkins-panel">
+            <div class="box-body">
+              <div>
+                <h4 class="dashboard-jenkins-title"><i class="fa fa-server"></i> Jenkins Live</h4>
+                <p class="dashboard-jenkins-detail" id="dashboardJenkinsDetail">Loading Jenkins state...</p>
+              </div>
+              <div class="dashboard-jenkins-stats">
+                <div class="dashboard-jenkins-stat">
+                  <strong id="dashboardJenkinsCapacity">--</strong>
+                  <span>Executors Busy</span>
+                </div>
+                <div class="dashboard-jenkins-stat">
+                  <strong id="dashboardJenkinsQueue">--</strong>
+                  <span>Queued Builds</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-        <div class="row">
+        <div class="row dashboard-status-row">
             <div class="col-lg-3 col-xs-6">
               <!-- small box -->
               <div class="small-box bg-aqua running animated">
 
                 <div class="inner">
                  <span id="running"><h3></h3></span>
-                  <p>Running Jobs</p>
+                  <p>Running Entries</p>
                 </div>
                 <div class="icon">
                   <i class="fa fa-refresh"></i>
@@ -59,7 +156,7 @@
               <div class="small-box bg-green ready animated">
                 <div class="inner">
                   <h3 id="ready"></h3>
-                  <p>Ready Jobs</p>
+                  <p>Ready Entries</p>
                 </div>
                 <div class="icon">
                   <i class="fa fa-check-square-o"></i>
@@ -72,7 +169,7 @@
               <div class="small-box bg-yellow warning animated">
                 <div class="inner">
                   <h3 id="warning"></h3>
-                  <p>Warning Jobs</p>
+                  <p>Warning Entries</p>
                 </div>
                 <div class="icon">
                   <i class="fa fa-warning"></i>
@@ -85,7 +182,7 @@
               <div class="small-box bg-red error animated">
                 <div class="inner">
                   <h3 id="error"></h3>
-                  <p>Error Jobs</p>
+                  <p>Error Entries</p>
                 </div>
                 <div class="icon">
                   <i class="fa fa-thumbs-o-down"></i>
@@ -128,11 +225,11 @@
                 <!-- /.col -->
                 <div class="col-md-4">
                   <p class="text-center">
-                    <strong>Jobs status amount per total</strong>
+                    <strong>TMF status distribution</strong>
                   </p>
 
                   <div class="progress-group runningGraph animated">
-                    <span class="progress-text">Running Jobs</span>
+                    <span class="progress-text">Running Entries</span>
                     <span class="progress-number" id="runningGraph"></span>
 
                     <div class="progress sm">
@@ -141,7 +238,7 @@
                   </div>
                   <!-- /.progress-group -->
                   <div class="progress-group readyGraph animated ">
-                    <span class="progress-text">Successfully ready Jobs</span>
+                    <span class="progress-text">Ready Entries</span>
                     <span class="progress-number" id="readyGraph"><b></b></span>
 
                     <div class="progress sm">
@@ -150,7 +247,7 @@
                   </div>
                      <!-- /.progress-group -->
                   <div class="progress-group warningGraph animated">
-                    <span class="progress-text">Jobs with Warning</span>
+                    <span class="progress-text">Warning Entries</span>
                     <span class="progress-number" id="warningGraph"></span>
 
                     <div class="progress sm">
@@ -159,7 +256,7 @@
                   </div>
                   <!-- /.progress-group -->
                   <div class="progress-group errorGraph animated">
-                    <span class="progress-text">Jobs with one or more error</span>
+                    <span class="progress-text">Error Entries</span>
                     <span class="progress-number" id="errorGraph"></span>
 
                     <div class="progress sm">
@@ -209,7 +306,7 @@
                   <div class="description-block border-right">
                     <span class="description-percentage" id="runningGrowthDecline"> </span>
                     
-                    <span class="description-text text-blue">Running</span> Growth
+                    <span class="description-text text-blue">Running Entries</span> Growth
                   </div>
                   <!-- /.description-block -->
                 </div>
@@ -252,7 +349,7 @@
                   <div class="description-block border-right">
                     <span class="description-percentage" id="runningGrowthDeclineX90"> </span>
                     
-                    <span class="description-text text-blue">Running</span> Growth
+                    <span class="description-text text-blue">Running Entries</span> Growth
                   </div>
                   <!-- /.description-block -->
                 </div>
@@ -295,7 +392,7 @@
                   <div class="description-block border-right">
                     <span class="description-percentage" id="runningGrowthDeclineX180"> </span>
                     
-                    <span class="description-text text-blue">Running</span> Growth
+                    <span class="description-text text-blue">Running Entries</span> Growth
                   </div>
                   <!-- /.description-block -->
                 </div>
@@ -335,29 +432,34 @@
                     <?php 
                       switch ($record->status) {
                         case 'ready':
-                          echo '<img src="assets/images/items/ready.png" alt="Ready">';
+                          echo '<img src="' . base_url() . 'assets/images/items/ready.png" alt="Ready">';
                           break;
 
                         case 'error':
-                          echo '<img src="assets/images/items/error.png" alt="Error">';
+                          echo '<img src="' . base_url() . 'assets/images/items/error.png" alt="Error">';
                           break;
 
                           case 'warning':
-                          echo '<img src="assets/images/items/warning.png" alt="Warning">';
+                          echo '<img src="' . base_url() . 'assets/images/items/warning.png" alt="Warning">';
                           break;
 
                           case 'running':
-                          echo '<img src="assets/images/items/running.png" alt="Running">';
+                          echo '<img src="' . base_url() . 'assets/images/items/running.png" alt="Running">';
+                          break;
+
+                          case 'cancelled':
+                          case 'Cancelled':
+                          echo '<img src="' . base_url() . 'assets/images/items/404.png" alt="Cancelled">';
                           break;
                         
                         default:
-                          echo '<img src="assets/images/items/404.png" alt="Error 404">';
+                          echo '<img src="' . base_url() . 'assets/images/items/404.png" alt="Error 404">';
                           break;
                       }
                     ?>
                   </div>
                   <div class="product-info">
-                    <a href="<?php echo base_url(); ?>tmf/fetchDataJobName/<?php echo $record->job_name ?>" class="product-title"><?php echo $record->job_name ?>
+                    <a href="<?php echo base_url(); ?>tmf/fetchDataJobName/<?php echo rawurlencode($record->job_name); ?>" class="product-title"><?php echo html_escape($record->job_name); ?>
                     <?php 
                       switch ($record->status) {
                         case 'ready':
@@ -375,6 +477,11 @@
                           case 'running':
                           echo '<span class="label label-primary pull-right">Running</span>';
                           break;
+
+                          case 'cancelled':
+                          case 'Cancelled':
+                          echo '<span class="label label-default pull-right">Cancelled</span>';
+                          break;
                         
                         default:
                           echo '<span class="label label-danger pull-right">404 Error</span>';
@@ -382,8 +489,8 @@
                       }
                     ?>
                     </a>
-                    <span class="product-description"> <?php echo $record->event_text ?> </span>
-                    <span class="product-description"> <?php if ($record->records_processed != 0) { echo $record->records_processed.' Rows Were Affected.'; }?> 
+                    <span class="product-description"> <?php echo html_escape($record->event_text); ?> </span>
+                    <span class="product-description"> <?php if ($record->records_processed != 0) { echo (int) $record->records_processed.' Rows Were Affected.'; }?>
                     </span>
 
                   </div>
@@ -409,7 +516,7 @@
             <div class="col-lg 6 col-md-6 col-xs-12 animated fadeInRight">
                 <div class="box box-primary">
             <div class="box-header with-border">
-              <h3 class="box-title">Job Percent Report</h3>
+              <h3 class="box-title">TMF Status Percent Report</h3>
               <div class="box-tools pull-right">
                 <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
                 </button>
@@ -431,7 +538,8 @@
                     <li><i class="fa fa-circle-o text-green"></i> Ready</li>
                     <li><i class="fa fa-circle-o text-red"></i> error</li>
                     <li><i class="fa fa-circle-o text-yellow"></i> Warning</li>
-                    <li><i class="fa fa-circle-o text-aqua"></i> Running</li>
+                    <li><i class="fa fa-circle-o text-aqua"></i> Running Entries</li>
+                    <li><i class="fa fa-circle-o text-muted"></i> Cancelled</li>
                   </ul>
                 </div>
                 <div class="col-md-4">
@@ -456,7 +564,7 @@
                   <li><a href="#">Percent of <b class="text-yellow">Warning</b> from total
                   <span class="pull-right" id="pecentTotalWarning"> </span></a></li>
 
-                  <li><a href="#">Percent of <b class="text-blue">Running</b> from total
+                  <li><a href="#">Percent of <b class="text-blue">Running Entries</b> from total
                   <span class="pull-right" id="pecentTotalRunning"> </span></a></li>
                
               </ul>
@@ -567,6 +675,11 @@
 
                           case 'running':
                           echo '<span class="label label-primary">Running</span>';
+                          break;
+
+                          case 'cancelled':
+                          case 'Cancelled':
+                          echo '<span class="label label-default">Cancelled</span>';
                           break;
                         
                         default:
@@ -764,5 +877,5 @@ $(document).ready(function(){
     }
 });
 </script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=20"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=27"></script>
 

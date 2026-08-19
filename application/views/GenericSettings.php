@@ -65,17 +65,17 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->id ?></td>
+                      <td><?php echo (int) $record->id; ?></td>
                       <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
-                        <td><?php echo $record->job_name ?></td>
-                        <td><?php echo $record->setting ?></td>
-                        <td><?php echo $record->value1 ?></td>
-                        <td><?php echo $record->value2 ?></td>
-                        <td><?php echo $record->value3 ?></td>
-                        <td><?php echo $record->value4 ?></td>
-                        <td><?php echo $record->value5 ?></td>
-                        <td><?php echo $record->description ?></td>
-                        <td><?php echo $record->owner ?></td>
+                        <td><?php echo html_escape($record->job_name); ?></td>
+                        <td><?php echo html_escape($record->setting); ?></td>
+                        <td><?php echo html_escape($record->value1); ?></td>
+                        <td><?php echo html_escape($record->value2); ?></td>
+                        <td><?php echo html_escape($record->value3); ?></td>
+                        <td><?php echo html_escape($record->value4); ?></td>
+                        <td><?php echo html_escape($record->value5); ?></td>
+                        <td><?php echo html_escape($record->description); ?></td>
+                        <td><?php echo html_escape($record->owner); ?></td>
                        <?php if($role != 1) {  ?> <td>
                             <a class="btn btn-sm btn-warning" href="<?php echo base_url().'GenericSettings/EditSettingsFetchData/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
@@ -135,9 +135,11 @@
       data : { userId : userId } 
       }).done(function(data){
         console.log(data);
-        currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your Generic Setting has been successfully deleted !'); }
-        else if(data.status = false) { alertify.error("data deletion failed"); }
+        if(data.status === true) {
+          currentRow.parents('tr').remove();
+          alertify.success('Your Generic Setting has been successfully deleted !');
+        }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
 

@@ -149,9 +149,11 @@
       data : { userId : userId } 
       }).done(function(data){
         console.log(data);
-        currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your Database Setting has been successfully deleted !'); }
-        else if(data.status = false) { alertify.error("data deletion failed"); }
+        if(data.status === true) {
+          currentRow.parents('tr').remove();
+          alertify.success('Your Database Setting has been successfully deleted !');
+        }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
 

@@ -224,16 +224,10 @@
     }
   });
 
-   $('.testApi').click(function(){
-        var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
-
-    $.ajax({
-          url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
+     $('.testApi').click(function(){
+      $.ajax({
+        url: '<?php echo base_url(); ?>setup/testJenkinsApi',
           method: 'GET',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
            
             $('.overlay').show();

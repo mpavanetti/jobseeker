@@ -27,65 +27,416 @@ class JobCreation extends BaseController
 
     }
 
+    private function canManageJobs() {
+      return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+    }
+
+    private function generateJobName() {
+      $names = array('milo', 'luna', 'piper', 'nova', 'ruby', 'jasper', 'olive', 'cosmo');
+      $traits = array('sunny', 'maple', 'pixel', 'river', 'coco', 'sage', 'mango', 'ember');
+
+      try {
+        $token = dechex(random_int(4096, 65535));
+      } catch (Exception $exception) {
+        $token = substr(uniqid('', TRUE), -4);
+      }
+
+      return $names[array_rand($names)].'-'.$traits[array_rand($traits)].'-'.$token;
+    }
+
 
     public function do_upload($val,$job_name) {
 
       header('Content-Type: text/html; charset=utf-8');
 
+      if (! $this->canManageJobs()) {
+        $this->output->set_status_header(403);
+        echo 'Access denied.';
+        return;
+      }
+
       $this->global['pageTitle'] = 'Job Seeker : Upload';
       $jenkins_home = $this->global['jenkins_home'];
-      
-     $ds = DIRECTORY_SEPARATOR;  
+
+      $safeScriptType = $this->safePathSegment(rawurldecode($val));
+      $safeJobName = $this->safePathSegment(rawurldecode($job_name));
+
+      if ($safeScriptType === FALSE || $safeJobName === FALSE) {
+        $this->output->set_status_header(400);
+        echo 'Invalid upload destination.';
+        return;
+      }
+
+     $ds = DIRECTORY_SEPARATOR;
 
       // Check if jenkins home variable exist
      if($jenkins_home === '' || $jenkins_home === null){
-      $storeFolder = '../../repository/'.$val.'/jobs/'; 
+      $storeFolder = '../../repository/'.$safeScriptType.'/jobs/';
       $targetPath = dirname( __FILE__ ) . $ds. $storeFolder . $ds; 
 
      } else {
 
-      $storeFolder = $jenkins_home.'/repository/'.$val.'/jobs/';
+      $storeFolder = rtrim($jenkins_home, '/\\').'/repository/'.$safeScriptType.'/jobs/';
       $targetPath = $storeFolder;
       
      }
 
+      $allowedExtensions = $safeScriptType === 'python' ? array('zip', 'py') : array('zip');
+      $upload = $this->getUploadedFile('file', $allowedExtensions, 104857600);
+      if (! $upload['ok']) {
+        $this->output->set_status_header(400);
+        echo $upload['message'];
+        return;
+      }
 
-    if (!empty($_FILES)) {
-      echo "File Found";
-         
-        $tempFile = $_FILES['file']['tmp_name'];          //3             
-         
-        $targetFile =  $targetPath. $_FILES['file']['name'];  //5
+      $targetJobPath = rtrim($targetPath, '/\\') . $ds . $safeJobName;
 
-        // Create Path
-        if ( ! is_dir($targetPath)) {
-           mkdir($targetPath, 0777, true);
+      if ($safeScriptType === 'python' && $upload['extension'] === 'py') {
+        if (! $this->ensureDirectory($targetJobPath)) {
+          $this->output->set_status_header(500);
+          echo 'Unable to create upload directory.';
+          return;
         }
-     
-        move_uploaded_file($tempFile,$targetFile); //6
 
-          $zip = new ZipArchive;
-          $res = $zip->open($targetFile);
-          if ($res === TRUE) {
-            // extract it to the path we determined above
-            $zip->extractTo($targetPath.$job_name);
-            $zip->close();
-             echo "WOOT! $tempFile extracted to $targetFile";
-            unlink($targetFile);
-          } else {
-             echo "Doh! I couldn't open ";
+        $targetFile = $targetJobPath . $ds . $upload['safe_name'];
+        if (! move_uploaded_file($upload['tmp_name'], $targetFile)) {
+          $this->output->set_status_header(500);
+          echo 'Unable to store uploaded file.';
+          return;
+        }
+
+        echo 'Python file uploaded.';
+        return;
+      }
+
+      if (! $this->ensureDirectory($targetPath)) {
+        $this->output->set_status_header(500);
+        echo 'Unable to create upload directory.';
+        return;
+      }
+
+      $targetFile = $targetPath . uniqid('job_', TRUE) . '.zip';
+      if (! move_uploaded_file($upload['tmp_name'], $targetFile)) {
+        $this->output->set_status_header(500);
+        echo 'Unable to store uploaded file.';
+        return;
+      }
+
+      $destinationExisted = is_dir($targetJobPath);
+      $extractResult = $this->extractZipSafely($targetFile, $targetJobPath);
+      @unlink($targetFile);
+
+      if (! $extractResult['ok']) {
+        if (! $destinationExisted && is_dir($targetJobPath)) {
+          $this->removeUploadDirectory($targetJobPath);
+        }
+        $this->output->set_status_header(400);
+        echo $extractResult['message'];
+        return;
+      }
+
+      echo 'File uploaded and extracted.';
+
+      }
+
+      private function cronFieldString($values, $min, $max) {
+        if (! is_array($values)) {
+          $values = array($values);
+        }
+
+        $cleanValues = array();
+        foreach ($values as $value) {
+          $value = trim((string) $value);
+
+          if ($value === '') {
+            continue;
           }
 
-        } else {
-          echo "No FIle";
+          if ($value === '*') {
+            $cleanValues[] = '*';
+            continue;
+          }
+
+          if (! ctype_digit($value)) {
+            return FALSE;
+          }
+
+          $number = (int) $value;
+          if ($number < $min || $number > $max) {
+            return FALSE;
+          }
+
+          $cleanValues[] = (string) $number;
         }
 
+        $cleanValues = array_values(array_unique($cleanValues));
+        if (empty($cleanValues)) {
+          return FALSE;
+        }
+
+        if (in_array('*', $cleanValues, TRUE) && count($cleanValues) > 1) {
+          $cleanValues = array_values(array_diff($cleanValues, array('*')));
+        }
+
+        return implode(',', $cleanValues);
+      }
+
+      private function cronMinuteStepString($value) {
+        $value = trim((string) $value);
+
+        if ($value === '*') {
+          return '*';
+        }
+
+        if (! ctype_digit($value)) {
+          return FALSE;
+        }
+
+        $number = (int) $value;
+        if ($number < 1 || $number > 59) {
+          return FALSE;
+        }
+
+        return 'H/'.$number;
+      }
+
+      private function removeUploadDirectory($path) {
+        foreach (scandir($path) as $item) {
+          if ($item === '.' || $item === '..') {
+            continue;
+          }
+
+          $itemPath = $path . DIRECTORY_SEPARATOR . $item;
+          if (is_dir($itemPath) && ! is_link($itemPath)) {
+            $this->removeUploadDirectory($itemPath);
+          } else {
+            @unlink($itemPath);
+          }
+        }
+
+        @rmdir($path);
+      }
+
+      private function ensurePythonSharedLibrary($repositoryRoot) {
+        $sourceFile = APPPATH.'third_party/python/jobseeker.py';
+        $targetDirectory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.'python'.DIRECTORY_SEPARATOR.'lib';
+        $targetFile = $targetDirectory.DIRECTORY_SEPARATOR.'jobseeker.py';
+
+        if (! is_readable($sourceFile) || ! $this->ensureDirectory($targetDirectory)) {
+          return FALSE;
+        }
+
+        return copy($sourceFile, $targetFile);
+      }
+
+      private function selectedPythonSourceMode($sourceMode) {
+        return in_array($sourceMode, array('upload', 'path', 'git'), TRUE) ? $sourceMode : 'upload';
+      }
+
+      private function cleanPythonEntryPoint($entryPoint, $required = FALSE) {
+        $entryPoint = trim((string) $entryPoint);
+
+        if ($entryPoint === '') {
+          return $required ? FALSE : '';
+        }
+
+        $safeEntryPoint = $this->safeRelativePath($entryPoint);
+        if ($safeEntryPoint === FALSE || strtolower(pathinfo($safeEntryPoint, PATHINFO_EXTENSION)) !== 'py') {
+          return FALSE;
+        }
+
+        return str_replace(DIRECTORY_SEPARATOR, '/', $safeEntryPoint);
+      }
+
+      private function repositoryRealPath($repositoryRoot) {
+        $repositoryRealPath = realpath($repositoryRoot);
+        return $repositoryRealPath === FALSE ? FALSE : rtrim($repositoryRealPath, DIRECTORY_SEPARATOR);
+      }
+
+      private function resolveRepositoryPath($path, $repositoryRoot) {
+        $path = trim((string) $path);
+        if ($path === '') {
+          return FALSE;
+        }
+
+        $repositoryRealPath = $this->repositoryRealPath($repositoryRoot);
+        if ($repositoryRealPath === FALSE) {
+          return FALSE;
+        }
+
+        if (strpos($path, '/php/repository/') === 0 || $path === '/php/repository') {
+          $candidatePath = $path;
+        } else {
+          $path = trim(str_replace('\\', '/', $path), '/');
+          if (strpos($path, 'repository/') === 0) {
+            $path = substr($path, strlen('repository/'));
+          }
+
+          $safePath = $this->safeRelativePath($path);
+          if ($safePath === FALSE) {
+            return FALSE;
+          }
+
+          $candidatePath = $repositoryRealPath.DIRECTORY_SEPARATOR.$safePath;
+        }
+
+        $resolvedPath = realpath($candidatePath);
+        if ($resolvedPath === FALSE || ! $this->pathWithinBase($resolvedPath, $repositoryRealPath)) {
+          return FALSE;
+        }
+
+        return $resolvedPath;
+      }
+
+      private function resolvePythonFile($sourceDirectory, $entryPoint) {
+        $scriptPath = realpath(rtrim($sourceDirectory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $entryPoint));
+        if ($scriptPath === FALSE || ! is_file($scriptPath) || strtolower(pathinfo($scriptPath, PATHINFO_EXTENSION)) !== 'py' || ! $this->pathWithinBase($scriptPath, $sourceDirectory)) {
+          return FALSE;
+        }
+
+        return $scriptPath;
+      }
+
+      private function resolveUploadedPythonExecution($repositoryRoot, $jobName, $entryPoint) {
+        $jobDirectory = $this->resolveRepositoryPath('python/jobs/'.$jobName, $repositoryRoot);
+        if ($jobDirectory === FALSE || ! is_dir($jobDirectory)) {
+          return FALSE;
+        }
+
+        if ($entryPoint !== '') {
+          $scriptPath = $this->resolvePythonFile($jobDirectory, $entryPoint);
+        } else {
+          $files = glob($jobDirectory.DIRECTORY_SEPARATOR.'*.py');
+          $scriptPath = empty($files) ? FALSE : realpath($files[0]);
+        }
+
+        if ($scriptPath === FALSE || ! is_file($scriptPath)) {
+          return FALSE;
+        }
+
+        return array(
+          'mode' => 'local',
+          'sourceDirectory' => $jobDirectory,
+          'scriptPath' => $scriptPath
+        );
+      }
+
+      private function resolvePathPythonExecution($repositoryRoot, $sourcePath, $entryPoint) {
+        $resolvedSourcePath = $this->resolveRepositoryPath($sourcePath, $repositoryRoot);
+        if ($resolvedSourcePath === FALSE) {
+          return FALSE;
+        }
+
+        if (is_file($resolvedSourcePath)) {
+          $sourceDirectory = dirname($resolvedSourcePath);
+          $scriptPath = $resolvedSourcePath;
+        } else if (is_dir($resolvedSourcePath) && $entryPoint !== '') {
+          $sourceDirectory = $resolvedSourcePath;
+          $scriptPath = $this->resolvePythonFile($sourceDirectory, $entryPoint);
+        } else {
+          return FALSE;
+        }
+
+        if ($scriptPath === FALSE || strtolower(pathinfo($scriptPath, PATHINFO_EXTENSION)) !== 'py') {
+          return FALSE;
+        }
+
+        return array(
+          'mode' => 'local',
+          'sourceDirectory' => $sourceDirectory,
+          'scriptPath' => $scriptPath
+        );
+      }
+
+      private function cleanPythonRepositoryUrl($repositoryUrl) {
+        $repositoryUrl = trim((string) $repositoryUrl);
+        if ($repositoryUrl === '' || strlen($repositoryUrl) > 1000 || preg_match('/[\x00-\x1F\x7F]/', $repositoryUrl)) {
+          return FALSE;
+        }
+
+        if (filter_var($repositoryUrl, FILTER_VALIDATE_URL) !== FALSE) {
+          return $repositoryUrl;
+        }
+
+        if (preg_match('/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9._\-]+:[A-Za-z0-9._\-\/]+(?:\.git)?$/', $repositoryUrl)) {
+          return $repositoryUrl;
+        }
+
+        return FALSE;
+      }
+
+      private function cleanPythonRepositoryBranch($branch) {
+        $branch = trim((string) $branch);
+        if ($branch === '') {
+          return '';
+        }
+
+        return preg_match('/^[A-Za-z0-9._\/-]+$/', $branch) ? $branch : FALSE;
+      }
+
+      private function resolveGitPythonExecution($repositoryUrl, $branch, $entryPoint) {
+        $repositoryUrl = $this->cleanPythonRepositoryUrl($repositoryUrl);
+        $branch = $this->cleanPythonRepositoryBranch($branch);
+        $entryPoint = $this->cleanPythonEntryPoint($entryPoint, TRUE);
+
+        if ($repositoryUrl === FALSE || $branch === FALSE || $entryPoint === FALSE) {
+          return FALSE;
+        }
+
+        return array(
+          'mode' => 'git',
+          'repositoryUrl' => $repositoryUrl,
+          'branch' => $branch,
+          'entryPoint' => $entryPoint
+        );
+      }
+
+      private function pythonEnvironmentArgument($environment, $checkEnvironment) {
+        return ($environment != '0' && $checkEnvironment == 1) ? escapeshellarg($environment) : '';
+      }
+
+      private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument) {
+        $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
+        $lines = array('set -e');
+
+        if ($execution['mode'] === 'git') {
+          $cloneCommand = 'git clone --depth 1';
+          if ($execution['branch'] !== '') {
+            $cloneCommand .= ' --branch '.escapeshellarg($execution['branch']);
+          }
+          $cloneCommand .= ' '.escapeshellarg($execution['repositoryUrl']).' "$WORKSPACE/jobseeker-python-source"';
+
+          $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
+          $lines[] = $cloneCommand;
+          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
+          $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
+          $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
+        } else {
+          $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
+          $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
+        }
+
+        $lines[] = 'export JOBSEEKER_PYTHON_LIB='.escapeshellarg($pythonLibraryPath);
+        $lines[] = 'export JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_SCRIPT_PATH")"';
+        $lines[] = 'cd "$JOBSEEKER_SOURCE_DIR"';
+        $lines[] = 'export PYTHONPATH="$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$JOBSEEKER_PYTHON_LIB:$PYTHONPATH"';
+        $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
+        $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
+        $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
+        $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
+        $lines[] = '  rm -rf "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
+        $lines[] = '  python3 -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs" -r "$JOBSEEKER_REQUIREMENTS"';
+        $lines[] = '  export PYTHONPATH="$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs:$PYTHONPATH"';
+        $lines[] = 'fi';
+        $lines[] = 'python3 "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+
+        return implode("\n", $lines);
       }
 
 
     public function send() {
 
-        if($this->isManager() == TRUE)
+      if(! $this->canManageJobs())
         {
             $this->loadThis();
         }
@@ -96,8 +447,8 @@ class JobCreation extends BaseController
             $this->load->library('form_validation');
 
             // Basic inputs
-            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[50]');
-            $this->form_validation->set_rules('description','Database Type','trim|required|max_length[5000]');
+            $this->form_validation->set_rules('job_name','Job Name','trim|max_length[50]');
+            $this->form_validation->set_rules('description','Description','trim|max_length[5000]');
 
       
             // Abort Build
@@ -115,11 +466,13 @@ class JobCreation extends BaseController
             else
             {
                 // Basic Inputs
-                $job_name = $this->security->xss_clean($this->input->post('job_name'));
-                $description = $this->security->xss_clean($this->input->post('description')); 
+                $job_name = trim((string) $this->security->xss_clean($this->input->post('job_name')));
+                if ($job_name === '') {
+                  $job_name = $this->generateJobName();
+                }
 
-                // Confirmation Checkbox
-                $confirmation = $this->security->xss_clean($this->input->post('confirmation'));
+                $description = trim((string) $this->security->xss_clean($this->input->post('description')));
+                $triggerAfterSave = $this->security->xss_clean($this->input->post('trigger_after_save')) == '1' ? '1' : '0';
 
                 // Timestamp Checkbox
                 $timestamp = $this->security->xss_clean($this->input->post('timestamp'));
@@ -235,6 +588,18 @@ class JobCreation extends BaseController
                 $linuxExecutionStrategy = $this->input->post('linuxExecutionStrategy');
                 $linuxScriptType = $this->input->post('linuxScriptType');
                 $linuxCommandLine = $this->input->post('linuxCommandLine');
+                $pythonSourceMode = $this->selectedPythonSourceMode($this->input->post('pythonSourceMode'));
+                $pythonSourcePath = $this->input->post('pythonSourcePath');
+                $pythonRepositoryUrl = $this->input->post('pythonRepositoryUrl');
+                $pythonRepositoryBranch = $this->input->post('pythonRepositoryBranch');
+                $pythonEntryPointRaw = $this->input->post('pythonEntryPoint');
+                $pythonEntryPoint = $this->cleanPythonEntryPoint($pythonEntryPointRaw, FALSE);
+                $pythonExecution = NULL;
+
+                if ($pythonEntryPoint === FALSE) {
+                  $this->session->set_flashdata('error', 'You missed to select a valid Python entry file.');
+                  redirect('JobCreation');
+                }
 
                 if($linuxExecutionStrategy == 'script'){
 
@@ -298,31 +663,20 @@ class JobCreation extends BaseController
                           // echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
                           // echo '<hr><br>';
                   } else if ($linuxScriptType == 'python') {
-                        $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.py");
-                          $file = glob($filelist[0]);
+                          $repositoryRoot = rtrim($storeFolder, '/\\');
 
-                          // Check if using environemnt
-                          if($environment != '0' && $checkEnvironment == 1){
-                              $filePath = realpath($file[0]).' '.$environment;  
+                          if ($pythonSourceMode === 'path') {
+                            $pythonExecution = $this->resolvePathPythonExecution($repositoryRoot, $pythonSourcePath, $pythonEntryPoint);
+                          } else if ($pythonSourceMode === 'git') {
+                            $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw);
                           } else {
-                            $filePath = realpath($file[0]);
+                            $pythonExecution = $this->resolveUploadedPythonExecution($repositoryRoot, $job_name, $pythonEntryPoint);
                           }
 
-                           // checking whether a file is directory or not 
-                          if (is_dir($filePath)) {
-                            // echo "My File is a directory";
-                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                          if ($pythonExecution === FALSE) {
+                           $this->session->set_flashdata('error', 'JobSeeker could not resolve the Python source. Check the upload, repository path, Git URL, and entry file.');
                            redirect('JobCreation');
-                          } else {
-                            if (file_exists($filePath)) {
-                            } else {
-                                // echo "The file $filePath does not exists";
-                            }
                           }
-
-                          
-                          // echo 'LINUX - PYTHON File Path: <b>'.$filePath.'</b>';
-                          // echo '<hr><br>';
                   }
                 } else if ($linuxExecutionStrategy == 'command'){
 
@@ -332,13 +686,6 @@ class JobCreation extends BaseController
 
                 // END Linux File Upload
           
-                // Validation if nothing comes null
-                if ($singleMinute == null || $singleHour == null || $singleDayOfMonth == null || $singleMonth == null || $singleDayOfWeek == null){
-
-                  $this->session->set_flashdata('error', 'You missed to select one field value for Build Periodically function');
-                    redirect('JobCreation');
-                }
-
                  // Repetitive Build Options
                 $repetitiveMinute = $this->security->xss_clean($this->input->post('repetitiveMinute'));
                 $repetitiveHour = $this->security->xss_clean($this->input->post('repetitiveHour'));
@@ -354,6 +701,21 @@ class JobCreation extends BaseController
                 $timeoutStrategy = $this->security->xss_clean($this->input->post('timeoutStrategy'));
                 $timeoutMinutes = $this->security->xss_clean($this->input->post('timeoutMinutes'));
                 $timeoutSeconds = $this->security->xss_clean($this->input->post('timeoutSeconds'));
+
+                if ($abort == 1) {
+                  if ($timeoutStrategy == 'absolute') {
+                    if (! ctype_digit((string) $timeoutMinutes) || (int) $timeoutMinutes < 1) {
+                      $this->session->set_flashdata('error', 'You missed to select a valid timeout in minutes for the abort option.');
+                      redirect('JobCreation');
+                    }
+                  } else {
+                    $timeoutStrategy = 'noActivity';
+                    if (! ctype_digit((string) $timeoutSeconds) || (int) $timeoutSeconds < 60) {
+                      $this->session->set_flashdata('error', 'You missed to select a valid timeout in seconds for the abort option.');
+                      redirect('JobCreation');
+                    }
+                  }
+                }
             
                 // Execute another job section 
                 $runJobCheck = $this->security->xss_clean($this->input->post('runJobCheck'));
@@ -383,11 +745,33 @@ class JobCreation extends BaseController
 
                
                 // Array to String Conversion Section
-                $singleMinuteString = rtrim(implode(',', $singleMinute), ',');
-                $singleHourString = rtrim(implode(',', $singleHour), ',');
-                $singleDayOfMonthString = rtrim(implode(',', $singleDayOfMonth), ',');
-                $singleMonthString = rtrim(implode(',', $singleMonth), ',');
-                $singleDayOfWeekString = rtrim(implode(',', $singleDayOfWeek), ',');
+                $singleMinuteString = $this->cronFieldString($singleMinute, 0, 59);
+                $singleHourString = $this->cronFieldString($singleHour, 0, 23);
+                $singleDayOfMonthString = $this->cronFieldString($singleDayOfMonth, 1, 31);
+                $singleMonthString = $this->cronFieldString($singleMonth, 1, 12);
+                $singleDayOfWeekString = $this->cronFieldString($singleDayOfWeek, 1, 7);
+
+                $repetitiveMinuteString = $this->cronMinuteStepString($repetitiveMinute);
+                $repetitiveHourString = $this->cronFieldString($repetitiveHour, 0, 23);
+                $repetitiveDayOfMonthString = $this->cronFieldString($repetitiveDayOfMonth, 1, 31);
+                $repetitiveMonthString = $this->cronFieldString($repetitiveMonth, 1, 12);
+                $repetitiveDayOfWeekString = $this->cronFieldString($repetitiveDayOfWeek, 1, 7);
+
+                if($checkBuild == 1){
+                  if($action == "single" && ($singleMinuteString === FALSE || $singleHourString === FALSE || $singleDayOfMonthString === FALSE || $singleMonthString === FALSE || $singleDayOfWeekString === FALSE)){
+                    $this->session->set_flashdata('error', 'You missed to select valid values for Single Execution scheduling.');
+                    redirect('JobCreation');
+                  } else if($action == "repetitive" && ($repetitiveMinuteString === FALSE || $repetitiveHourString === FALSE || $repetitiveDayOfMonthString === FALSE || $repetitiveMonthString === FALSE || $repetitiveDayOfWeekString === FALSE)){
+                    $this->session->set_flashdata('error', 'You missed to select valid values for Repetitive Execution scheduling.');
+                    redirect('JobCreation');
+                  } else if($action == "tags" && ! in_array($tag, array('@hourly', '@daily', '@weekly', '@monthly', '@annually', '@yearly', '@midnight'), TRUE)){
+                    $this->session->set_flashdata('error', 'You missed to select a valid Execution Tag option.');
+                    redirect('JobCreation');
+                  } else if($action != "single" && $action != "repetitive" && $action != "tags"){
+                    $this->session->set_flashdata('error', 'You missed to select one field value for Build Periodically function');
+                    redirect('JobCreation');
+                  }
+                }
 
                 if ($jobList != null) {
                   $jobListString = rtrim(implode(', ', $jobList), ',');
@@ -429,7 +813,7 @@ class JobCreation extends BaseController
                   if($action == "repetitive") {
                      $triggers = $dom->createElement('triggers');
                       $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
-                      $spec = $dom->createElement('spec', 'H/'.$repetitiveMinute.' '.$repetitiveHour.' '.$repetitiveDayOfMonth.' '.$repetitiveMonth.' '.$repetitiveDayOfWeek);
+                      $spec = $dom->createElement('spec', $repetitiveMinuteString.' '.$repetitiveHourString.' '.$repetitiveDayOfMonthString.' '.$repetitiveMonthString.' '.$repetitiveDayOfWeekString);
                       $hudson_triggers->appendChild($spec);  
                       $triggers->appendChild($hudson_triggers);    
                       $root->appendChild($triggers);
@@ -466,7 +850,12 @@ class JobCreation extends BaseController
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
                     if($linuxScriptType == 'python'){
-                      $command = $dom->createElement('command', 'python3 '.$filePath);
+                      $repositoryRoot = rtrim($storeFolder, '/\\');
+                      if (! $this->ensurePythonSharedLibrary($repositoryRoot)) {
+                        $this->session->set_flashdata('error', 'Unable to prepare the shared Python jobseeker helper.');
+                        redirect('JobCreation');
+                      }
+                      $command = $dom->createElement('command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment)));
                     } else {
                       $command = $dom->createElement('command', 'sh '.$filePath);
                     }
@@ -794,6 +1183,7 @@ class JobCreation extends BaseController
                 // Create flash data to send to view
                  $this->session->set_flashdata('xml', $content);
                  $this->session->set_flashdata('job_name', $job_name);
+                 $this->session->set_flashdata('trigger_after_save', $triggerAfterSave);
                  $this->session->set_flashdata('success', 'Your XML File has been successfully created !');
 
                 redirect('JobCreation');

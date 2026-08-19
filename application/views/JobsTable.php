@@ -64,15 +64,15 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->id ?></td>
+                      <td><?php echo (int) $record->id; ?></td>
                       <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
-                        <td><?php echo $record->job_name ?></td>
-                        <td><?php echo $record->job_component ?></td>
-                        <td><?php echo $record->component_type ?></td>
-                        <td><?php echo $record->file_path ?></td>
+                        <td><?php echo html_escape($record->job_name); ?></td>
+                        <td><?php echo html_escape($record->job_component); ?></td>
+                        <td><?php echo html_escape($record->component_type); ?></td>
+                        <td><?php echo html_escape($record->file_path); ?></td>
                         <td><?php echo ($record->file === '1') ? 'File' : 'Folder' ?></td>
-                        <td><?php echo ($record->file_name == NULL) ? 'Not Available' : $record->file_name; ?></td>
-                        <td><?php echo ($record->file_uploaded === '0') ? 'None yet' : $record->file_uploaded; ?></td>
+                        <td><?php echo ($record->file_name == NULL) ? 'Not Available' : html_escape($record->file_name); ?></td>
+                        <td><?php echo ($record->file_uploaded === '0') ? 'None yet' : (int) $record->file_uploaded; ?></td>
                         <td><?php echo $record->owner ?></td>
                        <?php if($role != 1) {  ?> <td>
                             <a class="btn btn-sm btn-warning" href="<?php echo base_url().'JobsTable/editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
@@ -132,9 +132,11 @@
       data : { userId : userId } 
       }).done(function(data){
         console.log(data);
-        currentRow.parents('tr').remove();
-        if(data.status = true) { alertify.success('Your input has been successfully deleted !'); }
-        else if(data.status = false) { alertify.error("data deletion failed"); }
+        if(data.status === true) {
+          currentRow.parents('tr').remove();
+          alertify.success('Your input has been successfully deleted !');
+        }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
         else { alert("Access denied..!"); }
       });
 

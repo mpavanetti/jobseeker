@@ -105,8 +105,8 @@
 
         // get Jenkins credentials
         var jenkins_url = '<?php echo $jenkins_url; ?>';
-        var jenkins_username = '<?php echo $jenkins_username; ?>';
-        var jenkins_token = '<?php echo $jenkins_token; ?>';
+        var jenkins_username = '';
+        var jenkins_token = '';
         var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
         $.ajax({
@@ -141,9 +141,10 @@
         if(job == '0'){
           toastr.error("Please, Select an avaiable job to view.", "Error");
         } else {
+         var encodedJob = encodeURIComponent(job);
          $('.overlay').show();
          $.ajax({
-          url: jenkins_url + 'job/'+ job +'/api/json',
+          url: jenkins_url + 'job/'+ encodedJob +'/api/json',
           method: 'GET',
           headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
@@ -216,7 +217,7 @@
           if(lastBuild != "<b style='color:red;'>None</b>") {
             var log = $.ajax({
               contentType: "application/text",
-              url: jenkins_url + 'job/'+ data.fullName +'/lastBuild/consoleText',
+              url: jenkins_url + 'job/'+ encodeURIComponent(data.fullName) +'/lastBuild/consoleText',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               async: false,
@@ -245,7 +246,7 @@
 
          var xml = $.ajax({
               contentType: "application/text",
-              url: jenkins_url + 'job/'+ data.fullName +'/config.xml',
+              url: jenkins_url + 'job/'+ encodeURIComponent(data.fullName) +'/config.xml',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               async: false,

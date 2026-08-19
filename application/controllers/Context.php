@@ -66,7 +66,7 @@ public function fetchEnvironments() {
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->model->listEnvironments();
-         print_r(json_encode($listJobsJson, JSON_PRETTY_PRINT));
+         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }
 

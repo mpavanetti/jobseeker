@@ -326,7 +326,11 @@ $config['cache_query_string'] = FALSE;
 | https://codeigniter.com/user_guide/libraries/encryption.html
 |
 */
-$config['encryption_key'] = 'asjkrue*$djasfl134213';
+$encryptionKey = getenv('JOBSEEKER_ENCRYPTION_KEY');
+if (ENVIRONMENT === 'production' && empty($encryptionKey)) {
+	show_error('JOBSEEKER_ENCRYPTION_KEY must be set in production.', 500);
+}
+$config['encryption_key'] = $encryptionKey ?: 'jobseeker-local-development-encryption-key';
 
 /*
 |--------------------------------------------------------------------------
@@ -385,7 +389,7 @@ $config['sess_expiration'] = 7200;
 $config['sess_save_path'] = 'ci_sessions';
 $config['sess_match_ip'] = FALSE;
 $config['sess_time_to_update'] = 300;
-$config['sess_regenerate_destroy'] = FALSE;
+$config['sess_regenerate_destroy'] = TRUE;
 
 /*
 |--------------------------------------------------------------------------
@@ -405,8 +409,8 @@ $config['sess_regenerate_destroy'] = FALSE;
 $config['cookie_prefix']	= '';
 $config['cookie_domain']	= '';
 $config['cookie_path']		= '/';
-$config['cookie_secure']	= FALSE;
-$config['cookie_httponly'] 	= FALSE;
+$config['cookie_secure']	= filter_var(getenv('JOBSEEKER_COOKIE_SECURE'), FILTER_VALIDATE_BOOLEAN);
+$config['cookie_httponly'] 	= TRUE;
 
 /*
 |--------------------------------------------------------------------------
@@ -450,12 +454,12 @@ $config['global_xss_filtering'] = FALSE;
 | 'csrf_regenerate' = Regenerate token on every submission
 | 'csrf_exclude_uris' = Array of URIs which ignore CSRF checks
 */
-$config['csrf_protection'] = FALSE;
+$config['csrf_protection'] = TRUE;
 $config['csrf_token_name'] = 'csrf_test_name';
 $config['csrf_cookie_name'] = 'csrf_cookie_name';
 $config['csrf_expire'] = 7200;
-$config['csrf_regenerate'] = TRUE;
-$config['csrf_exclude_uris'] = array();
+$config['csrf_regenerate'] = FALSE;
+$config['csrf_exclude_uris'] = array('jenkins/proxy');
 
 /*
 |--------------------------------------------------------------------------

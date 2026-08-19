@@ -1,11 +1,14 @@
 FROM nginx:alpine
-ADD nginx/default.conf /etc/nginx/conf.d
+ADD nginx/default.conf /etc/nginx/conf.d/default.conf
 
 RUN addgroup --gid 1000 mygroup
 RUN adduser  --system --no-create-home --disabled-password --uid 1000 --ingroup mygroup myuser
 
 WORKDIR /var/www/html
 
-RUN chown -R myuser:mygroup .
+RUN sed -i 's|pid .*|pid        /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+	&& sed -i 's|^user .*|# user directive disabled for rootless runtime;|' /etc/nginx/nginx.conf \
+	&& touch /tmp/nginx.pid \
+	&& chown -R myuser:mygroup /var/www/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d /tmp/nginx.pid
 
 USER myuser
