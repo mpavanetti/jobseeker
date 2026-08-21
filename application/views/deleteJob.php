@@ -8,13 +8,63 @@
     margin-bottom: 6px;
   }
 
+  .delete-job-layout {
+    align-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .delete-job-column {
+    display: flex;
+    margin-bottom: 15px;
+  }
+
+  .delete-job-box {
+    display: flex;
+    flex-direction: column;
+    min-height: 480px;
+    width: 100%;
+  }
+
+  .delete-job-box .box-body {
+    flex: 1 1 auto;
+    padding: 20px;
+  }
+
+  .delete-job-box .box-footer {
+    background: #fff;
+    margin-top: auto;
+  }
+
+  .delete-job-summary {
+    background: #f9fafc;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+  }
+
+  .delete-job-summary strong {
+    display: block;
+    margin-bottom: 3px;
+  }
+
   .delete-job-select {
-    min-height: 220px;
+    min-height: 300px;
   }
 
   .delete-selection-help {
     display: block;
     margin-top: 6px;
+  }
+
+  @media (max-width: 991px) {
+    .delete-job-layout,
+    .delete-job-column,
+    .delete-job-box {
+      display: block;
+      min-height: 0;
+    }
   }
 
 </style>
@@ -31,36 +81,36 @@
     </ol>
 </section>
 <section class="content">
-  <div class="container">
-    <div class="row" style="margin-top: 15px;">
-       <div class="col-lg-6 col-md-6 col-xs-12">
-         <div class="box box-primary">
+  <div class="container-fluid">
+    <div class="row delete-job-layout" style="margin-top: 15px;">
+       <div class="col-lg-6 col-md-6 col-xs-12 delete-job-column">
+         <div class="box box-danger delete-job-box">
             <div class="overlay" style="display:none;">
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
-            <div class="box-header">
-              <b>Delete Jenkins Jobs</b>
+            <div class="box-header with-border">
+              <h3 class="box-title"><b>Delete Jenkins Jobs</b></h3>
             </div>
             <form role="form" id="delJob">
              <div class="box-body">
-               <div class="col-lg-12 col-md-12 col-xs-12">
-                     <div class="form-group">
+              <div class="delete-job-summary">
+                <strong><i class="fa fa-server"></i> Jenkins job configuration</strong>
+                <span class="text-muted">Optionally remove matching uploaded source folders after the Jenkins job is deleted.</span>
+              </div>
+              <div class="form-group">
                   <label for="deleteJobSelect">Select jobs to delete</label>
                   <select class="form-control selector delete-job-select" id="deleteJobSelect" multiple>
                         </select>
                   <small class="text-muted delete-selection-help"><span id="deleteJobCount">0</span> job(s) selected. Hold Ctrl/Cmd to select multiple jobs.</small>
-                    </div>
-                </div>
-              <div class="col-lg-12 col-md-12 col-xs-12">
-                 <div class="form-group">
-                    <label for="job_name">Delete Job Repository</label>
+              </div>
+              <div class="form-group">
+                    <label for="deleteRepoCheck">Repository cleanup</label>
                     <div class="checkbox">
                         <label for="deleteRepository">
                     <input type="checkbox" name="deleteRepoCheck" id="deleteRepoCheck" value="1"> Also delete assigned job repositories and files.
                       </label>
                   </div>
               </div>
-          </div>
       </div>
           <div class="box-footer delete-actions">
            <button type="button" id="selectAllJobs" class="btn btn-default"><i class="fa fa-check-square-o"></i> Select All</button>
@@ -71,28 +121,31 @@
  </form> 
 </div>
 </div>
-<div class="col-lg-6 col-md-6 col-xs-12">
- <div class="box box-primary">
+<div class="col-lg-6 col-md-6 col-xs-12 delete-job-column">
+ <div class="box box-warning delete-job-box">
     <div class="overlay" style="display:none;">
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
-    <div class="box-header">
-      <b>Delete Job Repositories Only</b>
+    <div class="box-header with-border">
+      <h3 class="box-title"><b>Delete Job Repositories Only</b></h3>
     </div>
     <form role="form" id="delRepository">
      <div class="box-body">
-         <div class="col-lg-12 col-md-12 col-xs-12">
-             <div class="form-group">
+          <div class="delete-job-summary">
+            <strong><i class="fa fa-folder-open"></i> Uploaded source folders</strong>
+            <span class="text-muted">Remove stored job files while leaving the Jenkins job configuration available.</span>
+          </div>
+          <div class="form-group">
           <label for="deleteRepoSelect">Select repositories to delete</label>
           <select class="form-control selector delete-job-select" id="deleteRepoSelect" multiple>
                 </select>
           <small class="text-muted delete-selection-help"><span id="deleteRepoCount">0</span> repository selection(s). This does not delete Jenkins jobs.</small>
             </div>
-        </div>
 </div>
   <div class="box-footer delete-actions">
    <button type="button" id="selectAllRepos" class="btn btn-default"><i class="fa fa-check-square-o"></i> Select All</button>
    <button type="button" id="clearSelectedRepos" class="btn btn-default"><i class="fa fa-square-o"></i> Clear</button>
+   <button type="button" id="reloadDeleteRepos" class="btn btn-info"><i class="fa fa-refresh"></i> Reload</button>
    <button type="button" id="delRepoBtn" class="btn btn-danger"><i class="fa fa-trash"></i> Delete Selected Repositories</button>
 </div>
 </form> 
@@ -132,7 +185,7 @@ $(document).ready(function(){
 
     function setDeleteBusy(isBusy) {
       $('.overlay').toggle(isBusy);
-      $('#deleteJob, #delRepoBtn, #reloadDeleteJobs, #selectAllJobs, #clearSelectedJobs, #selectAllRepos, #clearSelectedRepos')
+      $('#deleteJob, #delRepoBtn, #reloadDeleteJobs, #reloadDeleteRepos, #selectAllJobs, #clearSelectedJobs, #selectAllRepos, #clearSelectedRepos')
         .prop('disabled', isBusy)
         .toggleClass('disabled', isBusy);
     }
@@ -304,7 +357,7 @@ $(document).ready(function(){
       $('#deleteRepoSelect').trigger('change');
     });
 
-    $('#reloadDeleteJobs').click(loadDeleteOptions);
+    $('#reloadDeleteJobs, #reloadDeleteRepos').click(loadDeleteOptions);
 
     $('#deleteJob').click(function(event){
       event.preventDefault();
