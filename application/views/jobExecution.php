@@ -6,6 +6,23 @@
     align-items: center;
   }
 
+  .execution-selector-actions {
+    align-items: stretch;
+  }
+
+  .execution-selector-actions .btn {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .execution-selector-actions #triggerSelected,
+  .execution-selector-actions #reloadJobs {
+    flex-basis: 100%;
+  }
+
+  .execution-main .box {
+    margin-bottom: 14px;
+  }
+
   .execution-help {
     color: #777;
     margin-top: 8px;
@@ -48,6 +65,14 @@
     text-overflow: ellipsis;
     vertical-align: middle;
     white-space: nowrap;
+  }
+
+  .execution-job-created {
+    color: #777;
+    display: block;
+    font-size: 12px;
+    margin-left: 24px;
+    margin-top: 3px;
   }
 
   .execution-job-option .label {
@@ -96,6 +121,66 @@
     white-space: nowrap;
   }
 
+  .execution-console-toolbar {
+    margin-bottom: 20px;
+  }
+
+  .execution-console-toolbar .execution-compare-columns {
+    min-width: 142px;
+    width: auto;
+  }
+
+  .execution-console-hint {
+    color: #777;
+  }
+
+  #executionTabContent.execution-compare-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  #executionTabContent.execution-compare-grid.compare-columns-auto {
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  }
+
+  #executionTabContent.execution-compare-grid.compare-columns-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #executionTabContent.execution-compare-grid.compare-columns-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #executionTabContent.execution-compare-grid > .tab-pane {
+    background: #fff;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    display: block !important;
+    min-width: 0;
+    padding: 12px;
+  }
+
+  #executionTabContent.execution-compare-grid .execution-pane-header {
+    align-items: flex-start;
+  }
+
+  #executionTabContent.execution-compare-grid .execution-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #executionTabContent.execution-compare-grid .execution-meta-item {
+    padding: 6px 8px;
+  }
+
+  #executionTabContent.execution-compare-grid .execution-console {
+    max-height: 520px;
+    min-height: 300px;
+  }
+
+  #executionTabContent.execution-compare-grid .execution-pane-focus {
+    box-shadow: 0 0 0 2px #3c8dbc;
+  }
+
   .execution-pane-header {
     display: flex;
     flex-wrap: wrap;
@@ -141,8 +226,8 @@
     font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
     font-size: 12px;
     line-height: 1.45;
-    max-height: 460px;
-    min-height: 260px;
+    max-height: 560px;
+    min-height: 340px;
     overflow: auto;
     padding: 14px;
     white-space: pre-wrap;
@@ -163,15 +248,12 @@
   }
 
   @media (min-width: 1200px) {
-    .execution-summary-column .execution-summary > div {
-      width: 100%;
+    .execution-sidebar {
+      position: sticky;
+      top: 15px;
     }
 
-    .execution-summary-column .info-box {
-      margin-bottom: 10px;
-    }
-
-    .execution-summary-column .info-box-number {
+    .execution-main .info-box-number {
       font-size: 24px;
     }
   }
@@ -179,6 +261,10 @@
   @media (max-width: 600px) {
     .execution-meta {
       grid-template-columns: 1fr;
+    }
+
+    #executionTabContent.execution-compare-grid {
+      grid-template-columns: 1fr !important;
     }
   }
 </style>
@@ -199,7 +285,7 @@
   <section class="content">
     <div class="container-fluid">
       <div class="row" style="margin-top: 10px;">
-        <div class="col-lg-3 col-md-4 col-xs-12">
+        <div class="col-lg-3 col-md-4 col-xs-12 execution-sidebar">
           <div class="box box-primary">
             <div class="box-header with-border">
               <div class="box-tools pull-right">
@@ -219,7 +305,7 @@
                 </div>
                 <p class="execution-help"><span id="selectedJobCount">0</span> job(s) selected.</p>
               </div>
-              <div class="execution-toolbar">
+              <div class="execution-toolbar execution-selector-actions">
                 <button type="button" class="btn btn-primary" id="triggerSelected">
                   <i class="fa fa-play"></i> Trigger Selected
                 </button>
@@ -240,7 +326,46 @@
           </div>
         </div>
 
-        <div class="col-lg-7 col-md-8 col-xs-12">
+        <div class="col-lg-9 col-md-8 col-xs-12 execution-main">
+          <div class="row execution-summary">
+            <div class="col-sm-6 col-md-3">
+              <div class="info-box">
+                <span class="info-box-icon bg-aqua"><i class="fa fa-list"></i></span>
+                <div class="info-box-content">
+                  <span class="info-box-text">Executions</span>
+                  <span class="info-box-number" id="executionTotal">0</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-3">
+              <div class="info-box">
+                <span class="info-box-icon bg-yellow"><i class="fa fa-clock-o"></i></span>
+                <div class="info-box-content">
+                  <span class="info-box-text">Queued</span>
+                  <span class="info-box-number" id="executionQueued">0</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-3">
+              <div class="info-box">
+                <span class="info-box-icon bg-green"><i class="fa fa-play"></i></span>
+                <div class="info-box-content">
+                  <span class="info-box-text">Running</span>
+                  <span class="info-box-number" id="executionRunning">0</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-3">
+              <div class="info-box">
+                <span class="info-box-icon bg-red"><i class="fa fa-flag-checkered"></i></span>
+                <div class="info-box-content">
+                  <span class="info-box-text">Finished</span>
+                  <span class="info-box-number" id="executionFinished">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="box box-primary">
             <div class="box-header with-border">
               <div class="box-tools pull-right">
@@ -281,52 +406,7 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="col-lg-2 col-md-12 col-xs-12 execution-summary-column">
-          <div class="row execution-summary">
-            <div class="col-sm-6 col-md-3 col-lg-12">
-              <div class="info-box">
-                <span class="info-box-icon bg-aqua"><i class="fa fa-list"></i></span>
-                <div class="info-box-content">
-                  <span class="info-box-text">Executions</span>
-                  <span class="info-box-number" id="executionTotal">0</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-md-3 col-lg-12">
-              <div class="info-box">
-                <span class="info-box-icon bg-yellow"><i class="fa fa-clock-o"></i></span>
-                <div class="info-box-content">
-                  <span class="info-box-text">Queued</span>
-                  <span class="info-box-number" id="executionQueued">0</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-md-3 col-lg-12">
-              <div class="info-box">
-                <span class="info-box-icon bg-green"><i class="fa fa-play"></i></span>
-                <div class="info-box-content">
-                  <span class="info-box-text">Running</span>
-                  <span class="info-box-number" id="executionRunning">0</span>
-                </div>
-              </div>
-            </div>
-            <div class="col-sm-6 col-md-3 col-lg-12">
-              <div class="info-box">
-                <span class="info-box-icon bg-red"><i class="fa fa-flag-checkered"></i></span>
-                <div class="info-box-content">
-                  <span class="info-box-text">Finished</span>
-                  <span class="info-box-number" id="executionFinished">0</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="col-xs-12">
           <div class="box box-primary">
             <div class="box-header with-border">
               <div class="box-tools pull-right">
@@ -339,6 +419,18 @@
                 <i class="fa fa-terminal fa-3x"></i>
                 <h4>No live executions yet</h4>
                 <p>Select one or more Jenkins jobs and trigger them to open live console tabs.</p>
+              </div>
+              <div class="execution-toolbar execution-console-toolbar">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Console layout">
+                  <button type="button" class="btn btn-primary active" id="consoleTabbedView" data-console-view="tabs"><i class="fa fa-list"></i> Tabs</button>
+                  <button type="button" class="btn btn-default" id="consoleCompareView" data-console-view="compare"><i class="fa fa-columns"></i> Compare</button>
+                </div>
+                <select class="form-control input-sm execution-compare-columns" id="consoleCompareColumns" disabled>
+                  <option value="auto">Auto columns</option>
+                  <option value="2">2 columns</option>
+                  <option value="3">3 columns</option>
+                </select>
+                <span class="execution-console-hint" id="consoleViewHint">Showing one live console at a time.</span>
               </div>
               <ul class="nav nav-tabs execution-tabs" id="executionTabs" role="tablist"></ul>
               <div class="tab-content" id="executionTabContent" style="padding-top: 15px;"></div>
@@ -362,6 +454,8 @@
     var buildPollDelay = 2000;
     var queuePollDelay = 2000;
     var consolePollDelay = 1200;
+    var consoleViewMode = 'tabs';
+    var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
 
     if (jenkinsUrl && jenkinsUrl.charAt(jenkinsUrl.length - 1) !== '/') {
       jenkinsUrl += '/';
@@ -429,6 +523,27 @@
       }
 
       return new Date(timestamp).toLocaleString();
+    }
+
+    function jobCreationTimestamp(jobName) {
+      var createdAt = jobCreationDates[jobName] || '';
+      var timestamp = Date.parse(createdAt);
+
+      return isNaN(timestamp) ? 0 : timestamp;
+    }
+
+    function formatJobCreationDate(jobName) {
+      var timestamp = jobCreationTimestamp(jobName);
+
+      if (! timestamp) {
+        return 'Created: Not tracked';
+      }
+
+      if (typeof moment === 'function') {
+        return 'Created: ' + moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+      }
+
+      return 'Created: ' + new Date(timestamp).toLocaleString();
     }
 
     function formatDuration(milliseconds) {
@@ -598,6 +713,7 @@
           '<input type="checkbox" class="execution-job-check" value="' + escapeAttribute(name) + '" ' + (selectedJobNames[name] ? 'checked ' : '') + (job.buildable === false ? 'disabled ' : '') + '>' +
           '<span class="execution-job-name">' + escapeHtml(name) + '</span>' +
           jobStateLabel(job) +
+          '<span class="execution-job-created"><i class="fa fa-calendar-o"></i> ' + escapeHtml(formatJobCreationDate(name)) + '</span>' +
         '</label>';
       });
 
@@ -619,6 +735,12 @@
           visibleJobs = jobs.sort(function(left, right) {
             var leftName = left.fullName || left.name || '';
             var rightName = right.fullName || right.name || '';
+            var createdDiff = jobCreationTimestamp(rightName) - jobCreationTimestamp(leftName);
+
+            if (createdDiff !== 0) {
+              return createdDiff;
+            }
+
             return leftName.localeCompare(rightName);
           });
 
@@ -722,6 +844,46 @@
       $('#executionTabs a[href="#pane-' + run.id + '"]').tab('show');
     }
 
+    function updateConsoleViewLayout() {
+      var compareMode = consoleViewMode === 'compare';
+      var columns = $('#consoleCompareColumns').val() || 'auto';
+
+      $('#consoleTabbedView')
+        .toggleClass('btn-primary active', ! compareMode)
+        .toggleClass('btn-default', compareMode);
+      $('#consoleCompareView')
+        .toggleClass('btn-primary active', compareMode)
+        .toggleClass('btn-default', ! compareMode);
+      $('#consoleCompareColumns').prop('disabled', ! compareMode);
+      $('#consoleViewHint').text(compareMode ? 'Showing live consoles side by side.' : 'Showing one live console at a time.');
+      $('#executionTabs').toggle(! compareMode);
+      $('#executionTabContent')
+        .removeClass('execution-compare-grid compare-columns-auto compare-columns-2 compare-columns-3')
+        .toggleClass('execution-compare-grid compare-columns-' + columns, compareMode);
+
+      if (! compareMode && executionOrder.length > 0 && $('#executionTabs li.active').length === 0) {
+        $('#executionTabs a[href="#pane-' + executionOrder[0] + '"]').tab('show');
+      }
+    }
+
+    function focusExecutionPane(runId) {
+      var pane = $('#pane-' + runId);
+
+      if (consoleViewMode === 'compare') {
+        if (pane.length && typeof pane[0].scrollIntoView === 'function') {
+          pane[0].scrollIntoView({behavior: 'smooth', block: 'start'});
+        }
+
+        pane.addClass('execution-pane-focus');
+        setTimeout(function() {
+          pane.removeClass('execution-pane-focus');
+        }, 1200);
+        return;
+      }
+
+      $('#executionTabs a[href="#pane-' + runId + '"]').tab('show');
+    }
+
     function updateExecutionUI(run) {
       var pane = $('#pane-' + run.id);
       pane.find('.run-job-name').text(run.jobName);
@@ -748,7 +910,7 @@
         }
 
         rows += '<tr>' +
-          '<td><a href="#pane-' + run.id + '" data-toggle="tab" class="execution-row-link" data-tab-id="' + run.id + '">' + escapeHtml(run.jobName) + '</a></td>' +
+          '<td><a href="#pane-' + run.id + '" class="execution-row-link" data-tab-id="' + run.id + '">' + escapeHtml(run.jobName) + '</a></td>' +
           '<td>' + escapeHtml(buildLabel(run)) + '</td>' +
           '<td>' + statusLabel(run) + '</td>' +
           '<td>' + escapeHtml(run.queueWhy || (run.queueId ? 'Queue #' + run.queueId : 'None')) + '</td>' +
@@ -1244,10 +1406,21 @@
       removeExecution(executions[$(this).data('execution-id')]);
     });
 
-    $(document).on('click', '.execution-row-link', function() {
-      $('#executionTabs a[href="#pane-' + $(this).data('tab-id') + '"]').tab('show');
+    $('[data-console-view]').on('click', function() {
+      consoleViewMode = $(this).data('console-view') === 'compare' ? 'compare' : 'tabs';
+      updateConsoleViewLayout();
+    });
+
+    $('#consoleCompareColumns').on('change', function() {
+      updateConsoleViewLayout();
+    });
+
+    $(document).on('click', '.execution-row-link', function(event) {
+      event.preventDefault();
+      focusExecutionPane($(this).data('tab-id'));
     });
 
     loadJobs();
+    updateConsoleViewLayout();
   });
 </script>
