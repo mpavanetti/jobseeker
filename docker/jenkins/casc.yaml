@@ -21,3 +21,13 @@ unclassified:
     smtpHost: "${JOBSEEKER_SMTP_HOST}"
     smtpPort: "${JOBSEEKER_SMTP_PORT}"
     useSsl: "${JOBSEEKER_SMTP_SSL}"
+  email-ext:
+    charset: "UTF-8"
+    defaultContentType: "text/html"
+    defaultReplyTo: "${JOBSEEKER_SMTP_REPLY_TO}"
+    mailAccount:
+      smtpHost: "${JOBSEEKER_SMTP_HOST}"
+      smtpPort: "${JOBSEEKER_SMTP_PORT}"
+      useSsl: "${JOBSEEKER_SMTP_SSL}"
+      useTls: false
+      useOAuth2: false
