@@ -95,7 +95,7 @@ class EmailSettings extends BaseController
         $config = array();
         $config['protocol'] = 'smtp';
         $config['smtp_host'] = 'smtp.gmail.com';
-        $config['smtp_user'] = 'YourEmail@gmail.com';
+        $config['smtp_user'] = 'sender@example.com';
         $config['smtp_pass'] = 'YOURPASSWORD';
         $config['smtp_port'] = '465'; 
         $config['mailtype'] = 'text';
@@ -105,8 +105,8 @@ class EmailSettings extends BaseController
 
         $this->email->set_newline("\r\n");
 
-        $this->email->to('YourEmail@hotmail.com');
-        $this->email->from('YourEmail@gmail.com');
+    $this->email->to('user@example.com');
+    $this->email->from('sender@example.com');
         $this->email->subject('Teste');
         $this->email->message('Teste'); 
 

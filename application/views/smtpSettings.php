@@ -28,9 +28,34 @@
             <div class="col-xs-12 text-left">
                 <div class="form-group">
                     <a class="btn btn-primary" href="<?php echo base_url(); ?>SmtpSettings/addSetting"><i class="fa fa-plus"></i> Add New Setting</a>
+                    <a class="btn btn-default" href="<?php echo base_url(); ?>SmtpSettings/syncJenkinsMailer"><i class="fa fa-refresh"></i> Sync Jenkins Mailer</a>
+                    <a class="btn btn-info" href="<?php echo htmlspecialchars($mailpit_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"><i class="fa fa-inbox"></i> Open Mailpit Inbox</a>
                 </div>
             </div>
         </div> 
+      <?php } ?>
+      <?php if(!empty($default_smtp)) { ?>
+        <div class="alert alert-info">
+          <i class="fa fa-envelope"></i>
+          Default enabled SMTP provider: <b><?php echo $default_smtp->name ?></b> at <b><?php echo $default_smtp->smtp_host ?>:<?php echo $default_smtp->smtp_port ?></b>.
+        </div>
+        <?php if(strtolower($default_smtp->smtp_host) === 'mailpit') { ?>
+        <div class="alert alert-warning">
+          <i class="fa fa-inbox"></i>
+          Local Mailpit captures Jenkins emails for testing. Messages appear in the Mailpit inbox and are not delivered to external mailboxes until a real SMTP provider is enabled as default.
+        </div>
+        <?php } ?>
+      <?php } else { ?>
+        <div class="alert alert-warning">
+          <i class="fa fa-warning"></i>
+          No enabled SMTP provider is available. Jenkins build emails will not be sent until one is enabled.
+        </div>
+      <?php } ?>
+      <?php if(!empty($jenkins_mailer_sync) && empty($jenkins_mailer_sync['ok'])) { ?>
+        <div class="alert alert-warning">
+          <i class="fa fa-warning"></i>
+          <?php echo $jenkins_mailer_sync['message']; ?>
+        </div>
       <?php } ?>
       <div class="row" style="margin-top: 5px;">
         <div class="col-xs-12">
@@ -48,6 +73,9 @@
                   <th>Name</th>
                   <th>Smtp_Host</th>
                   <th>Smtp_Port</th>
+                  <th>Enabled</th>
+                  <th>Default</th>
+                  <th>Reply To</th>
                   <th>Username</th>
                   <th>Password</th>
                   <th>Ssl</th>
@@ -69,6 +97,9 @@
                         <td><?php echo $record->name ?></td>
                         <td><?php echo $record->smtp_host ?></td>
                         <td><?php echo $record->smtp_port ?></td>
+                        <td><?php echo ((int) $record->is_enabled === 1) ? '<span class="label label-success">Enabled</span>' : '<span class="label label-default">Disabled</span>' ?></td>
+                        <td><?php echo ((int) $record->is_default === 1) ? '<span class="label label-primary">Default</span>' : '' ?></td>
+                        <td><?php echo $record->reply_to ?></td>
                         <td><?php echo $record->username ?></td>
                         <?php 
                           if($role != 1) { 
@@ -96,6 +127,9 @@
                   <th>Name</th>
                   <th>Smtp_Host</th>
                   <th>Smtp_Port</th>
+                  <th>Enabled</th>
+                  <th>Default</th>
+                  <th>Reply To</th>
                   <th>Username</th>
                   <th>Password</th>
                   <th>Ssl</th>

@@ -16,8 +16,13 @@
     transform: scale(1.5);
   }
   .checkbox label {
-    
+
     font-size: 16px;
+  }
+
+  .job-creation-workspace {
+    max-width: none;
+    width: 100%;
   }
 
   .job-form-row {
@@ -32,8 +37,17 @@
   }
 
   .job-form-row > [class*="col-"] {
+    align-items: stretch;
     display: flex;
     float: none;
+    margin-bottom: 20px;
+  }
+
+  .job-form-row > [class*="col-"] > .job-form-card,
+  .job-form-row > [class*="col-"] > .job-config-canvas {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+    min-height: 100%;
   }
 
   .job-form-card {
@@ -43,12 +57,152 @@
   }
 
   .job-form-card .box-body {
+    display: flex;
     flex: 1 1 auto;
+    flex-direction: column;
   }
 
-  .job-options-list .checkbox {
-    margin: 0 0 12px;
-    padding: 4px 0;
+  .job-option-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  .job-config-options {
+    border-bottom: 1px solid #edf1f5;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+  }
+
+  .job-config-options-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .job-config-options-header strong {
+    color: #3c4b55;
+    font-size: 15px;
+  }
+
+  .job-config-options .job-option-grid {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+
+  .job-option-card {
+    background: #fff;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    color: #444;
+    cursor: pointer;
+    display: block;
+    margin: 0;
+    min-height: 76px;
+    padding: 10px 10px 10px 42px;
+    position: relative;
+    transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
+
+  .job-option-card:hover {
+    background: #f9fafc;
+    border-color: #9ab6c8;
+  }
+
+  .job-option-card.active {
+    background: #f4fbff;
+    border-color: #3c8dbc;
+    box-shadow: inset 4px 0 0 #3c8dbc;
+  }
+
+  .job-option-card input {
+    opacity: 0;
+    position: absolute;
+  }
+
+  .job-option-icon {
+    color: #3c8dbc;
+    font-size: 19px;
+    left: 12px;
+    position: absolute;
+    top: 11px;
+  }
+
+  .job-option-title {
+    display: block;
+    font-weight: 700;
+    line-height: 1.25;
+    padding-right: 66px;
+  }
+
+  .job-option-detail {
+    color: #777;
+    display: block;
+    font-size: 12px;
+    line-height: 1.35;
+    margin-top: 5px;
+  }
+
+  .job-option-state {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+  }
+
+  .job-option-state .label {
+    display: none;
+  }
+
+  .job-option-card.active .job-option-state .label {
+    display: inline-block;
+  }
+
+  .job-config-action-menu {
+    align-items: center;
+    background: #f9fafc;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    min-height: 38px;
+    padding: 7px;
+  }
+
+  .job-config-action-menu-compact {
+    background: transparent;
+    border: 0;
+    justify-content: flex-end;
+    margin-top: 6px;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .job-config-chip {
+    border-color: #b8c7ce;
+    color: #3c4b55;
+    font-weight: 600;
+  }
+
+  .job-config-chip i {
+    color: #3c8dbc;
+    margin-right: 4px;
+  }
+
+  .job-config-chip:hover,
+  .job-config-chip:focus,
+  .job-config-chip.active {
+    background: #ecf7ff;
+    border-color: #3c8dbc;
+    color: #2b536a;
+  }
+
+  .job-config-menu-empty {
+    color: #777;
+    font-size: 12px;
   }
 
   .job-form-actions {
@@ -59,6 +213,672 @@
     gap: 8px;
     margin-top: 16px;
     padding-top: 16px;
+  }
+
+  .job-bulk-drafts {
+    border-top: 1px solid #edf1f5;
+    margin-top: 14px;
+    padding-top: 14px;
+  }
+
+  .job-bulk-drafts-summary {
+    align-items: flex-start;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+  }
+
+  .job-bulk-drafts-summary label {
+    margin-bottom: 2px;
+  }
+
+  .job-bulk-drafts-summary .help-block {
+    margin: 0;
+  }
+
+  .job-bulk-drafts-panel {
+    background: #fbfcfd;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    display: none;
+    margin-top: 10px;
+    padding: 10px;
+  }
+
+  .job-bulk-drafts-panel textarea {
+    resize: vertical;
+  }
+
+  .linux-code-editor {
+    background: #1e1e1e;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+    overflow: hidden;
+  }
+
+  .linux-code-editor-bar {
+    align-items: center;
+    background: #252526;
+    border-bottom: 1px solid #333;
+    color: #cccccc;
+    display: flex;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    justify-content: space-between;
+    min-height: 32px;
+  }
+
+  .linux-code-editor-tab {
+    align-items: center;
+    background: #1e1e1e;
+    border-right: 1px solid #333;
+    display: inline-flex;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+  }
+
+  .linux-code-editor-tab i {
+    color: #75beff;
+  }
+
+  .linux-code-editor-actions {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+    padding-right: 8px;
+  }
+
+  .linux-code-editor-actions .btn {
+    background: transparent;
+    border: 0;
+    color: #cccccc;
+    padding: 2px 5px;
+  }
+
+  .linux-code-editor-actions .btn:hover,
+  .linux-code-editor-actions .btn:focus {
+    background: #37373d;
+    color: #fff;
+  }
+
+  .python-inline-workspace {
+    background: #252526;
+    display: flex;
+    min-height: 320px;
+  }
+
+  .python-inline-sidebar {
+    border-right: 1px solid #333;
+    color: #cccccc;
+    flex: 0 0 220px;
+    min-width: 0;
+  }
+
+  .python-inline-sidebar-header {
+    align-items: center;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    min-height: 35px;
+    padding: 0 8px 0 10px;
+  }
+
+  .python-inline-sidebar-title {
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .python-inline-sidebar-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .python-inline-sidebar-actions .btn {
+    background: transparent;
+    border: 0;
+    color: #cccccc;
+    padding: 2px 5px;
+  }
+
+  .python-inline-sidebar-actions .btn:hover,
+  .python-inline-sidebar-actions .btn:focus {
+    background: #37373d;
+    color: #fff;
+  }
+
+  .python-inline-file-list {
+    max-height: 314px;
+    overflow: auto;
+    padding: 6px 0;
+  }
+
+  .python-inline-file-row {
+    align-items: stretch;
+    display: flex;
+  }
+
+  .python-inline-file,
+  .python-inline-folder,
+  .python-inline-file-remove {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: #cccccc;
+    display: flex;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    gap: 7px;
+    min-height: 28px;
+    padding: 0 10px;
+    text-align: left;
+  }
+
+  .python-inline-file {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .python-inline-file span,
+  .python-inline-folder span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .python-inline-file.active {
+    background: #37373d;
+    color: #fff;
+  }
+
+  .python-inline-file i,
+  .python-inline-folder i {
+    color: #75beff;
+    flex: 0 0 auto;
+  }
+
+  .python-inline-folder i {
+    color: #d7ba7d;
+  }
+
+  .python-inline-file-remove {
+    color: #858585;
+    flex: 0 0 28px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .python-inline-file-remove:hover,
+  .python-inline-file-remove:focus {
+    background: #4b2f32;
+    color: #f48771;
+  }
+
+  .python-inline-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .python-inline-tabs {
+    border-bottom: 1px solid #333;
+    border-right: 1px solid #333;
+    display: flex;
+    flex: 0 0 auto;
+    min-height: 35px;
+    overflow-x: auto;
+  }
+
+  .python-inline-tab {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-right: 1px solid #333;
+    color: #cccccc;
+    display: flex;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    gap: 7px;
+    min-height: 35px;
+    padding: 0 8px 0 10px;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .python-inline-tab.active {
+    background: #1e1e1e;
+    border-top: 2px solid #007acc;
+    color: #fff;
+    padding-top: 0;
+  }
+
+  .python-inline-tab i {
+    color: #75beff;
+  }
+
+  .python-inline-tab-close {
+    align-items: center;
+    color: #858585;
+    display: inline-flex;
+    height: 18px;
+    justify-content: center;
+    margin-left: 4px;
+    width: 18px;
+  }
+
+  .python-inline-tab-close:hover,
+  .python-inline-tab-close:focus {
+    background: #37373d;
+    color: #fff;
+  }
+
+  .python-inline-empty-state {
+    align-items: center;
+    color: #858585;
+    display: none;
+    flex: 1 1 auto;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    justify-content: center;
+    min-height: 286px;
+  }
+
+  .python-inline-empty-state.active {
+    display: flex;
+  }
+
+  .python-inline-editor-panel {
+    display: none;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .python-inline-editor-panel.active {
+    display: block;
+  }
+
+  .python-inline-editor-panel .linux-code-editor {
+    border: 0;
+    border-radius: 0;
+    min-height: 100%;
+  }
+
+  .linux-code-editor-meta {
+    color: #858585;
+    padding: 0 12px;
+  }
+
+  .linux-code-editor-body {
+    align-items: stretch;
+    display: flex;
+    min-height: 240px;
+  }
+
+  .linux-code-editor-lines {
+    background: #1b1b1b;
+    border-right: 1px solid #333;
+    color: #858585;
+    flex: 0 0 44px;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 20px;
+    overflow: hidden;
+    padding: 10px 8px;
+    text-align: right;
+    user-select: none;
+  }
+
+  .linux-code-editor textarea.form-control {
+    background: #1e1e1e;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    color: #d4d4d4;
+    flex: 1 1 auto;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 20px;
+    min-height: 240px;
+    padding: 10px 12px;
+    resize: vertical;
+    white-space: pre;
+  }
+
+  .linux-code-editor textarea.form-control:focus {
+    box-shadow: inset 0 0 0 1px #007acc;
+    outline: 0;
+  }
+
+  .linux-code-editor textarea.form-control::placeholder {
+    color: #6a9955;
+  }
+
+  .linux-code-editor-status {
+    align-items: center;
+    background: #007acc;
+    color: #fff;
+    display: flex;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11px;
+    justify-content: flex-end;
+    min-height: 22px;
+    padding: 0 10px;
+  }
+
+  .linux-code-editor-status span {
+    margin-left: 12px;
+  }
+
+  .job-batch-tools {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .job-batch-preview {
+    color: #777;
+    margin-top: 8px;
+  }
+
+  .job-draft-workspace {
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    margin-top: 12px;
+  }
+
+  .job-draft-toolbar {
+    align-items: center;
+    background: #f9fafc;
+    border-bottom: 1px solid #d2d6de;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .job-draft-tabs {
+    border-bottom: 1px solid #d2d6de;
+    padding: 0 10px;
+  }
+
+  .job-draft-tabs > li > a {
+    color: #444;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .job-draft-comparison {
+    margin: 0;
+  }
+
+  .job-draft-comparison th,
+  .job-draft-comparison td {
+    vertical-align: top !important;
+  }
+
+  .job-draft-comparison .active-draft-row {
+    background: #ecf7ff;
+  }
+
+  .job-creation-review {
+    background: #f9fafc;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    margin-top: 16px;
+    padding: 12px;
+  }
+
+  .job-creation-review h4 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 8px;
+  }
+
+  .job-creation-review dl {
+    margin-bottom: 0;
+  }
+
+  .job-creation-review dt {
+    color: #777;
+    float: left;
+    width: 130px;
+  }
+
+  .job-creation-review dd {
+    margin-left: 140px;
+    margin-bottom: 6px;
+    word-break: break-word;
+  }
+
+  .job-creation-review .label {
+    margin-right: 4px;
+  }
+
+  .job-form-card .job-creation-review {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    border-top: 1px solid #edf1f5;
+    padding: 14px 0 0;
+  }
+
+  .job-config-canvas {
+    background: #fff;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    min-height: 100%;
+    overflow: visible;
+    padding: 0 14px 14px;
+    width: 100%;
+  }
+
+  .job-config-header {
+    align-items: center;
+    background: #fff;
+    border-bottom: 1px solid #edf1f5;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    justify-content: space-between;
+    margin: 0 -14px 14px;
+    padding: 14px;
+  }
+
+  .job-config-header-actions {
+    flex: 0 0 auto;
+    text-align: right;
+  }
+
+  .job-config-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .job-config-header p {
+    color: #777;
+    margin: 4px 0 0;
+  }
+
+  .job-config-empty-state {
+    border: 1px dashed #d2d6de;
+    color: #777;
+    padding: 28px 18px;
+    text-align: center;
+  }
+
+  .job-config-workbench {
+    align-items: stretch;
+    display: grid;
+    flex: 1 1 auto;
+    gap: 12px;
+    grid-template-columns: 175px minmax(0, 1fr);
+    min-height: 420px;
+  }
+
+  .job-config-side {
+    background: #f9fafc;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    padding: 10px;
+  }
+
+  .job-config-side-title {
+    color: #777;
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .job-config-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .job-config-rail .job-config-chip {
+    border-radius: 4px;
+    overflow: hidden;
+    padding: 8px 9px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  .job-config-panel-empty-note {
+    border: 1px dashed #d2d6de;
+    color: #777;
+    display: none;
+    padding: 28px 18px;
+    text-align: center;
+  }
+
+  .job-config-workbench.is-empty {
+    display: none;
+  }
+
+  .job-config-panel-stack > .row {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .job-config-panel-inactive {
+    display: none !important;
+  }
+
+  .job-config-canvas .box {
+    border-top-width: 3px;
+    box-shadow: none;
+    margin-bottom: 14px;
+  }
+
+  .job-config-canvas .box-header {
+    background: #f9fafc;
+  }
+
+  .job-config-canvas .box-body {
+    max-height: calc(100vh - 245px);
+    overflow-y: auto;
+    padding: 16px 18px !important;
+  }
+
+  .job-config-canvas .form-group {
+    margin-bottom: 12px;
+  }
+
+  .job-config-canvas select.form-control,
+  .job-config-canvas .select2-container {
+    max-width: 100%;
+    width: 100% !important;
+  }
+
+  .job-config-canvas .box.job-config-highlight {
+    box-shadow: 0 0 0 2px rgba(60, 141, 188, .22);
+  }
+
+  .job-config-canvas .box-header .btn-box-tool[data-widget="collapse"] {
+    display: none;
+  }
+
+  .job-config-canvas #runWinCommand > .col-lg-6,
+  .job-config-canvas #runlinuxCommand > .col-lg-6,
+  .job-config-canvas #build > .col-lg-6,
+  .job-config-canvas #enableEmail > .col-lg-6,
+  .job-config-canvas #abortIfStuck > .col-lg-6,
+  .job-config-canvas #runJob > .col-lg-6,
+  .job-config-canvas #editableEmail > .col-lg-6,
+  .job-config-canvas #environmentBox > .col-lg-6 {
+    float: none;
+    width: 100%;
+  }
+
+  @media (max-width: 600px) {
+    .job-config-header-actions {
+      text-align: left;
+    }
+
+    .job-config-action-menu-compact {
+      justify-content: flex-start;
+    }
+
+    .job-config-workbench {
+      grid-template-columns: 1fr;
+      min-height: 0;
+    }
+
+    .job-config-rail {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .job-config-rail .job-config-chip {
+      width: auto;
+    }
+
+    .job-config-canvas .box-body {
+      max-height: none;
+    }
+
+    .python-inline-workspace {
+      flex-direction: column;
+    }
+
+    .python-inline-tabs {
+      border-bottom: 1px solid #333;
+      border-right: 0;
+      display: flex;
+      flex: 0 0 auto;
+    }
+
+    .python-inline-tab {
+      border-bottom: 0;
+      border-right: 1px solid #333;
+      justify-content: center;
+    }
+
+    .job-creation-review dt {
+      float: none;
+      width: auto;
+    }
+
+    .job-creation-review dd {
+      margin-left: 0;
+    }
   }
 
   #build .box-body,
@@ -81,8 +901,32 @@
     border-left: 4px solid #00a65a;
   }
 
+  #myTable th.available-job-actions-cell,
+  #myTable td.available-job-actions-cell {
+    min-width: 230px;
+    white-space: nowrap;
+  }
+
+  #myTable .available-job-actions {
+    align-items: center;
+    display: inline-flex;
+    flex-wrap: nowrap;
+    vertical-align: middle;
+  }
+
+  #myTable .available-job-actions > .btn {
+    float: none;
+  }
+
+  .job-log-output pre {
+    max-height: 520px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
 </style>
-<div class="content-wrapper">    
+<div class="content-wrapper">
   <section class="content-header">
     <h1>
       Job Creation
@@ -95,7 +939,7 @@
     </ol>
   </section>
   <section class="content">
-    <div class="container">
+    <div class="container-fluid job-creation-workspace">
       <div class="row" style="margin-top: 10px; margin-bottom: 10px;">
         <div class="col-xs-12 text-right">
           <a class="btn btn-default" href="<?php echo base_url(); ?>jobList"><i class="fa fa-list"></i> Job Build List</a>
@@ -111,17 +955,35 @@
 
   <div class="row" style="margin-top: 10px; margin-bottom: 10px;">
    <div class="col-md-12">
-    <?php 
+    <?php
     $this->load->helper('form');
     $savedJobName = $this->session->flashdata('saved_job_name');
     if($savedJobName)
     {
       $this->session->unset_userdata('saved_job_name');
     }
+    $savedJobNames = $this->session->flashdata('saved_job_names');
+    if(! is_array($savedJobNames))
+    {
+      $savedJobNames = $savedJobName ? array($savedJobName) : array();
+    }
+    if($savedJobNames)
+    {
+      $this->session->unset_userdata('saved_job_names');
+    }
     $savedJobCreatedAt = $this->session->flashdata('saved_job_created_at');
     if($savedJobCreatedAt)
     {
       $this->session->unset_userdata('saved_job_created_at');
+    }
+    $savedJobCreationDates = $this->session->flashdata('saved_job_creation_dates');
+    if(! is_array($savedJobCreationDates))
+    {
+      $savedJobCreationDates = array();
+    }
+    if($savedJobCreationDates)
+    {
+      $this->session->unset_userdata('saved_job_creation_dates');
     }
     $jobCreationDates = isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array();
     $error = $this->session->flashdata('error');
@@ -137,7 +999,7 @@
         <?php echo $error; ?>
       </div>
     <?php } ?>
-    <?php  
+    <?php
     $success = $this->session->flashdata('success');
     if($success)
     {
@@ -200,6 +1062,23 @@
 <!-- /.col -->
 </div>
 <!-- /.row -->
+
+<div class="modal fade" id="jobCreationLogModal" style="display: none;">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">×</span></button>
+        <h4 class="modal-title">Job Build Console Log</h4>
+      </div>
+      <div class="modal-body job-log-output" id="jobCreationLogContent"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary pull-left" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php $this->load->helper("form"); ?>
 <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post">
 <div class="alert alert-info editJobBanner" style="display: none;">
@@ -208,7 +1087,7 @@
   <button type="button" id="clearEditJob" class="btn btn-default btn-xs pull-right"><i class="fa fa-plus"></i> New Job</button>
 </div>
 <div class="row job-form-row">
-  <div class="col-lg-6 col-md-6 col-xs-12">
+  <div class="col-lg-4 col-md-12 col-xs-12">
     <div class="box box-primary job-form-card" style="padding-bottom: 15px;">
       <div class="overlay" style="display:none;">
         <i class="fa fa-refresh fa-spin"></i>
@@ -218,7 +1097,7 @@
           <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
           </button>
         </div>
-        <h3 class="box-title"><b>Job Input Fields</b></h3> 
+        <h3 class="box-title"><b>Job Input Fields</b></h3>
       </div>
 
       <!-- /.box-header -->
@@ -227,6 +1106,38 @@
           <div class="form-group">
             <label for="exampleInputEmail1">Job Name</label>
             <input type="text" name ="job_name" class="form-control" id="job_name" maxlength="50" placeholder="Auto-generated if empty" onkeypress="return event.charCode != 32">
+            <p class="help-block">Primary job name. Leave empty to generate one.</p>
+          </div>
+          <div class="form-group job-bulk-drafts">
+            <div class="job-bulk-drafts-summary">
+              <div>
+                <label>Bulk Job Drafts</label>
+                <p class="help-block">Optional. Create multiple named jobs or manage separate draft tabs.</p>
+              </div>
+              <button type="button" class="btn btn-default btn-xs" id="toggleBulkDrafts"><i class="fa fa-clone"></i> <span class="bulk-drafts-toggle-label">Show Bulk Tools</span></button>
+            </div>
+            <div class="job-bulk-drafts-panel" id="bulkDraftsPanel">
+              <label for="job_names">Draft Names</label>
+              <textarea class="form-control" id="job_names" name="job_names" maxlength="5000" rows="3" placeholder="one-job-per-line&#10;another-job&#10;folder/nested-job"></textarea>
+              <p class="help-block">Names become draft tabs. Each tab can keep its own configuration before save.</p>
+              <div class="job-batch-tools">
+                <button type="button" class="btn btn-default btn-xs" id="generateBatchNames"><i class="fa fa-magic"></i> Generate 3 Names</button>
+                <button type="button" class="btn btn-default btn-xs" id="syncDraftNames"><i class="fa fa-columns"></i> Apply Names To Tabs</button>
+                <span class="job-batch-preview" id="jobBatchPreview">1 job will be saved.</span>
+              </div>
+              <div class="job-draft-workspace">
+                <div class="job-draft-toolbar">
+                  <strong><i class="fa fa-clone"></i> Job Drafts</strong>
+                  <button type="button" class="btn btn-default btn-xs" id="addJobDraft"><i class="fa fa-plus"></i> Add</button>
+                  <button type="button" class="btn btn-default btn-xs" id="duplicateJobDraft"><i class="fa fa-copy"></i> Duplicate</button>
+                  <button type="button" class="btn btn-danger btn-xs" id="removeJobDraft"><i class="fa fa-trash"></i> Remove</button>
+                </div>
+                <ul class="nav nav-tabs job-draft-tabs" id="jobDraftTabs"></ul>
+                <div class="table-responsive">
+                  <table class="table table-condensed table-striped job-draft-comparison" id="jobDraftComparison"></table>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="form-group" style="padding-top: 5px;">
             <div class="form-group">
@@ -234,91 +1145,123 @@
               <textarea class="form-control" id="description" value="" name="description" maxlength="500" rows="5"></textarea>
             </div>
           </div>
-        </div>
-        <!-- /.box-body -->
-      </div>
-    </div>
-
-    <div class="col-lg-6 col-md-6 col-xs-12">
-      <div class="box box-primary job-form-card">
-        <div class="overlay" style="display:none;">
-          <i class="fa fa-refresh fa-spin"></i>
-        </div>
-        <div class="box-header with-border">
-          <div class="box-tools pull-right">
-            <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-            </button>
+          <div class="job-creation-review">
+            <h4><i class="fa fa-clipboard"></i> Review Before Save</h4>
+            <dl id="jobCreationReview"></dl>
           </div>
-          <h3 class="box-title"><b>Job Options</b></h3>
-        </div>
-        <!-- /.box-header -->
-        <!-- form start -->
-        <div class="box-body job-options-list">
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="checkBuild" id="checkBuild" value="1"> Schedule Job
-            </label>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1"> Choose Environment
-            </label>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="abort" id="abort" value="1"> Abort the job if it's stuck
-            </label>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="timestamp" id="timestamp" value="1"> Add timestamps to the Console Output
-            </label>
-          </div>
-          <?php if($os == "windows") { ?>
-            <div class="checkbox">
-              <label>
-                <input type="checkbox" name="winCommand" id="winCommand" value="1"> Execute a <b>Windows</b> local command or script
-              </label>
-            </div>
-          <?php } else { ?>
-            <div class="checkbox">
-              <label>
-                <input type="checkbox" name="linuxCommand" id="linuxCommand" value="1"> Execute a <b>Linux</b> local command or script
-              </label>
-            </div>
-          <?php }?>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="runJobCheck" id="runJobCheck" value="1"> Execute another job after this build
-            </label>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="emailCheck" id="emailCheck" value="1"> Enable email notification in case of failure
-            </label>
-          </div>
-          <div class="checkbox">
-            <label>
-              <input type="checkbox" name="editableEmailCheck" id="editableEmailCheck" value="1"> Enable editable email notification
-            </label>
-          </div>
-          <div class="form-group" style="margin-top: 20px;">
-            <div class="form-group job-form-actions">
-              <input type="hidden" name="trigger_after_save" id="trigger_after_save" value="0">
-              <button type="submit" id="send" href="#" class="btn btn-success buildXmlBtn"><i class="fa fa-save"></i> Create Job</button>
-              <button type="submit" id="saveAndTrigger" class="btn btn-primary buildXmlBtn"><i class="fa fa-play"></i> Create And Trigger</button>
-              <span class="saveJobStatus text-muted" style="display: none; margin-left: 10px;"></span>
-            </div>
+          <div class="form-group job-form-actions">
+            <input type="hidden" name="trigger_after_save" id="trigger_after_save" value="0">
+            <button type="submit" id="send" href="#" class="btn btn-success buildXmlBtn"><i class="fa fa-save"></i> Create Job</button>
+            <button type="submit" id="saveAndTrigger" class="btn btn-primary buildXmlBtn"><i class="fa fa-play"></i> Create And Trigger</button>
+            <span class="saveJobStatus text-muted" style="display: none; margin-left: 10px;"></span>
           </div>
         </div>
         <!-- /.box-body -->
       </div>
     </div>
 
-  </div>
+    <div class="col-lg-8 col-md-12 col-xs-12">
+      <div class="job-config-canvas">
+    <div class="job-config-header">
+      <div>
+        <h3><i class="fa fa-sliders"></i> Configuration Canvas</h3>
+        <p>Select options, then edit one enabled section at a time.</p>
+      </div>
+      <div class="job-config-header-actions">
+        <span class="label label-default" id="jobOptionEnabledCount">0 enabled</span>
+      </div>
+    </div>
+        <div class="job-config-options">
+          <div class="job-config-options-header">
+            <strong><i class="fa fa-list-ul"></i> Job Options</strong>
+          </div>
+          <div class="job-option-grid">
+            <?php if($os == "windows") { ?>
+              <label class="job-option-card" data-option-panel="#runWinCommand">
+                <input type="checkbox" name="winCommand" id="winCommand" value="1">
+                <i class="fa fa-terminal job-option-icon"></i>
+                <span class="job-option-title">Windows Execution</span>
+                <span class="job-option-detail">Command line or uploaded Windows script.</span>
+                <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+              </label>
+            <?php } else { ?>
+              <label class="job-option-card" data-option-panel="#runlinuxCommand">
+                <input type="checkbox" name="linuxCommand" id="linuxCommand" value="1">
+                <i class="fa fa-terminal job-option-icon"></i>
+                <span class="job-option-title">Linux Execution</span>
+                <span class="job-option-detail">Shell command, Bash, Talend, or Python source.</span>
+                <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+              </label>
+            <?php }?>
+            <label class="job-option-card" data-option-panel="#build">
+              <input type="checkbox" name="checkBuild" id="checkBuild" value="1">
+              <i class="fa fa-calendar job-option-icon"></i>
+              <span class="job-option-title">Schedule</span>
+              <span class="job-option-detail">Cron-style single, repetitive, or tag based timing.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+            <label class="job-option-card" data-option-panel="#environmentBox">
+              <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1">
+              <i class="fa fa-database job-option-icon"></i>
+              <span class="job-option-title">Environment</span>
+              <span class="job-option-detail">Attach one managed environment/context to the run.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+            <label class="job-option-card" data-option-panel="#abortIfStuck">
+              <input type="checkbox" name="abort" id="abort" value="1">
+              <i class="fa fa-hourglass-half job-option-icon"></i>
+              <span class="job-option-title">Timeout</span>
+              <span class="job-option-detail">Abort jobs after no activity or an absolute limit.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+            <label class="job-option-card">
+              <input type="checkbox" name="timestamp" id="timestamp" value="1">
+              <i class="fa fa-clock-o job-option-icon"></i>
+              <span class="job-option-title">Console Timestamps</span>
+              <span class="job-option-detail">Add Jenkins timestamps to console output.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+            <label class="job-option-card" data-option-panel="#runJob">
+              <input type="checkbox" name="runJobCheck" id="runJobCheck" value="1">
+              <i class="fa fa-sitemap job-option-icon"></i>
+              <span class="job-option-title">Downstream Jobs</span>
+              <span class="job-option-detail">Trigger one or more jobs after this build.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+            <label class="job-option-card" data-option-panel="#enableEmail">
+              <input type="checkbox" name="emailCheck" id="emailCheck" value="1">
+              <i class="fa fa-envelope-o job-option-icon"></i>
+              <span class="job-option-title">Failure Email</span>
+              <span class="job-option-detail">Send a simple recipient list on failed builds.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+            <label class="job-option-card" data-option-panel="#editableEmail">
+              <input type="checkbox" name="editableEmailCheck" id="editableEmailCheck" value="1">
+              <i class="fa fa-envelope job-option-icon"></i>
+              <span class="job-option-title">Email Templates</span>
+              <span class="job-option-detail">Choose success, failure, and abort templates.</span>
+              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+            </label>
+          </div>
+        </div>
+    <div class="job-config-empty-state" id="jobOptionEmptyState">
+      <i class="fa fa-mouse-pointer fa-2x"></i>
+      <h4>No optional configuration enabled</h4>
+      <p>Select an option card above to add schedule, execution, notification, timeout, environment, or downstream settings.</p>
+    </div>
 
-  <div class="row">
+    <div class="job-config-workbench is-empty" id="jobConfigWorkbench">
+      <div class="job-config-side">
+        <span class="job-config-side-title">Enabled Sections</span>
+        <div class="job-config-rail" id="jobConfigSideNav">
+          <span class="job-config-menu-empty">No configurable options enabled.</span>
+        </div>
+      </div>
 
+    <div class="job-config-panel-stack">
+      <div class="job-config-panel-empty-note" id="jobConfigPanelEmptyNote">
+        Enable an option to edit its settings here.
+      </div>
 
     <!-- Row and column for Schedule Job and Execute Windows / Linux Command, Script -->
     <div class="row">
@@ -397,8 +1340,9 @@
                           <label for="linuxExecutionStrategy">Execution Strategy</label>
                           <select class="form-control" id="linuxExecutionStrategy" name="linuxExecutionStrategy">
                             <option value="0" selected>-- Select an action -- </option>
-                            <option value="script">Script Execution</option>
                             <option value="command">Linux Command Execution</option>
+                            <option value="script">Script/File Execution</option>
+                            <option value="python_inline">Inline Python Code</option>
                           </select>
                         </div>
                       </div>
@@ -406,15 +1350,15 @@
                         <div class="form-group">
                           <label for="linuxScriptType">Script Type</label>
                           <select class="form-control" id="linuxScriptType" name="linuxScriptType"><option value="0" selected>-- Select a script type -- </option>
-                            <option value="bash">Linux Bash Script</option>
+                            <option value="bash">Bash Script</option>
                             <option value="talend">Talend Data Integration Script</option>
-                            <option value="python">Python Script</option>
+                            <option value="python">Python File or Repository</option>
                           </select>
                         </div>
                       </div>
                     </div>
                     <div class="row pythonSourceForm" style="display: none;">
-                      <div class="col-md-4">
+                      <div class="col-md-4 pythonSourceModeColumn">
                         <div class="form-group">
                           <label for="pythonSourceMode">Python Source</label>
                           <select class="form-control" id="pythonSourceMode" name="pythonSourceMode">
@@ -424,18 +1368,18 @@
                           </select>
                         </div>
                       </div>
-                      <div class="col-md-8">
+                      <div class="col-md-8 pythonEntryPointColumn">
                         <div class="form-group">
-                          <label for="pythonEntryPoint">Entry Python File</label>
-                          <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" placeholder="main.py">
+                          <label for="pythonEntryPoint">Entry Python File or Nested Path</label>
+                          <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" placeholder="main.py or pyjob/main.py">
                         </div>
                       </div>
                     </div>
                     <div class="row pythonPathSourceForm" style="display: none;">
                       <div class="col-md-12">
                         <div class="form-group">
-                          <label for="pythonSourcePath">Repository Path</label>
-                          <input type="text" class="form-control" id="pythonSourcePath" name="pythonSourcePath" maxlength="1000" autocomplete="off" placeholder="python/jobs/my-job or /php/repository/python/jobs/my-job">
+                          <label for="pythonSourcePath">Repository Folder or File</label>
+                          <input type="text" class="form-control" id="pythonSourcePath" name="pythonSourcePath" maxlength="1000" autocomplete="off" placeholder="python/jobs/my-job or python/jobs/my-job/main.py">
                         </div>
                       </div>
                     </div>
@@ -453,12 +1397,144 @@
                         </div>
                       </div>
                     </div>
+                    <div class="row pythonRuntimeForm" style="display: none;">
+                      <div class="col-md-6">
+                        <div class="form-group">
+                          <label for="pythonRuntimeMode">Runtime</label>
+                          <select class="form-control" id="pythonRuntimeMode" name="pythonRuntimeMode">
+                            <option value="local" selected>Jenkins Agent</option>
+                            <option value="docker">Docker Container</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="col-md-6 pythonAgentPythonColumn">
+                        <div class="form-group">
+                          <label for="pythonVersion">Agent Python</label>
+                          <select class="form-control" id="pythonVersion" name="pythonVersion">
+                            <option value="python3" selected>Default python3</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="col-md-6 pythonDockerImageColumn" style="display: none;">
+                        <div class="form-group">
+                          <label for="pythonDockerImage">Docker Image</label>
+                          <input type="text" class="form-control" id="pythonDockerImage" name="pythonDockerImage" maxlength="200" autocomplete="off" list="pythonDockerImageOptions" placeholder="alpine:3.20, eclipse-temurin:17-jre-alpine, or python:3.12-slim">
+                          <datalist id="pythonDockerImageOptions">
+                            <option value="alpine:3.20">
+                            <option value="busybox:1.36">
+                            <option value="bash:5.2">
+                            <option value="debian:12-slim">
+                            <option value="eclipse-temurin:17-jre-alpine">
+                            <option value="eclipse-temurin:17-jre-jammy">
+                            <option value="eclipse-temurin:11-jre-jammy">
+                            <option value="python:3.13-slim">
+                            <option value="python:3.12-slim">
+                            <option value="python:3.11-slim">
+                            <option value="python:3.10-slim">
+                          </datalist>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="row pythonInlineSourceForm" style="display: none;">
+                      <div class="col-md-12">
+                        <div class="form-group">
+                          <label id="pythonWorkspaceLabel" for="pythonInlineCode">Python Workspace</label>
+                          <input type="hidden" id="pythonInlineFilesJson" name="pythonInlineFilesJson" value="{&quot;files&quot;:[],&quot;directories&quot;:[]}">
+                          <div class="python-inline-workspace">
+                            <div class="python-inline-sidebar">
+                              <div class="python-inline-sidebar-header">
+                                <span class="python-inline-sidebar-title">Files</span>
+                                <div class="python-inline-sidebar-actions">
+                                  <button type="button" class="btn btn-xs" id="addPythonInlineFile" title="Add Python file"><i class="fa fa-file-code-o"></i></button>
+                                  <button type="button" class="btn btn-xs" id="addPythonInlineFolder" title="Add folder"><i class="fa fa-folder-o"></i></button>
+                                </div>
+                              </div>
+                              <div class="python-inline-file-list" id="pythonInlineFileList"></div>
+                            </div>
+                            <div class="python-inline-main">
+                              <div class="python-inline-tabs" role="tablist">
+                                <button type="button" class="python-inline-tab active" data-python-inline-pane="code"><i class="fa fa-code"></i> <span id="pythonInlineEditorFile">main.py</span><span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
+                                <button type="button" class="python-inline-tab" data-python-inline-pane="requirements"><i class="fa fa-list-alt"></i> requirements.txt<span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
+                                <button type="button" class="python-inline-tab" data-python-inline-pane="dockerfile"><i class="fa fa-cube"></i> Dockerfile<span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
+                                <button type="button" class="python-inline-tab" data-python-inline-pane="extra" style="display: none;"><i class="fa fa-file-code-o"></i> <span id="pythonInlineExtraTabFile">lib.py</span><span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
+                              </div>
+                              <div class="python-inline-empty-state" id="pythonInlineEmptyState"><i class="fa fa-file-code-o"></i>&nbsp;Select a file</div>
+                              <div class="python-inline-editor-panel active" data-python-inline-pane="code">
+                              <div class="linux-code-editor python-code-editor">
+                                <div class="linux-code-editor-bar">
+                                  <span class="linux-code-editor-tab"><i class="fa fa-code"></i> <span id="pythonInlineEditorActiveFile">main.py</span></span>
+                                  <span class="linux-code-editor-actions">
+                                    <button type="button" class="btn btn-xs" id="applyPythonInlineTemplate" title="Insert JobSeeker template"><i class="fa fa-magic"></i></button>
+                                    <span class="linux-code-editor-meta">python</span>
+                                  </span>
+                                </div>
+                                <div class="linux-code-editor-body">
+                                  <div class="linux-code-editor-lines" id="pythonInlineCodeNumbers" aria-hidden="true">1</div>
+                                  <textarea class="form-control" id="pythonInlineCode" name="pythonInlineCode" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="def main():&#10;    print(&quot;Hello from JobSeeker&quot;)&#10;&#10;if __name__ == &quot;__main__&quot;:&#10;    main()"></textarea>
+                                </div>
+                                <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
+                              </div>
+                              </div>
+                              <div class="python-inline-editor-panel" data-python-inline-pane="requirements">
+                              <div class="linux-code-editor python-requirements-editor">
+                                <div class="linux-code-editor-bar">
+                                  <span class="linux-code-editor-tab"><i class="fa fa-list-alt"></i> requirements.txt</span>
+                                  <span class="linux-code-editor-meta">pip</span>
+                                </div>
+                                <div class="linux-code-editor-body">
+                                  <div class="linux-code-editor-lines" id="pythonRequirementsTextNumbers" aria-hidden="true">1</div>
+                                  <textarea class="form-control" id="pythonRequirementsText" name="pythonRequirementsText" maxlength="20000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="requests==2.32.3&#10;pandas==2.2.2"></textarea>
+                                </div>
+                                <div class="linux-code-editor-status"><span>Requirements</span><span>UTF-8</span><span>LF</span></div>
+                              </div>
+                              </div>
+                              <div class="python-inline-editor-panel" data-python-inline-pane="dockerfile">
+                              <div class="linux-code-editor python-dockerfile-editor">
+                                <div class="linux-code-editor-bar">
+                                  <span class="linux-code-editor-tab"><i class="fa fa-cube"></i> Dockerfile</span>
+                                  <span class="linux-code-editor-meta">docker</span>
+                                </div>
+                                <div class="linux-code-editor-body">
+                                  <div class="linux-code-editor-lines" id="pythonDockerfileTextNumbers" aria-hidden="true">1</div>
+                                  <textarea class="form-control" id="pythonDockerfileText" name="pythonDockerfileText" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="FROM python:3.13-slim&#10;WORKDIR /app&#10;RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends build-essential &amp;&amp; rm -rf /var/lib/apt/lists/*"></textarea>
+                                </div>
+                                <div class="linux-code-editor-status"><span>Dockerfile</span><span>UTF-8</span><span>LF</span></div>
+                              </div>
+                              </div>
+                              <div class="python-inline-editor-panel" data-python-inline-pane="extra">
+                                <div class="linux-code-editor python-extra-editor">
+                                  <div class="linux-code-editor-bar">
+                                    <span class="linux-code-editor-tab"><i class="fa fa-file-code-o"></i> <span id="pythonInlineExtraEditorFile">lib.py</span></span>
+                                    <span class="linux-code-editor-meta">python</span>
+                                  </div>
+                                  <div class="linux-code-editor-body">
+                                    <div class="linux-code-editor-lines" id="pythonInlineExtraCodeNumbers" aria-hidden="true">1</div>
+                                    <textarea class="form-control" id="pythonInlineExtraCode" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="def helper():&#10;    return &quot;ready&quot;"></textarea>
+                                  </div>
+                                  <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     <hr>
                     <div class="row linuxCommandForm" style="display: none;">
                       <div class="col-md-12 ">
                         <div class="form-group">
                           <label for="linuxCommandLine">Linux Command Line</label>
-                          <textarea class="form-control" id="linuxCommandLine" name="linuxCommandLine"  maxlength="5000" autocomplete="off" rows="5"></textarea>
+                          <div class="linux-code-editor">
+                            <div class="linux-code-editor-bar">
+                              <span class="linux-code-editor-tab"><i class="fa fa-terminal"></i> command.sh</span>
+                              <span class="linux-code-editor-meta">bash</span>
+                            </div>
+                            <div class="linux-code-editor-body">
+                              <div class="linux-code-editor-lines" id="linuxCommandLineNumbers" aria-hidden="true">1</div>
+                              <textarea class="form-control" id="linuxCommandLine" name="linuxCommandLine" maxlength="5000" autocomplete="off" rows="10" spellcheck="false" wrap="off" placeholder="echo &quot;Starting job&quot;&#10;./run-task.sh"></textarea>
+                            </div>
+                            <div class="linux-code-editor-status"><span>Shell</span><span>UTF-8</span><span>LF</span></div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -526,10 +1602,10 @@
                             <label for="singleMinute">Every Minute: </label><br>
                             <select class="form-control select2" id="singleMinute" name="singleMinute[]" multiple="multiple">
                               <option value="*" selected>All</option>
-                              <?php  
+                              <?php
                               $i = 0;
-                              for ($i=0; $i < 60; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=0; $i < 60; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -540,10 +1616,10 @@
                             <label>At Hour: </label><br>
                             <select class="form-control select2" id="singleHour" name="singleHour[]" multiple="multiple">
                               <option value="*" selected>All</option>
-                              <?php  
+                              <?php
                               $i = 0;
-                              for ($i=0; $i < 24; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=0; $i < 24; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -556,10 +1632,10 @@
                             <label for="singleDayOfMonth">On Day of month:</label><br>
                             <select class="form-control select2" id="singleDayOfMonth" name="singleDayOfMonth[]" multiple="multiple">
                               <option value="*" selected>All</option>
-                              <?php  
+                              <?php
                               $i = 1;
-                              for ($i=1; $i < 32; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=1; $i < 32; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -570,10 +1646,10 @@
                             <label for="singleMonth">On Month:</label><br>
                             <select class="form-control select2" id="singleMonth" name="singleMonth[]" multiple="multiple">
                               <option value="*" selected>All</option>
-                              <?php  
+                              <?php
                               $i = 1;
-                              for ($i=1; $i < 13; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=1; $i < 13; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -586,10 +1662,10 @@
                             <label for="singleDayOfWeek">On Day of Week:</label><br>
                             <select class="form-control select2" id="singleDayOfWeek" name="singleDayOfWeek[]" multiple="multiple">
                               <option value="*" selected>All</option>
-                              <?php  
+                              <?php
                               $i = 0;
-                              for ($i=1; $i < 8; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=1; $i < 8; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -603,10 +1679,10 @@
                             <label for="repetitiveMinute">In X Minutes</label><br>
                             <select class="form-control" id="repetitiveMinute" name="repetitiveMinute">
                               <option value="*">All</option>
-                              <?php  
+                              <?php
                               $i = 0;
-                              for ($i=0; $i < 60; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=0; $i < 60; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -617,10 +1693,10 @@
                             <label for="repetitiveHour">Hour</label>
                             <select class="form-control" id="repetitiveHour" name="repetitiveHour">
                               <option value="*">All</option>
-                              <?php  
+                              <?php
                               $i = 0;
-                              for ($i=0; $i < 24; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=0; $i < 24; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -631,10 +1707,10 @@
                             <label for="repetitiveDayOfMonth">Day of month</label>
                             <select class="form-control" id="repetitiveDayOfMonth" name="repetitiveDayOfMonth">
                               <option value="*">All</option>
-                              <?php  
+                              <?php
                               $i = 1;
-                              for ($i=1; $i < 32; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=1; $i < 32; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -645,10 +1721,10 @@
                             <label for="repetitiveMonth">Month</label>
                             <select class="form-control" id="repetitiveMonth" name="repetitiveMonth">
                               <option value="*">All</option>
-                              <?php  
+                              <?php
                               $i = 1;
-                              for ($i=1; $i < 13; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=1; $i < 13; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -659,10 +1735,10 @@
                             <label for="repetitiveDayOfWeek">Day of Week</label>
                             <select class="form-control" id="repetitiveDayOfWeek" name="repetitiveDayOfWeek">
                               <option value="*">All</option>
-                              <?php  
+                              <?php
                               $i = 0;
-                              for ($i=1; $i < 8; $i++) { 
-                                echo '<option value="'.$i.'">'.$i.'</option>';    
+                              for ($i=1; $i < 8; $i++) {
+                                echo '<option value="'.$i.'">'.$i.'</option>';
                               }
                               ?>
                             </select>
@@ -696,7 +1772,7 @@
                         <div class="form-group">
                           <label for="recipients">Recipients</label>
                           <input type="text" class="form-control" id="recipients" name="recipients">
-                          <small><b>Example:</b> matheuspavanetti@gmail.com,matheuspavanetti@hotmail.com</small>
+                          <small><b>Example:</b> user@example.com,team@example.com</small>
                         </div>
                       </div>
                     </div>
@@ -793,7 +1869,7 @@
                                 </label>
                               </div>
                             </div>
-                          </div>  
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -907,7 +1983,11 @@
             </div>
             <!-- Close and column for Job Execution Area and Editable Email Notification -->
         </div>
-      </form> <!-- Close Form -->
+      </div>
+    </div>
+  </div>
+</div>
+</form> <!-- Close Form -->
         <div id="output"></div>
 
     </div>
@@ -915,9 +1995,10 @@
 </div>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.js"></script>
+  <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-inspect-modal.js?v=1"></script>
   <script type="text/javascript">
     $(document).ready(function(){
-    
+
       $('.select2').select2({
        placeholder: "Click to Select a option",
        allowClear: true
@@ -928,26 +2009,215 @@
 
         rules:{
           job_name :{ maxlength : 50 },
+          job_names :{ maxlength : 5000 },
           description :{ maxlength : 500 }
         },
         messages:{
           job_name :{ maxlength : "Job name can contain up to 50 characters" },
+          job_names :{ maxlength : "Bulk job names can contain up to 5000 characters" },
           description :{ maxlength : "Description can contain up to 500 characters" }
         }
       });
 
-      $('#send').click(function(){
+      $('#send').on('click mouseenter focus', function(){
         $('#trigger_after_save').val('0');
+        updateJobCreationReview();
       });
 
-      $('#saveAndTrigger').click(function(){
+      $('#saveAndTrigger').on('click mouseenter focus', function(){
         $('#trigger_after_save').val('1');
+        updateJobCreationReview();
       });
+
+      $('#toggleBulkDrafts').click(function() {
+        setBulkDraftsVisible(! $('#bulkDraftsPanel').is(':visible'));
+      });
+
+      $('#generateBatchNames').click(function() {
+        generateBatchNames(3);
+      });
+
+      $('#syncDraftNames').click(function() {
+        syncDraftsFromNames();
+      });
+
+      $('#addJobDraft').click(function() {
+        addJobDraft();
+      });
+
+      $('#duplicateJobDraft').click(function() {
+        duplicateJobDraft();
+      });
+
+      $('#removeJobDraft').click(function() {
+        removeJobDraft();
+      });
+
+      $('#jobDraftTabs').on('click', 'a', function(event) {
+        event.preventDefault();
+        switchJobDraft(parseInt($(this).data('draft-index'), 10));
+      });
+
+      $('#InsertDbSettings').on('submit', function(event) {
+        syncPythonInlineFilesInput();
+        if (submitJobDraftsIfNeeded()) {
+          event.preventDefault();
+        }
+      });
+
+      $('#InsertDbSettings').on('input change', 'input, textarea, select', function() {
+        updateJobCreationReview();
+      });
+
+      $('#linuxCommandLine').on('input change scroll', function() {
+        updateLinuxCommandEditor();
+      });
+
+      $('#pythonInlineCode').on('input change scroll', function() {
+        updatePythonInlineEditor();
+      });
+
+      $('#pythonRequirementsText').on('input change scroll', function() {
+        updatePythonRequirementsEditor();
+      });
+
+      $('#pythonDockerfileText').on('input change scroll', function() {
+        updatePythonDockerfileEditor();
+      });
+
+      $('#pythonInlineExtraCode').on('input change scroll', function() {
+        captureActivePythonInlineExtraFile();
+        updatePythonInlineExtraEditor();
+        syncPythonInlineFilesInput(false);
+      });
+
+      $('#pythonEntryPoint').on('input change', function() {
+        updatePythonInlineEditor();
+        renderPythonInlineWorkspace();
+      });
+
+      $('#applyPythonInlineTemplate').on('click', function() {
+        applyPythonInlineJobSeekerTemplate(true);
+      });
+
+      $('.python-inline-tabs').on('click', '.python-inline-tab', function(event) {
+        var pane = $(this).attr('data-python-inline-pane');
+        if ($(event.target).closest('.python-inline-tab-close').length) {
+          closePythonInlinePane(pane);
+          return;
+        }
+
+        setPythonInlinePane(pane, pane == 'extra' ? pythonInlineActiveExtraPath : '');
+      });
+
+      $('#pythonInlineFileList').on('click', '.python-inline-file', function() {
+        setPythonInlinePane($(this).attr('data-python-inline-pane'), $(this).attr('data-python-inline-path') || '');
+      });
+
+      $('#pythonInlineFileList').on('click', '.python-inline-file-remove', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        removePythonInlineWorkspacePath($(this).attr('data-python-inline-path') || '', $(this).attr('data-python-inline-type') || 'file');
+      });
+
+      $('#addPythonInlineFile').on('click', function() {
+        addPythonInlineFile();
+      });
+
+      $('#addPythonInlineFolder').on('click', function() {
+        addPythonInlineFolder();
+      });
+
+      $('#pythonRuntimeMode').on('change', function() {
+        updatePythonSourceControls();
+        updateJobCreationReview();
+      });
+
+      $('#pythonVersion').on('change', function() {
+        updatePythonDockerImageFromVersion();
+        updatePythonRuntimeControls();
+        updateJobCreationReview();
+      });
+
+      $('#pythonDockerImage').on('input change', function() {
+        updateJobCreationReview();
+      });
+
 
       var petNamePrefixes = ['milo', 'luna', 'piper', 'nova', 'ruby', 'jasper', 'olive', 'cosmo'];
       var petNameSuffixes = ['sunny', 'maple', 'pixel', 'river', 'coco', 'sage', 'mango', 'ember'];
       var singleEveryMinuteAcknowledged = false;
       var repetitiveEveryMinuteAcknowledged = false;
+      var jobDrafts = [];
+      var activeDraftIndex = 0;
+      var applyingJobDraft = false;
+      var activeConfigPanel = '';
+      var pythonInlineOpenPanes = { code: true, requirements: false, dockerfile: false, extra: false };
+      var pythonInlineActivePane = 'code';
+      var pythonInlineActiveExtraPath = '';
+      var pythonInlineExtraFiles = [];
+      var pythonInlineDirectories = [];
+      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'timestamp', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList'];
+
+      function pythonInlineJobSeekerTemplate() {
+        return [
+          'import sys',
+          'import time',
+          'from os import path',
+          '',
+          'from jobseeker import JobSeeker',
+          '',
+          '',
+          'JOB_NAME = path.basename(__file__).replace(".py", "")',
+          'ENVIRONMENT = sys.argv[1] if len(sys.argv) > 1 else "LOCAL"',
+          '',
+          '',
+          'def operation():',
+          '    with JobSeeker(environment=ENVIRONMENT, job=JOB_NAME) as js:',
+          '        with js.task("Inline Python Job", "DW_Master") as tmf:',
+          '            rows = tmf.context("rows", cast=int, default=5)',
+          '',
+          '            for index in range(1, rows + 1):',
+          '                print("Processing row {}/{}".format(index, rows))',
+          '                tmf.progress(total=rows, processed=index, msg="Processed {} of {} rows".format(index, rows))',
+          '                time.sleep(1)',
+          '',
+          '            tmf.finish(total=rows, processed=rows, msg="Inline JobSeeker Python job completed")',
+          '',
+          '    return True',
+          '',
+          '',
+          'if __name__ == "__main__":',
+          '    operation()',
+          ''
+        ].join('\n');
+      }
+
+      function applyPythonInlineJobSeekerTemplate(force) {
+        if (! pythonWorkspaceAllowsInlineCode()) {
+          return;
+        }
+
+        var editor = $('#pythonInlineCode');
+        if (! editor.length) {
+          return;
+        }
+
+        if ($.trim($('#pythonEntryPoint').val()) === '') {
+          $('#pythonEntryPoint').val('main.py');
+        }
+
+        if (force === true || $.trim(editor.val()) === '') {
+          editor.val(pythonInlineJobSeekerTemplate());
+          pythonInlineOpenPanes.code = true;
+          pythonInlineActivePane = 'code';
+          updatePythonInlineEditor();
+          renderPythonInlineWorkspace();
+          updateJobCreationReview();
+        }
+      }
 
       function randomJobNameToken() {
         return ('000' + Math.floor(Math.random() * 46656).toString(36)).slice(-3);
@@ -972,13 +2242,1486 @@
         return jobName;
       }
 
+      function uniqueValues(values) {
+        var seen = {};
+        var unique = [];
+
+        $.each(values || [], function(index, value) {
+          value = $.trim(String(value || ''));
+          if (value === '' || seen[value]) {
+            return;
+          }
+
+          seen[value] = true;
+          unique.push(value);
+        });
+
+        return unique;
+      }
+
+      function collectJobNames(includeGeneratedPlaceholder) {
+        var names = [];
+        var primaryName = $.trim($('#job_name').val());
+        var additionalNames = $.trim($('#job_names').val());
+
+        if (primaryName !== '') {
+          names.push(primaryName);
+        }
+
+        if (additionalNames !== '') {
+          names = names.concat(additionalNames.split(/[\r\n,;]+/));
+        }
+
+        names = uniqueValues(names);
+
+        if (names.length === 0 && includeGeneratedPlaceholder) {
+          names.push('Auto-generated name');
+        }
+
+        return names;
+      }
+
+      function setBulkDraftsVisible(isVisible) {
+        isVisible = !!isVisible;
+        $('#bulkDraftsPanel').toggle(isVisible);
+        $('#toggleBulkDrafts')
+          .toggleClass('btn-primary', isVisible)
+          .toggleClass('btn-default', ! isVisible)
+          .find('.bulk-drafts-toggle-label').text(isVisible ? 'Hide Bulk Tools' : 'Show Bulk Tools');
+      }
+
+      function updateLinuxCommandEditor() {
+        var editor = $('#linuxCommandLine');
+        var lineNumbers = $('#linuxCommandLineNumbers');
+
+        if (! editor.length || ! lineNumbers.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var minimumLines = parseInt(editor.attr('rows'), 10) || 1;
+        var lineCount = Math.max(value.split('\n').length, minimumLines);
+        var lines = [];
+
+        for (var index = 1; index <= lineCount; index++) {
+          lines.push(index);
+        }
+
+        lineNumbers.html(lines.join('<br>'));
+        lineNumbers.scrollTop(editor.scrollTop());
+      }
+
+      function updatePythonInlineEditor() {
+        var editor = $('#pythonInlineCode');
+        var lineNumbers = $('#pythonInlineCodeNumbers');
+
+        if (! editor.length || ! lineNumbers.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var minimumLines = parseInt(editor.attr('rows'), 10) || 1;
+        var lineCount = Math.max(value.split('\n').length, minimumLines);
+        var lines = [];
+
+        for (var index = 1; index <= lineCount; index++) {
+          lines.push(index);
+        }
+
+        lineNumbers.html(lines.join('<br>'));
+        lineNumbers.scrollTop(editor.scrollTop());
+        $('#pythonInlineEditorFile, #pythonInlineEditorActiveFile').text($.trim($('#pythonEntryPoint').val()) || 'main.py');
+      }
+
+      function updatePythonRequirementsEditor() {
+        var editor = $('#pythonRequirementsText');
+        var lineNumbers = $('#pythonRequirementsTextNumbers');
+
+        if (! editor.length || ! lineNumbers.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var minimumLines = parseInt(editor.attr('rows'), 10) || 1;
+        var lineCount = Math.max(value.split('\n').length, minimumLines);
+        var lines = [];
+
+        for (var index = 1; index <= lineCount; index++) {
+          lines.push(index);
+        }
+
+        lineNumbers.html(lines.join('<br>'));
+        lineNumbers.scrollTop(editor.scrollTop());
+      }
+
+      function updatePythonDockerfileEditor() {
+        var editor = $('#pythonDockerfileText');
+        var lineNumbers = $('#pythonDockerfileTextNumbers');
+
+        if (! editor.length || ! lineNumbers.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var minimumLines = parseInt(editor.attr('rows'), 10) || 1;
+        var lineCount = Math.max(value.split('\n').length, minimumLines);
+        var lines = [];
+
+        for (var index = 1; index <= lineCount; index++) {
+          lines.push(index);
+        }
+
+        lineNumbers.html(lines.join('<br>'));
+        lineNumbers.scrollTop(editor.scrollTop());
+      }
+
+      function updatePythonInlineExtraEditor() {
+        var editor = $('#pythonInlineExtraCode');
+        var lineNumbers = $('#pythonInlineExtraCodeNumbers');
+
+        if (! editor.length || ! lineNumbers.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var minimumLines = parseInt(editor.attr('rows'), 10) || 1;
+        var lineCount = Math.max(value.split('\n').length, minimumLines);
+        var lines = [];
+
+        for (var index = 1; index <= lineCount; index++) {
+          lines.push(index);
+        }
+
+        lineNumbers.html(lines.join('<br>'));
+        lineNumbers.scrollTop(editor.scrollTop());
+        $('#pythonInlineExtraTabFile, #pythonInlineExtraEditorFile').text(pythonInlineActiveExtraPath || 'lib.py');
+      }
+
+      function pythonWorkspaceAllowsInlineCode() {
+        return $('#linuxExecutionStrategy').val() == 'python_inline';
+      }
+
+      function pythonInlineDockerfileAvailable() {
+        return pythonWorkspaceAllowsInlineCode() && $('#pythonRuntimeMode').val() == 'docker';
+      }
+
+      function normalizePythonInlineWorkspacePath(path, requirePythonFile) {
+        path = $.trim(String(path || '')).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+        if (path === '') {
+          return '';
+        }
+
+        var segments = path.split('/');
+        for (var index = 0; index < segments.length; index++) {
+          var segment = segments[index];
+          if (segment === '' || segment === '.' || segment === '..' || segment.charAt(0) === '.' || ! /^[A-Za-z0-9._ -]+$/.test(segment)) {
+            return '';
+          }
+        }
+
+        var normalizedPath = segments.join('/');
+        var lowerPath = normalizedPath.toLowerCase();
+        if (lowerPath === 'requirements.txt' || lowerPath === 'dockerfile' || lowerPath.indexOf('__pycache__/') !== -1 || lowerPath.indexOf('.jobseeker-python-libs/') !== -1) {
+          return '';
+        }
+
+        if (requirePythonFile && ! /\.py$/i.test(normalizedPath)) {
+          return '';
+        }
+
+        return normalizedPath;
+      }
+
+      function pythonInlineEntryPath() {
+        return normalizePythonInlineWorkspacePath($.trim($('#pythonEntryPoint').val()) || 'main.py', true) || 'main.py';
+      }
+
+      function pythonInlineExtraFile(path) {
+        path = normalizePythonInlineWorkspacePath(path, true);
+        for (var index = 0; index < pythonInlineExtraFiles.length; index++) {
+          if (pythonInlineExtraFiles[index].path === path) {
+            return pythonInlineExtraFiles[index];
+          }
+        }
+
+        return null;
+      }
+
+      function sortPythonInlineWorkspace() {
+        pythonInlineDirectories = uniqueValues(pythonInlineDirectories).sort();
+        pythonInlineExtraFiles.sort(function(left, right) {
+          return left.path.localeCompare(right.path);
+        });
+      }
+
+      function ensurePythonInlineParentDirectories(path) {
+        var parts = normalizePythonInlineWorkspacePath(path, true).split('/');
+        var currentPath = '';
+
+        for (var index = 0; index < parts.length - 1; index++) {
+          currentPath = currentPath === '' ? parts[index] : currentPath + '/' + parts[index];
+          if ($.inArray(currentPath, pythonInlineDirectories) === -1) {
+            pythonInlineDirectories.push(currentPath);
+          }
+        }
+      }
+
+      function captureActivePythonInlineExtraFile() {
+        if (pythonInlineActivePane != 'extra' || pythonInlineActiveExtraPath === '') {
+          return;
+        }
+
+        var file = pythonInlineExtraFile(pythonInlineActiveExtraPath);
+        if (file) {
+          file.content = $('#pythonInlineExtraCode').val() || '';
+        }
+      }
+
+      function syncPythonInlineFilesInput(captureActive) {
+        if (captureActive !== false) {
+          captureActivePythonInlineExtraFile();
+        }
+
+        sortPythonInlineWorkspace();
+        $('#pythonInlineFilesJson').val(JSON.stringify({
+          files: pythonInlineExtraFiles,
+          directories: pythonInlineDirectories
+        }));
+      }
+
+      function loadPythonInlineFilesFromHidden() {
+        var payload = null;
+
+        try {
+          payload = JSON.parse($('#pythonInlineFilesJson').val() || '{"files":[],"directories":[]}');
+        } catch (error) {
+          payload = { files: [], directories: [] };
+        }
+
+        loadPythonInlineFilesPayload(payload);
+      }
+
+      function loadPythonInlineFilesPayload(payload) {
+        pythonInlineExtraFiles = [];
+        pythonInlineDirectories = [];
+
+        $.each(payload && $.isArray(payload.directories) ? payload.directories : [], function(index, directory) {
+          var path = normalizePythonInlineWorkspacePath(directory && directory.path ? directory.path : directory, false);
+          if (path !== '' && $.inArray(path, pythonInlineDirectories) === -1) {
+            pythonInlineDirectories.push(path);
+          }
+        });
+
+        $.each(payload && $.isArray(payload.files) ? payload.files : [], function(index, file) {
+          var path = normalizePythonInlineWorkspacePath(file && file.path ? file.path : '', true);
+          if (path !== '' && path.toLowerCase() !== pythonInlineEntryPath().toLowerCase() && ! pythonInlineExtraFile(path)) {
+            pythonInlineExtraFiles.push({ path: path, content: String(file.content || '') });
+            ensurePythonInlineParentDirectories(path);
+          }
+        });
+
+        syncPythonInlineFilesInput(false);
+        renderPythonInlineWorkspace();
+      }
+
+      function resetPythonInlineWorkspaceState() {
+        pythonInlineOpenPanes = { code: true, requirements: false, dockerfile: false, extra: false };
+        pythonInlineActivePane = 'code';
+        pythonInlineActiveExtraPath = '';
+        pythonInlineExtraFiles = [];
+        pythonInlineDirectories = [];
+        $('#pythonInlineExtraCode').val('');
+        syncPythonInlineFilesInput(false);
+        renderPythonInlineWorkspace();
+      }
+
+      function pythonInlinePaneAvailable(pane) {
+        if (pane == 'code' || pane == 'requirements') {
+          return pythonWorkspaceAllowsInlineCode();
+        }
+
+        if (pane == 'dockerfile') {
+          return pythonInlineDockerfileAvailable();
+        }
+
+        if (pane == 'extra') {
+          return pythonWorkspaceAllowsInlineCode() && pythonInlineActiveExtraPath !== '' && !! pythonInlineExtraFile(pythonInlineActiveExtraPath);
+        }
+
+        return false;
+      }
+
+      function choosePythonInlineFallbackPane() {
+        if (pythonInlineOpenPanes.code && pythonInlinePaneAvailable('code')) {
+          return { pane: 'code', path: '' };
+        }
+
+        if (pythonInlineOpenPanes.requirements && pythonInlinePaneAvailable('requirements')) {
+          return { pane: 'requirements', path: '' };
+        }
+
+        if (pythonInlineOpenPanes.dockerfile && pythonInlinePaneAvailable('dockerfile')) {
+          return { pane: 'dockerfile', path: '' };
+        }
+
+        if (pythonInlineOpenPanes.extra && pythonInlinePaneAvailable('extra')) {
+          return { pane: 'extra', path: pythonInlineActiveExtraPath };
+        }
+
+        return { pane: '', path: '' };
+      }
+
+      function renderPythonInlineWorkspace() {
+        var isInline = pythonWorkspaceAllowsInlineCode();
+        var isDocker = pythonInlineDockerfileAvailable();
+
+        if (! isDocker) {
+          pythonInlineOpenPanes.dockerfile = false;
+          if (pythonInlineActivePane == 'dockerfile') {
+            pythonInlineActivePane = '';
+          }
+        }
+
+        if (! isInline) {
+          pythonInlineOpenPanes.code = false;
+          pythonInlineOpenPanes.requirements = false;
+          pythonInlineOpenPanes.extra = false;
+          pythonInlineActivePane = '';
+        }
+
+        if (! pythonInlinePaneAvailable(pythonInlineActivePane) || (pythonInlineActivePane != '' && ! pythonInlineOpenPanes[pythonInlineActivePane])) {
+          var fallback = choosePythonInlineFallbackPane();
+          pythonInlineActivePane = fallback.pane;
+          pythonInlineActiveExtraPath = fallback.path;
+        }
+
+        $('.python-inline-sidebar-actions').toggle(isInline);
+        $('.python-inline-tab[data-python-inline-pane="code"]').toggle(isInline && pythonInlineOpenPanes.code);
+        $('.python-inline-tab[data-python-inline-pane="requirements"]').toggle(isInline && pythonInlineOpenPanes.requirements);
+        $('.python-inline-tab[data-python-inline-pane="dockerfile"]').toggle(isDocker && pythonInlineOpenPanes.dockerfile);
+        $('.python-inline-tab[data-python-inline-pane="extra"]').toggle(isInline && pythonInlineOpenPanes.extra && pythonInlineActiveExtraPath !== '');
+
+        $('.python-inline-tab').removeClass('active').filter('[data-python-inline-pane="' + pythonInlineActivePane + '"]').addClass('active');
+        $('.python-inline-editor-panel').removeClass('active').filter('[data-python-inline-pane="' + pythonInlineActivePane + '"]').addClass('active');
+        $('#pythonInlineEmptyState').toggleClass('active', pythonInlineActivePane === '');
+
+        var rows = [];
+        if (isInline) {
+          rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'code' ? ' active' : '') + '" data-python-inline-pane="code"><i class="fa fa-code"></i><span>' + escapeHtml(pythonInlineEntryPath()) + '</span></button></div>');
+          rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'requirements' ? ' active' : '') + '" data-python-inline-pane="requirements"><i class="fa fa-list-alt"></i><span>requirements.txt</span></button></div>');
+
+          if (isDocker) {
+            rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'dockerfile' ? ' active' : '') + '" data-python-inline-pane="dockerfile"><i class="fa fa-cube"></i><span>Dockerfile</span></button></div>');
+          }
+
+          $.each(pythonInlineDirectories, function(index, directory) {
+            rows.push('<div class="python-inline-file-row"><span class="python-inline-folder"><i class="fa fa-folder-o"></i><span>' + escapeHtml(directory) + '</span></span><button type="button" class="python-inline-file-remove" title="Remove" data-python-inline-type="directory" data-python-inline-path="' + escapeAttribute(directory) + '"><i class="fa fa-trash"></i></button></div>');
+          });
+
+          $.each(pythonInlineExtraFiles, function(index, file) {
+            rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'extra' && pythonInlineActiveExtraPath == file.path ? ' active' : '') + '" data-python-inline-pane="extra" data-python-inline-path="' + escapeAttribute(file.path) + '"><i class="fa fa-file-code-o"></i><span>' + escapeHtml(file.path) + '</span></button><button type="button" class="python-inline-file-remove" title="Remove" data-python-inline-type="file" data-python-inline-path="' + escapeAttribute(file.path) + '"><i class="fa fa-trash"></i></button></div>');
+          });
+        }
+
+        $('#pythonInlineFileList').html(rows.join(''));
+        updatePythonInlineEditor();
+        updatePythonRequirementsEditor();
+        updatePythonDockerfileEditor();
+        updatePythonInlineExtraEditor();
+      }
+
+      function setPythonInlinePane(pane) {
+        var extraPath = arguments.length > 1 ? arguments[1] : '';
+        captureActivePythonInlineExtraFile();
+        pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'requirements' ? 'requirements' : 'code'));
+
+        if (pane == 'extra') {
+          extraPath = normalizePythonInlineWorkspacePath(extraPath, true);
+          if (extraPath === '' || ! pythonInlineExtraFile(extraPath)) {
+            return;
+          }
+
+          pythonInlineActiveExtraPath = extraPath;
+        } else if (! pythonInlinePaneAvailable(pane)) {
+          return;
+        }
+
+        pythonInlineOpenPanes[pane] = true;
+        pythonInlineActivePane = pane;
+
+        if (pane == 'extra') {
+          $('#pythonInlineExtraCode').val(pythonInlineExtraFile(pythonInlineActiveExtraPath).content || '');
+        }
+
+        renderPythonInlineWorkspace();
+
+        if (pane == 'requirements') {
+          $('#pythonRequirementsText').trigger('focus');
+        } else if (pane == 'dockerfile') {
+          $('#pythonDockerfileText').trigger('focus');
+        } else if (pane == 'extra') {
+          $('#pythonInlineExtraCode').trigger('focus');
+        } else {
+          $('#pythonInlineCode').trigger('focus');
+        }
+      }
+
+      function closePythonInlinePane(pane) {
+        captureActivePythonInlineExtraFile();
+        pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'requirements' ? 'requirements' : 'code'));
+        pythonInlineOpenPanes[pane] = false;
+
+        if (pythonInlineActivePane == pane) {
+          pythonInlineActivePane = '';
+        }
+
+        renderPythonInlineWorkspace();
+      }
+
+      function addPythonInlineFile() {
+        if (! pythonWorkspaceAllowsInlineCode()) {
+          return;
+        }
+
+        var path = normalizePythonInlineWorkspacePath(window.prompt('Python file path', 'libs/helper.py'), true);
+        if (path === '') {
+          return;
+        }
+
+        if (path.toLowerCase() === pythonInlineEntryPath().toLowerCase()) {
+          toastr.error('Use the entry file tab for ' + path + '.', 'Inline Python');
+          return;
+        }
+
+        if (pythonInlineExtraFile(path)) {
+          toastr.error('That inline Python file already exists.', 'Inline Python');
+          return;
+        }
+
+        ensurePythonInlineParentDirectories(path);
+        pythonInlineExtraFiles.push({ path: path, content: '' });
+        syncPythonInlineFilesInput(false);
+        setPythonInlinePane('extra', path);
+        updateJobCreationReview();
+      }
+
+      function addPythonInlineFolder() {
+        if (! pythonWorkspaceAllowsInlineCode()) {
+          return;
+        }
+
+        var path = normalizePythonInlineWorkspacePath(window.prompt('Folder path', 'libs'), false);
+        if (path === '') {
+          return;
+        }
+
+        if ($.inArray(path, pythonInlineDirectories) === -1) {
+          pythonInlineDirectories.push(path);
+        }
+
+        syncPythonInlineFilesInput(false);
+        renderPythonInlineWorkspace();
+        updateJobCreationReview();
+      }
+
+      function removePythonInlineWorkspacePath(path, type) {
+        path = normalizePythonInlineWorkspacePath(path, type != 'directory');
+        if (path === '') {
+          return;
+        }
+
+        if (! window.confirm('Remove ' + path + '?')) {
+          return;
+        }
+
+        if (type == 'directory') {
+          pythonInlineDirectories = $.grep(pythonInlineDirectories, function(directory) {
+            return directory !== path && directory.indexOf(path + '/') !== 0;
+          });
+          pythonInlineExtraFiles = $.grep(pythonInlineExtraFiles, function(file) {
+            return file.path.indexOf(path + '/') !== 0;
+          });
+          if (pythonInlineActivePane == 'extra' && pythonInlineActiveExtraPath.indexOf(path + '/') === 0) {
+            pythonInlineActivePane = '';
+            pythonInlineActiveExtraPath = '';
+            pythonInlineOpenPanes.extra = false;
+          }
+        } else {
+          pythonInlineExtraFiles = $.grep(pythonInlineExtraFiles, function(file) {
+            return file.path !== path;
+          });
+          if (pythonInlineActivePane == 'extra' && pythonInlineActiveExtraPath == path) {
+            pythonInlineActivePane = '';
+            pythonInlineActiveExtraPath = '';
+            pythonInlineOpenPanes.extra = false;
+          }
+        }
+
+        syncPythonInlineFilesInput(false);
+        renderPythonInlineWorkspace();
+        updateJobCreationReview();
+      }
+
+      function dockerImageForPythonVersion(version) {
+        version = $.trim(version || $('#pythonVersion').val() || 'python3').replace(/^python/, '');
+        return 'python:' + (version || '3') + '-slim';
+      }
+
+      function linuxExecutionUsesPython() {
+        return ($('#linuxExecutionStrategy').val() == 'python_inline') ||
+          ($('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python');
+      }
+
+      function linuxExecutionUsesTalend() {
+        return $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'talend';
+      }
+
+      function linuxExecutionHasRuntime() {
+        if (! $('#linuxCommand').is(':checked')) {
+          return false;
+        }
+
+        if ($('#linuxExecutionStrategy').val() == 'command' || $('#linuxExecutionStrategy').val() == 'python_inline') {
+          return true;
+        }
+
+        return $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() != '0' && $('#linuxScriptType').val() !== '';
+      }
+
+      function dockerImageForLinuxExecution() {
+        if (linuxExecutionUsesPython()) {
+          return dockerImageForPythonVersion();
+        }
+
+        return linuxExecutionUsesTalend() ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20';
+      }
+
+      function isManagedDockerImage(image) {
+        return /^python:3(?:\.[0-9]{1,2})?-slim$/.test(image) || /^(alpine:3\.20|busybox:1\.36|bash:5\.2|debian:12-slim|eclipse-temurin:(?:17-jre-alpine|17-jre-jammy|11-jre-jammy))$/.test(image);
+      }
+
+      function updatePythonDockerImageFromVersion() {
+        var image = $.trim($('#pythonDockerImage').val() || '');
+
+        if (image === '' || isManagedDockerImage(image)) {
+          $('#pythonDockerImage').val(dockerImageForLinuxExecution());
+        }
+      }
+
+      function updatePythonRuntimeControls() {
+        var hasRuntime = linuxExecutionHasRuntime();
+        var isDockerRuntime = $('#pythonRuntimeMode').val() == 'docker';
+        $('.pythonRuntimeForm').toggle(hasRuntime);
+
+        if (! hasRuntime) {
+          return;
+        }
+
+        $('.pythonAgentPythonColumn').toggle(! isDockerRuntime && linuxExecutionUsesPython());
+        $('.pythonDockerImageColumn').toggle(isDockerRuntime);
+
+        if (isDockerRuntime) {
+          updatePythonDockerImageFromVersion();
+        }
+      }
+
+      function pythonRuntimeSummary() {
+        if ($('#pythonRuntimeMode').val() == 'docker') {
+          return 'Docker ' + ($.trim($('#pythonDockerImage').val()) || dockerImageForLinuxExecution()) + (pythonWorkspaceAllowsInlineCode() && $.trim($('#pythonDockerfileText').val()) ? ' + custom Dockerfile' : '');
+        }
+
+        return linuxExecutionUsesPython() ? 'Jenkins Agent python3' : 'Jenkins Agent shell';
+      }
+
+      function loadInlinePythonSource(jobName, entryPoint) {
+        $('#pythonInlineCode').val('');
+        $('#pythonRequirementsText').val('');
+        $('#pythonDockerfileText').val('');
+        loadPythonInlineFilesPayload({ files: [], directories: [] });
+        updatePythonInlineEditor();
+        updatePythonRequirementsEditor();
+        updatePythonDockerfileEditor();
+
+        var requestData = {
+          job_name: jobName,
+          entry_point: entryPoint || 'main.py'
+        };
+
+        var sourceRequest = $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonSource',
+          data: requestData,
+          dataType: 'text'
+        }).done(function(sourceCode) {
+          $('#pythonInlineCode').val(sourceCode);
+          updatePythonInlineEditor();
+          updateJobCreationReview();
+        }).fail(function() {
+          toastr.warning('The inline Python source file could not be loaded from the repository.', 'Edit Job');
+        });
+
+        $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonRequirements',
+          data: requestData,
+          dataType: 'text'
+        }).done(function(requirementsText) {
+          $('#pythonRequirementsText').val(requirementsText);
+          updatePythonRequirementsEditor();
+          updateJobCreationReview();
+        }).fail(function() {
+          $('#pythonRequirementsText').val('');
+          updatePythonRequirementsEditor();
+        });
+
+        $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonDockerfile',
+          data: requestData,
+          dataType: 'text'
+        }).done(function(dockerfileText) {
+          $('#pythonDockerfileText').val(dockerfileText);
+          updatePythonDockerfileEditor();
+          updateJobCreationReview();
+        }).fail(function() {
+          $('#pythonDockerfileText').val('');
+          updatePythonDockerfileEditor();
+        });
+
+        $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonFiles',
+          data: requestData,
+          dataType: 'json'
+        }).done(function(payload) {
+          loadPythonInlineFilesPayload(payload);
+          updateJobCreationReview();
+        }).fail(function() {
+          loadPythonInlineFilesPayload({ files: [], directories: [] });
+        });
+
+        return sourceRequest;
+      }
+
+      function selectedText(selector, fallback) {
+        var value = $(selector).val();
+        var text = $(selector + ' option:selected').text();
+        return value && value != '0' ? $.trim(text || value) : fallback;
+      }
+
+      function listValue(selector, fallback) {
+        var value = $(selector).val();
+
+        if ($.isArray(value)) {
+          return value.length ? value.join(',') : fallback;
+        }
+
+        return value || fallback;
+      }
+
+      function scheduleSummary() {
+        if (! $('#checkBuild').is(':checked')) {
+          return 'Manual only';
+        }
+
+        var action = $('#action').val();
+        if (action == 'single') {
+          return 'Cron: ' + listValue('#singleMinute', '*') + ' ' + listValue('#singleHour', '*') + ' ' + listValue('#singleDayOfMonth', '*') + ' ' + listValue('#singleMonth', '*') + ' ' + listValue('#singleDayOfWeek', '*');
+        }
+
+        if (action == 'repetitive') {
+          return 'Every ' + ($('#repetitiveMinute').val() || '*') + ' minute(s), hour ' + ($('#repetitiveHour').val() || '*') + ', day ' + ($('#repetitiveDayOfMonth').val() || '*') + ', month ' + ($('#repetitiveMonth').val() || '*') + ', weekday ' + ($('#repetitiveDayOfWeek').val() || '*');
+        }
+
+        if (action == 'tags') {
+          return 'Tag: ' + ($('#tag').val() || 'Not selected');
+        }
+
+        return 'Schedule enabled, action not selected';
+      }
+
+      function commandSummary() {
+        if ($('#winCommand').is(':checked')) {
+          if ($('#executionStrategy').val() == 'command') {
+            return 'Windows command';
+          }
+
+          if ($('#executionStrategy').val() == 'script') {
+            return 'Windows ' + selectedText('#scriptType', 'script');
+          }
+
+          return 'Windows execution enabled';
+        }
+
+        if ($('#linuxCommand').is(':checked')) {
+          if ($('#linuxExecutionStrategy').val() == 'command') {
+            return 'Linux command / ' + pythonRuntimeSummary();
+          }
+
+          if ($('#linuxExecutionStrategy').val() == 'python_inline') {
+            return 'Linux Inline Python Code / ' + pythonRuntimeSummary();
+          }
+
+          if ($('#linuxExecutionStrategy').val() == 'script') {
+            var source = selectedText('#linuxScriptType', 'script');
+            if ($('#linuxScriptType').val() == 'python') {
+              source += ' / ' + selectedText('#pythonSourceMode', 'uploaded source') + ' / ' + pythonRuntimeSummary();
+            } else if ($('#linuxScriptType').val() != '0') {
+              source += ' / ' + pythonRuntimeSummary();
+            }
+            return 'Linux ' + source;
+          }
+
+          return 'Linux execution enabled';
+        }
+
+        return 'No command or script selected';
+      }
+
+      function normalizeArray(value) {
+        if (value == null || value === '') {
+          return [];
+        }
+
+        return $.isArray(value) ? value.slice(0) : [value];
+      }
+
+      function createEmptyDraft(name) {
+        return {
+          job_name: name || '',
+          description: '',
+          checkBuild: '0',
+          checkEnvironment: '0',
+          abort: '0',
+          timestamp: '0',
+          winCommand: '0',
+          linuxCommand: '0',
+          runJobCheck: '0',
+          emailCheck: '0',
+          editableEmailCheck: '0',
+          executionStrategy: '0',
+          scriptType: '0',
+          windowsCommandLine: '',
+          linuxExecutionStrategy: '0',
+          linuxScriptType: '0',
+          pythonSourceMode: 'upload',
+          pythonEntryPoint: '',
+          pythonSourcePath: '',
+          pythonRepositoryUrl: '',
+          pythonRepositoryBranch: '',
+          pythonInlineCode: '',
+          pythonRequirementsText: '',
+          pythonDockerfileText: '',
+          pythonInlineFilesJson: '{"files":[],"directories":[]}',
+          pythonRuntimeMode: 'local',
+          pythonVersion: 'python3',
+          pythonDockerImage: '',
+          linuxCommandLine: '',
+          action: '0',
+          tag: '@hourly',
+          singleMinute: ['*'],
+          singleHour: ['*'],
+          singleDayOfMonth: ['*'],
+          singleMonth: ['*'],
+          singleDayOfWeek: ['*'],
+          repetitiveMinute: '*',
+          repetitiveHour: '*',
+          repetitiveDayOfMonth: '*',
+          repetitiveMonth: '*',
+          repetitiveDayOfWeek: '*',
+          recipients: '',
+          timeoutStrategy: 'noActivity',
+          timeoutSeconds: '60',
+          timeoutMinutes: '1',
+          jobList: [],
+          optionsRadios: '1',
+          onSuccess: '0',
+          attSuccess: 'true',
+          onFailure: '0',
+          attFailure: 'true',
+          onAbort: '0',
+          attAbort: 'true',
+          environment: '0'
+        };
+      }
+
+      function draftFromForm() {
+        syncPythonInlineFilesInput();
+        var draft = createEmptyDraft($.trim($('#job_name').val()));
+
+        $.each(draftCheckboxFields, function(index, field) {
+          draft[field] = $('#' + field).is(':checked') ? '1' : '0';
+        });
+
+        $.each(draftScalarFields, function(index, field) {
+          var element = $('#' + field);
+          if (element.length) {
+            var value = element.val();
+            draft[field] = value == null ? '' : value;
+          }
+        });
+
+        $.each(draftArrayFields, function(index, field) {
+          draft[field] = normalizeArray($('#' + field).val());
+        });
+
+        draft.optionsRadios = $('input[name="optionsRadios"]:checked').val() || '1';
+
+        return draft;
+      }
+
+      function draftChecked(draft, field) {
+        return draft && (draft[field] === '1' || draft[field] === 1 || draft[field] === true);
+      }
+
+      function draftName(draft, index, includePlaceholder) {
+        var name = $.trim(draft && draft.job_name ? draft.job_name : '');
+        if (name !== '') {
+          return name;
+        }
+
+        return includePlaceholder ? (index === 0 ? 'Auto-generated name' : 'Draft ' + (index + 1)) : '';
+      }
+
+      function draftListValue(draft, field, fallback) {
+        var value = normalizeArray(draft ? draft[field] : []);
+        return value.length ? value.join(',') : fallback;
+      }
+
+      function draftSelectedValue(draft, field, fallback) {
+        var value = draft && draft[field] != null && draft[field] !== '' ? draft[field] : fallback;
+        return value == null || value === '' || value === '0' ? fallback : value;
+      }
+
+      function draftScheduleSummary(draft) {
+        if (! draftChecked(draft, 'checkBuild')) {
+          return 'Manual only';
+        }
+
+        if (draft.action === 'single') {
+          return 'Cron: ' + draftListValue(draft, 'singleMinute', '*') + ' ' + draftListValue(draft, 'singleHour', '*') + ' ' + draftListValue(draft, 'singleDayOfMonth', '*') + ' ' + draftListValue(draft, 'singleMonth', '*') + ' ' + draftListValue(draft, 'singleDayOfWeek', '*');
+        }
+
+        if (draft.action === 'repetitive') {
+          return 'Every ' + (draft.repetitiveMinute || '*') + ' minute(s), hour ' + (draft.repetitiveHour || '*') + ', day ' + (draft.repetitiveDayOfMonth || '*') + ', month ' + (draft.repetitiveMonth || '*') + ', weekday ' + (draft.repetitiveDayOfWeek || '*');
+        }
+
+        if (draft.action === 'tags') {
+          return 'Tag: ' + (draft.tag || 'Not selected');
+        }
+
+        return 'Schedule enabled';
+      }
+
+      function draftPythonRuntimeSummary(draft) {
+        if (draft && draft.pythonRuntimeMode === 'docker') {
+          return 'Docker ' + (draft.pythonDockerImage || draftDockerImageDefault(draft)) + (draft.linuxExecutionStrategy === 'python_inline' && $.trim(draft.pythonDockerfileText || '') ? ' + custom Dockerfile' : '');
+        }
+
+        return draftUsesPythonRuntime(draft) ? 'Jenkins Agent python3' : 'Jenkins Agent shell';
+      }
+
+      function draftDockerImageDefault(draft) {
+        if (draftUsesPythonRuntime(draft)) {
+          return dockerImageForPythonVersion(draft.pythonVersion || 'python3');
+        }
+
+        return draft && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20';
+      }
+
+      function draftUsesPythonRuntime(draft) {
+        return draft && (draft.linuxExecutionStrategy === 'python_inline' || (draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType === 'python'));
+      }
+
+      function draftCommandSummary(draft) {
+        if (draftChecked(draft, 'winCommand')) {
+          if (draft.executionStrategy === 'command') {
+            return 'Windows command';
+          }
+
+          if (draft.executionStrategy === 'script') {
+            return 'Windows ' + draftSelectedValue(draft, 'scriptType', 'script');
+          }
+
+          return 'Windows execution';
+        }
+
+        if (draftChecked(draft, 'linuxCommand')) {
+          if (draft.linuxExecutionStrategy === 'command') {
+            return 'Linux command / ' + draftPythonRuntimeSummary(draft);
+          }
+
+          if (draft.linuxExecutionStrategy === 'python_inline') {
+            return 'Linux Inline Python Code / ' + draftPythonRuntimeSummary(draft);
+          }
+
+          if (draft.linuxExecutionStrategy === 'script') {
+            var source = draftSelectedValue(draft, 'linuxScriptType', 'script');
+            if (draft.linuxScriptType === 'python') {
+              source += ' / ' + draftSelectedValue(draft, 'pythonSourceMode', 'upload') + ' / ' + draftPythonRuntimeSummary(draft);
+            } else if (draft.linuxScriptType !== '0') {
+              source += ' / ' + draftPythonRuntimeSummary(draft);
+            }
+            return 'Linux ' + source;
+          }
+
+          return 'Linux execution';
+        }
+
+        return 'No command or script selected';
+      }
+
+      function draftUsesUploadedSource(draft) {
+        return (draftChecked(draft, 'winCommand') && draft.executionStrategy === 'script' && draft.scriptType !== '0') ||
+          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType !== 'python' && draft.linuxScriptType !== '0') ||
+          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType === 'python' && draft.pythonSourceMode === 'upload');
+      }
+
+      function draftControlSummary(draft) {
+        var labels = [];
+        if (draftChecked(draft, 'timestamp')) {
+          labels.push('timestamps');
+        }
+        if (draftChecked(draft, 'abort')) {
+          labels.push('timeout');
+        }
+        labels.push($('#trigger_after_save').val() == '1' ? 'trigger after save' : 'save only');
+        return labels.join(', ');
+      }
+
+      function draftNotificationSummary(draft) {
+        var labels = [];
+        if (draftChecked(draft, 'emailCheck')) {
+          labels.push('failure email');
+        }
+        if (draftChecked(draft, 'editableEmailCheck')) {
+          labels.push('editable email');
+        }
+        return labels.length ? labels.join(', ') : 'None';
+      }
+
+      function draftEnvironmentSummary(draft) {
+        return draftChecked(draft, 'checkEnvironment') ? draftSelectedValue(draft, 'environment', 'Not selected') : 'No environment';
+      }
+
+      function draftDownstreamSummary(draft) {
+        return draftChecked(draft, 'runJobCheck') ? draftListValue(draft, 'jobList', 'Not selected') : 'None';
+      }
+
+      function saveActiveJobDraft(renderAfterSave) {
+        if (applyingJobDraft || ! jobDrafts.length) {
+          return;
+        }
+
+        jobDrafts[activeDraftIndex] = draftFromForm();
+
+        if (renderAfterSave !== false) {
+          renderJobDraftTabs();
+          renderJobDraftComparison();
+        }
+      }
+
+      function renderJobDraftTabs() {
+        var tabs = [];
+
+        $.each(jobDrafts, function(index, draft) {
+          tabs.push('<li' + (index === activeDraftIndex ? ' class="active"' : '') + '><a href="#" data-draft-index="' + index + '"><i class="fa fa-file-code-o"></i> ' + escapeHtml(draftName(draft, index, true)) + '</a></li>');
+        });
+
+        $('#jobDraftTabs').html(tabs.join(''));
+      }
+
+      function renderJobDraftComparison() {
+        var rows = ['<thead><tr><th>Job</th><th>Execution</th><th>Schedule</th><th>Environment</th><th>Controls</th></tr></thead><tbody>'];
+
+        $.each(jobDrafts, function(index, draft) {
+          rows.push('<tr' + (index === activeDraftIndex ? ' class="active-draft-row"' : '') + '><td><b>' + escapeHtml(draftName(draft, index, true)) + '</b></td><td>' + escapeHtml(draftCommandSummary(draft)) + '</td><td>' + escapeHtml(draftScheduleSummary(draft)) + '</td><td>' + escapeHtml(draftEnvironmentSummary(draft)) + '</td><td>' + escapeHtml(draftControlSummary(draft)) + '</td></tr>');
+        });
+
+        rows.push('</tbody>');
+        $('#jobDraftComparison').html(rows.join(''));
+      }
+
+      function updateDraftNamesTextarea() {
+        $('#job_names').val($.map(jobDrafts, function(draft, index) {
+          return index === activeDraftIndex ? null : draft.job_name;
+        }).join('\n'));
+      }
+
+      function syncOptionCards() {
+        var enabledCount = 0;
+        var enabledPanelCount = 0;
+        var enabledConfigs = [];
+
+        $('.job-option-card').each(function() {
+          var card = $(this);
+          var checkbox = card.find('input[type="checkbox"]');
+          var isEnabled = checkbox.is(':checked');
+          var panelSelector = card.data('option-panel');
+
+          card.toggleClass('active', isEnabled);
+
+          if (isEnabled) {
+            enabledCount++;
+            if (panelSelector) {
+              enabledPanelCount++;
+              var iconClass = (card.find('.job-option-icon').attr('class') || 'fa fa-sliders').replace(/\s*job-option-icon\b/g, '');
+              var optionTitle = $.trim(card.find('.job-option-title').text());
+              enabledConfigs.push({
+                panelSelector: panelSelector,
+                iconClass: iconClass,
+                optionTitle: optionTitle
+              });
+            }
+          }
+        });
+
+        if (! enabledConfigs.length) {
+          activeConfigPanel = '';
+        } else if (! activeConfigPanel || ! $.grep(enabledConfigs, function(config) { return config.panelSelector === activeConfigPanel; }).length) {
+          activeConfigPanel = enabledConfigs[0].panelSelector;
+        }
+
+        var configChips = $.map(enabledConfigs, function(config) {
+          var isActive = config.panelSelector === activeConfigPanel;
+          return '<button type="button" class="btn btn-default btn-xs job-config-chip' + (isActive ? ' active' : '') + '" data-option-panel="' + escapeHtml(config.panelSelector) + '"><i class="' + escapeHtml(config.iconClass) + '"></i>' + escapeHtml(config.optionTitle) + '</button>';
+        });
+
+        $('#jobOptionEnabledCount').text(enabledCount + (enabledCount == 1 ? ' option enabled' : ' options enabled'));
+        $('#jobOptionEmptyState').toggle(enabledPanelCount === 0);
+        $('#jobConfigWorkbench').toggleClass('is-empty', enabledPanelCount === 0);
+        $('#jobConfigSideNav').html(configChips.length ? configChips.join('') : '<span class="job-config-menu-empty">No configurable options enabled.</span>');
+        applyActiveConfigPanel(enabledConfigs);
+      }
+
+      function applyActiveConfigPanel(enabledConfigs) {
+        var enabledPanelMap = {};
+
+        $.each(enabledConfigs, function(index, config) {
+          enabledPanelMap[config.panelSelector] = true;
+        });
+
+        $('.job-option-card').each(function() {
+          var panelSelector = $(this).data('option-panel');
+
+          if (! panelSelector) {
+            return;
+          }
+
+          $(panelSelector)
+            .toggleClass('job-config-panel-active', !!enabledPanelMap[panelSelector] && panelSelector === activeConfigPanel)
+            .toggleClass('job-config-panel-inactive', !!enabledPanelMap[panelSelector] && panelSelector !== activeConfigPanel);
+        });
+
+        $('#jobConfigPanelEmptyNote').toggle(enabledConfigs.length > 0 && ! activeConfigPanel);
+      }
+
+      function focusOptionPanel(panelSelector) {
+        if (! panelSelector || applyingJobDraft) {
+          return;
+        }
+
+        activeConfigPanel = panelSelector;
+        refreshJobOptionPanels();
+
+        window.setTimeout(function() {
+          var panel = $(panelSelector);
+          var box = panel.find('.box').first();
+
+          if (! panel.length || ! panel.is(':visible') || ! box.length) {
+            return;
+          }
+
+          box.addClass('job-config-highlight');
+
+          window.setTimeout(function() {
+            box.removeClass('job-config-highlight');
+          }, 900);
+        }, 180);
+      }
+
+      function refreshJobOptionPanels() {
+        updateSchedulePanel();
+        $('#environmentBox').toggle($('#checkEnvironment').is(':checked'));
+        $('#abortIfStuck').toggle($('#abort').is(':checked'));
+        $('#enableEmail').toggle($('#emailCheck').is(':checked'));
+        $('#editableEmail').toggle($('#editableEmailCheck').is(':checked'));
+        $('#runJob').toggle($('#runJobCheck').is(':checked'));
+        $('#runWinCommand').toggle($('#winCommand').is(':checked'));
+        $('#runlinuxCommand').toggle($('#linuxCommand').is(':checked'));
+
+        $('.scriptTypeForm').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'script');
+        $('.windowsCommandForm').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'command');
+        $('.uploadScript').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'script' && $('#scriptType').val() != '0');
+
+        $('.linuxScriptTypeForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script');
+        $('.linuxCommandForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'command');
+        updatePythonSourceControls();
+        syncOptionCards();
+      }
+
+      function loadJobDraft(draft) {
+        var normalizedDraft = $.extend(true, createEmptyDraft(''), draft || {});
+
+        applyingJobDraft = true;
+
+        $.each(draftCheckboxFields, function(index, field) {
+          $('#' + field).prop('checked', draftChecked(normalizedDraft, field));
+        });
+
+        $.each(draftScalarFields, function(index, field) {
+          var element = $('#' + field);
+          if (element.length) {
+            element.val(normalizedDraft[field]);
+          }
+        });
+
+        $.each(draftArrayFields, function(index, field) {
+          $('#' + field).val(normalizeArray(normalizedDraft[field])).trigger('change.select2');
+        });
+
+          updateLinuxCommandEditor();
+          updatePythonInlineEditor();
+          updatePythonRequirementsEditor();
+          loadPythonInlineFilesFromHidden();
+          updatePythonRuntimeControls();
+          renderPythonInlineWorkspace();
+          if (pythonWorkspaceAllowsInlineCode()) {
+            setPythonInlinePane('code');
+          }
+        updateDraftNamesTextarea();
+        $('input[name="optionsRadios"][value="' + (normalizedDraft.optionsRadios || '1') + '"]').prop('checked', true);
+        refreshJobOptionPanels();
+
+        applyingJobDraft = false;
+        updateJobCreationReview();
+      }
+
+      function switchJobDraft(index) {
+        if (index < 0 || index >= jobDrafts.length || index === activeDraftIndex) {
+          return;
+        }
+
+        saveActiveJobDraft(false);
+        activeDraftIndex = index;
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+      }
+
+      function replaceDraftsWithCurrentForm() {
+        jobDrafts = [draftFromForm()];
+        activeDraftIndex = 0;
+        renderJobDraftTabs();
+        renderJobDraftComparison();
+      }
+
+      function syncDraftsFromNames() {
+        saveActiveJobDraft(false);
+
+        var names = collectJobNames(false);
+        var sourceDraft = $.extend(true, createEmptyDraft(''), jobDrafts[activeDraftIndex] || draftFromForm());
+        var existingByName = {};
+        var nextDrafts = [];
+
+        $.each(jobDrafts, function(index, draft) {
+          var name = $.trim(draft.job_name || '');
+          if (name !== '') {
+            existingByName[name] = draft;
+          }
+        });
+
+        if (! names.length) {
+          names.push(sourceDraft.job_name || generateJobName());
+        }
+
+        $.each(names, function(index, name) {
+          var draft = existingByName[name] ? $.extend(true, {}, existingByName[name]) : $.extend(true, {}, sourceDraft);
+          draft.job_name = name;
+          nextDrafts.push(draft);
+        });
+
+        jobDrafts = nextDrafts;
+        activeDraftIndex = 0;
+        $('#job_name').val(jobDrafts[0].job_name);
+        updateDraftNamesTextarea();
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+        setBulkDraftsVisible(jobDrafts.length > 1 || $.trim($('#job_names').val()) !== '');
+      }
+
+      function addJobDraft() {
+        saveActiveJobDraft(false);
+        jobDrafts.push(createEmptyDraft(generateJobName()));
+        activeDraftIndex = jobDrafts.length - 1;
+        updateDraftNamesTextarea();
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+        setBulkDraftsVisible(true);
+      }
+
+      function duplicateJobDraft() {
+        saveActiveJobDraft(false);
+        var draft = $.extend(true, {}, jobDrafts[activeDraftIndex] || draftFromForm());
+        draft.job_name = generateJobName();
+        jobDrafts.push(draft);
+        activeDraftIndex = jobDrafts.length - 1;
+        updateDraftNamesTextarea();
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+        setBulkDraftsVisible(true);
+      }
+
+      function removeJobDraft() {
+        if (jobDrafts.length <= 1) {
+          jobDrafts = [createEmptyDraft('')];
+          activeDraftIndex = 0;
+          $('#job_names').val('');
+          loadJobDraft(jobDrafts[0]);
+          return;
+        }
+
+        jobDrafts.splice(activeDraftIndex, 1);
+        activeDraftIndex = Math.max(0, activeDraftIndex - 1);
+        updateDraftNamesTextarea();
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+      }
+
+      function ensureJobDraftsInitialized() {
+        if (! jobDrafts.length) {
+          jobDrafts = [draftFromForm()];
+          activeDraftIndex = 0;
+        }
+      }
+
+      function validateDraftNames(drafts) {
+        var seen = {};
+
+        for (var index = 0; index < drafts.length; index++) {
+          var name = $.trim(drafts[index].job_name || '');
+          if (name === '') {
+            name = generateJobName();
+            drafts[index].job_name = name;
+          }
+
+          if (name.length > 50 || /\s/.test(name) || /[^A-Za-z0-9._\/\-]/.test(name) || name.indexOf('..') !== -1 || name.charAt(0) === '/' || name.charAt(name.length - 1) === '/' || name.indexOf('//') !== -1) {
+            return 'Job name "' + name + '" is invalid.';
+          }
+
+          if (seen[name]) {
+            return 'Job name "' + name + '" is duplicated.';
+          }
+
+          seen[name] = true;
+        }
+
+        return '';
+      }
+
+      function draftFormData(draft, triggerAfterSave) {
+        var formData = new FormData();
+
+        formData.append('job_name', draft.job_name || '');
+        formData.append('job_names', '');
+        formData.append('description', draft.description || '');
+        formData.append('trigger_after_save', triggerAfterSave || '0');
+
+        $.each(draftCheckboxFields, function(index, field) {
+          if (draftChecked(draft, field)) {
+            formData.append(field, '1');
+          }
+        });
+
+        $.each(draftScalarFields, function(index, field) {
+          if (field !== 'job_name' && field !== 'description') {
+            formData.append(field, draft[field] == null ? '' : draft[field]);
+          }
+        });
+
+        $.each(draftArrayFields, function(index, field) {
+          $.each(normalizeArray(draft[field]), function(valueIndex, value) {
+            formData.append(field + '[]', value);
+          });
+        });
+
+        formData.append('optionsRadios', draft.optionsRadios || '1');
+
+        return formData;
+      }
+
+      function responseFlashText(responseText, selector) {
+        var response = $('<div>').append($.parseHTML(responseText || '', document, false));
+        return $.trim(response.find(selector).first().text().replace(/×/g, ''));
+      }
+
+      function postJobDraft(draft, triggerAfterSave) {
+        return $.ajax({
+          url: $('#InsertDbSettings').attr('action'),
+          method: 'POST',
+          data: draftFormData(draft, triggerAfterSave),
+          processData: false,
+          contentType: false
+        }).then(function(responseText) {
+          var errorText = responseFlashText(responseText, '.alert-danger, .alert-error');
+          if (errorText !== '') {
+            return $.Deferred().reject(errorText).promise();
+          }
+
+          return responseFlashText(responseText, '.alert-success') || 'Saved';
+        });
+      }
+
+      function submitJobDraftsIfNeeded() {
+        ensureJobDraftsInitialized();
+        saveActiveJobDraft(false);
+
+        if (jobDrafts.length <= 1 && $.trim($('#job_names').val()) !== '') {
+          syncDraftsFromNames();
+          saveActiveJobDraft(false);
+        }
+
+        if (jobDrafts.length <= 1) {
+          return false;
+        }
+
+        var drafts = $.map(jobDrafts, function(draft) { return $.extend(true, {}, draft); });
+        var validationError = validateDraftNames(drafts);
+        var triggerAfterSave = $('#trigger_after_save').val() == '1' ? '1' : '0';
+        var index = 0;
+        var savedNames = [];
+
+        if (validationError !== '') {
+          toastr.error(validationError, 'Job Drafts');
+          return true;
+        }
+
+        jobDrafts = $.map(drafts, function(draft) { return $.extend(true, {}, draft); });
+        activeDraftIndex = Math.min(activeDraftIndex, jobDrafts.length - 1);
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+
+        setSaveJobState(true, 'Saving 0 of ' + drafts.length + ' job drafts...');
+
+        function submitNext() {
+          if (index >= drafts.length) {
+            savedJobNames = savedNames.slice(0);
+            savedJobName = savedJobNames[0] || '';
+            $.each(savedJobNames, function(savedIndex, jobName) {
+              jobCreationDates[jobName] = new Date().toISOString();
+            });
+            setSaveJobState(false, '');
+            toastr.success(savedNames.length + ' job draft(s) saved.', 'Job Creation');
+            expandAvailableJobsBox();
+            refreshAvailableJobsTable(false);
+            updateJobCreationReview();
+            return;
+          }
+
+          setSaveJobState(true, 'Saving ' + (index + 1) + ' of ' + drafts.length + ': ' + drafts[index].job_name + '...');
+          postJobDraft(drafts[index], triggerAfterSave).done(function() {
+            savedNames.push(drafts[index].job_name);
+            index += 1;
+            submitNext();
+          }).fail(function(errorText) {
+            setSaveJobState(false, '');
+            toastr.error(errorText || ('Unable to save ' + drafts[index].job_name + '.'), 'Job Creation');
+          });
+        }
+
+        submitNext();
+
+        return true;
+      }
+
+      function updateJobCreationReview() {
+        ensureJobDraftsInitialized();
+
+        if (! applyingJobDraft) {
+          saveActiveJobDraft(false);
+        }
+
+        var drafts = jobDrafts.length ? jobDrafts : [draftFromForm()];
+        var activeDraft = drafts[activeDraftIndex] || drafts[0] || createEmptyDraft('');
+        var labels = [];
+        var uploadSourceWarning = '';
+
+        $.each(drafts, function(index, draft) {
+          labels.push('<span class="label label-primary">' + escapeHtml(draftName(draft, index, true)) + '</span>');
+        });
+
+        if (drafts.length > 1) {
+          $.each(drafts, function(index, draft) {
+            if (draftUsesUploadedSource(draft)) {
+              uploadSourceWarning = '<br><span class="text-warning"><i class="fa fa-warning"></i> Uploaded sources must be prepared while each draft tab is active.</span>';
+              return false;
+            }
+          });
+        }
+
+        $('#jobBatchPreview').text(drafts.length + ' job draft(s) will be saved.');
+        $('#send').html('<i class="fa fa-save"></i> ' + (drafts.length > 1 ? 'Save Job Drafts' : 'Save Job'));
+        $('#saveAndTrigger').html('<i class="fa fa-play"></i> ' + (drafts.length > 1 ? 'Save And Trigger Drafts' : 'Save And Trigger'));
+        $('#jobCreationReview').html(
+          '<dt>Jobs</dt><dd>' + labels.join(' ') + uploadSourceWarning + '</dd>' +
+          '<dt>Active Draft</dt><dd>' + escapeHtml(draftName(activeDraft, activeDraftIndex, true)) + '</dd>' +
+          '<dt>Description</dt><dd>' + (String(activeDraft.description || '').trim() ? escapeHtml(activeDraft.description) : '<span class="text-muted">None</span>') + '</dd>' +
+          '<dt>Execution</dt><dd>' + escapeHtml(draftCommandSummary(activeDraft)) + '</dd>' +
+          '<dt>Schedule</dt><dd>' + escapeHtml(draftScheduleSummary(activeDraft)) + '</dd>' +
+          '<dt>Environment</dt><dd>' + escapeHtml(draftEnvironmentSummary(activeDraft)) + '</dd>' +
+          '<dt>Controls</dt><dd>' + escapeHtml(draftControlSummary(activeDraft)) + '</dd>' +
+          '<dt>Notifications</dt><dd>' + escapeHtml(draftNotificationSummary(activeDraft)) + '</dd>' +
+          '<dt>Downstream</dt><dd>' + escapeHtml(draftDownstreamSummary(activeDraft)) + '</dd>'
+        );
+
+        renderJobDraftTabs();
+        renderJobDraftComparison();
+      }
+
+      function generateBatchNames(count) {
+        var names = collectJobNames(false);
+        for (var index = 0; index < count; index++) {
+          names.push(generateJobName());
+        }
+
+        if ($.trim($('#job_name').val()) === '' && names.length > 0) {
+          $('#job_name').val(names.shift());
+        }
+
+        $('#job_names').val(names.join('\n'));
+        syncDraftsFromNames();
+      }
+
       function updatePythonSourceControls() {
-        var isPythonScript = $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python';
+        var isScriptExecution = $('#linuxExecutionStrategy').val() == 'script';
+        var isInlinePythonExecution = $('#linuxExecutionStrategy').val() == 'python_inline';
+        var scriptType = $('#linuxScriptType').val();
         var sourceMode = $('#pythonSourceMode').val() || 'upload';
 
-        $('.pythonSourceForm').toggle(isPythonScript);
+        if (isScriptExecution && scriptType == 'python' && sourceMode == 'inline') {
+          setSelectValue('#linuxExecutionStrategy', 'python_inline');
+          $('#linuxScriptType').val(0);
+          setSelectValue('#pythonSourceMode', 'upload');
+          isInlinePythonExecution = true;
+          isScriptExecution = false;
+          scriptType = '0';
+          sourceMode = 'upload';
+        }
+
+        var isPythonScript = isScriptExecution && scriptType == 'python';
+
+        $('.pythonSourceForm').toggle(isPythonScript || isInlinePythonExecution);
+        $('.pythonSourceModeColumn').toggle(isPythonScript);
+        $('.pythonEntryPointColumn')
+          .toggleClass('col-md-8', isPythonScript)
+          .toggleClass('col-md-12', isInlinePythonExecution);
         $('.pythonPathSourceForm').toggle(isPythonScript && sourceMode == 'path');
         $('.pythonGitSourceForm').toggle(isPythonScript && sourceMode == 'git');
+        $('.pythonInlineSourceForm').toggle(isInlinePythonExecution);
+        $('#pythonWorkspaceLabel').text('Inline Python Workspace');
+
+        if (isInlinePythonExecution && $.trim($('#pythonEntryPoint').val()) === '') {
+          $('#pythonEntryPoint').val('main.py');
+        }
+
+        updatePythonInlineEditor();
+        updatePythonRequirementsEditor();
+        updatePythonDockerfileEditor();
+        updatePythonRuntimeControls();
+        renderPythonInlineWorkspace();
 
         if (! isPythonScript || sourceMode != 'upload') {
           $('.linuxUploadScript').hide();
@@ -986,21 +3729,136 @@
         }
       }
 
+      function syncLinuxScriptUpload() {
+        var scriptType = $('#linuxScriptType').val();
+
+        updatePythonSourceControls();
+
+        if (! $('#linuxCommand').is(':checked') || $('#linuxExecutionStrategy').val() != 'script' || scriptType == '0' || scriptType == '') {
+          $('.linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+          return;
+        }
+
+        if (scriptType == 'python' && $('#pythonSourceMode').val() != 'upload') {
+          $('.linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+          return;
+        }
+
+        var jobName = ensureJobName();
+
+        if (jobName == '' || jobName == null) {
+          toastr.error('Please select a job name to upload the file.', 'File Upload Error');
+          $('#linuxScriptType').val(0);
+          $('.linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+          return;
+        }
+
+        var acceptedFiles = scriptType == 'python' ? '.py,.zip' : '.zip';
+        var uploadMessage = scriptType == 'python' ? 'Drop Python .py or .zip files here or click to upload.' : 'Drop zip files here or click to upload.';
+        $('.linuxUploadScript').show();
+        $('.destroyDropzone').remove();
+        $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>' + uploadMessage + '</b></h3><BR></DIV></form></DIV>'));
+
+        $('#mydropzone').dropzone({
+          maxFiles: 1,
+          acceptedFiles: acceptedFiles,
+          url: '<?php echo base_url(); ?>jobCreation/do_upload/' + encodeURIComponent(scriptType) + '/' + encodeURIComponent(jobName),
+          maxFilesize: 100,
+          sending: function() {
+            toastr.info('Uploading File, please wait the file get uploaded', 'File Uploading');
+            $('.buildXmlBtn').prop('disabled', true);
+          },
+          success: function() {
+            toastr.success('Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.', 'File Upload Success');
+            $('.buildXmlBtn').prop('disabled', false);
+          },
+          error: function() {
+            toastr.error('Erro during uploading file.', 'File Upload Error');
+            $('.buildXmlBtn').prop('disabled', false);
+          }
+        });
+      }
+
+      function syncLinuxExecutionControls(resetScriptType) {
+        if (! $('#linuxCommand').is(':checked')) {
+          $('#runlinuxCommand').hide();
+          $('.linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm').hide();
+          $('.destroyDropzone').remove();
+          return;
+        }
+
+        $('#runlinuxCommand').show();
+
+        if ($('#linuxExecutionStrategy').val() == 'command') {
+          $('.linuxScriptTypeForm').hide();
+          $('.linuxCommandForm').show();
+          if (resetScriptType !== false) {
+            $('#linuxScriptType').val(0);
+          }
+          $('.linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+          updatePythonSourceControls();
+        } else if ($('#linuxExecutionStrategy').val() == 'python_inline') {
+          $('.linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript').hide();
+          $('#linuxScriptType').val(0);
+          $('.destroyDropzone').remove();
+          updatePythonSourceControls();
+          applyPythonInlineJobSeekerTemplate(false);
+        } else if ($('#linuxExecutionStrategy').val() == 'script') {
+          $('.linuxScriptTypeForm').show();
+          $('.linuxCommandForm').hide();
+          syncLinuxScriptUpload();
+        } else {
+          $('.linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+          updatePythonSourceControls();
+        }
+      }
+
       $('#pythonSourceMode').change(function() {
         updatePythonSourceControls();
         if ($('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python' && $('#pythonSourceMode').val() == 'upload') {
-          $('#linuxScriptType').trigger('change');
+          syncLinuxScriptUpload();
         }
+      });
+
+      $('#linuxExecutionStrategy').change(function() {
+        syncLinuxExecutionControls(true);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
+      });
+
+      $('#linuxScriptType').change(function() {
+        syncLinuxScriptUpload();
+        refreshJobOptionPanels();
+        updateJobCreationReview();
+      });
+
+      $('#linuxCommand').change(function() {
+        syncLinuxExecutionControls(false);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
       });
 
      // get Jenkins credentials
      var jenkins_url = '<?php echo $jenkins_url; ?>';
     var jenkins_username = '';
     var jenkins_token = '';
-     var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';    
+     var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+      var availableJobsRefreshTimer = null;
+      var availableJobsRefreshIntervalMs = 10000;
       var savedJobName = <?php echo json_encode($savedJobName); ?>;
+      var savedJobNames = <?php echo json_encode(array_values($savedJobNames)); ?> || [];
       var savedJobCreatedAt = <?php echo json_encode($savedJobCreatedAt); ?>;
+      var savedJobCreationDates = <?php echo json_encode($savedJobCreationDates); ?> || {};
       var jobCreationDates = <?php echo json_encode($jobCreationDates); ?> || {};
+
+      $.each(savedJobCreationDates, function(jobName, createdAt) {
+        jobCreationDates[jobName] = createdAt;
+      });
 
       if (savedJobName && savedJobCreatedAt) {
        jobCreationDates[savedJobName] = savedJobCreatedAt;
@@ -1034,7 +3892,7 @@
     }
 
     function isRecentlySavedJob(jobName) {
-      return savedJobName && jobName === savedJobName;
+      return $.inArray(jobName, savedJobNames) !== -1 || (savedJobName && jobName === savedJobName);
     }
 
     function expandAvailableJobsBox() {
@@ -1116,6 +3974,9 @@
         form.reset();
       }
 
+      $('#job_name').prop('readonly', false).removeClass('input-loading');
+      $('#job_names').val('');
+      setBulkDraftsVisible(false);
       $('#trigger_after_save').val('0');
       $('.editJobBanner').hide();
       $('.editJobName').text('');
@@ -1126,9 +3987,21 @@
       $('#linuxScriptType').val('0');
       $('#executionStrategy').val('0');
       $('#scriptType').val('0');
-      $('.singleForm, .repetitive, .tags, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonPathSourceForm, .pythonGitSourceForm, #enableEmail, #abortIfStuck, #runJob, #environmentBox, #editableEmail').hide();
+      $('#pythonRuntimeMode').val('local');
+      $('#pythonVersion').val('python3');
+      $('#pythonDockerImage').val('');
+      $('#pythonDockerfileText').val('');
+      $('#pythonInlineFilesJson').val('{"files":[],"directories":[]}');
+      $('.singleForm, .repetitive, .tags, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm, #enableEmail, #abortIfStuck, #runJob, #environmentBox, #editableEmail').hide();
       $('#timeoutMinutes, #timeoutSeconds, #environment').prop('required', false);
       $('.destroyDropzone').remove();
+      resetPythonInlineWorkspaceState();
+      updatePythonInlineEditor();
+      updatePythonRequirementsEditor();
+      updatePythonDockerfileEditor();
+      updatePythonRuntimeControls();
+      refreshJobOptionPanels();
+      updateJobCreationReview();
     }
 
     function showEditBanner(jobName) {
@@ -1208,6 +4081,20 @@
       return '';
     }
 
+    function shellExportBase64Value(command, variableName) {
+      var encoded = shellExportValue(command, variableName);
+
+      if (encoded === '' || ! window.atob) {
+        return '';
+      }
+
+      try {
+        return window.atob(encoded);
+      } catch (error) {
+        return '';
+      }
+    }
+
     function relativeScriptPath(sourceDirectory, scriptPath) {
       if (sourceDirectory !== '' && scriptPath.indexOf(sourceDirectory + '/') === 0) {
         return scriptPath.substring(sourceDirectory.length + 1);
@@ -1279,12 +4166,13 @@
       var lines = command.split(/\r?\n/);
 
       $.each(lines, function(index, line) {
-        if ($.trim(line).indexOf('python3 "$JOBSEEKER_SCRIPT_PATH"') === 0) {
-          runLine = $.trim(line);
+        var trimmedLine = $.trim(line);
+        if (trimmedLine.indexOf('python3 "$JOBSEEKER_SCRIPT_PATH"') === 0 || trimmedLine.indexOf('"$JOBSEEKER_PYTHON" "$JOBSEEKER_SCRIPT_PATH"') === 0) {
+          runLine = trimmedLine;
         }
       });
 
-      var match = runLine.match(/^python3 "\$JOBSEEKER_SCRIPT_PATH"\s+(.+)$/);
+      var match = runLine.match(/^(?:python3|"\$JOBSEEKER_PYTHON") "\$JOBSEEKER_SCRIPT_PATH"\s+(.+)$/);
       if (!match) {
         return;
       }
@@ -1295,6 +4183,77 @@
       }
     }
 
+    function hydratePythonRuntime(command) {
+      var runtimeMode = shellExportValue(command, 'JOBSEEKER_PYTHON_RUNTIME');
+      var pythonExecutable = shellExportValue(command, 'JOBSEEKER_PYTHON');
+      var dockerImage = shellExportValue(command, 'JOBSEEKER_DOCKER_IMAGE');
+      var requirementsText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_REQUIREMENTS_B64');
+      var dockerfileText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_DOCKERFILE_B64');
+      var isDockerRuntime = runtimeMode == 'docker';
+
+      setSelectValue('#pythonRuntimeMode', isDockerRuntime ? 'docker' : 'local');
+      if (isDockerRuntime && dockerImage === '' && pythonExecutable !== '' && pythonExecutable !== 'python3') {
+        dockerImage = dockerImageForPythonVersion(pythonExecutable);
+      }
+      setSelectValue('#pythonVersion', 'python3');
+
+      if (dockerImage !== '') {
+        $('#pythonDockerImage').val(dockerImage);
+      }
+
+      if (requirementsText !== '') {
+        $('#pythonRequirementsText').val(requirementsText);
+        updatePythonRequirementsEditor();
+      }
+
+      if (dockerfileText !== '') {
+        $('#pythonDockerfileText').val(dockerfileText);
+        updatePythonDockerfileEditor();
+      }
+
+      updatePythonRuntimeControls();
+    }
+
+    function hydrateLinuxRuntime(command) {
+      var runtimeMode = shellExportValue(command, 'JOBSEEKER_LINUX_RUNTIME');
+      var dockerImage = shellExportValue(command, 'JOBSEEKER_DOCKER_IMAGE');
+
+      setSelectValue('#pythonRuntimeMode', runtimeMode == 'docker' ? 'docker' : 'local');
+      $('#pythonVersion').val('python3');
+
+      if (dockerImage !== '') {
+        $('#pythonDockerImage').val(dockerImage);
+      }
+
+      updatePythonRuntimeControls();
+    }
+
+    function hydrateLinuxDockerCommand(command) {
+      $('#linuxCommand').prop('checked', true);
+      $('#runlinuxCommand').show();
+      hydrateLinuxRuntime(command);
+
+      var rawCommand = shellExportBase64Value(command, 'JOBSEEKER_LINUX_COMMAND_B64');
+      if (rawCommand !== '') {
+        setSelectValue('#linuxExecutionStrategy', 'command');
+        $('.linuxCommandForm').show();
+        $('.linuxScriptTypeForm, .pythonSourceForm, .pythonRuntimeForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
+        $('#linuxCommandLine').val(rawCommand);
+        updateLinuxCommandEditor();
+        updatePythonRuntimeControls();
+        return;
+      }
+
+      var scriptType = shellExportValue(command, 'JOBSEEKER_LINUX_SCRIPT_TYPE') || 'bash';
+      setSelectValue('#linuxExecutionStrategy', 'script');
+      $('.linuxScriptTypeForm').show();
+      $('.linuxCommandForm').hide();
+      setSelectValue('#linuxScriptType', scriptType);
+      $('.linuxUploadScript').show();
+      updatePythonSourceControls();
+      hydrateLinuxRuntime(command);
+    }
+
     function hydratePythonCommand(jobName, command) {
       $('#linuxCommand').prop('checked', true);
       $('#runlinuxCommand').show();
@@ -1303,6 +4262,7 @@
       $('.linuxCommandForm').hide();
       setSelectValue('#linuxScriptType', 'python');
       $('.pythonSourceForm').show();
+      hydratePythonRuntime(command);
 
       var cloneLine = '';
       $.each(command.split(/\r?\n/), function(index, line) {
@@ -1314,12 +4274,14 @@
       if (cloneLine !== '') {
         var branchMatch = cloneLine.match(/--branch '([^']+)'/);
         var urlMatch = cloneLine.match(/'([^']+)' "\$WORKSPACE\/jobseeker-python-source"$/);
+        setSelectValue('#linuxScriptType', 'python');
         setSelectValue('#pythonSourceMode', 'git');
         $('#pythonRepositoryUrl').val(urlMatch ? urlMatch[1] : '');
         $('#pythonRepositoryBranch').val(branchMatch ? branchMatch[1] : '');
         $('#pythonEntryPoint').val(shellExportValue(command, 'JOBSEEKER_ENTRYPOINT'));
         $('.pythonGitSourceForm').show();
-        $('.pythonPathSourceForm, .linuxUploadScript').hide();
+        $('.pythonPathSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
+        updatePythonSourceControls();
         hydrateEnvironmentFromPythonCommand(command);
         return;
       }
@@ -1330,16 +4292,27 @@
       var uploadPath = '/python/jobs/' + jobName;
 
       if (sourceDirectory.indexOf(uploadPath) !== -1) {
+        setSelectValue('#linuxScriptType', 'python');
         setSelectValue('#pythonSourceMode', 'upload');
         $('#pythonEntryPoint').val(entryPoint);
         $('.linuxUploadScript').show();
-        $('.pythonPathSourceForm, .pythonGitSourceForm').hide();
+        $('.pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm').hide();
+        updatePythonSourceControls();
+      } else if (sourceDirectory.indexOf('/python/inline/') !== -1) {
+        setSelectValue('#linuxExecutionStrategy', 'python_inline');
+        $('#linuxScriptType').val(0);
+        setSelectValue('#pythonSourceMode', 'upload');
+        $('#pythonEntryPoint').val(entryPoint || 'main.py');
+        updatePythonSourceControls();
+        loadInlinePythonSource(jobName, entryPoint || 'main.py');
       } else {
+        setSelectValue('#linuxScriptType', 'python');
         setSelectValue('#pythonSourceMode', 'path');
         $('#pythonSourcePath').val(sourceDirectory);
         $('#pythonEntryPoint').val(entryPoint);
         $('.pythonPathSourceForm').show();
-        $('.pythonGitSourceForm, .linuxUploadScript').hide();
+        $('.pythonGitSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
+        updatePythonSourceControls();
       }
 
       hydrateEnvironmentFromPythonCommand(command);
@@ -1351,8 +4324,10 @@
 
       if (shell) {
         var shellCommand = firstXmlText(xmlDoc, 'command', shell);
-        if (shellCommand.indexOf('JOBSEEKER_SCRIPT_PATH') !== -1) {
+        if (shellCommand.indexOf('JOBSEEKER_PYTHON_RUNTIME') !== -1 || shellCommand.indexOf('JOBSEEKER_PYTHON_LIB') !== -1) {
           hydratePythonCommand(jobName, shellCommand);
+        } else if (shellCommand.indexOf('JOBSEEKER_LINUX_RUNTIME') !== -1) {
+          hydrateLinuxDockerCommand(shellCommand);
         } else if ($.trim(shellCommand).indexOf('sh ') === 0) {
           $('#linuxCommand').prop('checked', true);
           $('#runlinuxCommand').show();
@@ -1365,8 +4340,9 @@
           $('#runlinuxCommand').show();
           setSelectValue('#linuxExecutionStrategy', 'command');
           $('.linuxCommandForm').show();
-          $('.linuxScriptTypeForm, .pythonSourceForm, .linuxUploadScript').hide();
+          $('.linuxScriptTypeForm, .pythonSourceForm, .pythonRuntimeForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
           $('#linuxCommandLine').val(shellCommand);
+          updateLinuxCommandEditor();
         }
       }
 
@@ -1389,6 +4365,20 @@
         $('#recipients').val(firstXmlText(xmlDoc, 'recipients', mailer));
       }
 
+      var extendedMailer = firstXmlElement(xmlDoc, 'hudson.plugins.emailext.ExtendedEmailPublisher');
+      var generatedFailureEmail = false;
+      if (extendedMailer) {
+        var failureTrigger = firstXmlElement(xmlDoc, 'hudson.plugins.emailext.plugins.trigger.FailureTrigger', extendedMailer);
+        var recipientList = firstXmlText(xmlDoc, 'recipientList', failureTrigger);
+        var body = firstXmlText(xmlDoc, 'body', failureTrigger);
+        if (recipientList !== '') {
+          $('#emailCheck').prop('checked', true);
+          $('#enableEmail').show();
+          $('#recipients').val(recipientList);
+          generatedFailureEmail = body.indexOf('Jenkins marked this JobSeeker build as failed') !== -1;
+        }
+      }
+
       var buildTrigger = firstXmlElement(xmlDoc, 'hudson.tasks.BuildTrigger');
       if (buildTrigger) {
         var childProjects = $.map(firstXmlText(xmlDoc, 'childProjects', buildTrigger).split(','), function(value) {
@@ -1403,7 +4393,7 @@
         $('input[name="optionsRadios"][value="' + (thresholdName == 'FAILURE' ? '2' : '1') + '"]').prop('checked', true);
       }
 
-      if (firstXmlElement(xmlDoc, 'hudson.plugins.emailext.ExtendedEmailPublisher')) {
+      if (extendedMailer && !generatedFailureEmail) {
         toastr.warning('Editable email templates cannot be restored from Jenkins XML. Select templates again before saving if you want to keep editable email notifications.', 'Edit Job');
       }
     }
@@ -1444,7 +4434,10 @@
       hydrateBuilders(xmlDoc, jobName);
       hydratePublishers(xmlDoc);
       hydrateBuildWrappers(xmlDoc);
+      refreshJobOptionPanels();
       showEditBanner(jobName);
+      replaceDraftsWithCurrentForm();
+      updateJobCreationReview();
 
       toastr.info('Loaded ' + jobName + ' for editing.', 'Edit Job');
       $('html, body').animate({ scrollTop: $('#InsertDbSettings').offset().top - 70 }, 300);
@@ -1477,11 +4470,28 @@
 
     $('#clearEditJob').click(function() {
       resetJobCreationForm();
+      jobDrafts = [createEmptyDraft('')];
+      activeDraftIndex = 0;
+      loadJobDraft(jobDrafts[0]);
       toastr.info('Ready to create a new job.', 'New Job');
     });
 
     $('#myTable').on('click', '.editJob', function() {
       loadJobForEdit($(this).data('job'));
+    });
+
+    $('.job-option-card input[type="checkbox"]').on('change', function() {
+      var card = $(this).closest('.job-option-card');
+
+      if ($(this).is(':checked') && card.data('option-panel')) {
+        activeConfigPanel = card.data('option-panel');
+      }
+
+      refreshJobOptionPanels();
+    });
+
+    $(document).on('click', '.job-config-chip', function() {
+      focusOptionPanel($(this).data('option-panel'));
     });
 
      // Logic for editable email notification
@@ -1497,13 +4507,13 @@
 
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "<?php echo base_url(); ?>EmailSettings/fetchall/name",             
-        dataType: "html",    
+        url: "<?php echo base_url(); ?>EmailSettings/fetchall/name",
+        dataType: "html",
         beforeSend: function(){
           $('.overlay').fadeIn();
         },
-        success: function(data){  
-          var json = JSON.parse(data);  
+        success: function(data){
+          var json = JSON.parse(data);
 
            $.each(json["data"], function(i, item) {
             var newJson = (json["data"][i].name);
@@ -1522,11 +4532,11 @@
 
     });
 
-      } 
+      }
         else if($(this).is(":not(:checked)")){
           $('#editableEmail').fadeOut();
         }
-      }); 
+      });
 
 
      // Logic for run another job after this build function
@@ -1559,7 +4569,7 @@
     });
 
      $('#runJob').fadeIn();
-   } 
+   }
    else if($(this).is(":not(:checked)")){
     $('#runJob').fadeOut();
   }
@@ -1571,7 +4581,7 @@
       if($(this).is(":checked")){
         $('#enableEmail').fadeIn();
 
-      } 
+      }
       else if($(this).is(":not(:checked)")){
         $('#enableEmail').fadeOut();
       }
@@ -1602,7 +4612,7 @@
         $('.scriptTypeForm').fadeIn();
         $('.windowsCommandForm').fadeOut();
 
-          // Windows Script Execution 
+          // Windows Script Execution
           $('#scriptType').change(function(){
             var val = $('#scriptType').val();
             var job_name = $('#job_name').val();
@@ -1660,116 +4670,14 @@
 
       });
 
-     } 
+     }
       else if($(this).is(":not(:checked)")){ // If checkbox is NOT checked
 
         // Hide Windows Command Div
         $('#runWinCommand').fadeOut();
-        
+
       }
     });
-
-
-    // Linux Command / Script execution function
-    $('#linuxCommand').click(function(){
-      if($(this).is(":checked")){
-
-        // Show Linux Command div
-        $('#runlinuxCommand').fadeIn();
-
-          //Linux Execution Strategy area script
-          $('#linuxExecutionStrategy').change(function(){
-            var val = $('#linuxExecutionStrategy').val();
-
-            // If the option is to execute a linux command then
-            if(val == 'command' && val != 0){
-              $('.linuxScriptTypeForm').fadeOut();
-              $('.destroyDropzone').remove();
-              $('.linuxCommandForm').fadeIn();
-              $("#linuxScriptType").val(0);
-              updatePythonSourceControls();
-
-            // If the option is to execute a linux script then  
-          } else if(val == 'script' && val != 0) {
-            $('.linuxScriptTypeForm').fadeIn();
-            $('.linuxCommandForm').fadeOut();
-
-              // Linux Command execution script
-              $('#linuxScriptType').change(function(){
-                var val = $('#linuxScriptType').val();
-                var job_name = $('#job_name').val();
-                console.log(job_name);
-                updatePythonSourceControls();
-
-                if (val != 0) {
-                  job_name = ensureJobName();
-
-                    if(job_name != '' && job_name != null){
-                      if (val == 'python' && $('#pythonSourceMode').val() != 'upload') {
-                        $('.linuxUploadScript').fadeOut();
-                        $('.destroyDropzone').remove();
-                        return;
-                      }
-
-                      var acceptedFiles = val == 'python' ? ".py,.zip" : ".zip";
-                      var uploadMessage = val == 'python' ? "Drop Python .py or .zip files here or click to upload." : "Drop zip files here or click to upload.";
-                      $('.linuxUploadScript').show();
-                      $('.destroyDropzone').remove();
-                      $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>' + uploadMessage + '</b></h3><BR></DIV></form></DIV>'));
-
-                      $("#mydropzone").dropzone({
-                        maxFiles: 1,
-                        acceptedFiles: acceptedFiles,
-                        url: "<?php echo base_url(); ?>jobCreation/do_upload/" + encodeURIComponent(val) + "/" + encodeURIComponent(job_name),
-                        maxFilesize: 100,
-                        sending: function () {
-                          toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
-                          $(".buildXmlBtn").prop('disabled', true);
-                        },
-                        success: function(file, response) {
-                          console.log(file)
-                          console.log(response)
-                          toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
-                          $(".buildXmlBtn").prop('disabled', false);
-                        },
-                        error: function(file, response) {
-                          console.log(file)
-                          console.log(response)
-                          toastr.error("Erro during uploading file.", "File Upload Error")
-                          $(".buildXmlBtn").prop('disabled', false);
-                        }
-
-
-                      });
-                    } else {
-                      toastr.error("Please Select a job name to upload the file", "File Upload Error");
-                      $("#linuxScriptType").val(0);
-                    }
-
-                } else {
-                  $('.linuxUploadScript').fadeOut();
-                  $('.destroyDropzone').remove();
-                }
-
-              });
-
-            // If the option is nothing then   
-          } else if(val == 0){
-            $('.linuxScriptTypeForm').fadeOut();
-            $('.linuxCommandForm').fadeOut();
-            updatePythonSourceControls();
-          }
-        });
-
-        } 
-        else if($(this).is(":not(:checked)")){
-
-          // Hide Linux Command div
-          $('#runlinuxCommand').fadeOut();
-
-        }
-      });
-
 
     function updateScheduleActionForms() {
       var val = $('#action').val();
@@ -1903,6 +4811,114 @@ $('#checkEnvironment').click(function(){
     $('.saveJobStatus').text(message || '').toggle(!!message);
   }
 
+  function refreshAvailableJobsTable(resetPaging) {
+    if ($.fn.DataTable.isDataTable('#myTable')) {
+      $('#myTable').DataTable().ajax.reload(null, resetPaging === true);
+    }
+  }
+
+  function startAvailableJobsAutoRefresh() {
+    if (availableJobsRefreshTimer) {
+      clearInterval(availableJobsRefreshTimer);
+    }
+
+    availableJobsRefreshTimer = setInterval(function() {
+      refreshAvailableJobsTable(false);
+    }, availableJobsRefreshIntervalMs);
+  }
+
+  function triggerAvailableJob(jobName, button) {
+    var triggerButton = $(button);
+
+    if (jobName === '' || triggerButton.prop('disabled')) {
+      return;
+    }
+
+    triggerButton.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Triggering');
+
+    $.ajax({
+      url: jenkins_url + jenkinsJobPath(jobName) + '/build?delay=0sec',
+      type: 'POST',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+      success: function() {
+        toastr.success('Execution request sent for ' + jobName + '.', 'Job Triggered');
+        setTimeout(function() {
+          refreshAvailableJobsTable(false);
+        }, 1500);
+      },
+      error: function(xhr) {
+        var message = xhr && xhr.responseText ? xhr.responseText : 'Unable to trigger job.';
+        toastr.error(message, 'Trigger Failed');
+      },
+      complete: function() {
+        triggerButton.prop('disabled', false).html('<i class="fa fa-play"></i> Trigger');
+      }
+    });
+  }
+
+  function formatBuildTime(timestamp) {
+    timestamp = parseInt(timestamp, 10);
+
+    if (! timestamp) {
+      return '';
+    }
+
+    if (typeof moment === 'function') {
+      return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+    }
+
+    return new Date(timestamp).toLocaleString();
+  }
+
+  function renderAvailableJobLog(jobName, buildNumber, result, date, output) {
+    $('#jobCreationLogContent').html(
+      '<table class="table table-bordered"><tbody>' +
+        '<tr><th width="120px">Header</th><th>Task</th></tr>' +
+        '<tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr>' +
+        '<tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[' + escapeHtml(buildNumber || 'No build') + ']</b></td></tr>' +
+        '<tr><td>Status</td><td>' + escapeHtml(result || 'Not available') + '</td></tr>' +
+        '<tr><td>Console Log</td><td><pre>' + escapeHtml(output) + '</pre></td></tr>' +
+      '</tbody></table>'
+    );
+    $('#jobCreationLogModal').modal('show');
+  }
+
+  function showAvailableJobLog(jobName, buildNumber, result, date, button) {
+    var logButton = $(button);
+
+    if (jobName === '') {
+      return;
+    }
+
+    if (buildNumber === '' || buildNumber == null) {
+      renderAvailableJobLog(jobName, '', '', '', 'This job has not been executed yet. Trigger it first, then check the logs after Jenkins starts a build.');
+      return;
+    }
+
+    logButton.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Loading');
+
+    $.ajax({
+      contentType: 'application/text',
+      url: jenkins_url + jenkinsJobPath(jobName) + '/' + encodeURIComponent(buildNumber) + '/consoleText',
+      method: 'GET',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+      beforeSend: function() {
+        $('.overlay').show();
+      },
+      success: function(output) {
+        renderAvailableJobLog(jobName, buildNumber, result, date, output || 'Console output is empty for this build.');
+      },
+      error: function(xhr) {
+        var message = xhr && xhr.responseText ? xhr.responseText : 'Unable to fetch console log.';
+        toastr.error(message, 'Log Query Failed');
+      },
+      complete: function() {
+        $('.overlay').hide();
+        logButton.prop('disabled', false).html('<i class="fa fa-terminal"></i> Logs');
+      }
+    });
+  }
+
   Dropzone.autoDiscover = false;
 
 function loadTable () {
@@ -1916,10 +4932,15 @@ function loadTable () {
           "pageLength": 5,
           "order": [[ 2, "desc" ], [ 1, "asc" ]],
           "ajax": {
-            "url": jenkins_url +'api/json?tree=jobs[name,fullName,color]',
+            "url": '<?php echo base_url(); ?>jobCreation/availableJobs',
             "type": 'GET',
-            "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-            "dataSrc": "jobs"
+            "dataSrc": function(response) {
+              return response && response.jobs ? response.jobs : [];
+            },
+            "error": function(xhr) {
+              var message = xhr && xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Failed to refresh available jobs.';
+              toastr.error(message, 'Available Jobs');
+            }
           },
           "columns": [
           {"data": "color"},
@@ -1939,9 +4960,14 @@ function loadTable () {
                  return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/loading.gif">';
               }
             } else {return ''}
-          }}, {targets:3, orderable:false, searchable:false, render:function(data, type, row){
+          }}, {targets:3, orderable:false, searchable:false, className:'available-job-actions-cell', width:'230px', render:function(data, type, row){
             var jobName = jobNameFromRow(row);
-            return '<div class="btn-group btn-group-xs"><button type="button" class="btn btn-info editJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-pencil"></i> Edit</button><a class="btn btn-default" href="<?php echo base_url(); ?>jobView?job=' + encodeURIComponent(jobName) + '"><i class="fa fa-eye"></i> Inspect</a></div>';
+            var build = row && row.lastBuild ? row.lastBuild : {};
+            var buildNumber = build.number || '';
+            var result = build.result || '';
+            var date = formatBuildTime(build.timestamp);
+            var disabled = row && row.buildable === false ? ' disabled' : '';
+            return '<div class="btn-group btn-group-xs available-job-actions"><button type="button" class="btn btn-info editJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-pencil"></i> Edit</button><button type="button" class="btn btn-default inspectJenkinsJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-eye"></i> Inspect</button><button type="button" class="btn btn-success triggerAvailableJob" data-job="' + escapeAttribute(jobName) + '"' + disabled + '><i class="fa fa-play"></i> Trigger</button><button type="button" class="btn btn-warning showAvailableJobLog" data-job="' + escapeAttribute(jobName) + '" data-build="' + escapeAttribute(buildNumber) + '" data-result="' + escapeAttribute(result) + '" data-time="' + escapeAttribute(date) + '"><i class="fa fa-terminal"></i> Logs</button></div>';
           }}],
           "createdRow": function(row, data) {
             if (isRecentlySavedJob(jobNameFromRow(data))) {
@@ -1949,17 +4975,38 @@ function loadTable () {
             }
           },
           "initComplete": function() {
-            if (savedJobName) {
+            if (savedJobNames.length || savedJobName) {
               expandAvailableJobsBox();
             }
           }
        });
-  $(".overlay").hide();  
-}  
+  $(".overlay").hide();
+  startAvailableJobsAutoRefresh();
+}
 
 setTimeout(function(){ loadTable() }, 1000);
+ensureJobDraftsInitialized();
+refreshJobOptionPanels();
+updateJobCreationReview();
 
- 
+$(document).on('click', '.triggerAvailableJob', function() {
+  triggerAvailableJob($(this).data('job') || '', this);
+});
+
+$(document).on('click', '.showAvailableJobLog', function() {
+  showAvailableJobLog($(this).data('job') || '', $(this).data('build') || '', $(this).data('result') || '', $(this).data('time') || '', this);
+});
+
+$(document).on('click', '.inspectJenkinsJob', function() {
+  JobSeekerJobInspect.open({
+    jobName: $(this).data('job') || '',
+    jenkinsUrl: jenkins_url,
+    headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+    button: this
+  });
+});
+
+
 });
 
 </script>
