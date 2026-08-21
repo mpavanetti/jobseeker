@@ -1,8 +1,21 @@
 <style type="text/css">
-   .checkbox input {
-
+  .checkbox input {
     transform: scale(1.5);
-}
+  }
+
+  .delete-actions .btn {
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+
+  .delete-job-select {
+    min-height: 220px;
+  }
+
+  .delete-selection-help {
+    display: block;
+    margin-top: 6px;
+  }
 
 </style>
 <div class="content-wrapper">    
@@ -26,31 +39,34 @@
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
             <div class="box-header">
-                <b>Delete Job</b>
+              <b>Delete Jenkins Jobs</b>
             </div>
             <form role="form" id="delJob">
              <div class="box-body">
-                 <div class="col-lg-6 col-md-6 col-xs-12">
+               <div class="col-lg-12 col-md-12 col-xs-12">
                      <div class="form-group">
-                        <label for="job_name">Delete Below Job</label>
-                        <select class="form-control selector" id="deleteJobSelect">
-                            <option value="0">Select a Job to delete.</option>
+                  <label for="deleteJobSelect">Select jobs to delete</label>
+                  <select class="form-control selector delete-job-select" id="deleteJobSelect" multiple>
                         </select>
+                  <small class="text-muted delete-selection-help"><span id="deleteJobCount">0</span> job(s) selected. Hold Ctrl/Cmd to select multiple jobs.</small>
                     </div>
                 </div>
-                <div class="col-lg-6 col-md-6 col-xs-12">
+              <div class="col-lg-12 col-md-12 col-xs-12">
                  <div class="form-group">
                     <label for="job_name">Delete Job Repository</label>
                     <div class="checkbox">
                         <label for="deleteRepository">
-                          <input type="checkbox" name="deleteRepoCheck" id="deleteRepoCheck" value="1"> Delete asigned job repository.
+                    <input type="checkbox" name="deleteRepoCheck" id="deleteRepoCheck" value="1"> Also delete assigned job repositories and files.
                       </label>
                   </div>
               </div>
           </div>
       </div>
-      <div class="box-footer">
-         <a id="deleteJob" href="#" class="btn btn-primary"><i class="fa fa-save"></i>  Delete Job</a>
+          <div class="box-footer delete-actions">
+           <button type="button" id="selectAllJobs" class="btn btn-default"><i class="fa fa-check-square-o"></i> Select All</button>
+           <button type="button" id="clearSelectedJobs" class="btn btn-default"><i class="fa fa-square-o"></i> Clear</button>
+           <button type="button" id="reloadDeleteJobs" class="btn btn-info"><i class="fa fa-refresh"></i> Reload</button>
+           <button type="button" id="deleteJob" class="btn btn-danger"><i class="fa fa-trash"></i> Delete Selected Jobs</button>
      </div>
  </form> 
 </div>
@@ -61,21 +77,23 @@
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
     <div class="box-header">
-        <b>Delete Job Repository</b>
+      <b>Delete Job Repositories Only</b>
     </div>
     <form role="form" id="delRepository">
      <div class="box-body">
          <div class="col-lg-12 col-md-12 col-xs-12">
              <div class="form-group">
-                <label for="job_name">Delete only job repository and files.</label>
-                <select class="form-control selector" id="deleteRepoSelect">
-                    <option value="0">Select a job repository to delete.</option>
+          <label for="deleteRepoSelect">Select repositories to delete</label>
+          <select class="form-control selector delete-job-select" id="deleteRepoSelect" multiple>
                 </select>
+          <small class="text-muted delete-selection-help"><span id="deleteRepoCount">0</span> repository selection(s). This does not delete Jenkins jobs.</small>
             </div>
         </div>
 </div>
-<div class="box-footer">
- <a id="delRepoBtn" href="#" class="btn btn-primary"><i class="fa fa-save"></i>  Delete Repository</a>
+  <div class="box-footer delete-actions">
+   <button type="button" id="selectAllRepos" class="btn btn-default"><i class="fa fa-check-square-o"></i> Select All</button>
+   <button type="button" id="clearSelectedRepos" class="btn btn-default"><i class="fa fa-square-o"></i> Clear</button>
+   <button type="button" id="delRepoBtn" class="btn btn-danger"><i class="fa fa-trash"></i> Delete Selected Repositories</button>
 </div>
 </form> 
 </div>
@@ -89,150 +107,281 @@
 
 $(document).ready(function(){
 
-    $("#deleteRepoCheck"). prop("checked", true);
-
-        var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
-
-    $.ajax({
-          url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
-          method: 'GET',
-          beforeSend: function() {
-           
-            $('.overlay').show();
-        }
-        }).done(function(data) {
-
-           $.each(data["jobs"], function (key, item) {
-          var newJson = item.name;
-                $('.selector').append($('<option>', {
-                value: newJson,
-                text: newJson
-                }))
-            });
-
-           $('.overlay').hide();
-
-        }).fail(function() {
-          console.error(arguments);
-        });
-
-});
-
-$('#deleteJob').click(function(event){
-  event.preventDefault();
     var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
+    var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
 
-    var job = $('#deleteJobSelect').val();
-  var encodedJob = encodeURIComponent(job);
+    $("#deleteRepoCheck").prop("checked", true);
 
-    if(job != 0 ){
-
-         alertify.confirm('Delete Job Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this job permanently ?</b></p></div></div></div>', 
-      function(){ 
-       
-         $.ajax({
-          url: jenkins_url + 'job/'+ encodedJob + '/doDelete',
-          method: 'POST',
-          beforeSend: function() {
-           
-            $('.overlay').show();
-        },
-        success: function() {
-
-             toastr.success('Your job has ben successfully deleted !', 'Job Successfully Deleted');
-           $('.overlay').hide();
-           $('#deleteJobSelect option').filter(function() { return this.value === job; }).remove();
-           $('#deleteRepoSelect option').filter(function() { return this.value === job; }).remove();
-
-        },
-        error: function(){
-             console.error(arguments);
-             toastr.error('Some Error has occured during delete job', 'Error to delete Job');
-             $('.overlay').hide();
-        }
-        });
-
-          if($('#deleteRepoCheck').is(":checked")){
-            console.log("Delete Repo Selected")
-
-            $.ajax({
-       url: '<?php echo base_url(); ?>DeleteJob/deleteRepository/' + encodedJob,
-          method: 'POST',
-       dataType: 'json',
-          beforeSend: function() {
-           
-            $('.overlay').show();
-        },
-        success: function(data) {
-         if(data && data.exist == true) {
-           toastr.info('It has found files inside the job repository: ' + data.systems.join(', '), 'Repository Found');
-                toastr.success('Your Repository and files has been succesfully Deleted.', 'Repository Successfully Deleted');
-                 $('#deleteRepoSelect option').filter(function() { return this.value === job; }).remove();
-             } else {
-                toastr.warning('It has not found any available repository to delete.', 'No Repository found');
-             }
-
-           $('.overlay').hide();
-
-        },
-        error: function(){
-             console.error(arguments);
-             toastr.error('Some Error has occured during deleting the job repository', 'Error to delete Job Repository');
-             $('.overlay').hide();
-        }
-        });
-
-         }
-    }, 
-      function(){ 
-        alertify.error('Operation Aborted, good choice.')
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#039;',
+          '"': '&quot;'
+        }[character];
+      });
     }
-  );
 
-    } else {
-        toastr.error('Please, Select a job to be deleted', 'Select a Job');
+    function jenkinsJobPath(jobName) {
+      return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
+        return 'job/' + encodeURIComponent(segment);
+      }).join('/');
     }
-   
 
-});
+    function setDeleteBusy(isBusy) {
+      $('.overlay').toggle(isBusy);
+      $('#deleteJob, #delRepoBtn, #reloadDeleteJobs, #selectAllJobs, #clearSelectedJobs, #selectAllRepos, #clearSelectedRepos')
+        .prop('disabled', isBusy)
+        .toggleClass('disabled', isBusy);
+    }
 
-$('#delRepoBtn').click(function(event){
-  event.preventDefault();
-    var job = $('#deleteRepoSelect').val();
-    if(job != 0){
+    function selectedValues(selector) {
+      return ($(selector).val() || []).filter(function(value) {
+        return value !== null && value !== '' && value !== '0';
+      });
+    }
 
+    function updateSelectedCounts() {
+      $('#deleteJobCount').text(selectedValues('#deleteJobSelect').length);
+      $('#deleteRepoCount').text(selectedValues('#deleteRepoSelect').length);
+    }
 
-         $.ajax({
-         url: '<?php echo base_url(); ?>DeleteJob/deleteRepository/' + encodeURIComponent(job),
-          method: 'POST',
-         dataType: 'json',
-          beforeSend: function() {
-           
-            $('.overlay').show();
-        },
-        success: function(data) {
-           if(data && data.exist == true) {
-             toastr.info('It has found files inside the job repository: ' + data.systems.join(', '), 'Repository Found');
-                toastr.success('Your Repository and files has been succesfully Deleted.', 'Repository Successfully Deleted');
-             } else {
-                toastr.warning('It has not found any available repository to delete.', 'No Repository found');
-             }
+    function optionListHtml(jobNames) {
+      var maxVisibleJobs = 10;
+      var visibleJobs = jobNames.slice(0, maxVisibleJobs).map(function(jobName) {
+        return '<li>' + escapeHtml(jobName) + '</li>';
+      }).join('');
+      var hiddenCount = jobNames.length - maxVisibleJobs;
 
-           $('.overlay').hide();
+      if (hiddenCount > 0) {
+        visibleJobs += '<li>and ' + hiddenCount + ' more...</li>';
+      }
 
-        },
-        error: function(){
-             console.error(arguments);
-             toastr.error('Some Error has occured during deleting the job repository', 'Error to delete Job Repository');
-             $('.overlay').hide();
-        }
+      return '<ul class="text-left">' + visibleJobs + '</ul>';
+    }
+
+    function populateSelectors(jobs) {
+      var names = (jobs || []).map(function(job) {
+        return job.fullName || job.name || '';
+      }).filter(function(name, index, allNames) {
+        return name !== '' && allNames.indexOf(name) === index;
+      }).sort();
+
+      $('.selector').empty();
+      $.each(names, function(index, name) {
+        $('.selector').append($('<option>', {
+          value: name,
+          text: name
+        }));
+      });
+
+      updateSelectedCounts();
+    }
+
+    function removeDeletedOptions(jobNames) {
+      $.each(jobNames, function(index, jobName) {
+        $('.selector option').filter(function() {
+          return this.value === jobName;
+        }).remove();
+      });
+
+      updateSelectedCounts();
+    }
+
+    function loadDeleteOptions() {
+      setDeleteBusy(true);
+      $.ajax({
+        url: jenkins_url + 'api/json?tree=jobs[name,fullName]&pretty=true',
+        method: 'GET'
+      }).done(function(data) {
+        populateSelectors(data && data.jobs ? data.jobs : []);
+      }).fail(function() {
+        console.error(arguments);
+        toastr.error('Could not load Jenkins jobs.', 'Load Jobs Failed');
+      }).always(function() {
+        setDeleteBusy(false);
+      });
+    }
+
+    function deleteJenkinsJob(jobName) {
+      return $.ajax({
+        url: jenkins_url + jenkinsJobPath(jobName) + '/doDelete',
+        method: 'POST'
+      });
+    }
+
+    function deleteJenkinsJobs(jobNames) {
+      var results = [];
+      var chain = $.Deferred().resolve().promise();
+
+      $.each(jobNames, function(index, jobName) {
+        chain = chain.then(function() {
+          var step = $.Deferred();
+          deleteJenkinsJob(jobName).done(function() {
+            results.push({job: jobName, deleted: true});
+          }).fail(function(request) {
+            results.push({
+              job: jobName,
+              deleted: false,
+              error: request && request.responseText ? request.responseText : 'Unable to delete Jenkins job.'
+            });
+          }).always(function() {
+            step.resolve();
+          });
+
+          return step.promise();
         });
+      });
 
-
-
-    } else {
-      toastr.error('Please, Select a job to be deleted', 'Select a Job');
+      return chain.then(function() {
+        return results;
+      });
     }
+
+    function deleteRepositories(jobNames) {
+      return $.ajax({
+        url: deleteRepositoriesUrl,
+        method: 'POST',
+        dataType: 'json',
+        data: {jobs: jobNames}
+      });
+    }
+
+    function reportJenkinsDeleteResults(results) {
+      var deletedJobs = results.filter(function(result) { return result.deleted; }).map(function(result) { return result.job; });
+      var failedJobs = results.filter(function(result) { return ! result.deleted; });
+
+      if (deletedJobs.length > 0) {
+        toastr.success(deletedJobs.length + ' Jenkins job(s) deleted.', 'Jobs Deleted');
+        removeDeletedOptions(deletedJobs);
+      }
+
+      if (failedJobs.length > 0) {
+        toastr.error(failedJobs.length + ' Jenkins job(s) could not be deleted.', 'Delete Failed');
+        console.error('Jenkins delete failures', failedJobs);
+      }
+
+      return deletedJobs;
+    }
+
+    function reportRepositoryDeleteResults(data) {
+      var results = data && data.results ? data.results : [];
+      var deletedRepositories = results.filter(function(result) { return result.exist; });
+      var invalidRepositories = results.filter(function(result) { return result.error; });
+
+      if (deletedRepositories.length > 0) {
+        toastr.success(deletedRepositories.length + ' repository folder(s) deleted.', 'Repositories Deleted');
+      } else if (results.length > 0) {
+        toastr.warning('No matching repository folders were found.', 'No Repository Found');
+      }
+
+      if (invalidRepositories.length > 0) {
+        toastr.error(invalidRepositories.length + ' repository selection(s) were invalid.', 'Repository Delete Warning');
+      }
+    }
+
+    $('#deleteJobSelect, #deleteRepoSelect').change(updateSelectedCounts);
+
+    $('#selectAllJobs').click(function() {
+      $('#deleteJobSelect option').prop('selected', true);
+      $('#deleteJobSelect').trigger('change');
+    });
+
+    $('#clearSelectedJobs').click(function() {
+      $('#deleteJobSelect option').prop('selected', false);
+      $('#deleteJobSelect').trigger('change');
+    });
+
+    $('#selectAllRepos').click(function() {
+      $('#deleteRepoSelect option').prop('selected', true);
+      $('#deleteRepoSelect').trigger('change');
+    });
+
+    $('#clearSelectedRepos').click(function() {
+      $('#deleteRepoSelect option').prop('selected', false);
+      $('#deleteRepoSelect').trigger('change');
+    });
+
+    $('#reloadDeleteJobs').click(loadDeleteOptions);
+
+    $('#deleteJob').click(function(event){
+      event.preventDefault();
+
+      if ($(this).hasClass('disabled')) {
+        return;
+      }
+
+      var jobs = selectedValues('#deleteJobSelect');
+      var deleteRepositoriesAfterJobs = $('#deleteRepoCheck').is(':checked');
+
+      if (jobs.length === 0) {
+        toastr.error('Please select at least one job to delete.', 'Select Jobs');
+        return;
+      }
+
+      var repositoryWarning = deleteRepositoriesAfterJobs ? '<p><b>Repository folders and files will also be deleted.</b></p>' : '';
+      alertify.confirm('Delete Job Confirmation Required', '<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Delete ' + jobs.length + ' selected Jenkins job(s) permanently?</b></p>' + repositoryWarning + optionListHtml(jobs) + '</div></div></div>',
+        function(){
+          setDeleteBusy(true);
+          deleteJenkinsJobs(jobs).done(function(results) {
+            reportJenkinsDeleteResults(results);
+
+            if (! deleteRepositoriesAfterJobs) {
+              setDeleteBusy(false);
+              return;
+            }
+
+            deleteRepositories(jobs).done(function(data) {
+              reportRepositoryDeleteResults(data);
+            }).fail(function() {
+              console.error(arguments);
+              toastr.error('Some repositories could not be deleted.', 'Repository Delete Failed');
+            }).always(function() {
+              setDeleteBusy(false);
+            });
+          });
+        },
+        function(){
+          alertify.error('Operation aborted.');
+        }
+      );
+    });
+
+    $('#delRepoBtn').click(function(event){
+      event.preventDefault();
+
+      if ($(this).hasClass('disabled')) {
+        return;
+      }
+
+      var jobs = selectedValues('#deleteRepoSelect');
+
+      if (jobs.length === 0) {
+        toastr.error('Please select at least one repository to delete.', 'Select Repositories');
+        return;
+      }
+
+      alertify.confirm('Delete Repository Confirmation Required', '<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Delete repository files for ' + jobs.length + ' selected job(s)?</b></p><p>This does not delete the Jenkins job configuration.</p>' + optionListHtml(jobs) + '</div></div></div>',
+        function(){
+          setDeleteBusy(true);
+          deleteRepositories(jobs).done(function(data) {
+            reportRepositoryDeleteResults(data);
+          }).fail(function() {
+            console.error(arguments);
+            toastr.error('Some repositories could not be deleted.', 'Repository Delete Failed');
+          }).always(function() {
+            setDeleteBusy(false);
+          });
+        },
+        function(){
+          alertify.error('Operation aborted.');
+        }
+      );
+    });
+
+    loadDeleteOptions();
 
 });
 

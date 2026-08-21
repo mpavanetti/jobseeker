@@ -15,6 +15,11 @@ class JobList extends BaseController
         $this->load->helper('url');
     }
 
+    private function canManageJobs()
+    {
+        return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+    }
+
     /**
      * Index Page for this controller.
      */
@@ -22,16 +27,20 @@ class JobList extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Job Listing';
+        $data['role'] = $this->isManager();
+        $data['canManageJobs'] = $this->canManageJobs();
         
-        $this->loadViews("jobList", $this->global, NULL, NULL);
+        $this->loadViews("jobList", $this->global, $data, NULL);
     }
 
     public function full()
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Job Listing';
+        $data['role'] = $this->isManager();
+        $data['canManageJobs'] = $this->canManageJobs();
         
-        $this->loadViews("fullJobList", $this->global, NULL, NULL);
+        $this->loadViews("fullJobList", $this->global, $data, NULL);
     }
 
      

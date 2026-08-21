@@ -15,12 +15,17 @@ class DeleteJob extends BaseController
         $this->load->helper('url');
     }
 
+    private function canManageJobs()
+    {
+        return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+    }
+
     /**
      * Index Page for this controller.
      */
     public function index()
     {
-        if($this->isManager() == TRUE )
+        if(! $this->canManageJobs())
         {
             $this->loadThis();
         }
@@ -33,32 +38,112 @@ class DeleteJob extends BaseController
         }
     }
 
-    public function deleteRepository($job_name)
+    public function deleteRepository($job_name = NULL)
     {
-        if($this->isManager() == TRUE )
-        {
-            $this->loadThis();
-        }
-        else
-        {
-          $jobName = $this->safePathSegment(rawurldecode($job_name));
-          if ($jobName === FALSE) {
-            $this->output->set_status_header(400)->set_content_type('application/json')->set_output(json_encode(array('exist' => false, 'error' => 'Invalid job name.')));
+        if (! $this->canManageJobs()) {
+            $this->jsonDeleteResponse(array('exist' => false, 'error' => 'Access denied.'), 403);
             return;
-          }
-
-          $deletedSystems = array();
-          foreach (array('batch', 'bash', 'talend', 'python') as $system) {
-            if ($this->deleteRepositoryPath($system, $jobName)) {
-              $deletedSystems[] = $system;
-            }
-          }
-
-          $this->output
-            ->set_content_type('application/json')
-            ->set_output(json_encode(array('exist' => ! empty($deletedSystems), 'systems' => $deletedSystems), JSON_PRETTY_PRINT));
-
         }
+
+        if ($this->input->method(TRUE) !== 'POST') {
+            $this->jsonDeleteResponse(array('exist' => false, 'error' => 'Delete requests must use POST.'), 405);
+            return;
+        }
+
+        $jobName = $this->normaliseJobName($job_name !== NULL ? $job_name : $this->input->post('job_name'));
+        if ($jobName === FALSE) {
+            $this->jsonDeleteResponse(array('exist' => false, 'error' => 'Invalid job name.'), 400);
+            return;
+        }
+
+        $deletedSystems = $this->deleteRepositoryForJob($jobName);
+        $this->jsonDeleteResponse(array('job' => $jobName, 'exist' => ! empty($deletedSystems), 'systems' => $deletedSystems));
+    }
+
+    public function deleteRepositories()
+    {
+        if (! $this->canManageJobs()) {
+            $this->jsonDeleteResponse(array('deleted' => 0, 'results' => array(), 'error' => 'Access denied.'), 403);
+            return;
+        }
+
+        if ($this->input->method(TRUE) !== 'POST') {
+            $this->jsonDeleteResponse(array('deleted' => 0, 'results' => array(), 'error' => 'Delete requests must use POST.'), 405);
+            return;
+        }
+
+        $rawJobs = $this->input->post('jobs');
+        if ($rawJobs === NULL) {
+            $payload = json_decode($this->input->raw_input_stream);
+            if (is_object($payload) && isset($payload->jobs)) {
+                $rawJobs = $payload->jobs;
+            }
+        }
+
+        if (! is_array($rawJobs)) {
+            $rawJobs = $rawJobs === NULL ? array() : explode(',', (string) $rawJobs);
+        }
+
+        $seenJobs = array();
+        $results = array();
+        $deletedCount = 0;
+
+        foreach ($rawJobs as $rawJob) {
+            $jobName = $this->normaliseJobName($rawJob);
+
+            if ($jobName === FALSE) {
+                $results[] = array('job' => (string) $rawJob, 'exist' => false, 'systems' => array(), 'error' => 'Invalid job name.');
+                continue;
+            }
+
+            if (isset($seenJobs[$jobName])) {
+                continue;
+            }
+
+            $seenJobs[$jobName] = true;
+            $deletedSystems = $this->deleteRepositoryForJob($jobName);
+            if (! empty($deletedSystems)) {
+                $deletedCount++;
+            }
+
+            $results[] = array('job' => $jobName, 'exist' => ! empty($deletedSystems), 'systems' => $deletedSystems);
+        }
+
+        if (empty($results)) {
+            $this->jsonDeleteResponse(array('deleted' => 0, 'results' => array(), 'error' => 'No jobs were selected.'), 400);
+            return;
+        }
+
+        $this->jsonDeleteResponse(array('deleted' => $deletedCount, 'requested' => count($seenJobs), 'results' => $results));
+    }
+
+    private function normaliseJobName($jobName)
+    {
+        if (is_array($jobName) || is_object($jobName)) {
+            return FALSE;
+        }
+
+        return $this->safePathSegment(rawurldecode((string) $jobName));
+    }
+
+    private function deleteRepositoryForJob($jobName)
+    {
+        $deletedSystems = array();
+        foreach (array('batch', 'bash', 'talend', 'python') as $system) {
+            if ($this->deleteRepositoryPath($system, $jobName)) {
+                $deletedSystems[] = $system;
+            }
+        }
+
+        return $deletedSystems;
+    }
+
+    private function jsonDeleteResponse($payload, $status = 200)
+    {
+        $this->output
+            ->set_status_header($status)
+            ->set_content_type('application/json')
+            ->set_output(json_encode($payload, JSON_PRETTY_PRINT));
     }
 
     private function deleteRepositoryPath($system, $jobName)
