@@ -415,23 +415,6 @@
             </li>
           <?php } } ?>
           <?php
-          if($role == ROLE_ADMIN || $role == ROLE_MANAGER)
-          {
-            ?>
-            <li>
-              <a href="<?php echo base_url(); ?>files">
-                <i class="fa fa-files-o"></i>
-                <span>File Manager</span>
-              </a>
-            </li>
-            <li>
-              <a href="<?php echo base_url(); ?>Database">
-                <i class="fa fa-database"></i>
-                <span>Database Manager</span>
-              </a>
-            </li>
-            <?php
-          }
           if($role == ROLE_ADMIN)
           {
             ?>
@@ -450,12 +433,6 @@
                 </a>
               </li>
             <?php } ?>
-            <li>
-              <a href="<?php echo base_url(); ?>serverinfo">
-                <i class="fa fa-server"></i>
-                <span>Server Statistics</span>
-              </a>
-            </li>
             <li>
               <a href="<?php echo base_url(); ?>userListing">
                 <i class="fa fa-user"></i>
