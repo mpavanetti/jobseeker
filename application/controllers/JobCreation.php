@@ -128,6 +128,59 @@ class JobCreation extends BaseController
       return $names[array_rand($names)].'-'.$traits[array_rand($traits)].'-'.$token;
     }
 
+    private function cleanSubmittedJobName($jobName) {
+      $jobName = trim((string) $jobName);
+
+      if ($jobName === '') {
+        return array('ok' => FALSE, 'message' => 'Job name cannot be empty.');
+      }
+
+      if (strlen($jobName) > 50) {
+        return array('ok' => FALSE, 'message' => 'Job name "'.$jobName.'" is longer than 50 characters.');
+      }
+
+      if (preg_match('/\s/', $jobName) || preg_match('/[^A-Za-z0-9._\/-]/', $jobName) || strpos($jobName, '..') !== FALSE || trim($jobName, '/') !== $jobName || strpos($jobName, '//') !== FALSE) {
+        return array('ok' => FALSE, 'message' => 'Job name "'.$jobName.'" is invalid. Use letters, numbers, dot, dash, underscore, and folder separators only.');
+      }
+
+      return array('ok' => TRUE, 'name' => $jobName);
+    }
+
+    private function submittedJobNames($primaryJobName, $additionalJobNames) {
+      $candidates = array();
+
+      if (trim((string) $primaryJobName) !== '') {
+        $candidates[] = $primaryJobName;
+      }
+
+      foreach (preg_split('/[\r\n,;]+/', (string) $additionalJobNames) as $jobName) {
+        if (trim($jobName) !== '') {
+          $candidates[] = $jobName;
+        }
+      }
+
+      if (empty($candidates)) {
+        $candidates[] = $this->generateJobName();
+      }
+
+      $jobNames = array();
+      $seen = array();
+
+      foreach ($candidates as $candidate) {
+        $clean = $this->cleanSubmittedJobName($candidate);
+        if (! $clean['ok']) {
+          return array('ok' => FALSE, 'message' => $clean['message'], 'names' => array());
+        }
+
+        if (! isset($seen[$clean['name']])) {
+          $seen[$clean['name']] = TRUE;
+          $jobNames[] = $clean['name'];
+        }
+      }
+
+      return array('ok' => TRUE, 'message' => '', 'names' => $jobNames);
+    }
+
     public function do_upload($val,$job_name) {
 
       header('Content-Type: text/html; charset=utf-8');
@@ -300,20 +353,56 @@ class JobCreation extends BaseController
         @rmdir($path);
       }
 
-      private function ensurePythonSharedLibrary($repositoryRoot) {
-        $sourceFile = APPPATH.'third_party/python/jobseeker.py';
-        $targetDirectory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.'python'.DIRECTORY_SEPARATOR.'lib';
-        $targetFile = $targetDirectory.DIRECTORY_SEPARATOR.'jobseeker.py';
-
-        if (! is_readable($sourceFile) || ! $this->ensureDirectory($targetDirectory)) {
+      private function copyDirectory($sourcePath, $targetPath) {
+        if (! is_dir($sourcePath) || ! $this->ensureDirectory($targetPath)) {
           return FALSE;
         }
 
-        return copy($sourceFile, $targetFile);
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+        foreach ($iterator as $item) {
+          $name = $item->getFilename();
+          if ($name === '__pycache__' || substr($name, -4) === '.pyc') {
+            continue;
+          }
+
+          $relativePath = $iterator->getSubPathName();
+          $targetItem = rtrim($targetPath, '/\\').DIRECTORY_SEPARATOR.$relativePath;
+
+          if ($item->isDir()) {
+            if (! $this->ensureDirectory($targetItem)) {
+              return FALSE;
+            }
+          } else if (! copy($item->getPathname(), $targetItem)) {
+            return FALSE;
+          }
+        }
+
+        return TRUE;
+      }
+
+      private function ensurePythonSharedLibrary($repositoryRoot) {
+        $sourceDirectory = APPPATH.'third_party/python/jobseeker_sdk';
+        $targetRoot = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.'python'.DIRECTORY_SEPARATOR.'lib';
+        $targetDirectory = $targetRoot.DIRECTORY_SEPARATOR.'jobseeker-sdk';
+        $legacyTargetFile = $targetRoot.DIRECTORY_SEPARATOR.'jobseeker.py';
+
+        if (! is_dir($sourceDirectory) || ! $this->ensureDirectory($targetRoot)) {
+          return FALSE;
+        }
+
+        if (is_file($legacyTargetFile)) {
+          @unlink($legacyTargetFile);
+        }
+
+        if (is_dir($targetDirectory)) {
+          $this->removeUploadDirectory($targetDirectory);
+        }
+
+        return $this->copyDirectory($sourceDirectory, $targetDirectory);
       }
 
       private function selectedPythonSourceMode($sourceMode) {
-        return in_array($sourceMode, array('upload', 'path', 'git'), TRUE) ? $sourceMode : 'upload';
+        return in_array($sourceMode, array('upload', 'path', 'git', 'inline'), TRUE) ? $sourceMode : 'upload';
       }
 
       private function cleanPythonEntryPoint($entryPoint, $required = FALSE) {
@@ -329,6 +418,175 @@ class JobCreation extends BaseController
         }
 
         return str_replace(DIRECTORY_SEPARATOR, '/', $safeEntryPoint);
+      }
+
+      private function cleanPythonRequirementsText($requirementsText) {
+        $requirementsText = str_replace(array("\r\n", "\r"), "\n", (string) $requirementsText);
+
+        if (strlen($requirementsText) > 20000 || strpos($requirementsText, "\0") !== FALSE) {
+          return FALSE;
+        }
+
+        return $requirementsText;
+      }
+
+      private function cleanPythonDockerfileText($dockerfileText) {
+        $dockerfileText = str_replace(array("\r\n", "\r"), "\n", (string) $dockerfileText);
+
+        if (strlen($dockerfileText) > 50000 || strpos($dockerfileText, "\0") !== FALSE) {
+          return FALSE;
+        }
+
+        return $dockerfileText;
+      }
+
+      private function normalizeInlinePythonWorkspacePath($path, $requirePythonFile = FALSE) {
+        $safePath = $this->safeRelativePath($path);
+        if ($safePath === FALSE) {
+          return FALSE;
+        }
+
+        $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', $safePath);
+        $lowerPath = strtolower($relativePath);
+
+        if ($lowerPath === 'requirements.txt' || $lowerPath === 'dockerfile') {
+          return FALSE;
+        }
+
+        if (strpos($lowerPath, '__pycache__/') !== FALSE || strpos($lowerPath, '.jobseeker-python-libs/') !== FALSE) {
+          return FALSE;
+        }
+
+        if ($requirePythonFile && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) !== 'py') {
+          return FALSE;
+        }
+
+        return $relativePath;
+      }
+
+      private function cleanPythonInlineFilesJson($inlineFilesJson, $entryPoint) {
+        $inlineFilesJson = (string) $inlineFilesJson;
+        if (trim($inlineFilesJson) === '') {
+          return array('files' => array(), 'directories' => array());
+        }
+
+        if (strlen($inlineFilesJson) > 250000 || strpos($inlineFilesJson, "\0") !== FALSE) {
+          return FALSE;
+        }
+
+        $payload = json_decode($inlineFilesJson, TRUE);
+        if (! is_array($payload) || json_last_error() !== JSON_ERROR_NONE) {
+          return FALSE;
+        }
+
+        $entryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $entryPoint;
+        $entryPoint = $this->normalizeInlinePythonWorkspacePath($entryPoint, TRUE);
+        if ($entryPoint === FALSE) {
+          return FALSE;
+        }
+
+        $files = array();
+        $directories = array();
+        $totalBytes = 0;
+        $entries = 0;
+
+        if (isset($payload['directories']) && is_array($payload['directories'])) {
+          foreach ($payload['directories'] as $directory) {
+            $path = is_array($directory) && isset($directory['path']) ? $directory['path'] : $directory;
+            $path = $this->normalizeInlinePythonWorkspacePath($path, FALSE);
+            if ($path === FALSE || strtolower($path) === strtolower($entryPoint)) {
+              return FALSE;
+            }
+
+            $directories[$path] = $path;
+            $entries++;
+          }
+        }
+
+        if (isset($payload['files']) && is_array($payload['files'])) {
+          foreach ($payload['files'] as $file) {
+            if (! is_array($file) || ! array_key_exists('path', $file) || ! array_key_exists('content', $file)) {
+              return FALSE;
+            }
+
+            $path = $this->normalizeInlinePythonWorkspacePath($file['path'], TRUE);
+            if ($path === FALSE || strtolower($path) === strtolower($entryPoint)) {
+              return FALSE;
+            }
+
+            $content = str_replace(array("\r\n", "\r"), "\n", (string) $file['content']);
+            $contentLength = strlen($content);
+            if ($contentLength > 50000 || strpos($content, "\0") !== FALSE) {
+              return FALSE;
+            }
+
+            $totalBytes += $contentLength;
+            if ($totalBytes > 200000) {
+              return FALSE;
+            }
+
+            $files[$path] = $content;
+            $entries++;
+          }
+        }
+
+        if ($entries > 80) {
+          return FALSE;
+        }
+
+        ksort($files);
+        ksort($directories);
+
+        return array('files' => $files, 'directories' => array_values($directories));
+      }
+
+      private function selectedPythonRuntimeMode($runtimeMode) {
+        return $runtimeMode === 'docker' ? 'docker' : 'local';
+      }
+
+      private function selectedLinuxRuntimeMode($runtimeMode) {
+        return $runtimeMode === 'docker' ? 'docker' : 'local';
+      }
+
+      private function cleanPythonExecutable($pythonVersion) {
+        $pythonVersion = trim((string) $pythonVersion);
+
+        if ($pythonVersion === '') {
+          return 'python3';
+        }
+
+        if (preg_match('/^python3(?:\.[0-9]{1,2})?$/', $pythonVersion)) {
+          return 'python3';
+        }
+
+        if (preg_match('/^3(?:\.[0-9]{1,2})?$/', $pythonVersion)) {
+          return 'python3';
+        }
+
+        return FALSE;
+      }
+
+      private function cleanDockerImage($dockerImage, $defaultImage) {
+        $dockerImage = trim((string) $dockerImage);
+
+        if ($dockerImage === '') {
+          return $defaultImage;
+        }
+
+        if (strlen($dockerImage) > 200 || preg_match('/[\s\x00-\x1F\x7F]/', $dockerImage) || ! preg_match('/^[A-Za-z0-9][A-Za-z0-9._\/:@-]*$/', $dockerImage)) {
+          return FALSE;
+        }
+
+        return $dockerImage;
+      }
+
+      private function cleanPythonDockerImage($dockerImage, $pythonExecutable) {
+        $version = preg_replace('/^python/', '', $pythonExecutable);
+        return $this->cleanDockerImage($dockerImage, 'python:'.($version === '' ? '3' : $version).'-slim');
+      }
+
+      private function cleanLinuxDockerImage($dockerImage, $scriptType = '') {
+        return $this->cleanDockerImage($dockerImage, $scriptType === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
       }
 
       private function repositoryRealPath($repositoryRoot) {
@@ -380,18 +638,89 @@ class JobCreation extends BaseController
         return $scriptPath;
       }
 
+      private function shouldSkipUploadedPythonPath($path) {
+        $name = basename($path);
+
+        return $name === '__MACOSX' || $name === '__pycache__' || $name === '.git' || $name === '.jobseeker-python-libs' || strpos($name, '.') === 0;
+      }
+
+      private function collectUploadedPythonFiles($directory, $baseDirectory, &$files) {
+        if (count($files) >= 500) {
+          return;
+        }
+
+        $items = @scandir($directory);
+        if (! is_array($items)) {
+          return;
+        }
+
+        foreach ($items as $item) {
+          if ($item === '.' || $item === '..') {
+            continue;
+          }
+
+          $path = $directory.DIRECTORY_SEPARATOR.$item;
+          if ($this->shouldSkipUploadedPythonPath($path)) {
+            continue;
+          }
+
+          if (is_dir($path) && ! is_link($path)) {
+            $this->collectUploadedPythonFiles($path, $baseDirectory, $files);
+          } else if (is_file($path) && strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'py') {
+            $realPath = realpath($path);
+            if ($realPath !== FALSE && $this->pathWithinBase($realPath, $baseDirectory)) {
+              $files[] = $realPath;
+            }
+          }
+        }
+      }
+
+      private function resolveUploadedPythonFile($jobDirectory, $entryPoint) {
+        if ($entryPoint !== '') {
+          $scriptPath = $this->resolvePythonFile($jobDirectory, $entryPoint);
+          if ($scriptPath !== FALSE) {
+            return $scriptPath;
+          }
+
+          if (strpos($entryPoint, '/') !== FALSE) {
+            return FALSE;
+          }
+        }
+
+        $files = array();
+        $this->collectUploadedPythonFiles($jobDirectory, $jobDirectory, $files);
+
+        if ($entryPoint !== '') {
+          $matches = array_values(array_filter($files, function($file) use ($entryPoint) {
+            return basename($file) === $entryPoint;
+          }));
+
+          return count($matches) === 1 ? $matches[0] : FALSE;
+        }
+
+        $rootFiles = glob($jobDirectory.DIRECTORY_SEPARATOR.'*.py');
+        if (is_array($rootFiles) && count($rootFiles) === 1) {
+          return realpath($rootFiles[0]);
+        }
+
+        $mainFiles = array_values(array_filter($files, function($file) {
+          return basename($file) === 'main.py';
+        }));
+
+        if (count($mainFiles) === 1) {
+          return $mainFiles[0];
+        }
+
+        return count($files) === 1 ? $files[0] : FALSE;
+      }
+
       private function resolveUploadedPythonExecution($repositoryRoot, $jobName, $entryPoint) {
         $jobDirectory = $this->resolveRepositoryPath('python/jobs/'.$jobName, $repositoryRoot);
         if ($jobDirectory === FALSE || ! is_dir($jobDirectory)) {
           return FALSE;
         }
 
-        if ($entryPoint !== '') {
-          $scriptPath = $this->resolvePythonFile($jobDirectory, $entryPoint);
-        } else {
-          $files = glob($jobDirectory.DIRECTORY_SEPARATOR.'*.py');
-          $scriptPath = empty($files) ? FALSE : realpath($files[0]);
-        }
+        $scriptPath = $this->resolveUploadedPythonFile($jobDirectory, $entryPoint);
 
         if ($scriptPath === FALSE || ! is_file($scriptPath)) {
           return FALSE;
@@ -401,6 +730,161 @@ class JobCreation extends BaseController
           'mode' => 'local',
           'sourceDirectory' => $jobDirectory,
           'scriptPath' => $scriptPath
+        );
+      }
+
+      private function collectInlinePythonWorkspaceFiles($directory, $baseDirectory, $entryPoint, &$files, &$directories, $includeContent = FALSE) {
+        $items = @scandir($directory);
+        if (! is_array($items)) {
+          return;
+        }
+
+        foreach ($items as $item) {
+          if ($item === '.' || $item === '..') {
+            continue;
+          }
+
+          $path = $directory.DIRECTORY_SEPARATOR.$item;
+          if ($this->shouldSkipUploadedPythonPath($path)) {
+            continue;
+          }
+
+          $realPath = realpath($path);
+          if ($realPath === FALSE || ! $this->pathWithinBase($realPath, $baseDirectory)) {
+            continue;
+          }
+
+          $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', substr($realPath, strlen(rtrim($baseDirectory, DIRECTORY_SEPARATOR)) + 1));
+          if (is_dir($realPath) && ! is_link($realPath)) {
+            $this->collectInlinePythonWorkspaceFiles($realPath, $baseDirectory, $entryPoint, $files, $directories, $includeContent);
+            $directories[] = $relativePath;
+          } else if (is_file($realPath) && strtolower(pathinfo($realPath, PATHINFO_EXTENSION)) === 'py' && strtolower($relativePath) !== strtolower($entryPoint)) {
+            if ($includeContent) {
+              if (filesize($realPath) > 50000) {
+                continue;
+              }
+
+              $files[] = array('path' => $relativePath, 'content' => file_get_contents($realPath));
+            } else {
+              $files[] = $realPath;
+            }
+          }
+        }
+      }
+
+      private function syncInlinePythonFiles($jobDirectory, $entryPoint, $inlineFiles) {
+        if (! is_array($inlineFiles) || ! isset($inlineFiles['files']) || ! isset($inlineFiles['directories'])) {
+          return FALSE;
+        }
+
+        if (! $this->ensureDirectory($jobDirectory)) {
+          return FALSE;
+        }
+
+        $existingFiles = array();
+        $existingDirectories = array();
+        $this->collectInlinePythonWorkspaceFiles($jobDirectory, $jobDirectory, $entryPoint, $existingFiles, $existingDirectories, FALSE);
+
+        foreach ($existingFiles as $existingFile) {
+          @unlink($existingFile);
+        }
+
+        usort($existingDirectories, function($left, $right) {
+          return strlen($right) - strlen($left);
+        });
+
+        foreach ($existingDirectories as $existingDirectory) {
+          @rmdir($jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $existingDirectory));
+        }
+
+        foreach ($inlineFiles['directories'] as $directory) {
+          $targetDirectory = $jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $directory);
+          if (! $this->pathWithinBase($targetDirectory, $jobDirectory) || ! $this->ensureDirectory($targetDirectory)) {
+            return FALSE;
+          }
+        }
+
+        foreach ($inlineFiles['files'] as $path => $content) {
+          $targetFile = $jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path);
+          if (! $this->pathWithinBase($targetFile, $jobDirectory) || ! $this->ensureDirectory(dirname($targetFile)) || file_put_contents($targetFile, $content, LOCK_EX) === FALSE) {
+            return FALSE;
+          }
+        }
+
+        return TRUE;
+      }
+
+      private function resolveInlinePythonExecution($repositoryRoot, $jobName, $entryPoint, $sourceCode, $requirementsText = NULL, $dockerfileText = NULL, $inlineFiles = NULL) {
+        $entryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPoint, TRUE);
+        if ($entryPoint === FALSE) {
+          return FALSE;
+        }
+
+        $relativeJobDirectory = $this->safeRelativePath('python/inline/'.$jobName);
+        if ($relativeJobDirectory === FALSE) {
+          return FALSE;
+        }
+
+        $jobDirectory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.$relativeJobDirectory;
+        $scriptPath = $jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $entryPoint);
+
+        if (! $this->pathWithinBase($scriptPath, $jobDirectory)) {
+          return FALSE;
+        }
+
+        $sourceCode = str_replace(array("\r\n", "\r"), "\n", (string) $sourceCode);
+        if ($requirementsText !== NULL) {
+          $requirementsText = $this->cleanPythonRequirementsText($requirementsText);
+          if ($requirementsText === FALSE) {
+            return FALSE;
+          }
+        }
+
+        if (trim($sourceCode) !== '') {
+          if (strlen($sourceCode) > 50000 || ! $this->ensureDirectory(dirname($scriptPath)) || file_put_contents($scriptPath, $sourceCode, LOCK_EX) === FALSE) {
+            return FALSE;
+          }
+        } else if (! is_file($scriptPath)) {
+          return FALSE;
+        }
+
+        $requirementsPath = $jobDirectory.DIRECTORY_SEPARATOR.'requirements.txt';
+        if ($requirementsText !== NULL) {
+          if (trim($requirementsText) !== '') {
+            if (! $this->ensureDirectory($jobDirectory) || file_put_contents($requirementsPath, $requirementsText, LOCK_EX) === FALSE) {
+              return FALSE;
+            }
+          } else if (is_file($requirementsPath)) {
+            @unlink($requirementsPath);
+          }
+        }
+
+        $dockerfilePath = $jobDirectory.DIRECTORY_SEPARATOR.'Dockerfile';
+        if ($dockerfileText !== NULL) {
+          $dockerfileText = $this->cleanPythonDockerfileText($dockerfileText);
+          if ($dockerfileText === FALSE) {
+            return FALSE;
+          }
+
+          if (trim($dockerfileText) !== '') {
+            if (! $this->ensureDirectory($jobDirectory) || file_put_contents($dockerfilePath, $dockerfileText, LOCK_EX) === FALSE) {
+              return FALSE;
+            }
+          } else if (is_file($dockerfilePath)) {
+            @unlink($dockerfilePath);
+          }
+        }
+
+        if ($inlineFiles !== NULL && ! $this->syncInlinePythonFiles($jobDirectory, $entryPoint, $inlineFiles)) {
+          return FALSE;
+        }
+
+        return array(
+          'mode' => 'local',
+          'sourceDirectory' => $jobDirectory,
+          'scriptPath' => $scriptPath,
+          'requirementsPath' => $requirementsPath,
+          'dockerfilePath' => $dockerfilePath
         );
       }
 
@@ -474,12 +958,256 @@ class JobCreation extends BaseController
         );
       }
 
+      public function inlinePythonSource() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          echo 'Access denied.';
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->get('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->output->set_status_header(400);
+          echo $cleanJobName['message'];
+          return;
+        }
+
+        $entryPoint = $this->input->get('entry_point');
+        $cleanEntryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPoint, TRUE);
+        if ($cleanEntryPoint === FALSE) {
+          $this->output->set_status_header(400);
+          echo 'Invalid inline Python entry file.';
+          return;
+        }
+
+        $jenkinsHome = $this->global['jenkins_home'];
+        $repositoryRoot = ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+        $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $cleanJobName['name'], $cleanEntryPoint, '');
+
+        if ($pythonExecution === FALSE || ! is_readable($pythonExecution['scriptPath'])) {
+          $this->output->set_status_header(404);
+          echo 'Inline Python source was not found.';
+          return;
+        }
+
+        $this->output->set_content_type('text/plain', 'utf-8');
+        echo file_get_contents($pythonExecution['scriptPath']);
+      }
+
+      public function inlinePythonRequirements() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          echo 'Access denied.';
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->get('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->output->set_status_header(400);
+          echo $cleanJobName['message'];
+          return;
+        }
+
+        $entryPoint = $this->input->get('entry_point');
+        $cleanEntryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPoint, TRUE);
+        if ($cleanEntryPoint === FALSE) {
+          $this->output->set_status_header(400);
+          echo 'Invalid inline Python entry file.';
+          return;
+        }
+
+        $jenkinsHome = $this->global['jenkins_home'];
+        $repositoryRoot = ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+        $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $cleanJobName['name'], $cleanEntryPoint, '');
+
+        if ($pythonExecution === FALSE) {
+          $this->output->set_status_header(404);
+          echo 'Inline Python source was not found.';
+          return;
+        }
+
+        $this->output->set_content_type('text/plain', 'utf-8');
+        echo is_readable($pythonExecution['requirementsPath']) ? file_get_contents($pythonExecution['requirementsPath']) : '';
+      }
+
+      public function inlinePythonDockerfile() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          echo 'Access denied.';
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->get('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->output->set_status_header(400);
+          echo $cleanJobName['message'];
+          return;
+        }
+
+        $entryPoint = $this->input->get('entry_point');
+        $jenkinsHome = $this->global['jenkins_home'];
+        $repositoryRoot = ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+        $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $cleanJobName['name'], $entryPoint, '');
+
+        if ($pythonExecution === FALSE) {
+          $this->output->set_status_header(404);
+          echo 'Inline Python source was not found.';
+          return;
+        }
+
+        $this->output->set_content_type('text/plain', 'utf-8');
+        echo is_readable($pythonExecution['dockerfilePath']) ? file_get_contents($pythonExecution['dockerfilePath']) : '';
+      }
+
+      public function inlinePythonFiles() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          echo 'Access denied.';
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->get('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->output->set_status_header(400);
+          echo $cleanJobName['message'];
+          return;
+        }
+
+        $entryPoint = $this->input->get('entry_point');
+        $cleanEntryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPoint, TRUE);
+        if ($cleanEntryPoint === FALSE) {
+          $this->output->set_status_header(400);
+          echo 'Invalid inline Python entry file.';
+          return;
+        }
+
+        $jenkinsHome = $this->global['jenkins_home'];
+        $repositoryRoot = ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+        $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $cleanJobName['name'], $cleanEntryPoint, '');
+
+        if ($pythonExecution === FALSE) {
+          $this->output->set_status_header(404);
+          echo 'Inline Python source was not found.';
+          return;
+        }
+
+        $files = array();
+        $directories = array();
+        $this->collectInlinePythonWorkspaceFiles($pythonExecution['sourceDirectory'], $pythonExecution['sourceDirectory'], $cleanEntryPoint, $files, $directories, TRUE);
+
+        sort($directories);
+        usort($files, function($left, $right) {
+          return strcmp($left['path'], $right['path']);
+        });
+
+        $this->output->set_content_type('application/json', 'utf-8');
+        echo json_encode(array('files' => $files, 'directories' => $directories));
+      }
+
+      public function availableJobs() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          $this->output->set_content_type('application/json');
+          echo json_encode(array('jobs' => array(), 'error' => 'Access denied.'));
+          return;
+        }
+
+        $response = $this->requestJenkins('GET', 'api/json?tree=jobs[name,fullName,color,buildable,lastBuild[number,result,timestamp]]');
+        $this->output->set_status_header((int) $response['status']);
+        $this->output->set_content_type('application/json');
+
+        if ((int) $response['status'] !== 200) {
+          echo json_encode(array('jobs' => array(), 'error' => $response['body']));
+          return;
+        }
+
+        echo $response['body'];
+      }
+
       private function pythonEnvironmentArgument($environment, $checkEnvironment) {
         return ($environment != '0' && $checkEnvironment == 1) ? escapeshellarg($environment) : '';
       }
 
-      private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument) {
+      private function shellArgumentString($arguments) {
+        $escapedArguments = array();
+
+        foreach ($arguments as $argument) {
+          $escapedArguments[] = escapeshellarg($argument);
+        }
+
+        return implode(' ', $escapedArguments);
+      }
+
+      private function buildLinuxCommandExecutionCommand($commandText, $runtimeOptions = array()) {
+        $commandText = str_replace(array("\r\n", "\r"), "\n", (string) $commandText);
+        $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
+        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'alpine:3.20';
+
+        if ($runtimeMode !== 'docker') {
+          return $commandText;
+        }
+
+        $lines = array('set -e');
+        $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
+        $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
+        $lines[] = 'export JOBSEEKER_LINUX_COMMAND_B64='.escapeshellarg(base64_encode($commandText));
+        $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+        $lines[] = 'docker run --rm -i \\';
+        $lines[] = '  --network host \\';
+        $lines[] = '  -e "JOBSEEKER_LINUX_COMMAND_B64=$JOBSEEKER_LINUX_COMMAND_B64" \\';
+        $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
+        $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\'';
+
+        return implode("\n", $lines);
+      }
+
+      private function buildShellScriptExecutionCommand($execution, $runtimeOptions = array()) {
+        $arguments = isset($execution['arguments']) ? $execution['arguments'] : array();
+        $argumentString = $this->shellArgumentString($arguments);
+        $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
+        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : ($execution['scriptType'] === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
+
+        if ($runtimeMode !== 'docker') {
+          return 'sh '.escapeshellarg($execution['scriptPath']).($argumentString !== '' ? ' '.$argumentString : '');
+        }
+
+        $dockerScript = implode("\n", array(
+          'set -e',
+          'mkdir -p /tmp/jobseeker-context',
+          'tar -C /tmp/jobseeker-context -xf -',
+          'cd /tmp/jobseeker-context/source',
+          'sh "$JOBSEEKER_ENTRYPOINT" "$@"'
+        ));
+
+        $lines = array('set -e');
+        $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
+        $lines[] = 'export JOBSEEKER_LINUX_SCRIPT_TYPE='.escapeshellarg($execution['scriptType']);
+        $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
+        $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
+        $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
+        $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+        $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
+        $lines[] = 'if [ "$JOBSEEKER_DOCKER_ENTRYPOINT" = "$JOBSEEKER_SCRIPT_PATH" ]; then JOBSEEKER_DOCKER_ENTRYPOINT="$(basename "$JOBSEEKER_SCRIPT_PATH")"; fi';
+        $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-linux-docker-context"';
+        $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
+        $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source"';
+        $lines[] = 'cp -R "$JOBSEEKER_SOURCE_DIR/." "$JOBSEEKER_DOCKER_CONTEXT/source/"';
+        $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
+        $lines[] = '  --network host \\';
+        $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
+        $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
+        $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '');
+
+        return implode("\n", $lines);
+      }
+
+      private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument, $runtimeOptions = array()) {
         $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
+        $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
+        $pythonExecutable = isset($runtimeOptions['pythonExecutable']) ? $runtimeOptions['pythonExecutable'] : 'python3';
+        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'python:3-slim';
+        $requirementsText = isset($runtimeOptions['requirementsText']) ? (string) $runtimeOptions['requirementsText'] : '';
+        $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $lines = array('set -e');
 
         if ($execution['mode'] === 'git') {
@@ -500,18 +1228,79 @@ class JobCreation extends BaseController
         }
 
         $lines[] = 'export JOBSEEKER_PYTHON_LIB='.escapeshellarg($pythonLibraryPath);
+        $lines[] = 'export JOBSEEKER_PYTHON_SDK="$JOBSEEKER_PYTHON_LIB/jobseeker-sdk"';
+        $lines[] = 'export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"';
+        $lines[] = 'export JOBSEEKER_PYTHON_RUNTIME='.escapeshellarg($runtimeMode);
+        $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
         $lines[] = 'export JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_SCRIPT_PATH")"';
         $lines[] = 'cd "$JOBSEEKER_SOURCE_DIR"';
-        $lines[] = 'export PYTHONPATH="$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$JOBSEEKER_PYTHON_LIB:$PYTHONPATH"';
-        $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
-        $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
-        $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
-        $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
-        $lines[] = '  rm -rf "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
-        $lines[] = '  python3 -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs" -r "$JOBSEEKER_REQUIREMENTS"';
-        $lines[] = '  export PYTHONPATH="$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs:$PYTHONPATH"';
-        $lines[] = 'fi';
-        $lines[] = 'python3 "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+        $lines[] = 'rm -rf "$JOBSEEKER_RUNTIME_LIBS"';
+        $lines[] = '"$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"';
+
+        if ($runtimeMode === 'docker') {
+          $dockerScript = implode("\n", array(
+            'set -e',
+            'mkdir -p /tmp/jobseeker-context',
+            'tar -C /tmp/jobseeker-context -xf -',
+            'cd /tmp/jobseeker-context/source',
+            'JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_ENTRYPOINT")"',
+            'rm -rf /tmp/jobseeker-runtime-libs',
+            'PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-runtime-libs /tmp/jobseeker-context/jobseeker-sdk',
+            'JOBSEEKER_REQUIREMENTS=""',
+            'JOBSEEKER_USER_LIBS=""',
+            'if [ -f "/tmp/jobseeker-context/source/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/requirements.txt"; fi',
+            'if [ -f "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi',
+            'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then',
+            '  rm -rf /tmp/jobseeker-python-libs',
+            '  PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-python-libs -r "$JOBSEEKER_REQUIREMENTS"',
+            '  JOBSEEKER_USER_LIBS="/tmp/jobseeker-python-libs"',
+            'fi',
+            'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="/tmp/jobseeker-runtime-libs:$JOBSEEKER_USER_LIBS:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="/tmp/jobseeker-runtime-libs:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi',
+            'python "$JOBSEEKER_ENTRYPOINT" "$@"'
+          ));
+
+          $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
+          if (trim($requirementsText) !== '') {
+            $lines[] = 'export JOBSEEKER_PYTHON_REQUIREMENTS_B64='.escapeshellarg(base64_encode($requirementsText));
+          }
+          if (trim($dockerfileText) !== '') {
+            $lines[] = 'export JOBSEEKER_PYTHON_DOCKERFILE_B64='.escapeshellarg(base64_encode($dockerfileText));
+          }
+          $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+          $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
+          $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-python-docker-context"';
+          $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
+          $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source" "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"';
+          $lines[] = 'cp -R "$JOBSEEKER_SOURCE_DIR/." "$JOBSEEKER_DOCKER_CONTEXT/source/"';
+          $lines[] = 'cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"';
+          $lines[] = 'JOBSEEKER_DOCKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_DOCKER_ENTRYPOINT")"';
+          $lines[] = 'if [ -n "${JOBSEEKER_PYTHON_REQUIREMENTS_B64:-}" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR"; printf "%s" "$JOBSEEKER_PYTHON_REQUIREMENTS_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt"; fi';
+          $lines[] = 'if [ -n "${JOBSEEKER_PYTHON_DOCKERFILE_B64:-}" ]; then printf "%s" "$JOBSEEKER_PYTHON_DOCKERFILE_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
+          $lines[] = 'JOBSEEKER_DOCKERFILE=""';
+          $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
+          $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile"; fi';
+          $lines[] = 'JOBSEEKER_DOCKER_RUN_IMAGE="$JOBSEEKER_DOCKER_IMAGE"';
+          $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; docker build --network host --pull -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
+          $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
+          $lines[] = '  --network host \\';
+          $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
+          $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \\';
+          $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
+          $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
+          $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+        } else {
+          $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
+          $lines[] = 'JOBSEEKER_USER_LIBS=""';
+          $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
+          $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
+          $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
+          $lines[] = '  rm -rf "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
+          $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs" -r "$JOBSEEKER_REQUIREMENTS"';
+          $lines[] = '  JOBSEEKER_USER_LIBS="$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
+          $lines[] = 'fi';
+          $lines[] = 'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_USER_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi';
+          $lines[] = '"$JOBSEEKER_PYTHON" "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+        }
 
         return implode("\n", $lines);
       }
@@ -531,6 +1320,7 @@ class JobCreation extends BaseController
 
             // Basic inputs
             $this->form_validation->set_rules('job_name','Job Name','trim|max_length[50]');
+            $this->form_validation->set_rules('job_names','Bulk Job Names','trim|max_length[5000]');
             $this->form_validation->set_rules('description','Description','trim|max_length[5000]');
 
       
@@ -550,9 +1340,16 @@ class JobCreation extends BaseController
             {
                 // Basic Inputs
                 $job_name = trim((string) $this->security->xss_clean($this->input->post('job_name')));
-                if ($job_name === '') {
-                  $job_name = $this->generateJobName();
+                $job_names = $this->security->xss_clean($this->input->post('job_names'));
+                $submittedJobs = $this->submittedJobNames($job_name, $job_names);
+
+                if (! $submittedJobs['ok']) {
+                  $this->session->set_flashdata('error', $submittedJobs['message']);
+                  redirect('JobCreation');
                 }
+
+                $jobNames = $submittedJobs['names'];
+                $job_name = $jobNames[0];
                 $description = trim((string) $this->security->xss_clean($this->input->post('description')));
                 $triggerAfterSave = $this->security->xss_clean($this->input->post('trigger_after_save')) == '1' ? '1' : '0';
 
@@ -675,34 +1472,120 @@ class JobCreation extends BaseController
                 $pythonRepositoryUrl = $this->input->post('pythonRepositoryUrl');
                 $pythonRepositoryBranch = $this->input->post('pythonRepositoryBranch');
                 $pythonEntryPointRaw = $this->input->post('pythonEntryPoint');
+                $pythonInlineCode = $this->input->post('pythonInlineCode');
+                $pythonRequirementsText = $this->cleanPythonRequirementsText($this->input->post('pythonRequirementsText'));
+                $pythonDockerfileText = $this->cleanPythonDockerfileText($this->input->post('pythonDockerfileText'));
+                $pythonInlineFiles = NULL;
+                $pythonRuntimeMode = $this->selectedPythonRuntimeMode($this->input->post('pythonRuntimeMode'));
+                $linuxRuntimeMode = $this->selectedLinuxRuntimeMode($this->input->post('pythonRuntimeMode'));
+                $pythonExecutable = $this->cleanPythonExecutable($this->input->post('pythonVersion'));
                 $pythonEntryPoint = $this->cleanPythonEntryPoint($pythonEntryPointRaw, FALSE);
+                $postedDockerImage = $this->input->post('pythonDockerImage');
                 $pythonExecution = NULL;
+                $linuxScriptExecution = NULL;
+                $linuxUsesPythonRuntime = ($linuxExecutionStrategy == 'python_inline' || ($linuxExecutionStrategy == 'script' && ($linuxScriptType == 'python' || $linuxScriptType == 'python_inline')));
+
+                if ($linuxExecutionStrategy == 'python_inline' || $linuxScriptType == 'python_inline') {
+                  $pythonSourceMode = 'inline';
+                }
+
+                $usesInlinePythonSource = $pythonSourceMode === 'inline' || $linuxExecutionStrategy == 'python_inline' || $linuxScriptType == 'python_inline';
+
+                if ($pythonRequirementsText === FALSE) {
+                  $this->session->set_flashdata('error', 'Your Python requirements.txt content is too large or contains invalid characters.');
+                  redirect('JobCreation');
+                }
+
+                if ($pythonDockerfileText === FALSE) {
+                  $this->session->set_flashdata('error', 'Your Python Dockerfile content is too large or contains invalid characters.');
+                  redirect('JobCreation');
+                }
+
+                if ($pythonExecutable === FALSE) {
+                  $this->session->set_flashdata('error', 'Please select a valid Python version.');
+                  redirect('JobCreation');
+                }
+
+                $pythonDockerImage = $this->cleanPythonDockerImage($postedDockerImage, $pythonExecutable);
+                if ($pythonRuntimeMode === 'docker' && $pythonDockerImage === FALSE && $linuxUsesPythonRuntime) {
+                  $this->session->set_flashdata('error', 'Please select a valid Python Docker image.');
+                  redirect('JobCreation');
+                }
+
+                if ($pythonDockerImage === FALSE) {
+                  $pythonDockerImage = $this->cleanPythonDockerImage('', $pythonExecutable);
+                }
+
+                $pythonRuntimeOptions = array(
+                  'mode' => $pythonRuntimeMode,
+                  'pythonExecutable' => $pythonExecutable,
+                  'dockerImage' => $pythonDockerImage,
+                  'requirementsText' => $usesInlinePythonSource ? $pythonRequirementsText : '',
+                  'dockerfileText' => ($usesInlinePythonSource && $pythonRuntimeMode === 'docker') ? $pythonDockerfileText : ''
+                );
+
+                $linuxDockerImage = $this->cleanLinuxDockerImage($postedDockerImage, $linuxExecutionStrategy == 'script' ? $linuxScriptType : '');
+                if ($linuxRuntimeMode === 'docker' && $linuxDockerImage === FALSE && ! $linuxUsesPythonRuntime) {
+                  $this->session->set_flashdata('error', 'Please select a valid Linux Docker image.');
+                  redirect('JobCreation');
+                }
+
+                $linuxRuntimeOptions = array(
+                  'mode' => $linuxRuntimeMode,
+                  'dockerImage' => $linuxDockerImage
+                );
 
                 if ($pythonEntryPoint === FALSE) {
                   $this->session->set_flashdata('error', 'You missed to select a valid Python entry file.');
                   redirect('JobCreation');
                 }
 
-                if($linuxExecutionStrategy == 'script'){
+                $pythonDockerfileTextForInlineSave = $pythonRuntimeMode === 'docker' ? $pythonDockerfileText : NULL;
 
-                  // Check if jenkins home variable exist
-                   if($jenkins_home != ''){
-                         $storeFolder = $jenkins_home.'/repository/';
-                         } else {
-                            $storeFolder = 'repository/'; 
-                            }
+                if ($usesInlinePythonSource) {
+                  $pythonInlineFiles = $this->cleanPythonInlineFilesJson($this->input->post('pythonInlineFilesJson'), $pythonEntryPoint ?: 'main.py');
+                  if ($pythonInlineFiles === FALSE) {
+                    $this->session->set_flashdata('error', 'Your inline Python workspace contains invalid file paths or too much content. Use .py files inside the job folder.');
+                    redirect('JobCreation');
+                  }
+                }
+
+                    // Check if jenkins home variable exist
+                     if($jenkins_home != ''){
+                       $storeFolder = $jenkins_home.'/repository/';
+                       } else {
+                          $storeFolder = 'repository/';
+                      }
+
+                    if($linuxExecutionStrategy == 'script'){
 
                   if($linuxScriptType == 'talend'){
 
                           $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*");
                           $file = glob($filelist[0].'/*.sh');
+                          $scriptPath = realpath($file[0]);
+                          $sourceDirectory = realpath($filelist[0]);
+                          $scriptArguments = array();
+
+                          if ($scriptPath === FALSE || $sourceDirectory === FALSE || ! is_file($scriptPath)) {
+                            $this->session->set_flashdata('error', 'Your file was not uploaded to the server or no executable file was found inside the zip archive.');
+                            redirect('JobCreation');
+                          }
                           
                           // Check if using environemnt
                           if($environment != '0' && $checkEnvironment == 1){
-                              $filePath = realpath($file[0]).' --context='.$environment;  
+                              $filePath = $scriptPath.' --context='.$environment;
+                              $scriptArguments[] = '--context='.$environment;
                           } else {
-                            $filePath = realpath($file[0]);
+                            $filePath = $scriptPath;
                           }
+
+                          $linuxScriptExecution = array(
+                            'scriptType' => 'talend',
+                            'sourceDirectory' => $sourceDirectory,
+                            'scriptPath' => $scriptPath,
+                            'arguments' => $scriptArguments
+                          );
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
@@ -721,13 +1604,30 @@ class JobCreation extends BaseController
                   } else if ($linuxScriptType == 'bash') {
                         $filelist = glob($storeFolder.$linuxScriptType."/jobs/".$job_name."/*.sh");
                           $file = glob($filelist[0]);
+                          $scriptPath = realpath($file[0]);
+                          $sourceDirectory = realpath($storeFolder.$linuxScriptType."/jobs/".$job_name);
+                          $scriptArguments = array();
+
+                          if ($scriptPath === FALSE || ! is_file($scriptPath)) {
+                            $this->session->set_flashdata('error', 'Your file was not uploaded to the server or no executable file was found inside the zip archive.');
+                            redirect('JobCreation');
+                          }
 
                           // Check if using environemnt
                           if($environment != '0' && $checkEnvironment == 1){
-                              $filePath = realpath($file[0]).' -context "'.$environment.'"';  
+                              $filePath = $scriptPath.' -context "'.$environment.'"';
+                              $scriptArguments[] = '-context';
+                              $scriptArguments[] = $environment;
                           } else {
-                            $filePath = realpath($file[0]);
+                            $filePath = $scriptPath;
                           }
+
+                          $linuxScriptExecution = array(
+                            'scriptType' => 'bash',
+                            'sourceDirectory' => $sourceDirectory === FALSE ? dirname($scriptPath) : $sourceDirectory,
+                            'scriptPath' => $scriptPath,
+                            'arguments' => $scriptArguments
+                          );
 
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
@@ -744,21 +1644,32 @@ class JobCreation extends BaseController
                          
                           // echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
                           // echo '<hr><br>';
-                  } else if ($linuxScriptType == 'python') {
+                    } else if ($linuxScriptType == 'python' || $linuxScriptType == 'python_inline') {
                           $repositoryRoot = rtrim($storeFolder, '/\\');
 
                           if ($pythonSourceMode === 'path') {
                             $pythonExecution = $this->resolvePathPythonExecution($repositoryRoot, $pythonSourcePath, $pythonEntryPoint);
                           } else if ($pythonSourceMode === 'git') {
                             $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw);
+                          } else if ($pythonSourceMode === 'inline') {
+                            $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsText, $pythonDockerfileTextForInlineSave, $pythonInlineFiles);
                           } else {
                             $pythonExecution = $this->resolveUploadedPythonExecution($repositoryRoot, $job_name, $pythonEntryPoint);
                           }
 
                           if ($pythonExecution === FALSE) {
-                           $this->session->set_flashdata('error', 'JobSeeker could not resolve the Python source. Check the upload, repository path, Git URL, and entry file.');
+                           $this->session->set_flashdata('error', 'JobSeeker could not resolve the Python source. Check the upload, repository path, Git URL, and entry file. For ZIP uploads with a top-level folder, use an entry file like pyjob/main.py, or a unique filename such as main.py.');
                            redirect('JobCreation');
                           }
+                  }
+                } else if ($linuxExecutionStrategy == 'python_inline'){
+
+                  $repositoryRoot = rtrim($storeFolder, '/\\');
+                  $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsText, $pythonDockerfileTextForInlineSave, $pythonInlineFiles);
+
+                  if ($pythonExecution === FALSE) {
+                   $this->session->set_flashdata('error', 'JobSeeker could not resolve the inline Python source. Check the entry file and code.');
+                   redirect('JobCreation');
                   }
                 } else if ($linuxExecutionStrategy == 'command'){
 
@@ -920,8 +1831,7 @@ class JobCreation extends BaseController
                   if($executionStrategy == 'script' && $scriptType != "0" || $executionStrategy == 'command'){
 
                     $hudson_task_BatchFile = $dom->createElement('hudson.tasks.BatchFile');
-                    $command = $dom->createElement('command', $filePath);
-                    $hudson_task_BatchFile->appendChild($command);
+                    $this->appendTextElement($dom, $hudson_task_BatchFile, 'command', $filePath);
                     $builders->appendChild($hudson_task_BatchFile);
                   }
                 }  
@@ -931,25 +1841,34 @@ class JobCreation extends BaseController
                   if($linuxExecutionStrategy == 'script' && $linuxScriptType != "0"){
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
-                    if($linuxScriptType == 'python'){
+                    if($linuxScriptType == 'python' || $linuxScriptType == 'python_inline'){
                       $repositoryRoot = rtrim($storeFolder, '/\\');
                       if (! $this->ensurePythonSharedLibrary($repositoryRoot)) {
                         $this->session->set_flashdata('error', 'Unable to prepare the shared Python jobseeker helper.');
                         redirect('JobCreation');
                       }
-                      $command = $dom->createElement('command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment)));
+                      $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment), $pythonRuntimeOptions));
                     } else {
-                      $command = $dom->createElement('command', 'sh '.$filePath);
+                      $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildShellScriptExecutionCommand($linuxScriptExecution, $linuxRuntimeOptions));
                     }
-                    
-                    $hudson_task_BashFile->appendChild($command);
+
                     $builders->appendChild($hudson_task_BashFile);
                     
+                  } else if($linuxExecutionStrategy == 'python_inline') {
+
+                    $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
+                    $repositoryRoot = rtrim($storeFolder, '/\\');
+                    if (! $this->ensurePythonSharedLibrary($repositoryRoot)) {
+                      $this->session->set_flashdata('error', 'Unable to prepare the shared Python jobseeker helper.');
+                      redirect('JobCreation');
+                    }
+                    $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment), $pythonRuntimeOptions));
+                    $builders->appendChild($hudson_task_BashFile);
+
                   } else if($linuxExecutionStrategy == 'command') {
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
-                    $command = $dom->createElement('command', $filePath);
-                    $hudson_task_BashFile->appendChild($command);
+                    $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildLinuxCommandExecutionCommand($filePath, $linuxRuntimeOptions));
                     $builders->appendChild($hudson_task_BashFile);
 
                   }
@@ -964,6 +1883,9 @@ class JobCreation extends BaseController
 
 
 
+
+                 $hudson_ExtendedMailer = NULL;
+                 $configuredTriggers = NULL;
 
                  // Editable Email Notification
                  if($editableEmailCheck == 1){ // if enable editable email notification is marked
@@ -984,31 +1906,17 @@ class JobCreation extends BaseController
                   $this->load->model('emailSettings_model','model');
                   $listMailTemplates = $this->model->fetchName($onSuccess); 
 
-                  // CC String to array, array to string function
-                  $string = $listMailTemplates[0]->cc;
-                  $array = explode(",", $string);
-                  if($listMailTemplates[0]->cc != ''){
-                   for ($i=0; $i < sizeof($array); $i++) { 
-                    $array2[$i] = ', cc:'.$array[$i];
-                   }
-                  }
-                  $array2String = rtrim(implode('', $array2), ',');
-
-
                   $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.SuccessTrigger');
                   $configuredTriggers->appendChild($successTrigger);
 
                   $email = $dom->createElement('email');
                   $successTrigger->appendChild($email);
 
-                  $recipientList = $dom->createElement('recipientList', $listMailTemplates[0]->to.$array2String);
-                  $email->appendChild($recipientList);
+                  $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
 
-                  $subject = $dom->createElement('subject', $listMailTemplates[0]->subject);
-                  $email->appendChild($subject);
+                  $this->appendTextElement($dom, $email, 'subject', $listMailTemplates[0]->subject);
 
-                  $body = $dom->createElement('body', $listMailTemplates[0]->msg);
-                  $email->appendChild($body);
+                  $this->appendTextElement($dom, $email, 'body', $listMailTemplates[0]->msg);
 
                   $recipientProviders = $dom->createElement('recipientProviders');
                   $email->appendChild($recipientProviders);
@@ -1031,8 +1939,7 @@ class JobCreation extends BaseController
                   $contentType = $dom->createElement('contentType', 'both');
                   $email->appendChild($contentType);
 
-                  $from = $dom->createElement('from', $listMailTemplates[0]->from);
-                  $hudson_ExtendedMailer->appendChild($from);
+                  $this->appendTextElement($dom, $hudson_ExtendedMailer, 'from', $listMailTemplates[0]->from);
 
                   }
 
@@ -1044,30 +1951,17 @@ class JobCreation extends BaseController
                   $this->load->model('emailSettings_model','model');
                   $listMailTemplates = $this->model->fetchName($onFailure); 
 
-                  // CC String to array, array to string function
-                  $string = $listMailTemplates[0]->cc;
-                  $array = explode(",", $string);
-                  if($listMailTemplates[0]->cc != ''){
-                   for ($i=0; $i < sizeof($array); $i++) { 
-                    $array2[$i] = ', cc:'.$array[$i];
-                   }
-                  }
-                  $array2String = rtrim(implode('', $array2), ',');
-
                   $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
                   $configuredTriggers->appendChild($successTrigger);
 
                   $email = $dom->createElement('email');
                   $successTrigger->appendChild($email);
 
-                  $recipientList = $dom->createElement('recipientList', $listMailTemplates[0]->to.$array2String);
-                  $email->appendChild($recipientList);
+                  $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
 
-                  $subject = $dom->createElement('subject', $listMailTemplates[0]->subject);
-                  $email->appendChild($subject);
+                  $this->appendTextElement($dom, $email, 'subject', $listMailTemplates[0]->subject);
 
-                  $body = $dom->createElement('body', $listMailTemplates[0]->msg);
-                  $email->appendChild($body);
+                  $this->appendTextElement($dom, $email, 'body', $listMailTemplates[0]->msg);
 
                   $recipientProviders = $dom->createElement('recipientProviders');
                   $email->appendChild($recipientProviders);
@@ -1090,8 +1984,7 @@ class JobCreation extends BaseController
                   $contentType = $dom->createElement('contentType', 'both');
                   $email->appendChild($contentType);
 
-                  $from = $dom->createElement('from', $listMailTemplates[0]->from);
-                  $hudson_ExtendedMailer->appendChild($from);
+                  $this->appendTextElement($dom, $hudson_ExtendedMailer, 'from', $listMailTemplates[0]->from);
 
                   }
 
@@ -1102,30 +1995,17 @@ class JobCreation extends BaseController
                   $this->load->model('emailSettings_model','model');
                   $listMailTemplates = $this->model->fetchName($onAbort);
 
-                   // CC String to array, array to string function
-                  $string = $listMailTemplates[0]->cc;
-                  $array = explode(",", $string);
-                  if($listMailTemplates[0]->cc != ''){
-                   for ($i=0; $i < sizeof($array); $i++) { 
-                    $array2[$i] = ', cc:'.$array[$i];
-                   }
-                  }
-                  $array2String = rtrim(implode('', $array2), ',');
-
                   $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.AbortedTrigger');
                   $configuredTriggers->appendChild($successTrigger);
 
                   $email = $dom->createElement('email');
                   $successTrigger->appendChild($email);
 
-                  $recipientList = $dom->createElement('recipientList', $listMailTemplates[0]->to.$array2String);
-                  $email->appendChild($recipientList);
+                  $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
 
-                  $subject = $dom->createElement('subject', $listMailTemplates[0]->subject);
-                  $email->appendChild($subject);
+                  $this->appendTextElement($dom, $email, 'subject', $listMailTemplates[0]->subject);
 
-                  $body = $dom->createElement('body', $listMailTemplates[0]->msg);
-                  $email->appendChild($body);
+                  $this->appendTextElement($dom, $email, 'body', $listMailTemplates[0]->msg);
 
                   $recipientProviders = $dom->createElement('recipientProviders');
                   $email->appendChild($recipientProviders);
@@ -1148,28 +2028,24 @@ class JobCreation extends BaseController
                   $contentType = $dom->createElement('contentType', 'both');
                   $email->appendChild($contentType);
 
-                  $from = $dom->createElement('from', $listMailTemplates[0]->from);
-                  $hudson_ExtendedMailer->appendChild($from);
+                  $this->appendTextElement($dom, $hudson_ExtendedMailer, 'from', $listMailTemplates[0]->from);
 
                   }
 
                  }
 
 
-                 // Email Notification (Mailer)
+                 // Email Notification
                  if ($emailCheck == 1) { // if email notification checkbox is marked then
                     if ($recipients != '') {
 
-                      $hudson_Mailer = $dom->createElement('hudson.tasks.Mailer');
-                      $attr_hudson_Mailer = new DOMAttr('plugin', 'mailer@1.30');
-                      $hudson_Mailer->setAttributeNode($attr_hudson_Mailer);
-                      $childRecipients = $dom->createElement('recipients', $recipients );
-                      $hudson_Mailer->appendChild($childRecipients);
-                      $childUnstableBuild = $dom->createElement('dontNotifyEveryUnstableBuild', 'false' );
-                      $hudson_Mailer->appendChild($childUnstableBuild);
-                      $sendToIndividuals = $dom->createElement('sendToIndividuals', 'false' );
-                      $hudson_Mailer->appendChild($sendToIndividuals);
-                      $publishers->appendChild($hudson_Mailer);
+                      if($hudson_ExtendedMailer === NULL || $configuredTriggers === NULL) {
+                        $emailExtPublisher = $this->createExtendedEmailPublisher($dom, $publishers);
+                        $hudson_ExtendedMailer = $emailExtPublisher['publisher'];
+                        $configuredTriggers = $emailExtPublisher['configuredTriggers'];
+                      }
+
+                      $this->appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients);
                     
                     }
                   }
@@ -1270,41 +2146,182 @@ class JobCreation extends BaseController
                   redirect('JobCreation');
                 }
 
-                $saveResult = $this->saveGeneratedJenkinsJob($job_name, $xmlContent);
+                $savedJobNames = array();
+                $savedJobCreationDates = array();
+                $createdCount = 0;
+                $updatedCount = 0;
+                $triggeredCount = 0;
+                $saveFailures = array();
+                $triggerFailures = array();
 
-                if (! $saveResult['ok']) {
-                  $this->session->set_flashdata('error', 'Your Jenkins job save request failed. Jenkins returned HTTP '.$saveResult['status'].'.');
-                  redirect('JobCreation');
-                }
+                foreach ($jobNames as $targetJobName) {
+                  $saveResult = $this->saveGeneratedJenkinsJob($targetJobName, $xmlContent);
 
-                $createdAt = NULL;
-                if (! $saveResult['updated']) {
-                  $createdAt = date('c');
-                  $this->recordJobCreationDate($job_name, $createdAt);
-                }
+                  if (! $saveResult['ok']) {
+                    $saveFailures[] = $targetJobName.' (HTTP '.$saveResult['status'].')';
+                    continue;
+                  }
 
-                $successMessage = 'Your job has been successfully '.($saveResult['updated'] ? 'updated' : 'created').'.';
+                  $savedJobNames[] = $targetJobName;
 
-                if ($triggerAfterSave === '1') {
-                  $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($job_name) . '/build');
-
-                  if ($this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
-                    $successMessage .= ' It has also been triggered.';
+                  if ($saveResult['updated']) {
+                    $updatedCount += 1;
                   } else {
-                    $this->session->set_flashdata('error', 'The job was saved, but the trigger request failed. Jenkins returned HTTP '.$triggerResponse['status'].'.');
+                    $createdCount += 1;
+                    $createdAt = date('c');
+                    $savedJobCreationDates[$targetJobName] = $createdAt;
+                    $this->recordJobCreationDate($targetJobName, $createdAt);
+                  }
+
+                  if ($triggerAfterSave === '1') {
+                    $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/build');
+
+                    if ($this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
+                      $triggeredCount += 1;
+                    } else {
+                      $triggerFailures[] = $targetJobName.' (HTTP '.$triggerResponse['status'].')';
+                    }
                   }
                 }
 
+                if (empty($savedJobNames)) {
+                  $this->session->set_flashdata('error', 'No Jenkins jobs were saved. Failed jobs: '.implode(', ', $saveFailures).'.');
+                  redirect('JobCreation');
+                }
+
+                $successMessage = count($savedJobNames).' job(s) saved: '.$createdCount.' created, '.$updatedCount.' updated.';
+
+                if ($triggerAfterSave === '1') {
+                  $successMessage .= ' '.$triggeredCount.' trigger request(s) sent.';
+                }
+
+                $warnings = array();
+                if (! empty($saveFailures)) {
+                  $warnings[] = 'Some jobs failed to save: '.implode(', ', $saveFailures).'.';
+                }
+                if (! empty($triggerFailures)) {
+                  $warnings[] = 'Some saved jobs failed to trigger: '.implode(', ', $triggerFailures).'.';
+                }
+
+                if (! empty($warnings)) {
+                  $this->session->set_flashdata('error', implode(' ', $warnings));
+                }
+
                  $this->session->set_flashdata('success', $successMessage);
-                 $this->session->set_flashdata('saved_job_name', $job_name);
-                 if ($createdAt !== NULL) {
-                   $this->session->set_flashdata('saved_job_created_at', $createdAt);
+                 $this->session->set_flashdata('saved_job_name', $savedJobNames[0]);
+                 $this->session->set_flashdata('saved_job_names', $savedJobNames);
+                 $this->session->set_flashdata('saved_job_creation_dates', $savedJobCreationDates);
+                 if (isset($savedJobCreationDates[$savedJobNames[0]])) {
+                   $this->session->set_flashdata('saved_job_created_at', $savedJobCreationDates[$savedJobNames[0]]);
                  }
 
                 redirect('JobCreation');
 
             }
         }
+    }
+
+    private function createExtendedEmailPublisher($dom, $publishers) {
+      $publisher = $dom->createElement('hudson.plugins.emailext.ExtendedEmailPublisher');
+      $attrPublisher = new DOMAttr('plugin', 'email-ext@2.68');
+      $publisher->setAttributeNode($attrPublisher);
+      $publishers->appendChild($publisher);
+
+      $configuredTriggers = $dom->createElement('configuredTriggers');
+      $publisher->appendChild($configuredTriggers);
+
+      return array('publisher' => $publisher, 'configuredTriggers' => $configuredTriggers);
+    }
+
+    private function appendTextElement($dom, $parent, $name, $value) {
+      $element = $dom->createElement($name);
+      $element->appendChild($dom->createTextNode((string) $value));
+      $parent->appendChild($element);
+
+      return $element;
+    }
+
+    private function emailTemplateRecipientList($template) {
+      $recipients = trim((string) $template->to);
+      $cc = trim((string) $template->cc);
+
+      if($cc !== '') {
+        foreach(explode(',', $cc) as $ccRecipient) {
+          $ccRecipient = trim($ccRecipient);
+          if($ccRecipient !== '') {
+            $recipients .= ($recipients === '' ? '' : ', ') . 'cc:' . $ccRecipient;
+          }
+        }
+      }
+
+      return $recipients;
+    }
+
+    private function appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients) {
+      $failureTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
+      $configuredTriggers->appendChild($failureTrigger);
+
+      $email = $dom->createElement('email');
+      $failureTrigger->appendChild($email);
+
+      $recipientList = $dom->createElement('recipientList', $recipients);
+      $email->appendChild($recipientList);
+
+      $subject = $dom->createElement('subject', '[${BUILD_STATUS}] ${PROJECT_NAME} #${BUILD_NUMBER}');
+      $email->appendChild($subject);
+
+      $body = $dom->createElement('body');
+      $body->appendChild($dom->createCDATASection($this->defaultFailureEmailBody()));
+      $email->appendChild($body);
+
+      $recipientProviders = $dom->createElement('recipientProviders');
+      $email->appendChild($recipientProviders);
+
+      $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
+      $recipientProviders->appendChild($recipientProvidersPlugin);
+
+      $attachments = $dom->createElement('attachmentsPattern', '');
+      $email->appendChild($attachments);
+
+      $attachBuildLog = $dom->createElement('attachBuildLog', 'false');
+      $email->appendChild($attachBuildLog);
+
+      $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
+      $email->appendChild($compressBuildLog);
+
+      $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
+      $email->appendChild($replyTo);
+
+      $contentType = $dom->createElement('contentType', 'text/html');
+      $email->appendChild($contentType);
+    }
+
+    private function defaultFailureEmailBody() {
+      return <<<'HTML'
+<html>
+  <body style="margin:0; padding:0; background:#f4f6f8; color:#1f2933; font-family:Arial, Helvetica, sans-serif;">
+    <div style="max-width:720px; margin:0 auto; padding:24px;">
+      <div style="background:#ffffff; border:1px solid #d9e2ec; border-radius:6px; overflow:hidden;">
+        <div style="background:#b91c1c; color:#ffffff; padding:18px 22px;">
+          <h1 style="margin:0; font-size:22px; line-height:1.3;">Build failed: ${PROJECT_NAME} #${BUILD_NUMBER}</h1>
+        </div>
+        <div style="padding:22px;">
+          <p style="margin:0 0 16px; font-size:15px; line-height:1.5;">Jenkins marked this JobSeeker build as failed. Review the summary and recent console output below before rerunning or checking dependent jobs.</p>
+          <table style="width:100%; border-collapse:collapse; margin:0 0 18px; font-size:14px;">
+            <tr><th align="left" style="width:150px; padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Job</th><td style="padding:8px; border:1px solid #d9e2ec;">${PROJECT_NAME}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Build</th><td style="padding:8px; border:1px solid #d9e2ec;">#${BUILD_NUMBER}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d9e2ec; color:#b91c1c; font-weight:bold;">${BUILD_STATUS}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Cause</th><td style="padding:8px; border:1px solid #d9e2ec;">${CAUSE}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Build URL</th><td style="padding:8px; border:1px solid #d9e2ec;"><a href="${BUILD_URL}" style="color:#2563eb;">${BUILD_URL}</a></td></tr>
+          </table>
+          <h2 style="margin:18px 0 8px; font-size:16px;">Recent Console Output</h2>
+          <pre style="white-space:pre-wrap; word-break:break-word; background:#111827; color:#e5e7eb; padding:14px; border-radius:4px; font-size:12px; line-height:1.45;">${BUILD_LOG, maxLines=120, escapeHtml=true}</pre>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+HTML;
     }
 
     public function readXML() {
