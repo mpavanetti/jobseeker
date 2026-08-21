@@ -313,11 +313,19 @@ class SmtpSettings extends BaseController
     {
         $script = "def instance = jenkins.model.Jenkins.get()\n" .
             "def mailer = instance.getDescriptorByType(hudson.tasks.Mailer.DescriptorImpl.class)\n" .
+            "def ext = instance.getDescriptor('hudson.plugins.emailext.ExtendedEmailPublisher')\n" .
             "def location = jenkins.model.JenkinsLocationConfiguration.get()\n" .
             "println('smtpHost=' + mailer.smtpHost)\n" .
             "println('smtpPort=' + mailer.smtpPort)\n" .
             "println('useSsl=' + mailer.useSsl)\n" .
             "println('replyTo=' + mailer.replyToAddress)\n" .
+            "println('emailExtPresent=' + (ext != null))\n" .
+            "if (ext != null) {\n" .
+            "  println('emailExtSmtpHost=' + ext.smtpServer)\n" .
+            "  println('emailExtSmtpPort=' + ext.smtpPort)\n" .
+            "  println('emailExtUseSsl=' + ext.useSsl)\n" .
+            "  println('emailExtReplyTo=' + ext.defaultReplyTo)\n" .
+            "}\n" .
             "println('jenkinsUrl=' + location.url)\n" .
             "println('adminAddress=' + location.adminAddress)\n";
         $response = $this->requestJenkins('POST', 'scriptText', http_build_query(array('script' => $script)), 'application/x-www-form-urlencoded');
@@ -334,11 +342,16 @@ class SmtpSettings extends BaseController
             }
         }
 
-        return isset($actual['smtpHost'], $actual['smtpPort'], $actual['useSsl'], $actual['replyTo'], $actual['jenkinsUrl'], $actual['adminAddress'])
+        return isset($actual['smtpHost'], $actual['smtpPort'], $actual['useSsl'], $actual['replyTo'], $actual['emailExtPresent'], $actual['emailExtSmtpHost'], $actual['emailExtSmtpPort'], $actual['emailExtUseSsl'], $actual['emailExtReplyTo'], $actual['jenkinsUrl'], $actual['adminAddress'])
             && $actual['smtpHost'] === (string) $setting->smtp_host
             && $actual['smtpPort'] === (string) $setting->smtp_port
             && $actual['useSsl'] === (((int) $setting->ssl === 1) ? 'true' : 'false')
             && $actual['replyTo'] === $this->smtpReplyTo($setting)
+            && $actual['emailExtPresent'] === 'true'
+            && $actual['emailExtSmtpHost'] === (string) $setting->smtp_host
+            && $actual['emailExtSmtpPort'] === (string) $setting->smtp_port
+            && $actual['emailExtUseSsl'] === (((int) $setting->ssl === 1) ? 'true' : 'false')
+            && $actual['emailExtReplyTo'] === $this->smtpReplyTo($setting)
             && $actual['jenkinsUrl'] === $this->jenkinsPublicUrl()
             && $actual['adminAddress'] === $this->smtpReplyTo($setting);
     }
