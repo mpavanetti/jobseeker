@@ -11,6 +11,7 @@ It gives data teams one place to create and trigger Jenkins jobs, schedule recur
 - Create, update, schedule, trigger, stop, inspect, and delete Jenkins jobs from a controlled web UI.
 - Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history and console output.
 - Query TMF records by job, status, environment, date range, dimension, event text, and reprocess flag.
+- Run Python jobs with the bundled `jobseeker` SDK for TMF logging, context lookup, progress updates, and Jenkins-agent or Docker execution.
 - Track processed records, warnings, errors, messages, hostnames, users, and execution timing.
 - Manage database settings, generic key-value settings, SMTP settings, email templates, file paths, projects, environments, and context variables.
 - Publish embedded Power BI, Tableau, Qlik Sense, or iframe dashboards with user and group access control.
@@ -63,6 +64,12 @@ cd jobseeker
 docker compose up -d --build
 ```
 
+For local overrides, copy the environment template first:
+
+```bash
+cp .env.example .env
+```
+
 Open JobSeeker at http://localhost/ and Jenkins at http://localhost:8080/.
 
 The Docker stack configures the database connection, session encryption key, and internal Jenkins API endpoint through [docker-compose.yml](docker-compose.yml).
@@ -84,6 +91,21 @@ Adminer, elFinder, and server statistics tools are disabled in Docker because th
 
 Docker Compose is the recommended installation path because it starts the application, database, and Jenkins execution engine together.
 
+### Runtime Stack
+
+- PHP-FPM 8.3 with the required MySQL and ZIP extensions.
+- Nginx 1.29 Alpine serving the CodeIgniter application.
+- MariaDB 10.7 for JobSeeker and TMF data.
+- Jenkins 2.568.2 LTS with pinned plugins, Docker CLI access, and the JobSeeker Python SDK runtime.
+
+Frontend assets are managed with npm in [package.json](package.json) and [package-lock.json](package-lock.json). The application still serves legacy AdminLTE 2, Bootstrap 3, and jQuery-era paths under `assets/bower_components`, but that directory is generated and is not committed.
+
+Docker Compose restores those assets automatically through the `assets` service before Nginx starts. To refresh them manually, run:
+
+```bash
+docker compose run --rm assets
+```
+
 ## Demo Data
 
 After the Docker stack is running, seed Jenkins and MariaDB with representative demo data:
@@ -92,7 +114,7 @@ After the Docker stack is running, seed Jenkins and MariaDB with representative 
 ./seed_demo_data.sh
 ```
 
-The seed creates Jenkins jobs with successful, failed, disabled, not-built, running, and queued states. It also inserts TMF rows across past dates, statuses, dimensions, environments, warnings, and errors.
+The seed creates Jenkins jobs with successful, failed, disabled, not-built, running, and queued states. It also creates Python SDK sample jobs for Jenkins-agent and Docker execution, then inserts TMF rows across past dates, statuses, dimensions, environments, warnings, and errors.
 
 Remove the demo dataset with:
 
@@ -158,7 +180,7 @@ Brazilian Portuguese JobSeeker demonstration:
 ## Credits
 
 Matheus Pavanetti
-(matheuspavanetti@gmail.com)
+(maintainer@example.com)
 
 ## Contributors
 

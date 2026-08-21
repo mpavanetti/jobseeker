@@ -33,6 +33,7 @@ Usage: $0 [seed|--cleanup]
 
 Creates a repeatable demo dataset for screenshots:
   - Jenkins demo jobs with success, failure, running, queued, disabled, and not-built states.
+  - JobSeeker Python SDK sample jobs that import jobseeker and write live TMF rows.
   - TMF/TMF error database history across past dates, statuses, dimensions, and environments.
   - JobSeeker-created-date metadata so Available Jobs sorts newest created jobs first.
 
@@ -156,6 +157,105 @@ create_job() {
   esac
 }
 
+stage_python_sdk_runtime() {
+  local source="application/third_party/python/jobseeker_sdk"
+  local target="repository/python/lib/jobseeker-sdk"
+
+  if [[ ! -f "$source/pyproject.toml" ]]; then
+    echo "JobSeeker Python SDK package not found at $source." >&2
+    return 1
+  fi
+
+  rm -rf "$target"
+  mkdir -p "$target"
+  tar -C "$source" --exclude='__pycache__' --exclude='*.pyc' --exclude='build' --exclude='*.egg-info' -cf - . | tar -C "$target" -xf -
+}
+
+python_sdk_agent_command() {
+  cat <<'SH'
+set -e
+export JOBSEEKER_PYTHON="${JOBSEEKER_PYTHON:-python3}"
+export JOBSEEKER_PYTHON_SDK="/php/repository/python/lib/jobseeker-sdk"
+export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"
+
+rm -rf "$JOBSEEKER_RUNTIME_LIBS"
+"$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"
+export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:${PYTHONPATH:-}"
+
+"$JOBSEEKER_PYTHON" - <<'PY'
+import os
+
+from jobseeker import JobSeeker
+
+
+environment = os.environ.get("JOBSEEKER_SAMPLE_ENV", "LOCAL")
+job_name = os.environ.get("JOB_NAME") or "jobseeker-sdk-agent-sample"
+
+with JobSeeker(environment=environment, job=job_name) as js:
+    with js.task("Sample SDK Agent Job", "DW_Master") as tmf:
+        rows = tmf.context("rows", cast=int, default=3)
+
+        for index in range(1, rows + 1):
+            print("Agent sample processed row {}/{}".format(index, rows))
+            tmf.progress(total=rows, processed=index, msg="Agent sample processed {} of {} rows".format(index, rows))
+
+        tmf.finish(total=rows, processed=rows, msg="JobSeeker SDK sample completed on Jenkins agent")
+
+print("JobSeeker SDK agent sample complete")
+PY
+SH
+}
+
+python_sdk_docker_command() {
+  cat <<'SH'
+set -e
+export JOBSEEKER_PYTHON_SDK="/php/repository/python/lib/jobseeker-sdk"
+
+test -f "$JOBSEEKER_PYTHON_SDK/pyproject.toml" || { echo "JobSeeker SDK package is missing at $JOBSEEKER_PYTHON_SDK"; exit 1; }
+command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }
+
+JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-sdk-demo-docker-context"
+rm -rf "$JOBSEEKER_DOCKER_CONTEXT"
+mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"
+cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"
+
+cat > "$JOBSEEKER_DOCKER_CONTEXT/main.py" <<'PY'
+import os
+
+from jobseeker import JobSeeker
+
+
+environment = os.environ.get("JOBSEEKER_SAMPLE_ENV", "LOCAL")
+job_name = os.environ.get("JOB_NAME") or "jobseeker-sdk-docker-sample"
+
+with JobSeeker(environment=environment, job=job_name) as js:
+    with js.task("Sample SDK Docker Job", "DW_Master") as tmf:
+        rows = tmf.context("rows", cast=int, default=4)
+        midpoint = max(1, rows // 2)
+
+        print("Docker sample heartbeat at {} of {} rows".format(midpoint, rows))
+        tmf.progress(total=rows, processed=midpoint, msg="Docker sample heartbeat")
+        tmf.finish(total=rows, processed=rows, msg="JobSeeker SDK sample completed in Docker")
+
+print("JobSeeker SDK Docker sample complete")
+PY
+
+tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \
+  --network host \
+  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \
+  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \
+  -e JOBSEEKER_SAMPLE_ENV="${JOBSEEKER_SAMPLE_ENV:-LOCAL}" \
+  python:3.12-slim \
+  sh -lc 'set -e
+    mkdir -p /tmp/jobseeker-context
+    tar -C /tmp/jobseeker-context -xf -
+    rm -rf /tmp/jobseeker-runtime-libs
+    PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-runtime-libs /tmp/jobseeker-context/jobseeker-sdk
+    export PYTHONPATH="/tmp/jobseeker-runtime-libs:/tmp/jobseeker-context:${PYTHONPATH:-}"
+    python /tmp/jobseeker-context/main.py'
+SH
+}
+
 trigger_job() {
   local job_name="$1"
   local status
@@ -174,6 +274,8 @@ $DEMO_PREFIX-dim-product-refresh
 $DEMO_PREFIX-fact-sales-refresh
 $DEMO_PREFIX-dw-orders-quality
 $DEMO_PREFIX-dm-marketing-sync
+$DEMO_PREFIX-python-sdk-agent
+$DEMO_PREFIX-python-sdk-docker
 $DEMO_PREFIX-notbuilt-new-pipeline
 $DEMO_PREFIX-disabled-legacy-import
 $DEMO_PREFIX-queued-backfill
@@ -219,7 +321,7 @@ def q(value):
     return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
 
 print("START TRANSACTION;")
-print(f"DELETE FROM tmf_error WHERE tmf_id LIKE {q(prefix + '-%')};")
+print(f"DELETE FROM tmf_error WHERE tmf_id LIKE {q(prefix + '-%')} OR job_name LIKE {q(prefix + '-%')};")
 print(f"DELETE FROM tmf WHERE interface_id LIKE {q(prefix + '-%')} OR instance_id LIKE {q(prefix + '-%')} OR job_name LIKE {q(prefix + '-%')};")
 
 rows = []
@@ -296,6 +398,8 @@ jobs = [
     f"{prefix}-fact-sales-refresh",
     f"{prefix}-dw-orders-quality",
     f"{prefix}-dm-marketing-sync",
+    f"{prefix}-python-sdk-agent",
+    f"{prefix}-python-sdk-docker",
     f"{prefix}-notbuilt-new-pipeline",
     f"{prefix}-disabled-legacy-import",
     f"{prefix}-queued-backfill",
@@ -327,7 +431,7 @@ cleanup_demo() {
   done < <(demo_jobs)
 
   docker compose exec -T mariadb mariadb -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" <<SQL
-DELETE FROM tmf_error WHERE tmf_id LIKE '${DEMO_PREFIX}-%';
+DELETE FROM tmf_error WHERE tmf_id LIKE '${DEMO_PREFIX}-%' OR job_name LIKE '${DEMO_PREFIX}-%';
 DELETE FROM tmf WHERE interface_id LIKE '${DEMO_PREFIX}-%' OR instance_id LIKE '${DEMO_PREFIX}-%' OR job_name LIKE '${DEMO_PREFIX}-%';
 SQL
 
@@ -357,12 +461,20 @@ seed_demo() {
   echo "Seeding demo data with prefix '$DEMO_PREFIX'..."
   cleanup_demo
   jenkins_crumb
+  stage_python_sdk_runtime
+
+  local sdk_agent_command
+  local sdk_docker_command
+  sdk_agent_command="$(python_sdk_agent_command)"
+  sdk_docker_command="$(python_sdk_docker_command)"
 
   create_job "$DEMO_PREFIX-stg-customer-ingest" "Demo success job: customer staging load." "echo 'Loading customer staging data'; exit 0" false "H/15 * * * *"
   create_job "$DEMO_PREFIX-dim-product-refresh" "Demo success job: product dimension refresh." "echo 'Refreshing product dimension'; exit 0" false "H 2 * * *"
   create_job "$DEMO_PREFIX-fact-sales-refresh" "Demo failing job: sales fact refresh." "echo 'Sales fact validation failed'; exit 1" false "H 4 * * 1-5"
   create_job "$DEMO_PREFIX-dw-orders-quality" "Demo success job: data warehouse order quality checks." "echo 'Order quality checks passed'; exit 0" false "H/30 * * * *"
   create_job "$DEMO_PREFIX-dm-marketing-sync" "Demo manual job: marketing data mart sync." "echo 'Marketing mart sync'; exit 0" false ""
+  create_job "$DEMO_PREFIX-python-sdk-agent" "Demo Python SDK job: writes TMF rows through the bundled jobseeker package on the Jenkins agent." "$sdk_agent_command" false ""
+  create_job "$DEMO_PREFIX-python-sdk-docker" "Demo Python SDK job: writes TMF rows through the bundled jobseeker package inside Docker." "$sdk_docker_command" false ""
   create_job "$DEMO_PREFIX-notbuilt-new-pipeline" "Demo not-built job: newly configured pipeline." "echo 'First build has not been triggered yet'; exit 0" false ""
   create_job "$DEMO_PREFIX-disabled-legacy-import" "Demo disabled job: retired legacy import." "echo 'Legacy import disabled'; exit 0" true "@weekly"
 
@@ -383,6 +495,9 @@ seed_demo() {
 
   seed_database
   seed_job_creation_dates
+
+  trigger_job "$DEMO_PREFIX-python-sdk-agent"
+  trigger_job "$DEMO_PREFIX-python-sdk-docker"
 
   echo "Demo data is ready. Open Dashboard, Job List, Job Creation, and TMF for screenshots."
   echo "Run '$0 --cleanup' to remove the demo dataset."
