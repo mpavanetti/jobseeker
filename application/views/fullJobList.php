@@ -4,18 +4,101 @@
   });
 </script>-->
 <style>
-
-pre { 
-    white-space: pre-wrap; 
-    word-break: break-word;
-    max-width: 750px;
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.checkbox {
+.full-job-filter-box .box-body {
+  padding-bottom: 10px;
+}
 
-    transform: scale(1.5);
-  }
+.full-job-filter-actions {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 25px;
+}
 
+.full-job-filter-actions .btn {
+  flex: 1 1 110px;
+}
+
+.full-job-filter-note {
+  color: #777;
+  margin-bottom: 0;
+}
+
+.full-job-summary {
+  margin-top: 10px;
+}
+
+.full-job-summary .info-box {
+  min-height: 72px;
+  margin-bottom: 12px;
+}
+
+.full-job-summary .info-box-icon {
+  height: 72px;
+  line-height: 72px;
+}
+
+.full-job-summary .info-box-content {
+  padding-top: 10px;
+}
+
+.full-job-table-wrapper {
+  overflow-x: auto;
+}
+
+#fetch th,
+#fetch td {
+  vertical-align: middle !important;
+}
+
+#fetch th {
+  white-space: nowrap;
+}
+
+.full-job-build-cell strong,
+.full-job-build-cell small {
+  display: block;
+}
+
+.full-job-build-cell small {
+  color: #777;
+  margin-top: 3px;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.full-job-log-preview {
+  max-width: 260px;
+  white-space: normal;
+}
+
+.full-job-log-preview mark {
+  background: #fff2a8;
+  padding: 0 2px;
+}
+
+#addLog pre {
+  max-height: 560px;
+  overflow: auto;
+}
+
+.full-job-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.full-job-actions > .btn {
+  float: none;
+}
 </style>
 <!-- Content Wrapper. Contains page content -->
 <div class="content-wrapper">
@@ -35,40 +118,115 @@ pre {
 <!-- Main content -->
 <section class="content">
 <div class="container">
-  <div class="row animated fadeIn" style="margin-top: 25px;">
-   <form action="<?php echo base_url() ?>Tmf/fetchData" method="POST" id="searchList">
-
-    <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-      <div class="input-group" style="width: 100%;">
-        <label>Job Name</label>
-        <select class="form-control" name="job_name" id="job_name">
-        </select>
-      </div>
+  <div class="box box-primary full-job-filter-box animated fadeIn" style="margin-top: 25px;">
+    <div class="box-header with-border">
+      <h3 class="box-title"><b>Build Filters</b></h3>
     </div>
-
-    <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-      <div class="form-group">
-        <label for="timeoutMinutes">Min rows to fetch</label>
-        <input type="number" class="form-control" id="minRows" name="minRows"maxlength="50" autocomplete="off">
-      </div>
+    <div class="box-body">
+      <form id="searchList" autocomplete="off">
+        <div class="row">
+          <div class="col-lg-3 col-md-4 col-sm-6 col-xs-12 form-group">
+            <label for="job_name">Job Name</label>
+            <select class="form-control" name="job_name" id="job_name">
+              <option value="">Loading Jenkins jobs...</option>
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-4 col-sm-6 col-xs-12 form-group">
+            <label for="resultFilter">Result</label>
+            <select class="form-control" id="resultFilter" name="resultFilter">
+              <option value="all">All results</option>
+              <option value="SUCCESS">Success</option>
+              <option value="FAILURE">Failure</option>
+              <option value="ABORTED">Aborted</option>
+              <option value="UNSTABLE">Unstable</option>
+              <option value="RUNNING">Running</option>
+              <option value="NO_RESULT">No result</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-4 col-sm-6 col-xs-12 form-group">
+            <label for="dateFrom">From date/time</label>
+            <input type="datetime-local" class="form-control" id="dateFrom" name="dateFrom" step="60">
+          </div>
+          <div class="col-lg-2 col-md-4 col-sm-6 col-xs-12 form-group">
+            <label for="dateTo">To date/time</label>
+            <input type="datetime-local" class="form-control" id="dateTo" name="dateTo" step="60">
+          </div>
+          <div class="col-lg-3 col-md-4 col-sm-6 col-xs-12 form-group">
+            <label for="logText">Console contains</label>
+            <input type="text" class="form-control" id="logText" name="logText" placeholder="Text inside build logs">
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12 form-group">
+            <label for="buildFrom">Build # from</label>
+            <input type="number" class="form-control" id="buildFrom" name="buildFrom" min="1" autocomplete="off">
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12 form-group">
+            <label for="buildTo">Build # to</label>
+            <input type="number" class="form-control" id="buildTo" name="buildTo" min="1" autocomplete="off">
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12 form-group">
+            <label for="rowLimit">Fetch latest builds</label>
+            <input type="number" class="form-control" id="rowLimit" name="rowLimit" min="1" max="500" value="100" autocomplete="off">
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6 col-xs-12 form-group">
+            <label>&nbsp;</label>
+            <div class="checkbox" style="margin-top: 4px;">
+              <label><input type="checkbox" id="caseSensitiveLog" name="caseSensitiveLog"> Case-sensitive log text</label>
+            </div>
+          </div>
+          <div class="col-lg-4 col-md-12 col-sm-12 col-xs-12 form-group">
+            <div class="full-job-filter-actions">
+              <button id="search" type="submit" class="btn btn-primary"><i class="fa fa-search" aria-hidden="true"></i> Search</button>
+              <button id="reload" type="button" class="btn btn-default"><i class="fa fa-refresh" aria-hidden="true"></i> Refresh</button>
+              <button id="resetFilters" type="button" class="btn btn-default"><i class="fa fa-eraser" aria-hidden="true"></i> Reset</button>
+            </div>
+          </div>
+        </div>
+      </form>
+      <p class="full-job-filter-note" id="fullJobFilterStatus">Select a Jenkins job, then search builds. Console text filtering checks the logs from the fetched builds.</p>
     </div>
-
-    <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-      <div class="form-group">
-        <label for="timeoutMinutes">Max rows to fetch</label>
-        <input type="number" class="form-control" id="maxRows" name="maxRows" maxlength="50" autocomplete="off">
-      </div>
-    </div>
-    <div style="padding-top: 25px;">
-      <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group">
-        <button id="search" type="button" class="btn btn-md btn-primary btn-block searchList pull-right"><i class="fa fa-search" aria-hidden="true"></i></button> 
-      </div>
-      <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group">
-        <button id="reload" type="button" class="btn btn-md btn-default btn-block pull-right resetFilters"><i class="fa fa-refresh" aria-hidden="true"></i></button>
-      </div>
-    </div> 
   </div>
-</form>
+
+  <div class="row full-job-summary">
+    <div class="col-sm-6 col-md-3">
+      <div class="info-box">
+        <span class="info-box-icon bg-aqua"><i class="fa fa-download"></i></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Fetched</span>
+          <span class="info-box-number" id="summaryFetched">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="info-box">
+        <span class="info-box-icon bg-yellow"><i class="fa fa-filter"></i></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Matching</span>
+          <span class="info-box-number" id="summaryMatching">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="info-box">
+        <span class="info-box-icon bg-green"><i class="fa fa-check"></i></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Success</span>
+          <span class="info-box-number" id="summarySuccess">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="info-box">
+        <span class="info-box-icon bg-red"><i class="fa fa-exclamation-triangle"></i></span>
+        <div class="info-box-content">
+          <span class="info-box-text">Problems</span>
+          <span class="info-box-number" id="summaryProblems">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
 
 
 <div class="modal fade" id="modal-default" style="display: none;">
@@ -106,34 +264,23 @@ pre {
       </div>
       <!-- /.box-header -->
       <div class="box-body">
-        <table id="fetch" class="table table-bordered table-striped">
+        <div class="full-job-table-wrapper">
+        <table id="fetch" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
             <tr>
-              <th>Job Name</th>
+              <th>Build</th>
               <th>Result</th>
-              <th>Build Number</th>
-              <th>Execution Date</th>
-              <th>Job Duration</th>
-              <th>Job Url</th>
-              <th>Queue Id</th>
-              <th>Building</th>
+              <th>Started</th>
+              <th>Duration</th>
+              <th>Queue</th>
+              <th>Console Match</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
           </tbody>
-          <tfoot>
-           <tr>
-            <th>Job Name</th>
-            <th>Result</th>
-            <th>Build Number</th>
-            <th>Execution Date</th>
-            <th>Job Duration</th>
-            <th>Job Url</th>
-            <th>Queue Id</th>
-            <th>Building</th>
-          </tr>
-        </tfoot>
       </table>
+      </div>
     </div>
     <!-- /.box-body -->
   </div>
@@ -151,215 +298,559 @@ pre {
 <script type="text/javascript">
   $(document).ready(function(){
     $('#box').boxWidget('collapse');
-    $('#box2').boxWidget('collapse');
-    $('#box3').boxWidget('collapse');
-    $('#box4').boxWidget('collapse');
   });
 </script>
 
 <script type="text/javascript">
+  $(document).ready(function() {
+    var jenkins_url = '<?php echo $jenkins_url; ?>';
+    var jenkins_username = '';
+    var jenkins_token = '';
+    var logCache = {};
+    var currentLogQuery = '';
 
-  function buildsFromJenkinsResponse(json) {
-    return json && Array.isArray(json.builds) ? json.builds : [];
-  }
+    loadJobs();
 
-  function destroyDataTable(selector) {
-    if ($.fn.DataTable.isDataTable(selector)) {
-      $(selector).DataTable().clear().destroy();
-    }
-  }
-
-  function reloadFetchTable() {
-    if ($.fn.DataTable.isDataTable('#fetch')) {
-      $('#fetch').DataTable().ajax.reload(null, false);
-    }
-  }
-
-  function renderBuildTime(data) {
-    return data != null && data !== '' ? moment(parseInt(data, 10)).format('MMMM Do YYYY, h:mm:ss a') : '';
-  }
-
-  function renderDuration(data) {
-    return data != null && data !== '' ? moment(parseInt(data, 10)).utc().format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]') : '';
-  }
-
-  function renderText(data) {
-    return data == null ? '' : data;
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
-      return {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        "'": '&#039;',
-        '"': '&quot;'
-      }[character];
-    });
-  }
-
-  $(document).ready(function(){
-
-        // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>',
-          jenkins_username = '',
-          jenkins_token = '',
-            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
-
-        $('#reload').click(function(){
-          $('.overlay').show();
-          reloadFetchTable();
-          toastr.info('Refreshing Table rows...','Refreshing ')
-          $('.overlay').hide();
-        });
-
-        $.ajax({
-          url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
-          method: 'GET',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-          beforeSend: function() {
-
-            $('.overlay').show();
-          }
-        }).done(function(data) {
-
-         $.each(data["jobs"], function (key, item) {
-               // console.log(item.name);
-               newJson = item.name;
-
-               $('#job_name').append($('<option>', {
-                value:  newJson,
-                text: newJson
-              }))
-             });
-
-         $('.overlay').hide();
-
-       }).fail(function() {
-        console.error(arguments);
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#039;',
+          '"': '&quot;'
+        }[character];
       });
+    }
 
+    function escapeAttribute(value) {
+      return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
 
-       $('#search').click(function(){
+    function jenkinsJobPath(jobName) {
+      return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
+        return 'job/' + encodeURIComponent(segment);
+      }).join('/');
+    }
 
-        var job_name = $('#job_name').val(),
-        minRows = $('#minRows').val(),
-        maxRows = $('#maxRows').val();
+    function isLocalHostName(hostname) {
+      hostname = String(hostname || '').toLowerCase();
+      return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+    }
 
-        if(minRows == '' || minRows == null) {
-          minRows = 0;
+    function isInternalJenkinsHost(hostname) {
+      hostname = String(hostname || '').toLowerCase();
+      return isLocalHostName(hostname) || hostname === 'jenkins';
+    }
+
+    function forwardedHostForPort(hostname, port) {
+      var codespacesHost = String(hostname || '').match(/^(.*)-\d+(\.(?:app\.github\.dev|preview\.app\.github\.dev|githubpreview\.dev))$/);
+
+      if (codespacesHost) {
+        return codespacesHost[1] + '-' + port + codespacesHost[2];
+      }
+
+      codespacesHost = String(hostname || '').match(/^(.+?)(\.(?:app\.github\.dev|preview\.app\.github\.dev|githubpreview\.dev))$/);
+
+      if (codespacesHost) {
+        return codespacesHost[1] + '-' + port + codespacesHost[2];
+      }
+
+      return hostname + ':' + port;
+    }
+
+    function browserJenkinsBaseUrl(configuredUrl) {
+      var baseUrl = String(configuredUrl || '');
+
+      if (! baseUrl) {
+        return '';
+      }
+
+      if (baseUrl.charAt(baseUrl.length - 1) !== '/') {
+        baseUrl += '/';
+      }
+
+      var parser = document.createElement('a');
+      parser.href = baseUrl;
+
+      if (isInternalJenkinsHost(parser.hostname) && window.location.hostname && ! isLocalHostName(window.location.hostname)) {
+        var jenkinsPort = parser.port || (parser.protocol === 'https:' ? '443' : '80');
+        var jenkinsPath = parser.pathname || '/';
+
+        if (jenkinsPath.charAt(jenkinsPath.length - 1) !== '/') {
+          jenkinsPath += '/';
         }
 
-        if(maxRows == '' || maxRows == null){
-          maxRows = 999999;
-        }     
+        return window.location.protocol + '//' + forwardedHostForPort(window.location.hostname, jenkinsPort) + jenkinsPath;
+      }
 
-        if(minRows < maxRows){
+      return baseUrl;
+    }
 
-          if(job_name != '' && job_name != null){
-            $('.overlay').show();
-            destroyDataTable('#fetch');
-            $('#fetch').DataTable({
-              "lengthMenu": [3,5,10,13,20,100,200,500,1000],
-              "pageLength": 5,
-              "order": [[ 2, "desc" ]],
-              "ajax": {
-                "url": jenkins_url +'job/'+ encodeURIComponent(job_name) +'/api/json?tree=builds[number,number,fullDisplayName,result,timestamp,duration,url,queueId,building]{'+ minRows +','+maxRows+'}',
-                "type": 'GET',
-                "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-                "dataSrc": buildsFromJenkinsResponse,
-                "bDestroy": true
-              },
-              "columns": [
-              {"data": "fullDisplayName", "defaultContent": ""},
-              {"data": "result", "defaultContent": ""},
-              {"data": "number", "defaultContent": ""},
-              {"data": "timestamp", "defaultContent": ""},
-              {"data": "duration", "defaultContent": ""},
-              {"data": "url", "defaultContent": ""},
-              {"data": "queueId", "defaultContent": ""},
-              {"data": "building", "defaultContent": ""}
+    function jenkinsBuildUrl(build) {
+      var baseUrl = browserJenkinsBaseUrl(jenkins_url);
 
-              ],
-              columnDefs:[{targets:0, render:function(data){
-                return renderText(data);
-              }},{targets:1, render:function(data){
-                if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
-              }},{targets:2, render:function(data){
-                if(data != null){return '<a class="btn btn-sm btn-info log text-center" href="#" style="margin-left: 20px;" title="Click to check the build console output.">'+ data + '</a>'} else {return ''}
-              }},{targets:3, render:function(data){
-                return renderBuildTime(data);
-              }},{targets:4, render:function(data){
-                return renderDuration(data);
-              }},{targets:5, render:function(data){
-                return renderText(data);
-              }},{targets:6, render:function(data){
-                return renderText(data);
-              }},{targets:7, render:function(data){
-                return renderText(data);
-              }}]
-          });
+      if (! build || ! build.jobName || build.number == null || build.number === '') {
+        return '';
+      }
 
-            $('#box').boxWidget('expand');
-            reloadFetchTable();
-            $('.overlay').hide();
+      if (baseUrl.charAt(baseUrl.length - 1) !== '/') {
+        baseUrl += '/';
+      }
 
-          } else {
-            toastr.error('Please, select a job name to fetch.', 'Job Name Empty');
-          }
+      return baseUrl + jenkinsJobPath(build.jobName) + '/' + encodeURIComponent(build.number) + '/';
+    }
 
-        } else {
-          toastr.error('The min rows must be less than max rows !', 'Rows Error');
-        }    
+    function buildsFromJenkinsResponse(json) {
+      return json && Array.isArray(json.builds) ? json.builds : [];
+    }
 
+    function destroyDataTable(selector) {
+      if ($.fn.DataTable.isDataTable(selector)) {
+        $(selector).DataTable().clear().destroy();
+      }
+    }
+
+    function setBusy(isBusy, message) {
+      $('.overlay').toggle(isBusy);
+      $('#search, #reload, #resetFilters').prop('disabled', isBusy);
+      if (message) {
+        $('#fullJobFilterStatus').text(message);
+      }
+    }
+
+    function updateSummary(fetchedBuilds, matchingBuilds) {
+      fetchedBuilds = fetchedBuilds || [];
+      matchingBuilds = matchingBuilds || [];
+
+      $('#summaryFetched').text(fetchedBuilds.length);
+      $('#summaryMatching').text(matchingBuilds.length);
+      $('#summarySuccess').text(matchingBuilds.filter(function(build) { return build.result === 'SUCCESS' && build.building !== true; }).length);
+      $('#summaryProblems').text(matchingBuilds.filter(function(build) {
+        return $.inArray(build.result, ['FAILURE', 'ABORTED', 'UNSTABLE', 'NOT_BUILT']) !== -1;
+      }).length);
+    }
+
+    function renderBuildTime(data) {
+      var timestamp = parseInt(data, 10);
+      return timestamp ? moment(timestamp).format('YYYY-MM-DD HH:mm:ss') : '';
+    }
+
+    function renderDuration(data) {
+      var duration = parseInt(data, 10);
+      return ! isNaN(duration) ? moment(duration).utc().format('HH [h] mm [m] ss [s]') : '';
+    }
+
+    function renderResult(build) {
+      if (build.building === true) {
+        return '<span class="label label-info">Running</span>';
+      }
+
+      if (build.result === 'SUCCESS') {
+        return '<span class="label label-success">SUCCESS</span>';
+      }
+
+      if ($.inArray(build.result, ['FAILURE', 'ABORTED', 'UNSTABLE', 'NOT_BUILT']) !== -1) {
+        return '<span class="label label-danger">' + escapeHtml(build.result) + '</span>';
+      }
+
+      return build.result ? '<span class="label label-warning">' + escapeHtml(build.result) + '</span>' : '<span class="text-muted">No result</span>';
+    }
+
+    function renderBoolean(value) {
+      return value === true || value === 'true' ? '<span class="label label-info">Yes</span>' : '<span class="label label-default">No</span>';
+    }
+
+    function renderBuildIdentity(build) {
+      return '<div class="full-job-build-cell"><strong>#' + renderText(build.number) + '</strong><small title="' + escapeAttribute(build.jobName) + '">' + renderText(build.jobName) + '</small></div>';
+    }
+
+    function renderQueue(build) {
+      var queueId = build.queueId == null || build.queueId === '' ? '<span class="text-muted">None</span>' : renderText(build.queueId);
+      var state = build.building === true ? '<span class="label label-info">Running</span>' : '<span class="label label-default">Finished</span>';
+
+      return queueId + '<br>' + state;
+    }
+
+    function renderText(value) {
+      return escapeHtml(value == null ? '' : value);
+    }
+
+    function renderLogPreview(build) {
+      if (! currentLogQuery) {
+        return '<span class="text-muted">No text filter</span>';
+      }
+
+      if (build.consolePreview) {
+        return '<div class="full-job-log-preview">' + build.consolePreview + '</div>';
+      }
+
+      if (build.consoleError) {
+        return '<span class="text-warning">Console unavailable</span>';
+      }
+
+      return '<span class="text-muted">No match preview</span>';
+    }
+
+    function renderActions(build) {
+      var jenkinsUrl = jenkinsBuildUrl(build);
+      var jenkinsButton = jenkinsUrl ? '<a class="btn btn-sm btn-default" target="_blank" rel="noopener" href="' + escapeAttribute(jenkinsUrl) + '"><i class="fa fa-external-link"></i> Jenkins</a>' : '';
+
+      return '<div class="btn-group btn-group-xs full-job-actions"><button type="button" class="btn btn-info log" data-job="' + escapeAttribute(build.jobName) + '" data-build="' + escapeAttribute(build.number) + '" data-result="' + escapeAttribute(build.result || '') + '" data-date="' + escapeAttribute(renderBuildTime(build.timestamp)) + '"><i class="fa fa-terminal"></i> Logs</button>' + jenkinsButton + '</div>';
+    }
+
+    function renderBuildTable(builds) {
+      destroyDataTable('#fetch');
+      $('#box').boxWidget('expand');
+      var buildTable = $('#fetch').DataTable({
+        data: builds,
+        lengthMenu: [5,10,20,50,100,200,500],
+        pageLength: 10,
+        order: [[3, 'desc']],
+        scrollX: true,
+        language: {
+          emptyTable: 'Search builds to populate this report.'
+        },
+        columns: [
+          {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' ? parseInt(row.number, 10) || 0 : renderBuildIdentity(row); }},
+          {data: null, defaultContent: '', render: function(data, type, row) { return renderResult(row); }},
+          {data: 'timestamp', defaultContent: '', render: function(data, type) { return type === 'sort' || type === 'type' ? parseInt(data, 10) || 0 : renderBuildTime(data); }},
+          {data: 'duration', defaultContent: '', render: function(data, type) { return type === 'sort' || type === 'type' ? parseInt(data, 10) || 0 : renderDuration(data); }},
+          {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' ? parseInt(row.queueId, 10) || 0 : renderQueue(row); }},
+          {data: null, defaultContent: '', orderable: false, render: function(data, type, row) { return renderLogPreview(row); }},
+          {data: null, defaultContent: '', orderable: false, searchable: false, render: function(data, type, row) { return renderActions(row); }}
+        ]
       });
 
-     });
+      setTimeout(function() {
+        buildTable.columns.adjust();
+      }, 0);
+    }
 
-$("#fetch").on('click','.log',function(){
+    function loadJobs() {
+      setBusy(true, 'Loading Jenkins jobs...');
 
-        // get Jenkins credentials
-        var jenkins_url = '<?php echo $jenkins_url; ?>',
-          jenkins_username = '',
-          jenkins_token = '',
-            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+      $.ajax({
+        url: jenkins_url + 'api/json?tree=jobs[name,fullName,color,buildable]',
+        method: 'GET',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      }).done(function(data) {
+        var jobs = data && Array.isArray(data.jobs) ? data.jobs : [];
+        var options = '<option value="">Select a Jenkins job</option>';
 
+        $.each(jobs, function(index, item) {
+          var name = item.fullName || item.name || '';
+          if (name !== '') {
+            options += '<option value="' + escapeAttribute(name) + '">' + escapeHtml(name) + '</option>';
+          }
+        });
 
-         // get the current row Id, job name and instance id
-         var currentRow=$(this).closest("tr"),
-             job_name=currentRow.find("td:eq(0)").text(),
-             result=currentRow.find("td:eq(1)").text(),
-             build=currentRow.find("td:eq(2)").text(),
-             date=currentRow.find("td:eq(3)").text(),
-             //buildNumber = build.substring(1),
-             name = job_name.split("#");
+        $('#job_name').html(options);
+        $('#fullJobFilterStatus').text(jobs.length ? 'Select a Jenkins job, then search builds.' : 'No Jenkins jobs were returned.');
+      }).fail(function(xhr) {
+        toastr.error(responseMessage(xhr, 'Unable to load Jenkins jobs.'), 'Job Query Failed');
+        $('#job_name').html('<option value="">Unable to load Jenkins jobs</option>');
+      }).always(function() {
+        setBusy(false);
+      });
+    }
 
-        $.ajax({
-            contentType: "application/text",
-          url: jenkins_url + 'job/'+ encodeURIComponent(name[0].trim()) +'/'+ encodeURIComponent(build) +'/consoleText',
-            method: 'GET',
-            headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-            beforeSend: function() {
-             $(".overlay").show();
-             $(".destroy").remove();
+    function responseMessage(xhr, fallback) {
+      return xhr && xhr.responseText ? xhr.responseText : fallback;
+    }
 
-            },
-            error: function() {
-            toastr.error("Error during console log query.", "Query Data Error");
-            },
-          success: function(output) {
-              $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(job_name) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
-              $('#modal-default').modal('show');
-            },
-            complete: function(data) {
-                dateRequest = data;
-                $(".overlay").hide();
-            }
+    function dateTimeValue(value) {
+      if (! value) {
+        return null;
+      }
 
-         });
+      var timestamp = new Date(value).getTime();
+      return isNaN(timestamp) ? null : timestamp;
+    }
 
+    function readFilters() {
+      var rowLimit = parseInt($('#rowLimit').val(), 10);
+      var buildFrom = parseInt($('#buildFrom').val(), 10);
+      var buildTo = parseInt($('#buildTo').val(), 10);
+
+      if (isNaN(rowLimit)) {
+        rowLimit = 100;
+      }
+
+      rowLimit = Math.max(1, Math.min(rowLimit, 500));
+      $('#rowLimit').val(rowLimit);
+
+      return {
+        jobName: $('#job_name').val() || '',
+        result: $('#resultFilter').val() || 'all',
+        dateFrom: $('#dateFrom').val() || '',
+        dateTo: $('#dateTo').val() || '',
+        fromTime: dateTimeValue($('#dateFrom').val()),
+        toTime: dateTimeValue($('#dateTo').val()),
+        buildFrom: isNaN(buildFrom) ? null : buildFrom,
+        buildTo: isNaN(buildTo) ? null : buildTo,
+        rowLimit: rowLimit,
+        logText: $.trim($('#logText').val() || ''),
+        caseSensitive: $('#caseSensitiveLog').is(':checked')
+      };
+    }
+
+    function validateFilters(filters) {
+      if (filters.jobName === '') {
+        toastr.error('Please select a Jenkins job.', 'Job Name Required');
+        return false;
+      }
+
+      if (filters.fromTime && filters.toTime && filters.fromTime > filters.toTime) {
+        toastr.error('From date must be before To date.', 'Date Range Error');
+        return false;
+      }
+
+      if (filters.buildFrom && filters.buildTo && filters.buildFrom > filters.buildTo) {
+        toastr.error('Build # from must be less than Build # to.', 'Build Range Error');
+        return false;
+      }
+
+      return true;
+    }
+
+    function fetchBuilds(filters) {
+      return $.ajax({
+        url: jenkins_url + jenkinsJobPath(filters.jobName) + '/api/json?tree=builds[number,fullDisplayName,result,timestamp,duration,url,queueId,building]{0,' + filters.rowLimit + '}',
+        method: 'GET',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      }).then(function(data) {
+        return $.map(buildsFromJenkinsResponse(data), function(build) {
+          build.jobName = filters.jobName;
+          build.number = parseInt(build.number, 10) || build.number;
+          return build;
+        });
+      });
+    }
+
+    function resultMatches(build, resultFilter) {
+      var result = build.result || '';
+
+      if (resultFilter === 'all') {
+        return true;
+      }
+
+      if (resultFilter === 'RUNNING') {
+        return build.building === true;
+      }
+
+      if (resultFilter === 'NO_RESULT') {
+        return build.building !== true && result === '';
+      }
+
+      if (resultFilter === 'OTHER') {
+        return build.building !== true && result !== '' && $.inArray(result, ['SUCCESS', 'FAILURE', 'ABORTED', 'UNSTABLE', 'NOT_BUILT']) === -1;
+      }
+
+      return result === resultFilter;
+    }
+
+    function applyBasicFilters(builds, filters) {
+      return builds.filter(function(build) {
+        var number = parseInt(build.number, 10);
+        var timestamp = parseInt(build.timestamp, 10);
+
+        if (! resultMatches(build, filters.result)) {
+          return false;
+        }
+
+        if (filters.fromTime && (! timestamp || timestamp < filters.fromTime)) {
+          return false;
+        }
+
+        if (filters.toTime && (! timestamp || timestamp > filters.toTime)) {
+          return false;
+        }
+
+        if (filters.buildFrom && (! number || number < filters.buildFrom)) {
+          return false;
+        }
+
+        if (filters.buildTo && (! number || number > filters.buildTo)) {
+          return false;
+        }
+
+        return true;
+      });
+    }
+
+    function consoleCacheKey(jobName, buildNumber) {
+      return jobName + '#' + buildNumber;
+    }
+
+    function fetchConsole(jobName, buildNumber) {
+      var key = consoleCacheKey(jobName, buildNumber);
+
+      if (logCache.hasOwnProperty(key)) {
+        return $.Deferred().resolve(logCache[key]).promise();
+      }
+
+      return $.ajax({
+        contentType: 'application/text',
+        url: jenkins_url + jenkinsJobPath(jobName) + '/' + encodeURIComponent(buildNumber) + '/consoleText',
+        method: 'GET',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      }).then(function(output) {
+        logCache[key] = output || '';
+        return logCache[key];
+      });
+    }
+
+    function logPreview(output, query, caseSensitive) {
+      var haystack = caseSensitive ? output : output.toLowerCase();
+      var needle = caseSensitive ? query : query.toLowerCase();
+      var index = haystack.indexOf(needle);
+
+      if (index === -1) {
+        return '';
+      }
+
+      var start = Math.max(0, index - 80);
+      var end = Math.min(output.length, index + query.length + 120);
+      var before = escapeHtml(output.substring(start, index));
+      var match = escapeHtml(output.substring(index, index + query.length));
+      var after = escapeHtml(output.substring(index + query.length, end));
+
+      return (start > 0 ? '...' : '') + before + '<mark>' + match + '</mark>' + after + (end < output.length ? '...' : '');
+    }
+
+    function filterByConsoleText(jobName, builds, query, caseSensitive) {
+      var deferred = $.Deferred();
+
+      if (! query) {
+        deferred.resolve(builds);
+        return deferred.promise();
+      }
+
+      if (builds.length === 0) {
+        deferred.resolve([]);
+        return deferred.promise();
+      }
+
+      var filtered = [];
+      var index = 0;
+      var active = 0;
+      var completed = 0;
+      var errors = 0;
+      var concurrency = 4;
+
+      function pump() {
+        while (active < concurrency && index < builds.length) {
+          (function(currentIndex) {
+            var build = builds[currentIndex];
+            active += 1;
+            fetchConsole(jobName, build.number).done(function(output) {
+              var preview = logPreview(output || '', query, caseSensitive);
+              if (preview) {
+                build.consolePreview = preview;
+                filtered[currentIndex] = build;
+              }
+            }).fail(function() {
+              build.consoleError = true;
+              errors += 1;
+            }).always(function() {
+              completed += 1;
+              active -= 1;
+              $('#fullJobFilterStatus').text('Checking console logs... ' + completed + '/' + builds.length);
+
+              if (completed === builds.length) {
+                if (errors > 0) {
+                  toastr.warning(errors + ' console log request(s) failed while filtering.', 'Console Filter');
+                }
+                deferred.resolve(filtered.filter(function(build) { return !! build; }));
+              } else {
+                pump();
+              }
+            });
+          })(index);
+          index += 1;
+        }
+      }
+
+      pump();
+      return deferred.promise();
+    }
+
+    function runSearch() {
+      var filters = readFilters();
+
+      if (! validateFilters(filters)) {
+        return;
+      }
+
+      currentLogQuery = filters.logText;
+      setBusy(true, 'Fetching latest ' + filters.rowLimit + ' build(s) for ' + filters.jobName + '...');
+
+      fetchBuilds(filters).done(function(builds) {
+        var basicMatches = applyBasicFilters(builds, filters);
+        $('#fullJobFilterStatus').text(basicMatches.length + ' build(s) match the non-console filters.');
+
+        filterByConsoleText(filters.jobName, basicMatches, filters.logText, filters.caseSensitive).done(function(filteredBuilds) {
+          renderBuildTable(filteredBuilds);
+          updateSummary(builds, filteredBuilds);
+          $('#fullJobFilterStatus').text('Fetched ' + builds.length + ' build(s); showing ' + filteredBuilds.length + ' matching build(s).');
+        }).always(function() {
+          setBusy(false);
+        });
+      }).fail(function(xhr) {
+        toastr.error(responseMessage(xhr, 'Unable to fetch builds for this job.'), 'Build Query Failed');
+        setBusy(false);
+      });
+    }
+
+    function resetFilters() {
+      $('#resultFilter').val('all');
+      $('#dateFrom, #dateTo, #buildFrom, #buildTo, #logText').val('');
+      $('#rowLimit').val(100);
+      $('#caseSensitiveLog').prop('checked', false);
+      $('#fullJobFilterStatus').text('Filters reset. Search again to refresh the report.');
+    }
+
+    function showLog(jobName, buildNumber, result, date, output) {
+      $('#addLog').html('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="120px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr><tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[#' + escapeHtml(buildNumber) + ']</b></td></tr><tr><td>Status</td><td>' + escapeHtml(result || 'No result') + '</td></tr><tr><td>Console Log</td><td><pre>' + escapeHtml(output || 'Console output is empty for this build.') + '</pre></td></tr></tbody></table></div>');
+      $('#modal-default').modal('show');
+    }
+
+    $('#searchList').on('submit', function(event) {
+      event.preventDefault();
+      runSearch();
     });
 
+    $('#reload').click(function() {
+      runSearch();
+    });
 
-   </script>
+    $('#resetFilters').click(function() {
+      resetFilters();
+    });
+
+    $('#fetch').on('click', '.log', function() {
+      var button = $(this);
+      var jobName = button.data('job') || '';
+      var buildNumber = button.data('build') || '';
+      var result = button.data('result') || '';
+      var date = button.data('date') || '';
+
+      if (jobName === '' || buildNumber === '') {
+        return;
+      }
+
+      button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Logs');
+      $('.overlay').show();
+
+      fetchConsole(jobName, buildNumber).done(function(output) {
+        showLog(jobName, buildNumber, result, date, output);
+      }).fail(function(xhr) {
+        toastr.error(responseMessage(xhr, 'Unable to fetch console log.'), 'Log Query Failed');
+      }).always(function() {
+        $('.overlay').hide();
+        button.prop('disabled', false).html('<i class="fa fa-terminal"></i> Logs');
+      });
+    });
+  });
+</script>

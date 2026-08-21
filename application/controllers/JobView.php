@@ -22,9 +22,38 @@ class JobView extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : View Job';
+                $data = array('job_creation_dates' => $this->readJobCreationDates());
         
-        $this->loadViews("jobView", $this->global, NULL, NULL);
+                $this->loadViews("jobView", $this->global, $data, NULL);
     }
+
+        private function jobCreationDatesPath() {
+            return APPPATH . 'cache/job_creation_dates.json';
+        }
+
+        private function readJobCreationDates() {
+            $path = $this->jobCreationDatesPath();
+
+            if (! is_readable($path)) {
+                return array();
+            }
+
+            $json = file_get_contents($path);
+            $dates = json_decode($json, TRUE);
+
+            if (! is_array($dates)) {
+                return array();
+            }
+
+            $cleanDates = array();
+            foreach ($dates as $jobName => $createdAt) {
+                if (is_string($jobName) && is_string($createdAt) && $jobName !== '' && $createdAt !== '') {
+                    $cleanDates[$jobName] = $createdAt;
+                }
+            }
+
+            return $cleanDates;
+        }
 
 
  

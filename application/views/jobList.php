@@ -133,6 +133,14 @@ pre {
   white-space: normal;
 }
 
+.job-list-layout {
+  width: 100%;
+}
+
+.job-list-layout table.dataTable {
+  width: 100% !important;
+}
+
 </style>
 
 <!-- Content Wrapper. Contains page content -->
@@ -152,7 +160,7 @@ pre {
 
 <!-- Main content -->
 <section class="content">
-  <div class="container">
+  <div class="container-fluid job-list-layout">
  <?php if($canManageJobs) {  ?>
   <div class="row">
     <div class="col-xs-12 text-left">
@@ -261,7 +269,7 @@ pre {
       <!-- /.box-header -->
       <div class="box-body">
         <div class="table-responsive">
-        <table id="listTable" class="table table-bordered table-striped">
+        <table id="listTable" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
             <tr>
               <th>Health</th>
@@ -329,7 +337,7 @@ pre {
       </div>
       <!-- /.box-header -->
       <div class="box-body">
-        <table id="listFailedTable" class="table table-bordered table-striped">
+        <table id="listFailedTable" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
             <tr>
             <th>Job Name</th>
@@ -379,7 +387,7 @@ pre {
       </div>
       <!-- /.box-header -->
       <div class="box-body">
-        <table id="listSuccessTable" class="table table-bordered table-striped">
+        <table id="listSuccessTable" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
             <tr>
             <th>Job Name</th>
@@ -416,13 +424,14 @@ pre {
 </div>
 <!-- /.row -->
 </div>
-<!-- /.container -->
+<!-- /.container-fluid -->
 
 </section>
 <!-- /.content -->
 </div>
 <!-- /.content-wrapper -->
 
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-inspect-modal.js?v=1"></script>
 <script type="text/javascript">
 
   var jobListRefreshTimer = null;
@@ -436,7 +445,6 @@ pre {
   var jobScheduleRequests = {};
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
   var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
-  var jobViewUrl = <?php echo json_encode(base_url() . 'jobView?job='); ?>;
 
   function jenkinsJobPath(jobName) {
     return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
@@ -1163,7 +1171,7 @@ pre {
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
-            return '<a class="btn btn-sm btn-default" href="' + jobViewUrl + encodeURIComponent(jobName) + '" title="Inspect this Jenkins job"><i class="fa fa-eye"></i> Inspect</a>';
+            return '<button type="button" class="btn btn-sm btn-default inspectJenkinsJob" data-job="'+ escapeAttribute(jobName) +'" title="Inspect this Jenkins job"><i class="fa fa-eye"></i> Inspect</button>';
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             if (! canManageJobs) {
@@ -1185,6 +1193,7 @@ pre {
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
           "order": [[ 3, "desc" ]],
+          "scrollX": true,
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,lastFailedBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
             "type": 'GET',
@@ -1226,6 +1235,7 @@ pre {
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
           "order": [[ 3, "desc" ]],
+          "scrollX": true,
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,lastStableBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
             "type": 'GET',
@@ -1448,6 +1458,13 @@ $("#listTable").on('click','.log',function(){
          });
 
     });
+
+$(document).on('click', '.inspectJenkinsJob', function() {
+  JobSeekerJobInspect.open({
+    jobName: $(this).data('job') || '',
+    button: this
+  });
+});
 
   $(function() {
     $('#refresh').prop('checked', true);
