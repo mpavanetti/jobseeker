@@ -15,7 +15,7 @@ It gives data teams one place to create and trigger Jenkins jobs, schedule recur
 - Track processed records, warnings, errors, messages, hostnames, users, and execution timing.
 - Manage database settings, generic key-value settings, SMTP settings, email templates, file paths, projects, environments, and context variables.
 - Publish embedded Power BI, Tableau, Qlik Sense, or iframe dashboards with user and group access control.
-- Manage users, roles, files, database tools, and server statistics from the same portal.
+- Manage users, roles, uploads, runtime settings, and operational dashboards from the same portal.
 
 ## Architecture
 
@@ -87,8 +87,6 @@ docker compose up -d --build
 
 Jenkins parallelism is controlled by `JENKINS_NUM_EXECUTORS`. The default Docker setup uses 5 executors, so independent jobs can run at the same time.
 
-Adminer, elFinder, and server statistics tools are disabled in Docker because they expose administration surfaces outside the main JobSeeker authorization flow.
-
 Docker Compose is the recommended installation path because it starts the application, database, and Jenkins execution engine together.
 
 ### Runtime Stack
@@ -136,9 +134,7 @@ DEMO_PREFIX=showcase DEMO_SLEEP_SECONDS=1200 DEMO_BLOCKER_COUNT=5 ./seed_demo_da
 2. [Transaction Monitoring Framework](doc/jobseeker/TransactionMonitoring)
 3. [ETL Helpers and Runtime Configuration](doc/jobseeker/ETL)
 4. [Job Management](doc/jobseeker/JobManagement)
-5. [File Manager](doc/jobseeker/FileManager)
-6. [Database Manager](doc/jobseeker/DatabaseManager)
-7. [Jenkins Setup Notes](doc/Jenkins)
+5. [Jenkins Setup Notes](doc/Jenkins)
 
 ### Example Implementations
 
