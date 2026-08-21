@@ -201,16 +201,6 @@
               </div>
 
             </div>
-
-            <div class="row">
-              <div class="col-lg-12 col-md-12">
-                  <div class="text-center">
-                    <img class="img img-responsive animated bounceIn a" src="<?php echo base_url() ?>assets/images/gifs/truhero.gif" height="300" width="700" style="display: inline;">
-                    <h2 class="b" style="display:none;"><b>Click to process</b></h2>
-                  
-                  </div>
-              </div>
-            </div>
             
          </form>
          
