@@ -108,9 +108,16 @@
         var jenkins_username = '';
         var jenkins_token = '';
         var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+        var requestedJob = new URLSearchParams(window.location.search).get('job') || '';
+
+        function jenkinsJobPath(jobName) {
+          return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
+            return 'job/' + encodeURIComponent(segment);
+          }).join('/');
+        }
 
         $.ajax({
-          url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
+          url: jenkins_url + 'api/json?tree=jobs[name,fullName,builds[number,actions[parameters[name,value]]]]&pretty=true',
           method: 'GET',
           headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
@@ -121,12 +128,26 @@
         }).done(function(data) {
 
          $.each(data["jobs"], function (key, item) {
-          newJson = item.name;
+          newJson = item.fullName || item.name;
           $('#selector').append($('<option>', {
             value: newJson,
             text: newJson
           }))
         });
+
+         if (requestedJob !== '') {
+          var requestedOption = $('#selector option').filter(function() {
+            return this.value === requestedJob;
+          });
+          if (requestedOption.length === 0) {
+            $('#selector').append($('<option>', {
+              value: requestedJob,
+              text: requestedJob
+            }));
+          }
+          $('#selector').val(requestedJob);
+          $('#view').trigger('click');
+         }
 
          $('.overlay').hide();
 
@@ -141,10 +162,9 @@
         if(job == '0'){
           toastr.error("Please, Select an avaiable job to view.", "Error");
         } else {
-         var encodedJob = encodeURIComponent(job);
          $('.overlay').show();
          $.ajax({
-          url: jenkins_url + 'job/'+ encodedJob +'/api/json',
+          url: jenkins_url + jenkinsJobPath(job) + '/api/json',
           method: 'GET',
           headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
           beforeSend: function() {
@@ -217,7 +237,7 @@
           if(lastBuild != "<b style='color:red;'>None</b>") {
             var log = $.ajax({
               contentType: "application/text",
-              url: jenkins_url + 'job/'+ encodeURIComponent(data.fullName) +'/lastBuild/consoleText',
+              url: jenkins_url + jenkinsJobPath(data.fullName) + '/lastBuild/consoleText',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               async: false,
@@ -246,7 +266,7 @@
 
          var xml = $.ajax({
               contentType: "application/text",
-              url: jenkins_url + 'job/'+ encodeURIComponent(data.fullName) +'/config.xml',
+              url: jenkins_url + jenkinsJobPath(data.fullName) + '/config.xml',
               method: 'GET',
               headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
               async: false,

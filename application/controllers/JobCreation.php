@@ -22,13 +22,97 @@ class JobCreation extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Job Creation';
+      $data = array('job_creation_dates' => $this->readJobCreationDates());
         
-        $this->loadViews("jobCreation", $this->global, NULL, NULL);
+      $this->loadViews("jobCreation", $this->global, $data, NULL);
 
     }
 
     private function canManageJobs() {
       return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+    }
+
+    private function jenkinsJobPath($jobName) {
+      $segments = explode('/', trim((string) $jobName, '/'));
+      $path = array();
+
+      foreach ($segments as $segment) {
+        if ($segment !== '') {
+          $path[] = 'job/' . rawurlencode($segment);
+        }
+      }
+
+      return implode('/', $path);
+    }
+
+    private function isSuccessfulJenkinsStatus($status) {
+      return in_array((int) $status, array(200, 201, 302, 303), TRUE);
+    }
+
+    private function saveGeneratedJenkinsJob($jobName, $xml) {
+      $jobPath = $this->jenkinsJobPath($jobName);
+      $jobResponse = $this->requestJenkins('GET', $jobPath . '/api/json');
+
+      if ((int) $jobResponse['status'] === 200) {
+        $saveResponse = $this->requestJenkins('POST', $jobPath . '/config.xml', $xml, 'text/xml');
+
+        return array(
+          'ok' => $this->isSuccessfulJenkinsStatus($saveResponse['status']),
+          'updated' => TRUE,
+          'status' => $saveResponse['status']
+        );
+      }
+
+      if ((int) $jobResponse['status'] === 404) {
+        $saveResponse = $this->requestJenkins('POST', 'createItem?name=' . rawurlencode($jobName), $xml, 'text/xml');
+
+        return array(
+          'ok' => $this->isSuccessfulJenkinsStatus($saveResponse['status']),
+          'updated' => FALSE,
+          'status' => $saveResponse['status']
+        );
+      }
+
+      return array(
+        'ok' => FALSE,
+        'updated' => FALSE,
+        'status' => $jobResponse['status']
+      );
+    }
+
+    private function jobCreationDatesPath() {
+      return APPPATH . 'cache/job_creation_dates.json';
+    }
+
+    private function readJobCreationDates() {
+      $path = $this->jobCreationDatesPath();
+
+      if (! is_readable($path)) {
+        return array();
+      }
+
+      $json = file_get_contents($path);
+      $dates = json_decode($json, TRUE);
+
+      if (! is_array($dates)) {
+        return array();
+      }
+
+      $cleanDates = array();
+      foreach ($dates as $jobName => $createdAt) {
+        if (is_string($jobName) && is_string($createdAt) && $jobName !== '' && $createdAt !== '') {
+          $cleanDates[$jobName] = $createdAt;
+        }
+      }
+
+      return $cleanDates;
+    }
+
+    private function recordJobCreationDate($jobName, $createdAt) {
+      $dates = $this->readJobCreationDates();
+      $dates[$jobName] = $createdAt;
+
+      return file_put_contents($this->jobCreationDatesPath(), json_encode($dates, JSON_PRETTY_PRINT), LOCK_EX) !== FALSE;
     }
 
     private function generateJobName() {
@@ -43,7 +127,6 @@ class JobCreation extends BaseController
 
       return $names[array_rand($names)].'-'.$traits[array_rand($traits)].'-'.$token;
     }
-
 
     public function do_upload($val,$job_name) {
 
@@ -470,7 +553,6 @@ class JobCreation extends BaseController
                 if ($job_name === '') {
                   $job_name = $this->generateJobName();
                 }
-
                 $description = trim((string) $this->security->xss_clean($this->input->post('description')));
                 $triggerAfterSave = $this->security->xss_clean($this->input->post('trigger_after_save')) == '1' ? '1' : '0';
 
@@ -1176,15 +1258,48 @@ class JobCreation extends BaseController
                 // Append document to root node
                 $dom->appendChild($root);
                 // Save XML file
-                $dom->save('/php/data/'.$xml_file_name);
-                // Read XML File to obtain xml text
-                $content = htmlentities(file_get_contents('/php/data/'.$xml_file_name));
+                $xmlPath = '/php/data/'.$xml_file_name;
+                if ($dom->save($xmlPath) === FALSE) {
+                  $this->session->set_flashdata('error', 'Unable to prepare the Jenkins job configuration.');
+                  redirect('JobCreation');
+                }
 
-                // Create flash data to send to view
-                 $this->session->set_flashdata('xml', $content);
-                 $this->session->set_flashdata('job_name', $job_name);
-                 $this->session->set_flashdata('trigger_after_save', $triggerAfterSave);
-                 $this->session->set_flashdata('success', 'Your XML File has been successfully created !');
+                $xmlContent = file_get_contents($xmlPath);
+                if ($xmlContent === FALSE) {
+                  $this->session->set_flashdata('error', 'Unable to read the generated Jenkins job configuration.');
+                  redirect('JobCreation');
+                }
+
+                $saveResult = $this->saveGeneratedJenkinsJob($job_name, $xmlContent);
+
+                if (! $saveResult['ok']) {
+                  $this->session->set_flashdata('error', 'Your Jenkins job save request failed. Jenkins returned HTTP '.$saveResult['status'].'.');
+                  redirect('JobCreation');
+                }
+
+                $createdAt = NULL;
+                if (! $saveResult['updated']) {
+                  $createdAt = date('c');
+                  $this->recordJobCreationDate($job_name, $createdAt);
+                }
+
+                $successMessage = 'Your job has been successfully '.($saveResult['updated'] ? 'updated' : 'created').'.';
+
+                if ($triggerAfterSave === '1') {
+                  $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($job_name) . '/build');
+
+                  if ($this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
+                    $successMessage .= ' It has also been triggered.';
+                  } else {
+                    $this->session->set_flashdata('error', 'The job was saved, but the trigger request failed. Jenkins returned HTTP '.$triggerResponse['status'].'.');
+                  }
+                }
+
+                 $this->session->set_flashdata('success', $successMessage);
+                 $this->session->set_flashdata('saved_job_name', $job_name);
+                 if ($createdAt !== NULL) {
+                   $this->session->set_flashdata('saved_job_created_at', $createdAt);
+                 }
 
                 redirect('JobCreation');
 

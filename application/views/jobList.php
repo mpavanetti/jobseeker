@@ -279,6 +279,7 @@ pre {
               <th>Trigger Job</th>
               <th>Last Build Output</th>
               <th>Abort Job</th>
+              <th>Inspect Job</th>
               <th>Delete Job</th>
             </tr>
           </thead>
@@ -301,6 +302,7 @@ pre {
               <th>Trigger Job</th>
               <th>Last Build Output</th>
               <th>Abort Job</th>
+              <th>Inspect Job</th>
               <th>Delete Job</th>
             </tr>
         </tfoot> 
@@ -434,6 +436,7 @@ pre {
   var jobScheduleRequests = {};
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
   var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
+  var jobViewUrl = <?php echo json_encode(base_url() . 'jobView?job='); ?>;
 
   function jenkinsJobPath(jobName) {
     return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
@@ -1157,6 +1160,10 @@ pre {
 
             var jobName = row.fullName || row.name || '';
             return '<button class="btn btn-sm btn-danger abort" href="#" value="'+ escapeAttribute(jobName) +'" title="Click to cancel this job execution">Abort</button>';
+          }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){
+            var jobName = row.fullName || row.name || '';
+            return '<a class="btn btn-sm btn-default" href="' + jobViewUrl + encodeURIComponent(jobName) + '" title="Inspect this Jenkins job"><i class="fa fa-eye"></i> Inspect</a>';
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             if (! canManageJobs) {

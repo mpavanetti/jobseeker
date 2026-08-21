@@ -8,6 +8,7 @@ repository/Talend/input/jobInfo.xlsx
 repository/Talend/output/jobInfo.json
 *.xlsx
 json/result.json
+application/cache/job_creation_dates.json
 repository/Talend/input/jobInfo.xlsx
 xml/
 config/*
