@@ -35,9 +35,40 @@ class JenkinsProxy extends BaseController
             $response['status'] = 200;
         }
 
+        $this->forwardJenkinsResponseHeaders($response);
+
         $this->output
             ->set_status_header($response['status'])
             ->set_content_type($response['content_type'])
             ->set_output($response['body']);
+    }
+
+    private function forwardJenkinsResponseHeaders($response)
+    {
+        if (empty($response['headers']) || ! is_array($response['headers'])) {
+            return;
+        }
+
+        $headersToForward = array('Location', 'X-Text-Size', 'X-More-Data');
+
+        foreach ($response['headers'] as $header) {
+            foreach ($headersToForward as $name) {
+                if (stripos($header, $name . ':') !== 0) {
+                    continue;
+                }
+
+                $value = trim(substr($header, strlen($name) + 1));
+
+                if ($value === '' || preg_match('/[\r\n]/', $value)) {
+                    continue;
+                }
+
+                if ($name === 'Location') {
+                    $this->output->set_header('X-JobSeeker-Jenkins-Location: ' . $value, TRUE);
+                } else {
+                    $this->output->set_header($name . ': ' . $value, TRUE);
+                }
+            }
+        }
     }
 }

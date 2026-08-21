@@ -34,13 +34,13 @@ class BaseController extends CI_Controller {
 
 	protected function requestJenkins($method, $path, $body = '', $contentType = NULL) {
 		if ($path === NULL || $path === '' || preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $path) || strpos($path, '..') !== FALSE) {
-			return array('status' => 400, 'content_type' => 'text/plain', 'body' => 'Invalid Jenkins path.');
+			return array('status' => 400, 'content_type' => 'text/plain', 'body' => 'Invalid Jenkins path.', 'headers' => array());
 		}
 
 		$config = $this->getRuntimeConfig();
 
 		if (empty($config->jenkins->enabled)) {
-			return array('status' => 503, 'content_type' => 'text/plain', 'body' => 'Jenkins integration is disabled.');
+			return array('status' => 503, 'content_type' => 'text/plain', 'body' => 'Jenkins integration is disabled.', 'headers' => array());
 		}
 
 		$jenkinsUrl = getenv('JOBSEEKER_JENKINS_INTERNAL_URL') ?: $config->jenkins->url;
@@ -116,10 +116,10 @@ class BaseController extends CI_Controller {
 		}
 
 		if ($response === FALSE) {
-			return array('status' => 502, 'content_type' => 'text/plain', 'body' => 'Unable to reach Jenkins.');
+			return array('status' => 502, 'content_type' => 'text/plain', 'body' => 'Unable to reach Jenkins.', 'headers' => $responseHeaders);
 		}
 
-		return array('status' => $statusCode, 'content_type' => $responseContentType, 'body' => $response);
+		return array('status' => $statusCode, 'content_type' => $responseContentType, 'body' => $response, 'headers' => $responseHeaders);
 	}
 
 	protected function getUploadedFile($field, $allowedExtensions = array(), $maxBytes = 104857600) {
