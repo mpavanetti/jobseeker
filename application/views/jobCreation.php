@@ -34,6 +34,11 @@
   </section>
   <section class="content">
     <div class="container">
+      <div class="row" style="margin-top: 10px; margin-bottom: 10px;">
+        <div class="col-xs-12 text-right">
+          <a class="btn btn-default" href="<?php echo base_url(); ?>jobList"><i class="fa fa-list"></i> Job Build List</a>
+        </div>
+      </div>
 <!--    <div class="row" style="margin-top: 10px; margin-bottom: 40px;">
      <div class="col-lg-12 col-md-12 col-xs-12">
       <div class="text-center">

@@ -1,4 +1,5 @@
  <?php // print_r($jobs) ?>
+ <?php $canManageJobs = isset($canManageJobs) ? (bool) $canManageJobs : false; ?>
  <!-- <script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse');
@@ -152,14 +153,14 @@ pre {
 <!-- Main content -->
 <section class="content">
   <div class="container">
- <?php if($role != 1) {  ?>
+ <?php if($canManageJobs) {  ?>
   <div class="row">
     <div class="col-xs-12 text-left">
       <div class="form-group">
         <a class="btn btn-primary" href="<?php echo base_url(); ?>jobCreation"><i class="fa fa-plus"></i> Add New Job</a>
         <a id="load" class="btn btn-success" href="#" style="margin-left: 10px;"><i class="fa fa-refresh"></i> Load Data</a>
          <label class="switch" style="margin-left: 15px; padding-top: 3px;">
-          <input type="checkbox" name="refresh" id="refresh" value="1">
+          <input type="checkbox" name="refresh" id="refresh" value="1" checked>
           <span class="slider round"></span>
         </label> <b style="margin-left: 10px; font-size: 15px;">Enable Auto Refresh</b>
       </div>
@@ -278,6 +279,7 @@ pre {
               <th>Trigger Job</th>
               <th>Last Build Output</th>
               <th>Abort Job</th>
+              <th>Delete Job</th>
             </tr>
           </thead>
           <tbody>
@@ -299,6 +301,7 @@ pre {
               <th>Trigger Job</th>
               <th>Last Build Output</th>
               <th>Abort Job</th>
+              <th>Delete Job</th>
             </tr>
         </tfoot> 
       </table>
@@ -426,13 +429,48 @@ pre {
   var jobMonitorFilter = 'all';
   var jobMonitorFilterRegistered = false;
   var jobDataTablesErrorModeConfigured = false;
+  var jobListLoadInProgress = false;
   var jobScheduleCache = {};
   var jobScheduleRequests = {};
+  var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
+  var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
 
   function jenkinsJobPath(jobName) {
     return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
       return 'job/' + encodeURIComponent(segment);
     }).join('/');
+  }
+
+  function deleteJenkinsJob(jobName, jenkinsUrl) {
+    return $.ajax({
+      url: jenkinsUrl + jenkinsJobPath(jobName) + '/doDelete',
+      method: 'POST'
+    });
+  }
+
+  function deleteJobRepositories(jobNames) {
+    return $.ajax({
+      url: deleteRepositoriesUrl,
+      method: 'POST',
+      dataType: 'json',
+      data: {jobs: jobNames}
+    });
+  }
+
+  function reportRepositoryDeleteResults(data) {
+    var results = data && data.results ? data.results : [];
+    var deletedCount = results.filter(function(result) { return result.exist; }).length;
+    var invalidCount = results.filter(function(result) { return result.error; }).length;
+
+    if (deletedCount > 0) {
+      toastr.success(deletedCount + ' repository folder(s) deleted.', 'Repositories Deleted');
+    } else if (results.length > 0) {
+      toastr.warning('No matching repository folders were found.', 'No Repository Found');
+    }
+
+    if (invalidCount > 0) {
+      toastr.error(invalidCount + ' repository selection(s) were invalid.', 'Repository Delete Warning');
+    }
   }
 
   function jobsFromJenkinsResponse(json) {
@@ -987,25 +1025,34 @@ pre {
     });
   }
 
-  function startJobListRefresh() {
+  function clearJobListRefresh() {
     if (jobListRefreshTimer !== null) {
       clearInterval(jobListRefreshTimer);
+      jobListRefreshTimer = null;
     }
+  }
+
+  function startJobListRefresh() {
+    clearJobListRefresh();
 
     jobListRefreshTimer = setInterval(function(){
       if($('#refresh').is(":checked")){
         reloadJobTables();
       } else {
-        clearInterval(jobListRefreshTimer);
-        jobListRefreshTimer = null;
+        clearJobListRefresh();
       }
     }, jobListRefreshIntervalMs);
   }
 
   $('#refresh').change(function(){
-    if($(this).is(":not(:checked)") && jobListRefreshTimer !== null){
-      clearInterval(jobListRefreshTimer);
-      jobListRefreshTimer = null;
+    if($(this).is(":checked")){
+      if ($.fn.DataTable.isDataTable('#listTable')) {
+        startJobListRefresh();
+      } else {
+        loadJobListData();
+      }
+    } else {
+      clearJobListRefresh();
     }
   });
 
@@ -1020,15 +1067,34 @@ pre {
     }
   });
 
-  $('#load').click(function(){
-    $("#refresh").prop('checked', true);
+  function loadJobListData(options) {
+    options = options || {};
+
+    if (jobListLoadInProgress) {
+      return;
+    }
+
+    if ($.fn.DataTable.isDataTable('#listTable')) {
+      if (! options.silent) {
+        toastr.info('Refreshing data from server...', 'Query Data');
+      }
+      reloadJobTables();
+      if ($('#refresh').is(':checked')) {
+        startJobListRefresh();
+      }
+      return;
+    }
+
+    jobListLoadInProgress = true;
     
         var jenkins_url = '<?php echo $jenkins_url; ?>';
         var jenkins_username = '';
         var jenkins_token = '';
         var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
-        toastr.info('Fetching data from server...', 'Query Data');
+        if (! options.silent) {
+          toastr.info('Fetching data from server...', 'Query Data');
+        }
         $(".overlay").show();
 
       
@@ -1091,6 +1157,14 @@ pre {
 
             var jobName = row.fullName || row.name || '';
             return '<button class="btn btn-sm btn-danger abort" href="#" value="'+ escapeAttribute(jobName) +'" title="Click to cancel this job execution">Abort</button>';
+          }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){
+            if (! canManageJobs) {
+              return '';
+            }
+
+            var jobName = row.fullName || row.name || '';
+            return '<button class="btn btn-sm btn-danger delete-job" href="#" value="'+ escapeAttribute(jobName) +'" data-running="'+ (isJobRunning(row) ? '1' : '0') +'" title="Delete this Jenkins job">Delete</button>';
           }}
           ],
           "drawCallback": function() {
@@ -1182,11 +1256,19 @@ pre {
        });
         $('#box4').boxWidget('expand');
 
-       $(".overlay").hide(); 
+       $(".overlay").hide();
+       jobListLoadInProgress = false;
 
-       startJobListRefresh();
-           
-  })
+        if ($('#refresh').is(':checked')) {
+          startJobListRefresh();
+        }
+
+      }
+
+      $('#load').click(function(event){
+        event.preventDefault();
+        loadJobListData();
+      });
 
 
  $("#listTable").on('click','.abort',function(){
@@ -1216,6 +1298,57 @@ pre {
              }, 1000);
                 $('.overlay').hide();
               })
+    },
+      function(){
+        alertify.error('Operation Aborted')
+    }
+  );
+
+});
+
+ $("#listTable").on('click','.delete-job',function(){
+
+       if (! canManageJobs) {
+         toastr.error('You do not have permission to delete jobs.', 'Access Denied');
+         return;
+       }
+
+       var button = $(this),
+           jenkins_url = '<?php echo $jenkins_url; ?>',
+           job = button.val(),
+           isRunning = button.data('running') == 1;
+
+       var runningWarning = isRunning ? '<p><b>This job appears to be running. Jenkins may reject deletion until the build is stopped.</b></p>' : '';
+
+       alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Delete Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to delete the job <b>'+ escapeHtml(job) +'</b> permanently?</p>' + runningWarning + '<div class="checkbox text-left"><label><input type="checkbox" id="deleteBuildListRepository" checked> Also delete assigned job repository files.</label></div></div></div></div>',
+      function(){
+        var deleteRepository = $('#deleteBuildListRepository').is(':checked');
+        $('.overlay').show();
+
+        deleteJenkinsJob(job, jenkins_url).done(function() {
+          toastr.success('Jenkins job deleted successfully.', 'Job Deleted');
+          delete jobScheduleCache[job];
+
+          if (! deleteRepository) {
+            reloadJobTables();
+            $('.overlay').hide();
+            return;
+          }
+
+          deleteJobRepositories([job]).done(function(data) {
+            reportRepositoryDeleteResults(data);
+          }).fail(function() {
+            console.error(arguments);
+            toastr.error('The Jenkins job was deleted, but repository cleanup failed.', 'Repository Delete Failed');
+          }).always(function() {
+            reloadJobTables();
+            $('.overlay').hide();
+          });
+        }).fail(function() {
+          console.error(arguments);
+          toastr.error('The Jenkins job could not be deleted.', 'Delete Failed');
+          $('.overlay').hide();
+        });
     }, 
       function(){ 
         alertify.error('Operation Aborted')
@@ -1309,5 +1442,10 @@ $("#listTable").on('click','.log',function(){
 
     });
 
-    
+  $(function() {
+    $('#refresh').prop('checked', true);
+    setTimeout(function() {
+      loadJobListData({silent: true});
+    }, 0);
+  });
 </script>
