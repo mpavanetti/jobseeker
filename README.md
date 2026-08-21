@@ -125,21 +125,25 @@ DEMO_PREFIX=showcase DEMO_SLEEP_SECONDS=1200 DEMO_BLOCKER_COUNT=5 ./seed_demo_da
 
 ## Screenshots
 
-JobSeeker home:
+Dashboard with Jenkins and TMF status:
 
-![JobSeeker Home](doc/img/JobSeekerHome.png)
+![JobSeeker Dashboard](doc/img/JobSeekerDashboard.png)
 
-Transaction Monitoring query builder:
+Transaction Monitoring records:
 
-![JobSeeker TMF](doc/img/JobSeeker2.JPG)
+![JobSeeker TMF](doc/img/JobSeekerTMF.png)
 
-Job creation:
+Job creation and available jobs:
 
-![JobSeeker Job Creation](doc/img/JobSeeker8.JPG)
+![JobSeeker Job Creation](doc/img/JobSeekerJobCreation.png)
 
-Operational dashboard:
+Job build list:
 
-![JobSeeker DW and DM Dashboard](doc/img/JobSeeker7.png)
+![JobSeeker Job List](doc/img/JobSeekerJobList.png)
+
+Job execution workspace:
+
+![JobSeeker Job Execution](doc/img/JobSeekerJobExecution.png)
 
 ## Videos
 
