@@ -1,176 +1,185 @@
-# Jobseeker Python use case
-This use case demonstrate the functionallity of jobseeker in a real talend ETL job environment, and how jobseeker can be useful.
-<br>
-With this example, you can easily have logs insert into jobseeker for a great job monitoring option and also retrieve dynamic contexts from jobseeker, for on going job variables replacement.
+# JobSeeker Python SDK
 
-## Files
-[Folder] : [code](code), download this folder into your working environment. <br>
-[JobSeeker python class] : [jobseeker.py](code/script/jobseeker.py). This file contains a class implementing jobseeker in python, this is a plugin and can be called from external python scripts.<br>
+JobSeeker ships a small Python SDK that lets Python jobs write to the Transaction Monitoring Framework (TMF), read JobSeeker context values, update progress, and report failures with very little boilerplate.
 
-### Setting up [jobseeker.py](code/script/jobseeker.py)
-Easily you have just to change the database credentials to point to your jobseeker database instance.<br>
-Edit the file [jobseeker.py](code/script/jobseeker.py) using notepad and replace the following values, matching your database environment:<br>
-For example:
-```
-connection = {
-        "host": "192.168.0.6",
-        "port": 3306,
-        "user": "python",
-        "password": "python",
-        "database": "jobseeker"
-    }   
-```
-After replacing the connection key values matching your database environment it's time to install the jobseeker.py libraries in this case, mysql connector.<br>
-Have python intalled in your computer, open Command Prompt as administrator, and navegate to your python virtual environment and activate it, or if you don't have a python environment, you can use your python system environment.
-```
-pip3 install mysql-connector-python
-pip3 install pandas
+Jobs created from the Job Creation screen receive the SDK as a preinstalled runtime package, so new jobs can import it directly:
+
+```python
+from jobseeker import JobSeeker
 ```
 
-And that's it, you pretty much everything you need for logging and querying for contexts.
+The downloadable sample now only needs [code/pyjob.py](code/pyjob.py) and [code/requirements.txt](code/requirements.txt). The `jobseeker` package is provided by the JobSeeker runtime for uploaded files, inline scripts, repository paths, Git sources, Jenkins-agent execution, and Docker execution.
 
-### Creating Projects, Environments and adding contexts
-For creating projects, environments and adding contexts take a look in the documentation at [Context Settings](../../jobseeker/ETL/contextsettings)
+## Runtime Requirements
 
-## Adding contexts
+The current SDK runtime writes TMF records through MariaDB and declares `mysql-connector-python` as its own package dependency. Python jobs do not need to include that dependency in their `requirements.txt` just to use `jobseeker`.
 
-Go to Jobseeker home page, navigate to Extract, Transform Load ->  Context Settings -> Context Details and add 3 context key values for three different environments.<br>
+The sample uses pandas, so its [code/requirements.txt](code/requirements.txt) contains:
 
-**LOCAL Environment:** Context Key: rows Context Value: 2 <br>
-**DEV Environment:** Context Key: rows Context Value: 5 <br>
-**PROD Environment:** Context Key: rows Context Value: 10 <br>
+```text
+pandas
+```
 
-As following:
+JobSeeker resolves database settings from environment variables first, then uses the defaults from the local Docker stack:
+
+| Variable | Default |
+| --- | --- |
+| `JOBSEEKER_DB_HOST` or `MYSQL_HOST` | `mariadb` |
+| `JOBSEEKER_DB_PORT` or `MYSQL_PORT` | `3306` |
+| `JOBSEEKER_DB_USER` or `MYSQL_USER` | `mysql` |
+| `JOBSEEKER_DB_PASSWORD` or `MYSQL_PASSWORD` | `mysql` |
+| `JOBSEEKER_DB_NAME` or `MYSQL_DATABASE` | `jobseeker` |
+
+The SDK also contains an HTTP transport boundary for a future JobSeeker API. When matching backend endpoints are available, jobs can switch transports with `JOBSEEKER_TRANSPORT=api`, `JOBSEEKER_API_URL`, and `JOBSEEKER_API_TOKEN` without changing task code.
+
+## Context Manager Style
+
+Use one `JobSeeker` client for the job, then create one TMF task per tracked unit of work. Each task writes its own TMF row and has its own `instance_id`.
+
+```python
+from jobseeker import JobSeeker
+
+
+with JobSeeker(environment="PROD", job="load_customers") as js:
+    with js.task("Load customers", "DW_Master") as tmf:
+        limit = tmf.context("rows", cast=int, default=100)
+
+        processed = load_customers(limit)
+
+        tmf.progress(processed=processed, total=limit, msg="Loaded customer batch")
+        tmf.finish(total=limit, processed=processed, msg="Customer load complete")
+```
+
+If code inside the `with js.task(...)` block raises an exception, the SDK records a TMF error and re-raises the exception so Jenkins still marks the build as failed.
+
+## Decorator Style
+
+For compact scripts, decorate the operation function. If the function accepts a `tmf` keyword argument, the SDK injects the active task object.
+
+```python
+from jobseeker import JobSeeker
+
+
+js = JobSeeker(environment="PROD", job="load_orders")
+
+
+@js.track("Load orders", "DW_Master")
+def run(tmf):
+    limit = tmf.context("rows", cast=int, default=100)
+    processed = load_orders(limit)
+    tmf.finish(total=limit, processed=processed, msg="Orders loaded")
+
+
+if __name__ == "__main__":
+    run()
+```
+
+The module-level decorator works the same way when you do not need to keep a client object:
+
+```python
+from jobseeker import task
+
+
+@task("Load invoices", "DW_Master", job="load_invoices", environment="PROD")
+def run(tmf):
+    batch_size = tmf.context("rows", cast=int, default=100)
+    processed = load_invoices(batch_size)
+    tmf.finish(total=batch_size, processed=processed)
+```
+
+## Reading Context Values
+
+Context values are read from `vw_contextdetails` using parameterized queries. The modern API can cast, default, or require values:
+
+```python
+rows = tmf.context("rows", cast=int, default=10)
+endpoint = tmf.context("api_url", required=True, project="Default")
+```
+
+Use `project` when the same context key exists in multiple projects.
+
+## Progress And Failure Logging
+
+Use `progress` for heartbeats and partial counters during long jobs:
+
+```python
+for index, row in enumerate(rows, start=1):
+    process(row)
+    if index % 500 == 0:
+        tmf.progress(processed=index, total=len(rows), msg="Processed {} rows".format(index))
+```
+
+Use `finish` when the task completes. Let exceptions bubble out of the task block; the SDK records them in `tmf_error` automatically.
+
+```python
+with js.task("Build report", "DW_Master") as tmf:
+    report = build_report()
+    tmf.finish(total=1, processed=1, msg=report.html)
+```
+
+## Creating Contexts
+
+Go to JobSeeker home page, navigate to Extract, Transform Load -> Context Settings -> Context Details, and add context key values for each environment.
+
+For this sample, add a `rows` context:
+
+| Environment | Context Key | Context Value |
+| --- | --- | --- |
+| `LOCAL` | `rows` | `2` |
+| `DEV` | `rows` | `5` |
+| `PROD` | `rows` | `10` |
 
 ![Context](img/context.JPG)
 
-Once you have add those 3 contexts, that's all we need for this use case.
+## Deploying Python Jobs
 
+JobSeeker supports Python jobs from a single uploaded `.py` file, a ZIP, an existing repository path, a Git repository, or the inline Python editor. In every mode, the runtime installs the bundled SDK first, so scripts can use `from jobseeker import JobSeeker` without bundling helper code or adding `mysql-connector-python` to job requirements.
 
-## Explaining jobseeker python functions
-Open up the file [pyjob.py](code/pyjob.py) and take a look in the jobseeker functions being called.
-```
-# This function starts jobseeker passing the environment and jobname as arguments
-js = jobSeeker(environment,jobName)
+Inline Python opens a small workspace with the entry script, optional `requirements.txt`, extra `.py` files, and a Dockerfile tab when Docker runtime is selected. Empty inline jobs start from a JobSeeker template that reads the `rows` context value, writes progress, and finishes a TMF row. The magic-wand button restores that starter template.
 
-# This function queries from jobseeker context database the context key "rows" we just added and store its value.
-rows = int(js.getContext("rows"))
+Python jobs can run on Jenkins agent `python3` or inside a Docker image such as `python:3.12-slim`. Use Docker when a job needs a specific Python version or system packages. For ZIP/path/Git sources, put `requirements.txt` and optional `Dockerfile` at the source root or beside the entry script.
 
-# This function starts the transaction in the TMF framework in jobseeker, passing the event_text and dimension as arguments.
-js.begin("Sample Python Job","DW_Master")
+## Demo Seed Jobs
 
-# This function finishes the transaction in TMF framework in jobseeker, displaying the ready status, passing the processed rows(rows read and rows processed) + a message field for logging porpuse.
-js.end(rows,rows,msg)
+The root [seed_demo_data.sh](../../seed_demo_data.sh) script stages the bundled SDK package into `repository/python/lib/jobseeker-sdk` and creates two runnable Python SDK demo jobs:
 
-# This function updates the transaction in TMF framework in case any error and stores the exception error message.
-js.error(str(e))
-```
+- `demo-python-sdk-agent` runs on the Jenkins agent, imports `JobSeeker`, writes progress, and finishes a TMF row.
+- `demo-python-sdk-docker` runs inside `python:3.12-slim`, installs the same SDK package inside the container, and writes a TMF row through the Docker runtime.
 
-This simple [pyjob.py](code/pyjob.py) python script, basically query context from jobseeker database, starts a jobseeker transaction, process a simple pandas dataframe, convert it into html, ends the jobseeker transaction and outputs the pandas dataframe to the console.
+Use `DEMO_PREFIX=showcase ./seed_demo_data.sh` to create the same jobs with a different prefix, and `./seed_demo_data.sh --cleanup` to remove both the Jenkins jobs and their TMF rows.
 
-## Deploying python job
+## Running The Sample
 
-Note that you can run this python script in your local machine in case you have python installed, otherwise you can deploy to jobseeker server.
-
-For a single Python file, upload the `.py` file directly. In the Docker runtime, JobSeeker exposes the shared helper on `PYTHONPATH`, so scripts can import it with `from jobseeker import jobSeeker` without bundling `script/jobseeker.py`.
-
-For multi-file Python jobs, you can upload a ZIP, point JobSeeker at an existing repository path, or provide a Git repository URL plus the entry Python file. When Jenkins runs the job, it runs from the source directory, adds the source directory and shared helper to `PYTHONPATH`, and installs a local `.jobseeker-python-libs` dependency folder when `requirements.txt` is present.
-
-If you still want to upload a ZIP, go to the [code](code) folder you have downloaded, select both [pyjob.py](code/pyjob.py) and [code/script](code/script) folder, right mouse button click, go to send to and zipped folder and rename it to pyjob.zip.
+To run the downloadable sample as a ZIP, select [code/pyjob.py](code/pyjob.py) and [code/requirements.txt](code/requirements.txt), then zip them as `pyjob.zip`.
 
 ![Context](img/context2.JPG)
 
 ![Context](img/files.JPG)
 
-You'll find a pyjob.zip file. Use that ZIP for uploaded multi-file jobs, upload a single `.py` file when no extra files need to travel with the job, or use a repository path/Git URL when Jenkins should pull the Python source itself.
-
-## Creating a jobseeker job
-
-Go to the jobseeker home page, navigate under job management, and click on Job Creation. <br>
-Type in Job Name field "pyjob", or leave it blank to let JobSeeker generate one. <br>
-Description is optional.<br>
-Check the box "Execute a windows local command or script"<br>
-Below at execute a Linux command, for Execution strategy, select "Script execution" and for Script Type select "python Script".<br>
-Choose the Python source: upload a Python `.py`/`.zip`, point to a path under the JobSeeker repository, or enter a Git repository URL and entry Python file.<br>
+Create a Python job named `pyjob`, select Python source upload, upload `pyjob.zip`, set the entry file to `pyjob.py`, and choose an environment such as `PROD`.
 
 ![Context](img/context3.JPG)
 
-And we have the file uploaded to the jobseeker server as following:
-
 ![Context](img/context4.JPG)
-
-### Choosing an Environment
-Check the box "Choose Environment" <br>
-Below in the "Select an Environment" box, select "PROD".
 
 ![Context](img/context5.JPG)
 
-### Publishing Job
-
-Click on the button "Save Job".
-
+Publish the job, then run it from Job Execution.
 
 ![Context](img/context6.JPG)
 
-Your job has been successfully published.
-
 ![Context](img/context7.JPG)
-
-
-## Running job
-Go to Jobseeker home page, navigate over Job Management, click on "Job Execution"<br>
-Select the job we just created in the Job Selector, "pyjob"<br>
-Click on the button "Play".
 
 ![Context](img/context8.JPG)
 
-Your job is running as requested.
-
 ![Context](img/context9.JPG)
 
-
- Your job has been successfully executed, and you can check the results in the Console Log Output view
+The Jenkins console shows the Python output, and the Transaction Monitoring Framework shows the TMF row and HTML message produced by `tmf.finish(...)`.
 
 ![Context](img/context10.JPG)
 
-
-## Checking job server logs
-
-You can either check the server job log frmo the Job Management, Job Build List or Full Job Build List which is a more complete job log history and contains all the executions.<br>
-You can click in the build numbers to check the latest logs.
-
-![Context](img/context11.JPG)
-
-Click on the last build number, check the server logs, note that 10 rows has been retrived, that's why we selected the PROD environment which specifies 10 rows must be retrieved.
-
-![Context](img/context12.JPG)
-
-Check the Job Build List option under Job Management also, click on button Load Data<br>
-In this area you can trigger multiple jobs and check their results in real time. also check the latest success and failure job build.
-
-![Context](img/context13.JPG)
-
-### Checking Transaction Monitoring
-
-Go to the jobseeker left side navigation bar, select Transaction Monitoring Framework.<br>
-On Query Builder, select the "PROD" environment at Available Environments dropdown and select today's date at "From Date" field.<br>
-Select pyjob in the avialable job name dropdown<br>
-Click on search button (blue button)
-
 ![Context](img/context14.JPG)
-
-Here we have the result of our job executions and total of processed records.<br>
-Click on Check Message button.
 
 ![Context](img/context15.JPG)
 
-This is the pandas html table output we did in the pyjob job.
-
 ![Context](img/context16.JPG)
-
-
-## Test it 
-
-Feel free to test using other python scripts, more contexts, and implement your ideas ! contexts replacement per environment are very useful when you have connections, credentials, variables that needs to has a different value per environment.
-
-Thanks.
