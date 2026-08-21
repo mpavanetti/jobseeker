@@ -19,6 +19,68 @@
     
     font-size: 16px;
   }
+
+  .job-form-row {
+    align-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .job-form-row:before,
+  .job-form-row:after {
+    display: none;
+  }
+
+  .job-form-row > [class*="col-"] {
+    display: flex;
+    float: none;
+  }
+
+  .job-form-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .job-form-card .box-body {
+    flex: 1 1 auto;
+  }
+
+  .job-options-list .checkbox {
+    margin: 0 0 12px;
+    padding: 4px 0;
+  }
+
+  .job-form-actions {
+    align-items: center;
+    border-top: 1px solid #edf1f5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+  }
+
+  #build .box-body,
+  #runWinCommand .box-body,
+  #runlinuxCommand .box-body,
+  #enableEmail .box-body,
+  #abortIfStuck .box-body,
+  #runJob .box-body,
+  #environmentBox .box-body,
+  #editableEmail .box-body {
+    max-height: 540px;
+    overflow-y: auto;
+  }
+
+  #myTable tr.jobRecentlySaved > td {
+    background-color: #fff8d9 !important;
+  }
+
+  #myTable tr.jobRecentlySaved > td:first-child {
+    border-left: 4px solid #00a65a;
+  }
+
 </style>
 <div class="content-wrapper">    
   <section class="content-header">
@@ -51,23 +113,42 @@
    <div class="col-md-12">
     <?php 
     $this->load->helper('form');
+    $savedJobName = $this->session->flashdata('saved_job_name');
+    if($savedJobName)
+    {
+      $this->session->unset_userdata('saved_job_name');
+    }
+    $savedJobCreatedAt = $this->session->flashdata('saved_job_created_at');
+    if($savedJobCreatedAt)
+    {
+      $this->session->unset_userdata('saved_job_created_at');
+    }
+    $jobCreationDates = isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array();
     $error = $this->session->flashdata('error');
+    if($error)
+    {
+      $this->session->unset_userdata('error');
+    }
     if($error)
     {
       ?>
       <div class="alert alert-danger alert-dismissable">
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <?php echo $this->session->flashdata('error'); ?>                    
+        <?php echo $error; ?>
       </div>
     <?php } ?>
     <?php  
     $success = $this->session->flashdata('success');
     if($success)
     {
+      $this->session->unset_userdata('success');
+    }
+    if($success && $success !== 'Your XML File has been successfully created !')
+    {
       ?>
       <div class="alert alert-success alert-dismissable destroy">
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <?php echo $this->session->flashdata('success'); ?>
+        <?php echo $success; ?>
       </div>
     <?php } ?>
 
@@ -96,7 +177,7 @@
             <tr>
               <th>Build Situation</th>
             <th>Job Name</th>
-            <th>Url</th>
+            <th>Created</th>
             <th>Actions</th>
             </tr>
           </thead>
@@ -106,7 +187,7 @@
            <tr>
             <th>Build Situation</th>
             <th>Job Name</th>
-            <th>Url</th>
+            <th>Created</th>
             <th>Actions</th>
           </tr>
         </tfoot>
@@ -126,9 +207,9 @@
   Editing <b class="editJobName"></b>. Saving will update this Jenkins job unless you change the job name.
   <button type="button" id="clearEditJob" class="btn btn-default btn-xs pull-right"><i class="fa fa-plus"></i> New Job</button>
 </div>
-<div class="row">
+<div class="row job-form-row">
   <div class="col-lg-6 col-md-6 col-xs-12">
-    <div class="box box-primary" style="padding-bottom: 15px;">
+    <div class="box box-primary job-form-card" style="padding-bottom: 15px;">
       <div class="overlay" style="display:none;">
         <i class="fa fa-refresh fa-spin"></i>
       </div>
@@ -159,7 +240,7 @@
     </div>
 
     <div class="col-lg-6 col-md-6 col-xs-12">
-      <div class="box box-primary">
+      <div class="box box-primary job-form-card">
         <div class="overlay" style="display:none;">
           <i class="fa fa-refresh fa-spin"></i>
         </div>
@@ -172,7 +253,7 @@
         </div>
         <!-- /.box-header -->
         <!-- form start -->
-        <div class="box-body">
+        <div class="box-body job-options-list">
           <div class="checkbox">
             <label>
               <input type="checkbox" name="checkBuild" id="checkBuild" value="1"> Schedule Job
@@ -222,10 +303,10 @@
             </label>
           </div>
           <div class="form-group" style="margin-top: 20px;">
-            <div class="form-group">
+            <div class="form-group job-form-actions">
               <input type="hidden" name="trigger_after_save" id="trigger_after_save" value="0">
-              <button type="submit" id="send" href="#" class="btn btn-success buildXmlBtn"><i class="fa fa-save"></i> Save Job</button>
-              <button type="submit" id="saveAndTrigger" class="btn btn-primary buildXmlBtn"><i class="fa fa-play"></i> Save And Trigger</button>
+              <button type="submit" id="send" href="#" class="btn btn-success buildXmlBtn"><i class="fa fa-save"></i> Create Job</button>
+              <button type="submit" id="saveAndTrigger" class="btn btn-primary buildXmlBtn"><i class="fa fa-play"></i> Create And Trigger</button>
               <span class="saveJobStatus text-muted" style="display: none; margin-left: 10px;"></span>
             </div>
           </div>
@@ -829,31 +910,6 @@
       </form> <!-- Close Form -->
         <div id="output"></div>
 
-        <?php
-        $xml = $this->session->flashdata('xml');
-        if($xml)
-        {
-        ?>
-        <div class="row generatedXmlPanel">
-          <div class="col-lg-12 col-md-12 col-xs-12">
-            <div class="box">
-              <div class="box-header with-border">
-                <div class="box-tools pull-right">
-                  <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                  </button>
-                </div>
-                <h3 class="box-title"><b>Generated Jenkins XML</b></h3>
-              </div>
-              <div class="box-body">
-                <pre id="xml" class="xml"><?php echo $xml; ?> </pre>
-              </div>
-              <div class="overlay" style="display:none;">
-                <i class="fa fa-refresh fa-spin"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-        <?php } ?>
     </div>
   </section>
 </div>
@@ -942,6 +998,13 @@
     var jenkins_username = '';
     var jenkins_token = '';
      var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';    
+      var savedJobName = <?php echo json_encode($savedJobName); ?>;
+      var savedJobCreatedAt = <?php echo json_encode($savedJobCreatedAt); ?>;
+      var jobCreationDates = <?php echo json_encode($jobCreationDates); ?> || {};
+
+      if (savedJobName && savedJobCreatedAt) {
+       jobCreationDates[savedJobName] = savedJobCreatedAt;
+      }
 
      function escapeHtml(value) {
       return $('<div>').text(value == null ? '' : value).html();
@@ -949,6 +1012,35 @@
 
     function escapeAttribute(value) {
       return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function jobNameFromRow(row) {
+      return row && (row.fullName || row.name) ? (row.fullName || row.name) : '';
+    }
+
+    function renderJobCreationDate(jobName, type) {
+      var createdAt = jobCreationDates[jobName] || '';
+      var timestamp = Date.parse(createdAt);
+
+      if (type === 'sort' || type === 'type') {
+        return isNaN(timestamp) ? 0 : timestamp;
+      }
+
+      if (createdAt === '' || isNaN(timestamp)) {
+        return '<span class="text-muted">Not tracked</span>';
+      }
+
+      return escapeHtml(new Date(timestamp).toLocaleString());
+    }
+
+    function isRecentlySavedJob(jobName) {
+      return savedJobName && jobName === savedJobName;
+    }
+
+    function expandAvailableJobsBox() {
+      if ($('#box').hasClass('collapsed-box')) {
+        $('#box').boxWidget('expand');
+      }
     }
 
     function firstXmlElement(xmlDoc, tagName, root) {
@@ -999,6 +1091,25 @@
       });
     }
 
+    function resetScheduleControls() {
+      $('#checkBuild').prop('checked', false);
+      $('#action').val('0');
+      $('#tag').val('@hourly');
+      setSelectValues('#singleMinute', ['*']);
+      setSelectValues('#singleHour', ['*']);
+      setSelectValues('#singleDayOfMonth', ['*']);
+      setSelectValues('#singleMonth', ['*']);
+      setSelectValues('#singleDayOfWeek', ['*']);
+      setSelectValue('#repetitiveMinute', '*');
+      setSelectValue('#repetitiveHour', '*');
+      setSelectValue('#repetitiveDayOfMonth', '*');
+      setSelectValue('#repetitiveMonth', '*');
+      setSelectValue('#repetitiveDayOfWeek', '*');
+      $('.singleForm, .repetitive, .tags, #build').stop(true, true).hide();
+      singleEveryMinuteAcknowledged = false;
+      repetitiveEveryMinuteAcknowledged = false;
+    }
+
     function resetJobCreationForm() {
       var form = $('#InsertDbSettings')[0];
       if (form) {
@@ -1010,7 +1121,7 @@
       $('.editJobName').text('');
       $('.saveJobStatus').hide().text('');
       $('.select2').val(null).trigger('change');
-      $('#action').val('0');
+      resetScheduleControls();
       $('#linuxExecutionStrategy').val('0');
       $('#linuxScriptType').val('0');
       $('#executionStrategy').val('0');
@@ -1029,8 +1140,7 @@
       var spec = firstXmlText(xmlDoc, 'spec');
 
       if (spec === '') {
-        $('#checkBuild').prop('checked', false);
-        $('#build').hide();
+        resetScheduleControls();
         return;
       }
 
@@ -1661,91 +1771,79 @@
       });
 
 
-    $('#checkBuild').click(function(){
-      if($(this).is(":checked")){
+    function updateScheduleActionForms() {
+      var val = $('#action').val();
 
-        $('#build').fadeIn();
+      if (! $('#checkBuild').is(':checked') || val == '0') {
+        $('.singleForm, .repetitive, .tags').stop(true, true).hide();
+        return;
+      }
 
-        $('#action').change(function(){
-          var val = $('#action').val();
-          console.log(val)
-          if (val == 'single') {
-            $('.tags').fadeOut();
-            $('.repetitive').fadeOut();
-            $('.singleForm').fadeIn();
+      $('.singleForm').toggle(val == 'single');
+      $('.repetitive').toggle(val == 'repetitive');
+      $('.tags').toggle(val == 'tags');
+    }
 
-            $('#send').hover(function(){
-              var val = $('#action').val();
-              var singleMinute = $('#singleMinute').val();
-              var singleHour = $('#singleHour').val();
-              var singleDayOfMonth = $('#singleDayOfMonth').val();
-              var singleMonth = $('#singleMonth').val();
-              var singleDayOfWeek = $('#singleDayOfWeek').val();
-              var action = $('#action').val();
+    function updateSchedulePanel() {
+      if ($('#checkBuild').is(':checked')) {
+        $('#build').stop(true, true).fadeIn();
+        updateScheduleActionForms();
+      } else {
+        resetScheduleControls();
+      }
+    }
 
-              if(!singleEveryMinuteAcknowledged && action != 0 && val == 'single') {
-                if (singleMinute == '*' && singleHour == '*' && singleDayOfMonth == '*' && singleMonth == '*' && singleDayOfWeek == '*' && val == 'single' && $("#checkBuild").is(":checked")){
-                  alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
-                    function(){ 
-                     alertify.success('You has agreeded with your choice, be careful !');
-                     singleEveryMinuteAcknowledged = true;
-                   }, 
-                   function(){ 
-                    alertify.error('Operation Aborted');
-                    singleEveryMinuteAcknowledged = false;
-                  }
-                  );
-                }
-              }
-            });
-            
-          } else  if (val == 'repetitive'){
-            $('.repetitive').fadeIn();
-            $('.singleForm').fadeOut();
-            $('.tags').fadeOut();
+    function confirmEveryMinuteSchedule() {
+      var val = $('#action').val();
 
-            $('#send').hover(function(){
-              var val = $('#action').val();
-              var repetitiveMinute = $('#repetitiveMinute').val();
-              var repetitiveHour = $('#repetitiveHour').val();
-              var repetitiveDayOfMonth = $('#repetitiveDayOfMonth').val();
-              var repetitiveMonth = $('#repetitiveMonth').val();
-              var repetitiveDayOfWeek = $('#repetitiveDayOfWeek').val();
-              var action = $('#action').val();
+      if (! $('#checkBuild').is(':checked') || val == 0) {
+        return;
+      }
 
-              if(!repetitiveEveryMinuteAcknowledged && action != 0 && val == 'repetitive') {
-                if (repetitiveMinute == '*' && repetitiveHour == '*' && repetitiveDayOfMonth == '*' && repetitiveMonth == '*' && repetitiveDayOfWeek == '*' && val == 'repetitive' && $("#checkBuild").is(":checked")){
-                  alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>', 
-                    function(){ 
-                     alertify.success('You has agreeded with your choice, be careful !');
-                     repetitiveEveryMinuteAcknowledged = true;
-                   }, 
-                   function(){ 
-                    alertify.error('Operation Aborted');
-                    repetitiveEveryMinuteAcknowledged = false;
-                  }
-                  );
-                }
-              }
-            });
+      if (val == 'single') {
+        var singleMinute = $('#singleMinute').val();
+        var singleHour = $('#singleHour').val();
+        var singleDayOfMonth = $('#singleDayOfMonth').val();
+        var singleMonth = $('#singleMonth').val();
+        var singleDayOfWeek = $('#singleDayOfWeek').val();
 
-
-          } else if (val == 'tags'){
-            $('.tags').fadeIn();
-            $('.singleForm').fadeOut();
-            $('.repetitive').fadeOut();
-          } else if( val == 0 ){
-            $('.singleForm').fadeOut();
-            $('.repetitive').fadeOut();
-            $('.tags').fadeOut();
+        if (! singleEveryMinuteAcknowledged && singleMinute == '*' && singleHour == '*' && singleDayOfMonth == '*' && singleMonth == '*' && singleDayOfWeek == '*') {
+          alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>',
+            function(){
+             alertify.success('You has agreeded with your choice, be careful !');
+             singleEveryMinuteAcknowledged = true;
+           },
+           function(){
+            alertify.error('Operation Aborted');
+            singleEveryMinuteAcknowledged = false;
           }
-        }); 
+          );
+        }
+      } else if (val == 'repetitive') {
+        var repetitiveMinute = $('#repetitiveMinute').val();
+        var repetitiveHour = $('#repetitiveHour').val();
+        var repetitiveDayOfMonth = $('#repetitiveDayOfMonth').val();
+        var repetitiveMonth = $('#repetitiveMonth').val();
+        var repetitiveDayOfWeek = $('#repetitiveDayOfWeek').val();
 
+        if (! repetitiveEveryMinuteAcknowledged && repetitiveMinute == '*' && repetitiveHour == '*' && repetitiveDayOfMonth == '*' && repetitiveMonth == '*' && repetitiveDayOfWeek == '*') {
+          alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>',
+            function(){
+             alertify.success('You has agreeded with your choice, be careful !');
+             repetitiveEveryMinuteAcknowledged = true;
+           },
+           function(){
+            alertify.error('Operation Aborted');
+            repetitiveEveryMinuteAcknowledged = false;
+          }
+          );
+        }
       }
-      else if($(this).is(":not(:checked)")){
-        $('#build').fadeOut();
-      }
-    });
+    }
+
+    $('#checkBuild').change(updateSchedulePanel);
+    $('#action').change(updateScheduleActionForms);
+    $('#send, #saveAndTrigger').hover(confirmEveryMinuteSchedule);
 
 $('#abort').click(function(){
   function updateTimeoutRequiredFields() {
@@ -1795,7 +1893,9 @@ $('#checkEnvironment').click(function(){
 
 
   function jenkinsJobPath(jobName) {
-    return 'job/' + encodeURIComponent(jobName);
+    return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
+      return 'job/' + encodeURIComponent(segment);
+    }).join('/');
   }
 
   function setSaveJobState(isSaving, message) {
@@ -1803,126 +1903,29 @@ $('#checkEnvironment').click(function(){
     $('.saveJobStatus').text(message || '').toggle(!!message);
   }
 
-  function refreshJobTable() {
-    if ($.fn.DataTable.isDataTable('#myTable')) {
-      $('#myTable').DataTable().ajax.reload(null, false);
-    } else {
-      loadTable();
-    }
-    $('#box').boxWidget('expand');
-  }
-
-  function saveJenkinsConfig(jobName, xml, isUpdate) {
-    return $.ajax({
-      url: isUpdate ? jenkins_url + jenkinsJobPath(jobName) + '/config.xml' : jenkins_url + 'createItem?name=' + encodeURIComponent(jobName),
-      data: xml,
-      method: 'POST',
-      contentType: 'text/xml',
-      dataType: 'text',
-      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
-    });
-  }
-
-  function triggerJenkinsJob(jobName) {
-    return $.ajax({
-      url: jenkins_url + jenkinsJobPath(jobName) + '/build',
-      method: 'POST',
-      dataType: 'text',
-      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
-    });
-  }
-
-  function completeGeneratedJobSave(jobName, isUpdate, triggerAfterSave) {
-    toastr.success('Your job has been successfully ' + (isUpdate ? 'updated' : 'created') + '.', isUpdate ? 'Job Updated' : 'Job Created');
-    refreshJobTable();
-    $('.generatedXmlPanel').remove();
-
-    if (!triggerAfterSave) {
-      $('.overlay').fadeOut();
-      setSaveJobState(false, '');
-      return;
-    }
-
-    setSaveJobState(true, 'Triggering job...');
-    triggerJenkinsJob(jobName).done(function() {
-      toastr.success('Your job has been triggered.', 'Job Triggered');
-    }).fail(function() {
-      console.error(arguments);
-      toastr.error('The job was saved, but the trigger request failed.', 'Trigger Error');
-    }).always(function() {
-      $('.overlay').fadeOut();
-      setSaveJobState(false, '');
-    });
-  }
-
-  function saveGeneratedJob() {
-    var jobName = <?php echo json_encode($this->session->flashdata('job_name')); ?>;
-    var triggerAfterSave = <?php echo json_encode($this->session->flashdata('trigger_after_save') == '1'); ?>;
-    var xml = $('#xml').text();
-
-    if (!jobName || !xml) {
-      return;
-    }
-
-    setSaveJobState(true, 'Saving job...');
-    $('.overlay').fadeIn();
-
-    $.ajax({
-      url: jenkins_url + jenkinsJobPath(jobName) + '/api/json',
-      method: 'GET',
-      dataType: 'json',
-      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
-    }).done(function() {
-      saveJenkinsConfig(jobName, xml, true).done(function() {
-        completeGeneratedJobSave(jobName, true, triggerAfterSave);
-      }).fail(function() {
-        console.error(arguments);
-        toastr.error('Your Job Update Request Has Failed', 'Request Error');
-        $('.overlay').fadeOut();
-        setSaveJobState(false, '');
-      });
-    }).fail(function(response) {
-      if (response.status == 404) {
-        saveJenkinsConfig(jobName, xml, false).done(function() {
-          completeGeneratedJobSave(jobName, false, triggerAfterSave);
-        }).fail(function() {
-          console.error(arguments);
-          toastr.error('Your Job Creation Request Has Failed', 'Request Error');
-          $('.overlay').fadeOut();
-          setSaveJobState(false, '');
-        });
-        return;
-      }
-
-      $('.overlay').fadeOut();
-      setSaveJobState(false, '');
-      console.error(arguments);
-      toastr.error('Unable to check whether this job already exists.', 'Request Error');
-    });
-  }
-
-  saveGeneratedJob();
-
   Dropzone.autoDiscover = false;
 
 function loadTable () {
      $(".overlay").show();
+     if (savedJobName) {
+       expandAvailableJobsBox();
+     }
         $("#myTable").dataTable().fnDestroy();
         $('#myTable').DataTable({
           "lengthMenu": [3,5,10,13,20,100,200,500,1000,2000,5000],
           "pageLength": 5,
-          "order": [[ 0, "desc" ]],
+          "order": [[ 2, "desc" ], [ 1, "asc" ]],
           "ajax": {
-            "url": jenkins_url +'api/json',
+            "url": jenkins_url +'api/json?tree=jobs[name,fullName,color]',
             "type": 'GET',
             "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
             "dataSrc": "jobs"
           },
           "columns": [
           {"data": "color"},
-          {"data": "name"},
-          {"data": "url"},
-          {"data": "name"}
+          {"data": null, "defaultContent": "", "render": function(data, type, row){ return escapeHtml(jobNameFromRow(row)); }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderJobCreationDate(jobNameFromRow(row), type); }},
+          {"data": null, "defaultContent": ""}
           ],
           columnDefs:[{targets:0, render:function(data){
             if(data != null){
@@ -1936,9 +1939,20 @@ function loadTable () {
                  return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/loading.gif">';
               }
             } else {return ''}
-          }}, {targets:3, orderable:false, searchable:false, render:function(data){
-            return '<button type="button" class="btn btn-info btn-xs editJob" data-job="' + escapeAttribute(data) + '"><i class="fa fa-pencil"></i> Edit</button>';
-          }}]
+          }}, {targets:3, orderable:false, searchable:false, render:function(data, type, row){
+            var jobName = jobNameFromRow(row);
+            return '<div class="btn-group btn-group-xs"><button type="button" class="btn btn-info editJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-pencil"></i> Edit</button><a class="btn btn-default" href="<?php echo base_url(); ?>jobView?job=' + encodeURIComponent(jobName) + '"><i class="fa fa-eye"></i> Inspect</a></div>';
+          }}],
+          "createdRow": function(row, data) {
+            if (isRecentlySavedJob(jobNameFromRow(data))) {
+              $(row).addClass('jobRecentlySaved');
+            }
+          },
+          "initComplete": function() {
+            if (savedJobName) {
+              expandAvailableJobsBox();
+            }
+          }
        });
   $(".overlay").hide();  
 }  
