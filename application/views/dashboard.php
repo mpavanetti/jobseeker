@@ -1,3 +1,7 @@
+ <?php
+  $hasJobsAmount = !empty($jobsAmount);
+  $hasJobsStatusAmount = !empty($jobsStatusAmount);
+ ?>
  <script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse')
@@ -87,6 +91,121 @@
   .dashboard-chart-panel canvas {
     max-width: 100%;
   }
+
+  .dashboard-equal-row {
+    align-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-equal-row:before,
+  .dashboard-equal-row:after {
+    display: none;
+  }
+
+  .dashboard-equal-row > [class*="col-"] {
+    display: flex;
+    float: none;
+  }
+
+  .dashboard-equal-row .clearfix {
+    display: none !important;
+  }
+
+  .dashboard-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .dashboard-card > .box-body {
+    flex: 1 1 auto;
+  }
+
+  .dashboard-card > .box-footer {
+    margin-top: auto;
+  }
+
+  .dashboard-card canvas {
+    max-width: 100%;
+  }
+
+  .dashboard-status-row .small-box {
+    display: flex;
+    flex-direction: column;
+    min-height: 128px;
+    width: 100%;
+  }
+
+  .dashboard-status-row .small-box .inner {
+    flex: 1 1 auto;
+  }
+
+  .dashboard-status-row .small-box-footer {
+    margin-top: auto;
+  }
+
+  .dashboard-paired-row .dashboard-card > .box-body,
+  .dashboard-table-row .dashboard-card > .box-body {
+    min-height: 260px;
+  }
+
+  .dashboard-chart-card > .box-body {
+    min-height: 250px;
+  }
+
+  .dashboard-info-row .info-box {
+    min-height: 92px;
+    width: 100%;
+  }
+
+  .dashboard-empty-panel {
+    background: #f7fafc;
+    border: 1px dashed #c8d4df;
+    border-radius: 4px;
+    color: #607080;
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin: 0;
+    min-height: 260px;
+    padding: 56px 20px;
+    text-align: center;
+  }
+
+  .dashboard-empty-panel-small {
+    min-height: 150px;
+    padding: 32px 20px;
+  }
+
+  .dashboard-paired-row .dashboard-empty-panel-small {
+    min-height: 260px;
+  }
+
+  .dashboard-table-row .dashboard-empty-panel-small {
+    min-height: 180px;
+  }
+
+  .dashboard-chart-card .dashboard-empty-panel-small {
+    min-height: 220px;
+  }
+
+  .dashboard-empty-panel i {
+    color: #8aa1b4;
+    font-size: 42px;
+    margin-bottom: 10px;
+  }
+
+  .dashboard-empty-panel h4 {
+    color: #2f4054;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+
+  .dashboard-empty-panel p {
+    margin-bottom: 0;
+  }
 </style>
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->
@@ -111,9 +230,14 @@
     <section id="main" class="content" style="display: none;">
       <div class="container">
 
+      <div id="dashboardEmptyState" class="callout callout-info" style="display: none;">
+        <h4><i class="fa fa-info-circle"></i> No dashboard records yet</h4>
+        <p>Run a job or import TMF data to populate dashboard metrics and charts.</p>
+      </div>
+
       <div class="row">
         <div class="col-xs-12">
-          <div class="box box-solid dashboard-jenkins-panel">
+          <div class="box box-solid dashboard-jenkins-panel dashboard-card">
             <div class="box-body">
               <div>
                 <h4 class="dashboard-jenkins-title"><i class="fa fa-server"></i> Jenkins Live</h4>
@@ -134,7 +258,7 @@
         </div>
       </div>
 
-        <div class="row dashboard-status-row">
+        <div class="row dashboard-status-row dashboard-equal-row">
             <div class="col-lg-3 col-xs-6">
               <!-- small box -->
               <div class="small-box bg-aqua running animated">
@@ -196,7 +320,7 @@
 
           <div class="row animated zoomIn" style="margin-top: 15px;">
             <div class="col-lg-12 col-xs-12">
-              <div class="box box-primary">
+              <div class="box box-primary dashboard-card dashboard-survey-card">
             <div class="box-header with-border">
               <h3 class="box-title"><b>Jobs survey report</b></h3>
 
@@ -210,7 +334,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <div class="row">
+              <div id="dashboardSurveyContent" class="row">
                 <div class="col-md-8">
                   <p class="text-center">
                     <strong id="date"></strong>
@@ -266,10 +390,15 @@
                 </div>
                 <!-- /.col -->
               </div>
+              <div id="dashboardSurveyEmptyState" class="dashboard-empty-panel" style="display: none;">
+                <i class="fa fa-line-chart"></i>
+                <h4>No survey data yet</h4>
+                <p>Job trends and status progress will appear after TMF records are created.</p>
+              </div>
               <!-- /.row -->
             </div>
             <!-- ./box-body -->
-            <div class="box-footer">
+            <div id="dashboardSurveyFooter" class="box-footer">
               <div class="row">
                 <div class="col-sm-12 col-xs-12">
                   <span class="text-center"><h5><b>Growth X Decline in 30 days (1 Month)</b></h5></span>
@@ -404,10 +533,10 @@
             </div>
           </div>
 
-          <div class="row">
+              <div class="row dashboard-equal-row dashboard-paired-row">
                <!-- Div last jobs -->
             <div class="col-lg-6 col-md-6 col-xs-12 animated fadeInLeft">
-                <div class="box box-primary">
+                <div class="box box-primary dashboard-card dashboard-recent-card">
             <div class="box-header with-border">
               <h3 class="box-title">Recently Added Jobs</h3>
 
@@ -419,7 +548,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <ul class="products-list product-list-in-box">
+              <ul id="dashboardRecentJobsList" class="products-list product-list-in-box">
                  <?php
                     if(!empty($lastJobs))
                     {
@@ -499,6 +628,18 @@
                  <?php
                         }
                     }
+                    else
+                    {
+                 ?>
+                <li id="dashboardRecentJobsEmptyState" class="item">
+                  <div class="dashboard-empty-panel dashboard-empty-panel-small">
+                    <i class="fa fa-history"></i>
+                    <h4>No recent jobs</h4>
+                    <p>Recent TMF job activity will appear here.</p>
+                  </div>
+                </li>
+                 <?php
+                    }
                  ?>
              
               </ul>
@@ -513,8 +654,8 @@
             <!-- End Div last jobs -->
 
             <!-- Div Graficos -->
-            <div class="col-lg 6 col-md-6 col-xs-12 animated fadeInRight">
-                <div class="box box-primary">
+            <div class="col-lg-6 col-md-6 col-xs-12 animated fadeInRight">
+              <div class="box box-primary dashboard-card dashboard-percent-card">
             <div class="box-header with-border">
               <h3 class="box-title">TMF Status Percent Report</h3>
               <div class="box-tools pull-right">
@@ -525,7 +666,7 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <div class="row">
+              <div id="dashboardPercentContent" class="row">
                 <div class="col-md-8">
                   <div class="chart-responsive">
                     <canvas id="pieChart" height="520" width="600" style="width: 600px; height: 520px;"></canvas>
@@ -550,10 +691,15 @@
                 </div>
                 <!-- /.col -->
               </div>
+              <div id="dashboardPercentEmptyState" class="dashboard-empty-panel" style="display: none;">
+                <i class="fa fa-pie-chart"></i>
+                <h4>No status distribution yet</h4>
+                <p>Percentages will appear here after TMF records are created.</p>
+              </div>
               <!-- /.row -->
             </div>
             <!-- /.box-body -->
-            <div class="box-footer" style="padding: 9px;">
+            <div id="dashboardPercentFooter" class="box-footer" style="padding: 9px;">
               <ul class="nav nav-pills nav-stacked">
                 <li><a href="#">Percent of <b class="text-green">Ready</b> from total
                   <span class="pull-right" id="pecentTotalReady"> </span></a></li>
@@ -576,9 +722,9 @@
         <!-- End Div Graficos -->
       </div>
 
-      <div class="row">
+      <div class="row dashboard-equal-row dashboard-table-row">
         <div class="col-lg-6 col-md-6 col-xs-12">
-          <div class="box box-info">
+          <div class="box box-info dashboard-card dashboard-table-card">
             <div class="box-header">
               <h3 class="box-title">Available job execution amount</h3>
               <div class="box-tools pull-right">
@@ -589,7 +735,12 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table class="table table-bordered table-striped table-config dataTable">
+              <div id="dashboardJobsAmountEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="<?php echo $hasJobsAmount ? 'display: none;' : ''; ?>">
+                <i class="fa fa-table"></i>
+                <h4>No job execution amounts</h4>
+                <p>Execution totals by job and dimension will appear here.</p>
+              </div>
+              <table id="dashboardJobsAmountTable" class="table table-bordered table-striped<?php echo $hasJobsAmount ? ' table-config dataTable' : ''; ?>" style="<?php echo $hasJobsAmount ? '' : 'display: none;'; ?>">
                 <thead>
                 <tr>
                   <th>Job Name</th>
@@ -629,7 +780,7 @@
         </div>
 
         <div class="col-lg-6 col-md-6 col-xs-12">
-          <div class="box box-info">
+          <div class="box box-info dashboard-card dashboard-table-card">
             <div class="box-header">
               <h3 class="box-title">Available status amount per jobs</h3>
               <div class="box-tools pull-right">
@@ -640,7 +791,12 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-              <table class="table table-bordered table-striped table-config dataTable">
+              <div id="dashboardJobsStatusAmountEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="<?php echo $hasJobsStatusAmount ? 'display: none;' : ''; ?>">
+                <i class="fa fa-list-alt"></i>
+                <h4>No status totals</h4>
+                <p>Status totals by job and dimension will appear here.</p>
+              </div>
+              <table id="dashboardJobsStatusAmountTable" class="table table-bordered table-striped<?php echo $hasJobsStatusAmount ? ' table-config dataTable' : ''; ?>" style="<?php echo $hasJobsStatusAmount ? '' : 'display: none;'; ?>">
                 <thead>
                 <tr>
                   <th>Job Name</th>
@@ -721,7 +877,7 @@
       </div>
 
 
-      <div class="row" style="margin-top: 15px;">
+      <div class="row dashboard-equal-row dashboard-info-row" style="margin-top: 15px;">
         <div class="col-md-3 col-sm-6 col-xs-12">
           <div class="info-box">
             <span class="info-box-icon bg-aqua"><i class="fa fa-bar-chart"></i></span>
@@ -786,7 +942,7 @@
 
       <div class="row" style="margin-top: 15px;">
         <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary">
+          <div class="box box-primary dashboard-card dashboard-chart-card">
             <div class="box-header">
               <h4><b>Data Warehouse and Data Marts Execution</b></h4>
               <div class="box-tools pull-right">
@@ -796,7 +952,14 @@
               </div>
             </div>
             <div class="box-body">
-              <canvas id="dwChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas> 
+              <div id="dashboardDwChartContent">
+                <canvas id="dwChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
+              </div>
+              <div id="dashboardDwChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
+                <i class="fa fa-bar-chart"></i>
+                <h4>No warehouse executions</h4>
+                <p>Warehouse and data mart execution charts will appear here.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -804,7 +967,7 @@
 
       <div class="row" style="margin-top: 15px;">
         <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary">
+          <div class="box box-primary dashboard-card dashboard-chart-card">
             <div class="box-header">
               <h4><b>Dimension Tables Executions</b></h4>
               <div class="box-tools pull-right">
@@ -814,7 +977,14 @@
               </div>
             </div>
             <div class="box-body">
-              <canvas id="dmChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas> 
+              <div id="dashboardDmChartContent">
+                <canvas id="dmChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
+              </div>
+              <div id="dashboardDmChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
+                <i class="fa fa-database"></i>
+                <h4>No dimension executions</h4>
+                <p>Dimension table execution charts will appear here.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -822,7 +992,7 @@
 
       <div class="row" style="margin-top: 15px;">
         <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary">
+          <div class="box box-primary dashboard-card dashboard-chart-card">
             <div class="box-header">
               <h4><b>Fact Tables Executions</b></h4>
               <div class="box-tools pull-right">
@@ -832,7 +1002,14 @@
               </div>
             </div>
             <div class="box-body">
-              <canvas id="factChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas> 
+              <div id="dashboardFactChartContent">
+                <canvas id="factChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
+              </div>
+              <div id="dashboardFactChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
+                <i class="fa fa-database"></i>
+                <h4>No fact executions</h4>
+                <p>Fact table execution charts will appear here.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -840,7 +1017,7 @@
 
       <div class="row" style="margin-top: 15px;">
         <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary">
+          <div class="box box-primary dashboard-card dashboard-chart-card">
             <div class="box-header">
               <h4><b>Stg Tables Executions</b></h4>
               <div class="box-tools pull-right">
@@ -850,7 +1027,14 @@
               </div>
             </div>
             <div class="box-body">
-              <canvas id="stgChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas> 
+              <div id="dashboardStgChartContent">
+                <canvas id="stgChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
+              </div>
+              <div id="dashboardStgChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
+                <i class="fa fa-database"></i>
+                <h4>No staging executions</h4>
+                <p>Staging table execution charts will appear here.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -877,5 +1061,5 @@ $(document).ready(function(){
     }
 });
 </script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=27"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=32"></script>
 

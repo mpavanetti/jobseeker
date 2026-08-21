@@ -41,6 +41,61 @@ function dashboardBuildLabel(value) {
   return dashboardNumber(value) === 1 ? 'build' : 'builds';
 }
 
+function dashboardShowMain() {
+  $('#loading').fadeOut();
+  $('#main').delay(500).fadeIn();
+}
+
+function dashboardSetEmptyCounter(selector) {
+  $(selector).html('<b>0 / 0</b>');
+}
+
+function dashboardShowEmptyPanel(contentSelector, emptySelector) {
+  $(contentSelector).hide();
+  $(emptySelector).show();
+}
+
+function dashboardDisableEmptyDataTable(tableSelector, emptySelector) {
+  var table = $(tableSelector);
+
+  if ($.fn.DataTable && $.fn.DataTable.isDataTable(tableSelector)) {
+    table.DataTable().destroy();
+  }
+
+  table.removeClass('dataTable dataTableMobile table-config').hide();
+  table.closest('.dataTables_wrapper').hide();
+  $(emptySelector).show();
+}
+
+function dashboardShowEmptyDashboard() {
+  $('#dashboardEmptyState').show();
+  $('#running').html('<h3>0</h3>');
+  $('#ready, #warning, #error').text('0');
+  $('#date').html('<b>No monitoring records available yet.</b>');
+
+  dashboardSetEmptyCounter('#runningGraph');
+  dashboardSetEmptyCounter('#readyGraph');
+  dashboardSetEmptyCounter('#warningGraph');
+  dashboardSetEmptyCounter('#errorGraph');
+  $('#runningGraphBar, #readyGraphBar, #warningGraphBar, #errorGraphBar').css('width', '0%');
+  $('#pecentTotalRunning, #pecentTotalReady, #pecentTotalWarning, #pecentTotalError').html('<b>Not Available</b>');
+  $('#totalJobs').html('Total of: <b>0</b> Jobs');
+  dashboardShowEmptyPanel('#dashboardSurveyContent, #dashboardSurveyFooter', '#dashboardSurveyEmptyState');
+  dashboardShowEmptyPanel('#dashboardPercentContent, #dashboardPercentFooter', '#dashboardPercentEmptyState');
+  dashboardDisableEmptyDataTable('#dashboardJobsAmountTable', '#dashboardJobsAmountEmptyState');
+  dashboardDisableEmptyDataTable('#dashboardJobsStatusAmountTable', '#dashboardJobsStatusAmountEmptyState');
+  dashboardShowEmptyPanel('#dashboardDwChartContent', '#dashboardDwChartEmptyState');
+  dashboardShowEmptyPanel('#dashboardDmChartContent', '#dashboardDmChartEmptyState');
+  dashboardShowEmptyPanel('#dashboardFactChartContent', '#dashboardFactChartEmptyState');
+  dashboardShowEmptyPanel('#dashboardStgChartContent', '#dashboardStgChartEmptyState');
+
+  $('#readyGrowthDecline, #errorGrowthDecline, #warningGrowthDecline, #runningGrowthDecline, #readyGrowthDeclineX90, #errorGrowthDeclineX90, #warningGrowthDeclineX90, #runningGrowthDeclineX90, #readyGrowthDeclineX180, #errorGrowthDeclineX180, #warningGrowthDeclineX180, #runningGrowthDeclineX180').html('<h4 class="description-header">Not Available</h4>');
+
+  $('#dwAmount, #dimTableAmount, #factTableAmount, #stgTableAmount').html('<b>0 </b>');
+
+  dashboardShowMain();
+}
+
 function loadDashboardJenkinsOverview() {
   if (! window.jobseekerJenkinsUrl) {
     $('#dashboardJenkinsCapacity').text('--');
@@ -267,9 +322,14 @@ function errorGraph(result) {
         datatype: "json",
         async: false,
         success: function(data){
-          result = data;              
+          result = dashboardNumber(data);
         }
       });
+
+  if (result === 0) {
+    dashboardShowEmptyDashboard();
+    return;
+  }
 
 
   running();
@@ -1131,7 +1191,6 @@ var myChart = new Chart(ctx5, {
       }
 });
 
-$('#loading').fadeOut();
-$('#main').delay(500).fadeIn();
+dashboardShowMain();
 
  });
