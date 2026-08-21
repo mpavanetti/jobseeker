@@ -12,7 +12,12 @@ jenkins:
       users:
        - id: "${JENKINS_ADMIN_ID}"
          password: "${JENKINS_ADMIN_PASSWORD}"
-  #mailer:
-    #replyToAddress: do-not-reply@acme.org
-    #smtpHost: smtp.acme.org
-    #smtpPort: 4441
+unclassified:
+  location:
+    adminAddress: "${JOBSEEKER_SMTP_REPLY_TO}"
+    url: "${JOBSEEKER_JENKINS_PUBLIC_URL}"
+  mailer:
+    replyToAddress: "${JOBSEEKER_SMTP_REPLY_TO}"
+    smtpHost: "${JOBSEEKER_SMTP_HOST}"
+    smtpPort: "${JOBSEEKER_SMTP_PORT}"
+    useSsl: "${JOBSEEKER_SMTP_SSL}"

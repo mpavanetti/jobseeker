@@ -1,11 +1,28 @@
 services:
 
+  assets:
+    image: node:20-alpine
+    user: "${JOBSEEKER_HOST_UID:-1000}:${JOBSEEKER_HOST_GID:-1000}"
+    working_dir: /workspace
+    command: sh -lc "npm ci --no-audit --no-fund"
+    environment:
+      - NPM_CONFIG_CACHE=/tmp/.npm
+    volumes:
+      - .:/workspace
+    networks:
+      - internal
+
   nginx:
     build:
       context: .
-      dockerfile: docker/ngnix_image
+      dockerfile: docker/nginx_image
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      php:
+        condition: service_healthy
     ports: 
-      - "80:8080"
+      - "${JOBSEEKER_HTTP_PORT:-80}:8080"
     networks:
       - internal
     volumes:
@@ -15,11 +32,20 @@ services:
       - ./.project:/var/www/html/.project
       - ./index.php:/var/www/html/index.php
      # - ./logs/nginx:/var/log/nginx/
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   php:
     build:
       context: .
       dockerfile: docker/php_image
+    depends_on:
+      mariadb:
+        condition: service_healthy
     networks:
       - internal
     volumes:
@@ -39,13 +65,22 @@ services:
       - JOBSEEKER_ENCRYPTION_KEY=${JOBSEEKER_ENCRYPTION_KEY:-change-this-local-development-key-before-shared-use}
       - JOBSEEKER_COOKIE_SECURE=${JOBSEEKER_COOKIE_SECURE:-false}
       - JOBSEEKER_JENKINS_INTERNAL_URL=http://jenkins:8080/
+      - JOBSEEKER_JENKINS_PUBLIC_URL=${JOBSEEKER_JENKINS_PUBLIC_URL:-http://localhost:8080/}
+      - JOBSEEKER_MAILPIT_HTTP_PORT=${JOBSEEKER_MAILPIT_HTTP_PORT:-8025}
+      - JOBSEEKER_MAILPIT_PUBLIC_URL=${JOBSEEKER_MAILPIT_PUBLIC_URL:-}
       - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   mariadb:
     image: mariadb:10.7
     ports:
-      - 3306:3306
+      - "${JOBSEEKER_DB_PORT:-3306}:3306"
     volumes:
       - "./config/mariadb:/var/lib/mysql"
       - "./db_setup.sql:/docker-entrypoint-initdb.d/1.sql"
@@ -57,14 +92,47 @@ services:
    # restart: on-failure
     networks:
       - internal
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u\"$${MYSQL_USER}\" -p\"$${MYSQL_PASSWORD}\" --silent"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "${JOBSEEKER_MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${JOBSEEKER_MAILPIT_HTTP_PORT:-8025}:8025"
+    networks:
+      - internal
+
+  docker-runtime:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    volumes:
+      - jobseeker-docker-cache:/var/lib/docker
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "docker info >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   jenkins:
     build:
       context: .
       dockerfile: docker/jenkins_image
+    depends_on:
+      docker-runtime:
+        condition: service_healthy
     ports:
-      - 8080:8080
-      - 50000:50000
+      - "${JENKINS_HTTP_PORT:-8080}:8080"
+      - "${JENKINS_AGENT_PORT:-50000}:50000"
     volumes:
       - ./jenkins:/var/jenkins_home
       - ./repository:/php/repository
@@ -74,7 +142,27 @@ services:
       - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-jobseeker}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-jobseeker}
       - JENKINS_NUM_EXECUTORS=${JENKINS_NUM_EXECUTORS:-5}
+      - JOBSEEKER_DB_HOST=mariadb
+      - JOBSEEKER_DB_PORT=3306
+      - JOBSEEKER_DB_USER=${JOBSEEKER_DB_USER:-mysql}
+      - JOBSEEKER_DB_PASSWORD=${JOBSEEKER_DB_PASSWORD:-mysql}
+      - JOBSEEKER_DB_NAME=${JOBSEEKER_DB_NAME:-jobseeker}
+      - JOBSEEKER_SMTP_HOST=${JOBSEEKER_SMTP_HOST:-mailpit}
+      - JOBSEEKER_SMTP_PORT=${JOBSEEKER_SMTP_PORT:-1025}
+      - JOBSEEKER_SMTP_SSL=${JOBSEEKER_SMTP_SSL:-false}
+      - JOBSEEKER_SMTP_REPLY_TO=${JOBSEEKER_SMTP_REPLY_TO:-jobseeker@local.test}
+      - JOBSEEKER_JENKINS_PUBLIC_URL=${JOBSEEKER_JENKINS_PUBLIC_URL:-http://localhost:8080/}
+      - DOCKER_HOST=${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
 
 networks:
   internal:
     driver: bridge
+
+volumes:
+  jobseeker-docker-cache:
