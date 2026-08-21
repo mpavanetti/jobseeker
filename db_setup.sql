@@ -3,7 +3,7 @@
 -- Versão do servidor:           10.4.11-MariaDB - mariadb.org binary distribution
 -- OS do Servidor:               Win64
 -- HeidiSQL Versão:              10.3.0.5771
--- Scripted by:              	 matheuspavanetti@gmail.com - 2021
+-- Scripted by:              	 maintainer@example.com - 2021
 -- --------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -216,6 +216,9 @@ CREATE TABLE IF NOT EXISTS `smtp_settings` (
   `username` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `password` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `ssl` int(1) NOT NULL,
+  `is_enabled` int(1) NOT NULL DEFAULT 1,
+  `is_default` int(1) NOT NULL DEFAULT 0,
+  `reply_to` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'jobseeker@local.test',
   `creation_date` datetime(6) NOT NULL,
   `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `description` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
@@ -224,6 +227,8 @@ CREATE TABLE IF NOT EXISTS `smtp_settings` (
 
 -- Copiando dados para a tabela jobseeker.smtp_settings: ~0 rows (aproximadamente)
 /*!40000 ALTER TABLE `smtp_settings` DISABLE KEYS */;
+INSERT INTO `smtp_settings` (`name`, `smtp_host`, `smtp_port`, `username`, `password`, `ssl`, `is_enabled`, `is_default`, `reply_to`, `creation_date`, `owner`, `description`) VALUES
+  ('Local Mailpit', 'mailpit', 1025, '', '', 0, 1, 1, 'jobseeker@local.test', CURRENT_TIMESTAMP(6), 'System', 'Local test inbox; captures Jenkins emails in Mailpit and does not deliver to external mailboxes.');
 /*!40000 ALTER TABLE `smtp_settings` ENABLE KEYS */;
 
 -- Copiando estrutura para tabela jobseeker.tbl_groups

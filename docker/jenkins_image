@@ -1,25 +1,33 @@
-FROM jenkins/jenkins:lts
+FROM docker:27-cli AS docker-cli
+
+FROM jenkins/jenkins:2.568.2-lts
 
 # Initialize directories, update image 
 USER root
 WORKDIR /var/jenkins_home/
 RUN mkdir /var/jenkins_files/ && chown -R jenkins /var/jenkins_files
 
-# Install python dependencies
+# Install Python dependencies used by demo and ETL jobs.
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3-pip \
+	&& apt-get install -y --no-install-recommends python3-pip curl \
 	&& rm -rf /var/lib/apt/lists/*
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY application/third_party/python/jobseeker_sdk /var/jenkins_files/jobseeker_sdk/
 COPY docker/jenkins/requirements.txt /var/jenkins_files/
+RUN python3 -m pip install --no-cache-dir --break-system-packages /var/jenkins_files/jobseeker_sdk
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r /var/jenkins_files/requirements.txt
 
 # Set jenkins configurations.
 USER jenkins
-ENV JAVA_OPTS -Djenkins.install.runSetupWizard=false
+ENV JAVA_OPTS=-Djenkins.install.runSetupWizard=false
 COPY docker/jenkins/casc.yaml /var/jenkins_files/
-ENV CASC_JENKINS_CONFIG /var/jenkins_files/casc.yaml
+ENV CASC_JENKINS_CONFIG=/var/jenkins_files/casc.yaml
 
-# Install plugins
-RUN jenkins-plugin-cli --plugins ant:latest antisamy-markup-formatter:latest build-timeout:latest cloudbees-folder:latest configuration-as-code:latest credentials-binding:latest email-ext:latest git:latest mailer:latest matrix-auth:latest pam-auth:latest ssh-slaves:latest timestamper:latest workflow-aggregator:latest ws-cleanup:latest cors-filter:latest
+# Install pinned plugins for reproducible local builds.
+COPY docker/jenkins/plugins.txt /var/jenkins_files/
+RUN jenkins-plugin-cli --plugin-file /var/jenkins_files/plugins.txt
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 CMD curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1
 
 
 

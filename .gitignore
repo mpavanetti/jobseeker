@@ -1,4 +1,7 @@
 .htaccess/
+.env
+node_modules/
+assets/bower_components/
 repository/
 json/result.json
 talend.sql

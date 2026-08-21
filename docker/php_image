@@ -1,12 +1,16 @@
-FROM php:7.4-fpm-alpine
+FROM php:8.3-fpm-alpine
 
-RUN docker-php-ext-install mysqli pdo pdo_mysql && docker-php-ext-enable pdo_mysql
-
-RUN apk add --no-cache zip libzip-dev
-RUN docker-php-ext-configure zip
-RUN docker-php-ext-install zip
+RUN set -eux; \
+	apk add --no-cache libzip; \
+	apk add --no-cache --virtual .build-deps $PHPIZE_DEPS libzip-dev; \
+	docker-php-ext-configure zip; \
+	docker-php-ext-install mysqli pdo_mysql zip; \
+	docker-php-ext-enable pdo_mysql; \
+	apk del .build-deps
 
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/
+
+WORKDIR /var/www/html
 
 RUN addgroup --gid 1000 mygroup
 RUN adduser --system --no-create-home --disabled-password --uid 1000 --ingroup mygroup myuser
@@ -16,3 +20,5 @@ RUN mkdir -p /php/data /php/repository \
 	&& chmod -R 775 /php
 
 USER myuser
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD php-fpm -t || exit 1
