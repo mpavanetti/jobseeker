@@ -1,59 +1,43 @@
-from script.jobseeker import jobSeeker
 import sys
 import time
 from os import path
-import pandas as pd # pip install pandas
 
-# Declaring job name as file name
-jobName = path.basename(__file__).replace(".py","")
+import pandas as pd
+from jobseeker import JobSeeker
 
-# Checking paramenter pos 1 as environment
-if len(sys.argv) <= 1:
-    environment = "LOCAL"
-else:
-    environment = sys.argv[1]
 
-# Starting Jobseeker script
-js = jobSeeker(environment,jobName)
+JOB_NAME = path.basename(__file__).replace(".py", "")
+ENVIRONMENT = sys.argv[1] if len(sys.argv) > 1 else "LOCAL"
 
-# Querying context Custom
-rows = int(js.getContext("rows"))
 
-# Declaring Operation Function
+def build_employee_dataframe():
+    return pd.DataFrame(
+        {
+            "Name": ["Jai", "Princi", "Gaurav", "Anuj", "Geeku", "Matheus", "Beatriz", "Natalia", "Carlos", "Vanessa"],
+            "Age": [27, 24, 22, 32, 15, 25, 24, 31, 44, 39],
+            "Address": ["Delhi", "Kanpur", "Allahabad", "Kannauj", "Noida", "Areao", "Nogueira", "Ipanema", "Areao", "Marli"],
+            "Qualification": ["Msc", "MA", "MCA", "Phd", "10th", "Msc", "Msc", "Bsc", "Phd", "MBA"],
+        }
+    )
+
+
 def operation():
-    try:
-        # Jobseeker Start Transaction
-        js.begin("Sample Python Job","DW_Master")
+    with JobSeeker(environment=ENVIRONMENT, job=JOB_NAME) as js:
+        with js.task("Sample Python Job", "DW_Master") as tmf:
+            rows = tmf.context("rows", cast=int, default=10)
+            df = build_employee_dataframe()
+            output = df.head(rows)
 
-        # Define a dictionary containing employee data
-        data = {'Name':['Jai', 'Princi', 'Gaurav', 'Anuj', 'Geeku','Matheus','Beatriz','Natalia','Carlos','Vanessa'],
-                'Age':[27, 24, 22, 32, 15,25,24,31,44,39],
-                'Address':['Delhi', 'Kanpur', 'Allahabad', 'Kannauj', 'Noida','Areão','Nogueira','Ipanema','Areão','Marli'],
-                'Qualification':['Msc', 'MA', 'MCA', 'Phd', '10th','Msc','Msc','Bsc','Phd','MBA']}
-        
-        # Convert the dictionary into DataFrame
-        df = pd.DataFrame(data)
-        
-        # Print Dataframe to console
-        print(df.head(rows))
-        
-        # Convert to HTML Table
-        html = df.to_html()
-        msg = "<h4>This is a HTML table generated from python pandas</h4><br>"+html
-        
-        
-        print(f"Sleeping {rows} seconds.")
-        time.sleep(rows)
-        # Jobseeker End Transaction
-        js.end(rows,rows,msg)
-        return True
+            print(output)
+            print("Sleeping {} seconds.".format(rows))
+            time.sleep(rows)
 
-        #raise Exception("This is an ERROR test.")
-    except Exception as e:
-        js.error(str(e))
-        return False
+            html = output.to_html(index=False)
+            message = "<h4>This is a HTML table generated from python pandas</h4><br>" + html
+            tmf.finish(total=rows, processed=len(output.index), msg=message)
 
-# Calling Operation function
-operation()
+    return True
 
 
+if __name__ == "__main__":
+    operation()
