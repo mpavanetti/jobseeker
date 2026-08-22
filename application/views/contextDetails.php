@@ -1,4 +1,4 @@
- <script>
+<script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse')
   });
@@ -12,11 +12,65 @@
       width: 500px;
       box-sizing: border-box;
     }
+
+    .context-page .content {
+      padding: 18px;
+    }
+
+    .context-shell {
+      max-width: 1580px;
+      width: 100%;
+    }
+
+    .context-page .info-box,
+    .context-entry-form,
+    .context-page .box {
+      border: 1px solid #d8e0e8;
+      border-radius: 6px;
+      box-shadow: 0 8px 20px rgba(16, 42, 67, .08);
+    }
+
+    .context-page .info-box {
+      min-height: 86px;
+    }
+
+    .context-page .info-box-icon {
+      border-radius: 6px 0 0 6px;
+      height: 86px;
+      line-height: 86px;
+    }
+
+    .context-entry-form label {
+      color: #243b53;
+      font-size: 12px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .context-entry-form {
+      background: #fff;
+      margin-top: 18px;
+      padding: 18px 18px 0;
+    }
+
+    .context-page table th {
+      color: #243b53;
+      font-size: 12px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .context-secret-value {
+      color: #829ab1;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
 </style>
 
 
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
-<div class="content-wrapper">    
+<div class="content-wrapper context-page">
     <section class="content-header">
       <h1>
         <i class="fa fa-dashboard"></i> Context Settings <b>Context Details</b>
@@ -30,8 +84,7 @@
     </section>
 
     <section class="content">
-      <div class="container">
-      <div class="container">
+      <div class="container-fluid context-shell">
         <div class="row" style="padding-top: 15px;">
         <div class="col-md-3 col-sm-6 col-xs-12">
           <div class="info-box animated flipInX">
@@ -93,8 +146,9 @@
             </div>
           </div>
        
-        <div class="row animated fadeIn" style="margin-top: 25px;">
+        <div class="row animated fadeIn context-entry-form">
            <form action="<?php echo base_url() ?>Context/addContext" method="POST" id="searchList">
+            <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
 
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
@@ -106,7 +160,7 @@
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Context Value</label>
-                      <input id="contextValue" type="text" name="contextValue" value="" class="form-control" placeholder="Enter Context Value" maxlength="255" autocomplete="off" required/>
+                      <input id="contextValue" type="text" name="contextValue" value="" class="form-control" placeholder="Enter Context Value" maxlength="1000" autocomplete="off" required/>
                 </div>
               </div>
               
@@ -141,7 +195,7 @@
                                 foreach($listProjects as $projects)
                                 {
                             ?>
-                        <option value="<?php echo $projects->ProjectName ?>"><?php echo $projects->ProjectName ?></option>
+                        <option value="<?php echo html_escape($projects->ProjectName) ?>"><?php echo html_escape($projects->ProjectName) ?></option>
                       <?php } } ?>
                       </select>
                 </div>
@@ -156,7 +210,7 @@
                                 foreach($listEnvironments as $env)
                                 {
                             ?>
-                        <option value="<?php echo $env->Environment ?>"><?php echo $env->Environment ?></option>
+                        <option value="<?php echo html_escape($env->Environment) ?>"><?php echo html_escape($env->Environment) ?></option>
                       <?php } } ?>
                       </select>
                 </div>
@@ -210,21 +264,21 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->Id ?></td>
+                      <td><?php echo (int) $record->Id ?></td>
                       <td><?php echo date('Y-m-d H:i:s', strtotime($record->CreatedOn)) ?></td>
-                        <td><?php echo '<b>'.$record->ContextKey.'</b>' ?></td>
-                        <td><?php echo $record->ContextValue ?></td>
+                        <td><?php echo '<b>'.html_escape($record->ContextKey).'</b>' ?></td>
+                        <td><?php echo ($record->isEncrypted == 1) ? '<span class="context-secret-value">********</span>' : html_escape($record->ContextValue) ?></td>
                         <td><?php echo ($record->isEncrypted == 1) ? 'True' : 'False' ?></td>
-                        <td><?php echo $record->Environment ?></td>
-                        <td><?php echo $record->ProjectName ?></td>
-                        <td><?php echo $record->Description ?></td>
+                        <td><?php echo html_escape($record->Environment) ?></td>
+                        <td><?php echo html_escape($record->ProjectName) ?></td>
+                        <td><?php echo html_escape($record->Description) ?></td>
                         <td><?php echo ($record->IsActive == 1) ? 'True' : 'False' ?></td>
-                        <td><?php echo $record->CreatedBy ?></td>
+                        <td><?php echo html_escape($record->CreatedBy) ?></td>
                         <td><?php if($record->ModifiedOn == null){ echo ""; } else { echo date('Y-m-d H:i:s', strtotime($record->ModifiedOn)); }  ?></td>
-                        <td><?php echo $record->ModifiedBy ?></td>
+                        <td><?php echo html_escape($record->ModifiedBy) ?></td>
                        <?php if($role != 1) {  ?> <td>
-                           <a class="btn btn-sm btn-warning" href="<?php echo base_url().'Context/editContext/'.$record->Id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->Id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                           <a class="btn btn-sm btn-warning" href="<?php echo base_url().'Context/editContext/'.(int) $record->Id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->Id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php
@@ -260,7 +314,6 @@
 
          
     </div>
-      </div>
     </section>
 
     <!-- Main content -->

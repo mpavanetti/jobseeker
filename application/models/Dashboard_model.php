@@ -4,191 +4,280 @@
 class Dashboard_model extends CI_Model
 {
 
-	function getLastjobs() {
+    private function normalizeEnvironmentFilter($environment) {
+        $environment = trim((string) $environment);
 
-        $this->db->select('status,job_name,event_text,records_processed');
+        if ($environment === '' || $environment === '*' || strtolower($environment) === 'all') {
+            return '';
+        }
+
+        if ($environment === '__UNKNOWN__' || strtolower($environment) === 'unknown') {
+            return '__UNKNOWN__';
+        }
+
+        return strtoupper($environment);
+    }
+
+    private function environmentFilterValues($environment) {
+        $environment = $this->normalizeEnvironmentFilter($environment);
+
+        if ($environment === '' || $environment === '__UNKNOWN__') {
+            return array();
+        }
+
+        $aliases = array(
+            'QA' => array('QA', 'QAS'),
+            'QAS' => array('QA', 'QAS'),
+            'PROD' => array('PROD', 'PRD', 'PRODUCTION'),
+            'PRD' => array('PROD', 'PRD', 'PRODUCTION'),
+            'PRODUCTION' => array('PROD', 'PRD', 'PRODUCTION'),
+            'HML' => array('HML', 'HOMOLOG', 'HOMOLOGATION'),
+            'HOMOLOG' => array('HML', 'HOMOLOG', 'HOMOLOGATION'),
+            'HOMOLOGATION' => array('HML', 'HOMOLOG', 'HOMOLOGATION')
+        );
+
+        return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
+    }
+
+    private function applyEnvironmentFilter($environment) {
+        $environment = $this->normalizeEnvironmentFilter($environment);
+
+        if ($environment === '') {
+            return;
+        }
+
+        if ($environment === '__UNKNOWN__') {
+            $this->db->group_start();
+            $this->db->where('environment IS NULL', null, false);
+            $this->db->or_where('TRIM(environment) =', '');
+            $this->db->group_end();
+            return;
+        }
+
+        $values = $this->environmentFilterValues($environment);
+        $this->db->group_start();
+        foreach ($values as $index => $value) {
+            if ($index === 0) {
+                $this->db->where('UPPER(TRIM(environment)) =', $value);
+            } else {
+                $this->db->or_where('UPPER(TRIM(environment)) =', $value);
+            }
+        }
+        $this->db->group_end();
+    }
+
+    private function environmentSql($environment, $prefix = 'WHERE') {
+        $environment = $this->normalizeEnvironmentFilter($environment);
+
+        if ($environment === '') {
+            return '';
+        }
+
+        if ($environment === '__UNKNOWN__') {
+            return ' '.$prefix.' (environment IS NULL OR TRIM(environment) = "")';
+        }
+
+        $conditions = array();
+        foreach ($this->environmentFilterValues($environment) as $value) {
+            $conditions[] = 'UPPER(TRIM(environment)) = '.$this->db->escape($value);
+        }
+
+        return ' '.$prefix.' ('.implode(' OR ', $conditions).')';
+    }
+
+	function getLastjobs($environment = '') {
+
+        $this->db->select('status,job_name,event_text,records_processed,environment');
         $this->db->from('tmf');
+        $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
         $this->db->limit(6);
         $query = $this->db->get();
         return $query->result();
     }
 
-    function listStatus($status) {
+    function listStatus($status, $environment = '') {
 
         $this->db->select('*');
         $this->db->from('tmf');
         $this->db->where('status', $status);
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->num_rows();
     }
 
-    function countAll(){
+    function countAll($environment = ''){
 
         $this->db->from('tmf');
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->num_rows();
     }
 
-    function graphMonth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY STATUS, MONTH(last_activity)');
+    function graphMonth($environment = ''){
+	    $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf'.$this->environmentSql($environment).' GROUP BY STATUS, MONTH(last_activity)');
         return $query->result();
     }
 
-    function graphReady(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "READY" GROUP BY STATUS, MONTH(last_activity)');
+    function graphReady($environment = ''){
+	    $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "READY"'.$this->environmentSql($environment, 'AND').' GROUP BY STATUS, MONTH(last_activity)');
         return $query->result();
     }
 
-    function graphError(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "ERROR" GROUP BY STATUS, MONTH(last_activity)');
+    function graphError($environment = ''){
+	    $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "ERROR"'.$this->environmentSql($environment, 'AND').' GROUP BY STATUS, MONTH(last_activity)');
         return $query->result();
     }
 
-    function graphWarning(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "WARNING" GROUP BY STATUS, MONTH(last_activity)');
+    function graphWarning($environment = ''){
+	    $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "WARNING"'.$this->environmentSql($environment, 'AND').' GROUP BY STATUS, MONTH(last_activity)');
         return $query->result();
     }
 
-    function graphRunning(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "RUNNING" GROUP BY STATUS, MONTH(last_activity)');
+    function graphRunning($environment = ''){
+	    $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", COUNT(STATUS) "AMOUNT" FROM tmf WHERE UPPER(STATUS) = "RUNNING"'.$this->environmentSql($environment, 'AND').' GROUP BY STATUS, MONTH(last_activity)');
         return $query->result();
     }
 
-    function months(){
-    	$query = $this->db->query('SELECT  MONTHNAME(last_activity) "MONTH"  FROM tmf WHERE UPPER(STATUS) = "READY" GROUP BY STATUS, MONTH(last_activity)  UNION SELECT  MONTHNAME(last_activity) "MONTH"  FROM tmf WHERE UPPER(STATUS) = "ERROR" GROUP BY STATUS, MONTH(last_activity)  UNION SELECT  MONTHNAME(last_activity) "MONTH" FROM tmf WHERE UPPER(STATUS) = "WARNING" GROUP BY STATUS, MONTH(last_activity) UNION SELECT  MONTHNAME(last_activity) "MONTH"  FROM tmf WHERE UPPER(STATUS) = "RUNNING" GROUP BY STATUS, MONTH(last_activity)');
+    function months($environment = ''){
+	    $query = $this->db->query('SELECT MONTHNAME(last_activity) "MONTH" FROM tmf'.$this->environmentSql($environment).' GROUP BY MONTH(last_activity) ORDER BY MIN(last_activity)');
         return $query->result();
     }
 
-    function lastDate(){
-    	$query = $this->db->query('SELECT last_activity FROM tmf ORDER BY last_activity DESC LIMIT 1');
+    function lastDate($environment = ''){
+	    $query = $this->db->query('SELECT last_activity FROM tmf'.$this->environmentSql($environment).' ORDER BY last_activity DESC LIMIT 1');
         return $query->result();
     }
 
-    function firstDate(){
-    	$query = $this->db->query('SELECT last_activity FROM tmf ORDER BY last_activity ASC LIMIT 1');
+    function firstDate($environment = ''){
+	    $query = $this->db->query('SELECT last_activity FROM tmf'.$this->environmentSql($environment).' ORDER BY last_activity ASC LIMIT 1');
         return $query->result();
     }
 
-    function readyGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function readyGrowth($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function errorGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function errorGrowth($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function warningGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function warningGrowth($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function runningGrowth(){
-    	$query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function runningGrowth($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 30 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function readyGrowthX90(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function readyGrowthX90($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function errorGrowthX90(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function errorGrowthX90($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function warningGrowthX90(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function warningGrowthX90($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function runningGrowthX90(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function runningGrowthX90($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 90 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function readyGrowthX180(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function readyGrowthX180($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "READY"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function errorGrowthX180(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function errorGrowthX180($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "ERROR"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function warningGrowthX180(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function warningGrowthX180($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "WARNING"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function runningGrowthX180(){
-        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
+    function runningGrowthX180($environment = ''){
+        $query = $this->db->query('SELECT UPPER(STATUS) "LABEL", MONTHNAME(last_activity) "MONTH", last_activity "DATE", COUNT(STATUS) "AMOUNT"  FROM tmf  WHERE UPPER(STATUS) = "RUNNING"'.$this->environmentSql($environment, 'AND').'  AND last_Activity BETWEEN NOW() - INTERVAL 180 DAY AND NOW() GROUP BY STATUS, MONTH(last_activity) ORDER BY DATE DESC');
         return $query->result();
     }
 
-    function statusGraph(){
-        $query = $this->db->query('SELECT LOWER(STATUS) AS STATUS, COUNT(STATUS) "AMOUNT" FROM tmf GROUP BY LOWER(STATUS) ORDER BY LOWER(STATUS)');
+    function statusGraph($environment = ''){
+        $query = $this->db->query('SELECT LOWER(STATUS) AS STATUS, COUNT(STATUS) "AMOUNT" FROM tmf'.$this->environmentSql($environment).' GROUP BY LOWER(STATUS) ORDER BY LOWER(STATUS)');
         return $query->result();
     }
 
-    function jobsAmount() {
-    	$query = $this->db->query('SELECT JOB_NAME,DIMENSION,COUNT(job_name) AS AMOUNT FROM tmf GROUP BY job_name,dimension ORDER BY DIMENSION ASC');
+    function jobsAmount($environment = '') {
+	    $query = $this->db->query('SELECT JOB_NAME,DIMENSION,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") AS ENVIRONMENT,COUNT(job_name) AS AMOUNT FROM tmf'.$this->environmentSql($environment).' GROUP BY job_name,dimension,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") ORDER BY DIMENSION ASC, ENVIRONMENT ASC');
     	return $query->result();
     }
 
-    function jobsStatusAmount() {
-    	$query = $this->db->query('SELECT JOB_NAME,DIMENSION,STATUS,COUNT(STATUS) AS AMOUNT FROM tmf GROUP BY JOB_NAME,DIMENSION,STATUS ORDER BY DIMENSION ASC');
+    function jobsStatusAmount($environment = '') {
+	    $query = $this->db->query('SELECT JOB_NAME,DIMENSION,STATUS,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") AS ENVIRONMENT,COUNT(STATUS) AS AMOUNT FROM tmf'.$this->environmentSql($environment).' GROUP BY JOB_NAME,DIMENSION,STATUS,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") ORDER BY DIMENSION ASC, ENVIRONMENT ASC');
     	return $query->result();
     }
 
-    function stgTableAmount() {
-    	$query = $this->db->query('SELECT id AS STG FROM tmf WHERE job_name LIKE UPPER("%STG%")');
+    function environmentSummary($environment = '') {
+        $query = $this->db->query('SELECT COALESCE(NULLIF(TRIM(environment), ""), "Unknown") AS ENVIRONMENT, COUNT(*) AS AMOUNT, SUM(CASE WHEN LOWER(status) = "ready" THEN 1 ELSE 0 END) AS READY, SUM(CASE WHEN LOWER(status) = "running" THEN 1 ELSE 0 END) AS RUNNING, SUM(CASE WHEN LOWER(status) IN ("error", "warning") THEN 1 ELSE 0 END) AS ATTENTION, MAX(last_activity) AS LAST_ACTIVITY FROM tmf'.$this->environmentSql($environment).' GROUP BY COALESCE(NULLIF(TRIM(environment), ""), "Unknown") ORDER BY ATTENTION DESC, AMOUNT DESC, ENVIRONMENT ASC');
+        return $query->result();
+    }
+
+    function stgTableAmount($environment = '') {
+        $query = $this->db->query('SELECT id AS STG FROM tmf WHERE job_name LIKE UPPER("%STG%")'.$this->environmentSql($environment, 'AND'));
     	return $query->num_rows();
     }
 
-    function dimTableAmount() {
-    	$query = $this->db->query('SELECT id AS DIM FROM tmf WHERE job_name LIKE UPPER("%DIM%")');
+    function dimTableAmount($environment = '') {
+        $query = $this->db->query('SELECT id AS DIM FROM tmf WHERE job_name LIKE UPPER("%DIM%")'.$this->environmentSql($environment, 'AND'));
     	return $query->num_rows();
     }
 
-     function factTableAmount() {
-    	$query = $this->db->query('SELECT job_name AS FACT FROM tmf WHERE job_name LIKE UPPER("%MET%") OR job_name LIKE UPPER("%METRIC%") OR job_name LIKE UPPER("%FATO%") OR job_name LIKE UPPER("%FAT%") OR job_name LIKE UPPER("%FACT%")');
+     function factTableAmount($environment = '') {
+        $query = $this->db->query('SELECT job_name AS FACT FROM tmf WHERE (job_name LIKE UPPER("%MET%") OR job_name LIKE UPPER("%METRIC%") OR job_name LIKE UPPER("%FATO%") OR job_name LIKE UPPER("%FAT%") OR job_name LIKE UPPER("%FACT%"))'.$this->environmentSql($environment, 'AND'));
     	return $query->num_rows();
     }
 
-    function dwAmount() {
-    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  dimension LIKE UPPER("%DW%")');
+    function dwAmount($environment = '') {
+        $query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE dimension LIKE UPPER("%DW%")'.$this->environmentSql($environment, 'AND'));
     	return $query->num_rows();
     }
 
-    function dmAmount() {
-    	$query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE  dimension LIKE UPPER("%DM%")');
+    function dmAmount($environment = '') {
+        $query = $this->db->query('SELECT DIMENSION AS DW FROM tmf WHERE dimension LIKE UPPER("%DM%")'.$this->environmentSql($environment, 'AND'));
     	return $query->num_rows();
     }
 
-    function dmAmountExec() {
-    	$query = $this->db->query('SELECT DIMENSION, COUNT(DIMENSION) AS AMOUNT FROM tmf WHERE  dimension LIKE UPPER("%DW%") GROUP BY DIMENSION');
+    function dmAmountExec($environment = '') {
+        $query = $this->db->query('SELECT DIMENSION, COUNT(DIMENSION) AS AMOUNT FROM tmf WHERE dimension LIKE UPPER("%DW%")'.$this->environmentSql($environment, 'AND').' GROUP BY DIMENSION');
     	return $query->result();
     }
 
-    function dimAmountExec() {
-        $query = $this->db->query('SELECT job_name AS DIM, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%DIM%") GROUP BY job_name');
+    function dimAmountExec($environment = '') {
+        $query = $this->db->query('SELECT job_name AS DIM, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%DIM%")'.$this->environmentSql($environment, 'AND').' GROUP BY job_name');
         return $query->result();
 
     }
 
-    function factAmountExec() {
-        $query = $this->db->query('SELECT job_name AS FACT, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%MET%") OR job_name LIKE UPPER("%METRIC%") OR job_name LIKE UPPER("%FATO%") OR job_name LIKE UPPER("%FAT%") OR job_name LIKE UPPER("%FACT%") GROUP BY job_name');
+    function factAmountExec($environment = '') {
+        $query = $this->db->query('SELECT job_name AS FACT, COUNT(job_name) AS AMOUNT FROM tmf WHERE (job_name LIKE UPPER("%MET%") OR job_name LIKE UPPER("%METRIC%") OR job_name LIKE UPPER("%FATO%") OR job_name LIKE UPPER("%FAT%") OR job_name LIKE UPPER("%FACT%"))'.$this->environmentSql($environment, 'AND').' GROUP BY job_name');
         return $query->result();
 
     }
 
-    function stgAmountExec() {
-        $query = $this->db->query('SELECT job_name AS STG, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%STG%") GROUP BY job_name');
+    function stgAmountExec($environment = '') {
+        $query = $this->db->query('SELECT job_name AS STG, COUNT(job_name) AS AMOUNT FROM tmf WHERE job_name LIKE UPPER("%STG%")'.$this->environmentSql($environment, 'AND').' GROUP BY job_name');
         return $query->result();
 
     }

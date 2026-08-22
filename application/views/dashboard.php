@@ -1,6 +1,7 @@
  <?php
   $hasJobsAmount = !empty($jobsAmount);
   $hasJobsStatusAmount = !empty($jobsStatusAmount);
+  $hasEnvironmentSummary = !empty($environmentSummary);
  ?>
  <script>
   $(document).ready(function(){
@@ -147,11 +148,16 @@
 
   .dashboard-paired-row .dashboard-card > .box-body,
   .dashboard-table-row .dashboard-card > .box-body {
-    min-height: 260px;
+    min-height: 220px;
   }
 
   .dashboard-chart-card > .box-body {
-    min-height: 250px;
+    min-height: 210px;
+  }
+
+  .dashboard-percent-card .chart-responsive {
+    margin: 0 auto;
+    max-width: 420px;
   }
 
   .dashboard-info-row .info-box {
@@ -169,8 +175,8 @@
     flex-direction: column;
     justify-content: center;
     margin: 0;
-    min-height: 260px;
-    padding: 56px 20px;
+    min-height: 210px;
+    padding: 34px 20px;
     text-align: center;
   }
 
@@ -180,7 +186,7 @@
   }
 
   .dashboard-paired-row .dashboard-empty-panel-small {
-    min-height: 260px;
+    min-height: 210px;
   }
 
   .dashboard-table-row .dashboard-empty-panel-small {
@@ -188,7 +194,7 @@
   }
 
   .dashboard-chart-card .dashboard-empty-panel-small {
-    min-height: 220px;
+    min-height: 180px;
   }
 
   .dashboard-empty-panel i {
@@ -619,6 +625,7 @@
                     ?>
                     </a>
                     <span class="product-description"> <?php echo html_escape($record->event_text); ?> </span>
+                    <span class="product-description"><i class="fa fa-globe"></i> <?php echo trim((string) $record->environment) !== '' ? html_escape($record->environment) : '<span class="label label-default">Unknown</span>'; ?></span>
                     <span class="product-description"> <?php if ($record->records_processed != 0) { echo (int) $record->records_processed.' Rows Were Affected.'; }?>
                     </span>
 
@@ -669,7 +676,7 @@
               <div id="dashboardPercentContent" class="row">
                 <div class="col-md-8">
                   <div class="chart-responsive">
-                    <canvas id="pieChart" height="520" width="600" style="width: 600px; height: 520px;"></canvas>
+                    <canvas id="pieChart" height="300" width="420" style="width: 420px; height: 300px;"></canvas>
                   </div>
                   <!-- ./chart-responsive -->
                 </div>
@@ -684,7 +691,7 @@
                   </ul>
                 </div>
                 <div class="col-md-4">
-                  <ul class="chart-legend clearfix" style="margin-top: 120px;">
+                  <ul class="chart-legend clearfix">
                     <li id="totalJobs"> </li>
                     <li>Represents 100%</li>
                   </ul>
@@ -745,6 +752,7 @@
                 <tr>
                   <th>Job Name</th>
                   <th>Dimension</th>
+                  <th>Environment</th>
                   <th>Amount</th>
                 </tr>
                 </thead>
@@ -758,6 +766,7 @@
                     <tr>
                       <td><?php echo $record->JOB_NAME ?></td>
                         <td><?php echo $record->DIMENSION ?></td>
+                        <td><?php echo $record->ENVIRONMENT === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($record->ENVIRONMENT); ?></td>
                         <td><?php echo $record->AMOUNT ?></td>
                     </tr>
                     <?php
@@ -769,6 +778,7 @@
                  <tr>
                   <th>Job Name</th>
                   <th>Dimension</th>
+                  <th>Environment</th>
                   <th>Amount</th>
                 </tr>
                 </tfoot>
@@ -801,6 +811,7 @@
                 <tr>
                   <th>Job Name</th>
                   <th>Dimension</th>
+                  <th>Environment</th>
                   <th>Status</th>
                   <th>Amount</th>
                 </tr>
@@ -815,6 +826,7 @@
                     <tr>
                       <td><?php echo $record->JOB_NAME ?></td>
                         <td><?php echo $record->DIMENSION ?></td>
+                        <td><?php echo $record->ENVIRONMENT === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($record->ENVIRONMENT); ?></td>
                         <td><?php 
                       switch ($record->STATUS) {
                         case 'ready':
@@ -854,6 +866,7 @@
                  <tr>
                   <th>Job Name</th>
                   <th>Dimension</th>
+                  <th>Environment</th>
                   <th>Status</th>
                   <th>Amount</th>
                 </tr>
@@ -863,6 +876,61 @@
             <!-- /.box-body -->
           </div>
           <!-- /.box -->
+        </div>
+      </div>
+
+      <div class="row dashboard-equal-row dashboard-table-row">
+        <div class="col-lg-12 col-md-12 col-xs-12">
+          <div class="box box-info dashboard-card dashboard-table-card">
+            <div class="box-header">
+              <h3 class="box-title">Environment execution summary</h3>
+              <div class="box-tools pull-right">
+                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
+                </button>
+                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
+              </div>
+            </div>
+            <div class="box-body">
+              <div id="dashboardEnvironmentSummaryEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="<?php echo $hasEnvironmentSummary ? 'display: none;' : ''; ?>">
+                <i class="fa fa-globe"></i>
+                <h4>No environment activity</h4>
+                <p>Environment totals will appear after TMF records include runtime context.</p>
+              </div>
+              <table id="dashboardEnvironmentSummaryTable" class="table table-bordered table-striped<?php echo $hasEnvironmentSummary ? ' table-config dataTable' : ''; ?>" style="<?php echo $hasEnvironmentSummary ? '' : 'display: none;'; ?>">
+                <thead>
+                <tr>
+                  <th>Environment</th>
+                  <th>Total Runs</th>
+                  <th>Ready</th>
+                  <th>Running</th>
+                  <th>Attention</th>
+                  <th>Last Activity</th>
+                </tr>
+                </thead>
+                <tbody>
+                  <?php
+                    if(!empty($environmentSummary))
+                    {
+                        foreach($environmentSummary as $record)
+                        {
+                          $environmentName = isset($record->ENVIRONMENT) ? (string) $record->ENVIRONMENT : 'Unknown';
+                    ?>
+                    <tr>
+                      <td><?php echo $environmentName === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($environmentName); ?></td>
+                      <td><?php echo number_format((int) $record->AMOUNT); ?></td>
+                      <td><span class="label label-success"><?php echo number_format((int) $record->READY); ?></span></td>
+                      <td><span class="label label-primary"><?php echo number_format((int) $record->RUNNING); ?></span></td>
+                      <td><span class="label label-<?php echo ((int) $record->ATTENTION) > 0 ? 'danger' : 'default'; ?>"><?php echo number_format((int) $record->ATTENTION); ?></span></td>
+                      <td><?php echo empty($record->LAST_ACTIVITY) ? '-' : html_escape(date('m-d-Y H:i:s', strtotime($record->LAST_ACTIVITY))); ?></td>
+                    </tr>
+                    <?php
+                        }
+                    }
+                    ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 

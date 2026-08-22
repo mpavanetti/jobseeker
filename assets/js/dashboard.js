@@ -11,6 +11,26 @@ function dashboardAjaxJson(url) {
   });
 }
 
+function dashboardSelectedEnvironment() {
+  var value = $('#globalEnvironmentSelector').val() || window.jobseekerDashboardEnvironment || 'all';
+
+  if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+    return window.JobSeekerGlobalEnvironment.normalize(value);
+  }
+
+  return String(value || 'all');
+}
+
+function dashboardUrl(path) {
+  var environment = dashboardSelectedEnvironment();
+
+  if (! environment || environment === 'all') {
+    return path;
+  }
+
+  return path + (path.indexOf('?') === -1 ? '?' : '&') + 'environment=' + encodeURIComponent(environment);
+}
+
 function dashboardJenkinsApiUrl(path) {
   var baseUrl = window.jobseekerJenkinsUrl || '';
   return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
@@ -84,6 +104,7 @@ function dashboardShowEmptyDashboard() {
   dashboardShowEmptyPanel('#dashboardPercentContent, #dashboardPercentFooter', '#dashboardPercentEmptyState');
   dashboardDisableEmptyDataTable('#dashboardJobsAmountTable', '#dashboardJobsAmountEmptyState');
   dashboardDisableEmptyDataTable('#dashboardJobsStatusAmountTable', '#dashboardJobsStatusAmountEmptyState');
+  dashboardDisableEmptyDataTable('#dashboardEnvironmentSummaryTable', '#dashboardEnvironmentSummaryEmptyState');
   dashboardShowEmptyPanel('#dashboardDwChartContent', '#dashboardDwChartEmptyState');
   dashboardShowEmptyPanel('#dashboardDmChartContent', '#dashboardDmChartEmptyState');
   dashboardShowEmptyPanel('#dashboardFactChartContent', '#dashboardFactChartEmptyState');
@@ -127,7 +148,7 @@ function loadDashboardJenkinsOverview() {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/running",             
+        url: dashboardUrl("Dashboard/query/running"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -147,7 +168,7 @@ function loadDashboardJenkinsOverview() {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/ready",             
+        url: dashboardUrl("Dashboard/query/ready"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -167,7 +188,7 @@ function loadDashboardJenkinsOverview() {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/warning",             
+        url: dashboardUrl("Dashboard/query/warning"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -187,7 +208,7 @@ function loadDashboardJenkinsOverview() {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/error",             
+        url: dashboardUrl("Dashboard/query/error"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -210,7 +231,7 @@ function runningGraph(result) {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/running",             
+        url: dashboardUrl("Dashboard/query/running"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -235,7 +256,7 @@ function readyGraph(result) {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/ready",             
+        url: dashboardUrl("Dashboard/query/ready"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -262,7 +283,7 @@ function warningGraph(result) {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/warning",             
+        url: dashboardUrl("Dashboard/query/warning"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -287,7 +308,7 @@ function errorGraph(result) {
       
       $.ajax({    //create an ajax request
         type: "GET",
-        url: "Dashboard/query/error",             
+        url: dashboardUrl("Dashboard/query/error"),
         dataType: "html",   //expect html to be returned   
          beforeSend: function() {
 
@@ -318,7 +339,7 @@ function errorGraph(result) {
 
       $.ajax({
         type: "GET",
-        url: "Dashboard/result",
+        url: dashboardUrl("Dashboard/result"),
         datatype: "json",
         async: false,
         success: function(data){
@@ -345,7 +366,7 @@ function errorGraph(result) {
 
 var tableAmount = $.parseJSON($.ajax({
       contentType: "application/json",
-        url:  'Dashboard/getAmount',
+        url:  dashboardUrl('Dashboard/getAmount'),
         dataType: "json", 
         async: false,
         beforeSend: function() {
@@ -406,7 +427,7 @@ $('#stgTableAmount').append('<b>' + tableAmount.data.stgTableAmount + ' </b>');
 
 var dateRequest = $.parseJSON($.ajax({
       contentType: "application/json",
-        url:  'Dashboard/getdate',
+        url:  dashboardUrl('Dashboard/getdate'),
         dataType: "json", 
         async: false,
         beforeSend: function() {
@@ -432,7 +453,7 @@ $('#date').append('<b>From: </b>' + firstdate + '<b> To: </b>' + lastDate);
 
     var request2 = $.parseJSON($.ajax({
       contentType: "application/json",
-        url:  'Dashboard/graphMonth',
+        url:  dashboardUrl('Dashboard/graphMonth'),
         dataType: "json", 
         async: false,
         beforeSend: function() {

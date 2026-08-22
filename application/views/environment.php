@@ -12,11 +12,70 @@
       width: 500px;
       box-sizing: border-box;
     }
+
+    .environment-page .content {
+      padding: 18px;
+    }
+
+    .environment-shell {
+      max-width: 1480px;
+      width: 100%;
+    }
+
+    .environment-page .info-box,
+    .environment-entry-form,
+    .environment-page .box {
+      border: 1px solid #d8e0e8;
+      border-radius: 6px;
+      box-shadow: 0 8px 20px rgba(16, 42, 67, .08);
+    }
+
+    .environment-page .info-box {
+      min-height: 86px;
+    }
+
+    .environment-page .info-box-icon {
+      border-radius: 6px 0 0 6px;
+      height: 86px;
+      line-height: 86px;
+    }
+
+    .environment-entry-form {
+      background: #fff;
+      margin-top: 18px;
+      padding: 18px 18px 0;
+    }
+
+    .environment-entry-form label,
+    .environment-page table th {
+      color: #243b53;
+      font-size: 12px;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .environment-status-pill {
+      border-radius: 12px;
+      display: inline-block;
+      font-weight: 700;
+      padding: 4px 9px;
+    }
+
+    .environment-status-active {
+      background: #e6fffa;
+      color: #047857;
+    }
+
+    .environment-status-inactive {
+      background: #edf2f7;
+      color: #4a5568;
+    }
 </style>
 
 
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
-<div class="content-wrapper">    
+<div class="content-wrapper environment-page">
     <section class="content-header">
       <h1>
         <i class="fa fa-dashboard"></i> Context Settings <b>Environment Details</b>
@@ -31,7 +90,7 @@
 
     <section class="content">
 
-      <div class="container">
+      <div class="container-fluid environment-shell">
         <div class="row" style="padding-top: 15px;">
         <div class="col-md-3 col-sm-6 col-xs-12">
           <div class="info-box animated flipInX">
@@ -93,8 +152,9 @@
             </div>
           </div>
        
-        <div class="row animated fadeIn" style="margin-top: 25px;">
+        <div class="row animated fadeIn environment-entry-form">
            <form action="<?php echo base_url() ?>Context/addEnvironment" method="POST" id="searchList">
+            <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Environment Name</label>
@@ -120,7 +180,7 @@
               </div>
 
               <div class="col-lg-1 col-md-1 col-sm-6 col-xs-12 form-group" style="margin-top: 25px;">
-                <button type="submit" class="btn btn-md btn-success btn-block searchList pull-right"><i class="fa fa-plus" aria-hidden="true"></i></button> 
+                <button type="submit" class="btn btn-md btn-success btn-block searchList pull-right" title="Add environment"><i class="fa fa-plus" aria-hidden="true"></i></button>
               </div>
           </div>
          </form>
@@ -153,15 +213,15 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->Id ?></td>
+                      <td><?php echo (int) $record->Id ?></td>
                       <td><?php echo date('Y-m-d H:i:s', strtotime($record->CreatedOn)) ?></td>
-                        <td><?php echo $record->Environment ?></td>
-                        <td><?php echo $record->Description ?></td>
-                        <td><?php echo $record->IsActive ?></td>
+                        <td><b><?php echo html_escape($record->Environment) ?></b></td>
+                        <td><?php echo html_escape($record->Description) ?></td>
+                        <td><?php echo ($record->IsActive == 1) ? '<span class="environment-status-pill environment-status-active">Active</span>' : '<span class="environment-status-pill environment-status-inactive">Inactive</span>' ?></td>
                         <td><?php if($record->ModifiedOn == null){ echo ""; } else { echo date('Y-m-d H:i:s', strtotime($record->ModifiedOn)); }  ?></td>
                        <?php if($role != 1) {  ?> <td>
-                          <a class="btn btn-sm btn-warning" href="<?php echo base_url().'Context/editEnvironment/'.$record->Id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->Id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                          <a class="btn btn-sm btn-warning" href="<?php echo base_url().'Context/editEnvironment/'.(int) $record->Id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->Id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php

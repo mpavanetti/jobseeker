@@ -99,21 +99,21 @@
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group" style="display: none;">
                 <div class="input-group" style="width: 100%;">
                   <label>Context Id</label>
-                      <input id="ContextId" type="text" name="ContextId" value="<?php echo $list[0]->Id ?>" class="form-control" placeholder="Enter Context Id" maxlength="11" autocomplete="off" required/>
+                      <input id="ContextId" type="text" name="ContextId" value="<?php echo (int) $list[0]->Id ?>" class="form-control" placeholder="Enter Context Id" maxlength="11" autocomplete="off" required/>
                 </div>
               </div>
 
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Context Key</label>
-                      <input id="contextKey" type="text" name="contextKey" value="<?php echo $list[0]->ContextKey ?>" class="form-control" placeholder="Enter Context Key" maxlength="1000" autocomplete="off" required/>
+                      <input id="contextKey" type="text" name="contextKey" value="<?php echo html_escape($list[0]->ContextKey) ?>" class="form-control" placeholder="Enter Context Key" maxlength="1000" autocomplete="off" required/>
                 </div>
               </div>
 
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Context Value</label>
-                      <input id="contextValue" type="text" name="contextValue" value="<?php echo $list[0]->ContextValue ?>" class="form-control" placeholder="Enter Context Value" maxlength="255" autocomplete="off" required/>
+                      <input id="contextValue" type="text" name="contextValue" value="<?php echo html_escape($list[0]->ContextValue) ?>" class="form-control" placeholder="Enter Context Value" maxlength="1000" autocomplete="off" required/>
                 </div>
               </div>
               
@@ -122,8 +122,8 @@
                 <div class="input-group" style="width: 100%;">
                   <label>Active Context</label>
                       <select id="active" class="form-control" name="active">
-                        <option value="1">True</option>
-                        <option value="0">False</option>
+                        <option value="1" <?php echo ($list[0]->IsActive == 1) ? 'selected' : ''; ?>>True</option>
+                        <option value="0" <?php echo ($list[0]->IsActive == 0) ? 'selected' : ''; ?>>False</option>
                       </select>
                 </div>
               </div>
@@ -132,8 +132,8 @@
                 <div class="input-group" style="width: 100%;">
                   <label>Is Encrypted</label>
                       <select id="encrypted" class="form-control" name="encrypted">
-                        <option value="0">False</option>
-                        <option value="1">True</option>
+                        <option value="0" <?php echo ($list[0]->isEncrypted == 0) ? 'selected' : ''; ?>>False</option>
+                        <option value="1" <?php echo ($list[0]->isEncrypted == 1) ? 'selected' : ''; ?>>True</option>
                       </select>
                 </div>
               </div>
@@ -148,7 +148,7 @@
                                 foreach($listProjects as $projects)
                                 {
                             ?>
-                        <option value="<?php echo $projects->ProjectName ?>"><?php echo $projects->ProjectName ?></option>
+                          <option value="<?php echo html_escape($projects->ProjectName) ?>" <?php echo ($projects->ProjectName == $list[0]->ProjectName) ? 'selected' : ''; ?>><?php echo html_escape($projects->ProjectName) ?></option>
                       <?php } } ?>
                       </select>
                 </div>
@@ -163,7 +163,7 @@
                                 foreach($listEnvironments as $env)
                                 {
                             ?>
-                        <option value="<?php echo $env->Environment ?>"><?php echo $env->Environment ?></option>
+                          <option value="<?php echo html_escape($env->Environment) ?>" <?php echo ($env->Environment == $list[0]->Environment) ? 'selected' : ''; ?>><?php echo html_escape($env->Environment) ?></option>
                       <?php } } ?>
                       </select>
                 </div>
@@ -173,7 +173,7 @@
               <div class="col-lg-5 col-md-5 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Description</label>
-                      <input id="description" type="text" name="description" value="<?php echo $list[0]->Description ?>" class="form-control" placeholder="Enter Description" maxlength="2000" autocomplete="off"/>
+                      <input id="description" type="text" name="description" value="<?php echo html_escape($list[0]->Description) ?>" class="form-control" placeholder="Enter Description" maxlength="2000" autocomplete="off"/>
                 </div>
               </div>
 

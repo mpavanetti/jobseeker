@@ -138,6 +138,24 @@ class JobCreation extends BaseController
       return $threshold;
     }
 
+    private function createRuntimeEnvironmentProperties($dom, $environment) {
+      $properties = $dom->createElement('properties');
+      $parametersProperty = $dom->createElement('hudson.model.ParametersDefinitionProperty');
+      $parameterDefinitions = $dom->createElement('parameterDefinitions');
+      $environmentParameter = $dom->createElement('hudson.model.StringParameterDefinition');
+
+      $this->appendTextElement($dom, $environmentParameter, 'name', 'ENVIRONMENT');
+      $this->appendTextElement($dom, $environmentParameter, 'description', 'Runtime environment managed by JobSeeker.');
+      $this->appendTextElement($dom, $environmentParameter, 'defaultValue', $environment);
+      $this->appendTextElement($dom, $environmentParameter, 'trim', 'true');
+
+      $parameterDefinitions->appendChild($environmentParameter);
+      $parametersProperty->appendChild($parameterDefinitions);
+      $properties->appendChild($parametersProperty);
+
+      return $properties;
+    }
+
     private function appendDownstreamJobToExistingJob($sourceJobName, $targetJobName, $optionsRadios) {
       $sourceJobPath = $this->jenkinsJobPath($sourceJobName);
       $jobResponse = $this->requestJenkins('GET', $sourceJobPath . '/config.xml');
@@ -470,6 +488,32 @@ class JobCreation extends BaseController
         }
 
         return 'H/'.$number;
+      }
+
+      private function cleanCustomCronExpression($value) {
+        $value = preg_replace('/\s+/', ' ', trim((string) $value));
+
+        if ($value === '' || strlen($value) > 120) {
+          return FALSE;
+        }
+
+        $allowedTags = array('@hourly', '@daily', '@weekly', '@monthly', '@annually', '@yearly', '@midnight');
+        if (in_array($value, $allowedTags, TRUE)) {
+          return $value;
+        }
+
+        $parts = preg_split('/\s+/', $value);
+        if (count($parts) !== 5) {
+          return FALSE;
+        }
+
+        foreach ($parts as $part) {
+          if ($part === '' || ! preg_match('/^[A-Za-z0-9*?,\/#LWH()\-]+$/', $part)) {
+            return FALSE;
+          }
+        }
+
+        return implode(' ', $parts);
       }
 
       private function removeUploadDirectory($path) {
@@ -1465,6 +1509,7 @@ class JobCreation extends BaseController
             // Abort Build
             $this->form_validation->set_rules('timeoutMinutes','Time Out in Minutes','trim|max_length[50]');
             $this->form_validation->set_rules('timeoutSeconds','Time Out in Seconds','trim|max_length[50]');
+            $this->form_validation->set_rules('customCronExpression','Custom Cron Expression','trim|max_length[120]');
 
             // Enable Email Notification
              $this->form_validation->set_rules('recipients','Recipients','trim|max_length[1000]');
@@ -1513,6 +1558,7 @@ class JobCreation extends BaseController
                 $singleDayOfMonth = $this->input->post('singleDayOfMonth');
                 $singleMonth = $this->input->post('singleMonth');
                 $singleDayOfWeek = $this->input->post('singleDayOfWeek');
+                $customCronExpression = $this->security->xss_clean($this->input->post('customCronExpression'));
 
                 // Execute a Windows Command Option
 
@@ -1523,8 +1569,21 @@ class JobCreation extends BaseController
                 $windowsCommandLine = $this->input->post('windowsCommandLine');
 
                 //Environment
-                $environment = $this->input->post('environment');
+                $environment = trim((string) $this->input->post('environment'));
                 $checkEnvironment = $this->security->xss_clean($this->input->post('checkEnvironment'));
+
+                if ($environment === '' || $environment === '0') {
+                  $this->session->set_flashdata('error', 'Please select the runtime environment for this Jenkins job. Existing jobs without an environment will still be shown as Unknown.');
+                  redirect('JobCreation');
+                }
+
+                $this->load->model('Context_model');
+                if ((int) $this->Context_model->validateEnvironment($environment) === 0) {
+                  $this->session->set_flashdata('error', 'The selected runtime environment is not configured in Context Settings.');
+                  redirect('JobCreation');
+                }
+
+                $checkEnvironment = 1;
 
                 if($executionStrategy == 'script'){
                   if($scriptType == 'talend'){
@@ -1895,6 +1954,7 @@ class JobCreation extends BaseController
                 $repetitiveDayOfMonthString = $this->cronFieldString($repetitiveDayOfMonth, 1, 31);
                 $repetitiveMonthString = $this->cronFieldString($repetitiveMonth, 1, 12);
                 $repetitiveDayOfWeekString = $this->cronFieldString($repetitiveDayOfWeek, 1, 7);
+                $customCronString = $this->cleanCustomCronExpression($customCronExpression);
 
                 if($checkBuild == 1){
                   if($action == "single" && ($singleMinuteString === FALSE || $singleHourString === FALSE || $singleDayOfMonthString === FALSE || $singleMonthString === FALSE || $singleDayOfWeekString === FALSE)){
@@ -1906,7 +1966,10 @@ class JobCreation extends BaseController
                   } else if($action == "tags" && ! in_array($tag, array('@hourly', '@daily', '@weekly', '@monthly', '@annually', '@yearly', '@midnight'), TRUE)){
                     $this->session->set_flashdata('error', 'You missed to select a valid Execution Tag option.');
                     redirect('JobCreation');
-                  } else if($action != "single" && $action != "repetitive" && $action != "tags"){
+                  } else if($action == "cron" && $customCronString === FALSE){
+                    $this->session->set_flashdata('error', 'You missed to provide a valid Jenkins cron expression. Use 5 fields such as H 2 * * 1-5.');
+                    redirect('JobCreation');
+                  } else if($action != "single" && $action != "repetitive" && $action != "tags" && $action != "cron"){
                     $this->session->set_flashdata('error', 'You missed to select one field value for Build Periodically function');
                     redirect('JobCreation');
                   }
@@ -1934,6 +1997,7 @@ class JobCreation extends BaseController
                 $node_description = $dom->createElement('description', $description);
 
                 $root->appendChild($node_description);
+                $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment));
 
                 // Create Trigger Elements
                 if($checkBuild == 1){ // If Build Periodically Build is selected then
@@ -1965,6 +2029,15 @@ class JobCreation extends BaseController
                       $spec = $dom->createElement('spec', $tag);
                       $hudson_triggers->appendChild($spec);  
                       $triggers->appendChild($hudson_triggers);    
+                      $root->appendChild($triggers);
+                  }
+
+                  if($action == "cron") {
+                     $triggers = $dom->createElement('triggers');
+                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
+                      $spec = $dom->createElement('spec', $customCronString);
+                      $hudson_triggers->appendChild($spec);
+                      $triggers->appendChild($hudson_triggers);
                       $root->appendChild($triggers);
                   }
                 }
@@ -2304,7 +2377,12 @@ class JobCreation extends BaseController
                   }
 
                   if ($triggerAfterSave === '1') {
-                    $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/build');
+                    $triggerBody = http_build_query(array('ENVIRONMENT' => $environment));
+                    $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
+
+                    if (! $this->isSuccessfulJenkinsStatus($triggerResponse['status']) && in_array((int) $triggerResponse['status'], array(400, 404), TRUE)) {
+                      $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/build');
+                    }
 
                     if ($this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
                       $triggeredCount += 1;
