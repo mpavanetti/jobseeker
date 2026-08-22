@@ -123,6 +123,14 @@ services:
       retries: 5
       start_period: 30s
 
+  jenkins-home-init:
+    image: alpine:3.20
+    command: sh -lc "mkdir -p /var/jenkins_home && chown -R ${JOBSEEKER_JENKINS_UID:-1000}:${JOBSEEKER_JENKINS_GID:-1000} /var/jenkins_home"
+    volumes:
+      - ./jenkins:/var/jenkins_home
+    networks:
+      - internal
+
   jenkins:
     build:
       context: .
@@ -130,6 +138,8 @@ services:
     depends_on:
       docker-runtime:
         condition: service_healthy
+      jenkins-home-init:
+        condition: service_completed_successfully
     ports:
       - "${JENKINS_HTTP_PORT:-8080}:8080"
       - "${JENKINS_AGENT_PORT:-50000}:50000"
