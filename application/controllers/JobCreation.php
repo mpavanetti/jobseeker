@@ -2299,23 +2299,37 @@ class JobCreation extends BaseController
     private function defaultFailureEmailBody() {
       return <<<'HTML'
 <html>
-  <body style="margin:0; padding:0; background:#f4f6f8; color:#1f2933; font-family:Arial, Helvetica, sans-serif;">
-    <div style="max-width:720px; margin:0 auto; padding:24px;">
-      <div style="background:#ffffff; border:1px solid #d9e2ec; border-radius:6px; overflow:hidden;">
-        <div style="background:#b91c1c; color:#ffffff; padding:18px 22px;">
-          <h1 style="margin:0; font-size:22px; line-height:1.3;">Build failed: ${PROJECT_NAME} #${BUILD_NUMBER}</h1>
+  <body style="margin:0; padding:0; background:#f3f4f6; color:#17202a; font-family:Arial, Helvetica, sans-serif;">
+    <div style="max-width:780px; margin:0 auto; padding:24px;">
+      <div style="background:#ffffff; border:1px solid #d8dee9; border-radius:6px; overflow:hidden;">
+        <div style="background:#991b1b; color:#ffffff; padding:20px 24px;">
+          <p style="margin:0 0 6px; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:#fee2e2;">${BUILD_STATUS}</p>
+          <h1 style="margin:0; font-size:23px; line-height:1.3;">${PROJECT_NAME} #${BUILD_NUMBER} failed</h1>
+          <p style="margin:8px 0 0; font-size:14px; line-height:1.4; color:#fee2e2;">${CAUSE}</p>
         </div>
-        <div style="padding:22px;">
-          <p style="margin:0 0 16px; font-size:15px; line-height:1.5;">Jenkins marked this JobSeeker build as failed. Review the summary and recent console output below before rerunning or checking dependent jobs.</p>
-          <table style="width:100%; border-collapse:collapse; margin:0 0 18px; font-size:14px;">
-            <tr><th align="left" style="width:150px; padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Job</th><td style="padding:8px; border:1px solid #d9e2ec;">${PROJECT_NAME}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Build</th><td style="padding:8px; border:1px solid #d9e2ec;">#${BUILD_NUMBER}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d9e2ec; color:#b91c1c; font-weight:bold;">${BUILD_STATUS}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Cause</th><td style="padding:8px; border:1px solid #d9e2ec;">${CAUSE}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d9e2ec; background:#f8fafc;">Build URL</th><td style="padding:8px; border:1px solid #d9e2ec;"><a href="${BUILD_URL}" style="color:#2563eb;">${BUILD_URL}</a></td></tr>
+        <div style="padding:24px;">
+          <p style="margin:0 0 18px; font-size:15px; line-height:1.55;">Jenkins marked this JobSeeker build as failed. Start with the highlighted error excerpt, then open the console log if the surrounding context is needed.</p>
+          <p style="margin:0 0 20px;">
+            <a href="${BUILD_URL}" style="display:inline-block; margin:0 8px 8px 0; padding:9px 13px; background:#1f2937; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Open build</a>
+            <a href="${BUILD_URL}console" style="display:inline-block; margin:0 8px 8px 0; padding:9px 13px; background:#2563eb; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Console log</a>
+            <a href="${BUILD_URL}consoleText" style="display:inline-block; margin:0 8px 8px 0; padding:9px 13px; background:#475569; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Raw log</a>
+            <a href="${PROJECT_URL}" style="display:inline-block; margin:0 0 8px 0; padding:9px 13px; background:#e5e7eb; color:#111827; text-decoration:none; border-radius:4px; font-size:13px;">Job page</a>
+          </p>
+          <table style="width:100%; border-collapse:collapse; margin:0 0 20px; font-size:14px;">
+            <tr><th align="left" style="width:150px; padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Job</th><td style="padding:8px; border:1px solid #d8dee9;">${PROJECT_NAME}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build</th><td style="padding:8px; border:1px solid #d8dee9;">#${BUILD_NUMBER}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d8dee9; color:#991b1b; font-weight:bold;">${BUILD_STATUS}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build ID</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_ID"}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build tag</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_TAG"}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Node</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="NODE_NAME"} / executor ${ENV,var="EXECUTOR_NUMBER"}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Workspace</th><td style="padding:8px; border:1px solid #d8dee9; word-break:break-all;">${ENV,var="WORKSPACE"}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Cause</th><td style="padding:8px; border:1px solid #d8dee9;">${CAUSE}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build URL</th><td style="padding:8px; border:1px solid #d8dee9; word-break:break-all;"><a href="${BUILD_URL}" style="color:#2563eb;">${BUILD_URL}</a></td></tr>
           </table>
-          <h2 style="margin:18px 0 8px; font-size:16px;">Recent Console Output</h2>
-          <pre style="white-space:pre-wrap; word-break:break-word; background:#111827; color:#e5e7eb; padding:14px; border-radius:4px; font-size:12px; line-height:1.45;">${BUILD_LOG, maxLines=120, escapeHtml=true}</pre>
+          <h2 style="margin:20px 0 8px; font-size:16px;">Error Focus</h2>
+          <pre style="white-space:pre-wrap; word-break:break-word; background:#111827; color:#e5e7eb; padding:14px; border-radius:4px; font-size:12px; line-height:1.45;">${BUILD_LOG_REGEX, regex="(?i)(traceback|[a-z_][a-z0-9_]*(error|exception):|error|exception|fatal|command not found|no such file|permission denied|returned non-zero exit status|script returned exit code|build step .* marked build as failure)", linesBefore=5, linesAfter=0, maxTailMatches=6, maxLineLength=360, showTruncatedLines=false, escapeHtml=true, matchedLineHtmlStyle="color:#fecaca; font-weight:bold;", defaultValue="No explicit error lines were detected in the captured console output."}</pre>
+          <h2 style="margin:20px 0 8px; font-size:16px;">Recent Console Output</h2>
+          <pre style="white-space:pre-wrap; word-break:break-word; background:#0f172a; color:#e5e7eb; padding:14px; border-radius:4px; font-size:12px; line-height:1.45;">${BUILD_LOG, maxLines=160, maxLineLength=500, escapeHtml=true}</pre>
         </div>
       </div>
     </div>
