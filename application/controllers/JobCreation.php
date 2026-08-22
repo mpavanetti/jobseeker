@@ -80,6 +80,142 @@ class JobCreation extends BaseController
       );
     }
 
+    private function cleanSubmittedJobNameList($jobNames) {
+      if ($jobNames === NULL || $jobNames === '') {
+        return array('ok' => TRUE, 'message' => '', 'names' => array());
+      }
+
+      if (! is_array($jobNames)) {
+        $jobNames = preg_split('/[\r\n,;]+/', (string) $jobNames);
+      }
+
+      $cleanNames = array();
+      $seen = array();
+
+      foreach ((array) $jobNames as $jobName) {
+        $jobName = trim((string) $jobName);
+        if ($jobName === '') {
+          continue;
+        }
+
+        $clean = $this->cleanSubmittedJobName($jobName);
+        if (! $clean['ok']) {
+          return array('ok' => FALSE, 'message' => $clean['message'], 'names' => array());
+        }
+
+        if (! isset($seen[$clean['name']])) {
+          $seen[$clean['name']] = TRUE;
+          $cleanNames[] = $clean['name'];
+        }
+      }
+
+      return array('ok' => TRUE, 'message' => '', 'names' => $cleanNames);
+    }
+
+    private function firstDirectChildElement($parent, $tagName) {
+      if (! $parent) {
+        return NULL;
+      }
+
+      foreach ($parent->childNodes as $child) {
+        if ($child->nodeType === XML_ELEMENT_NODE && $child->tagName === $tagName) {
+          return $child;
+        }
+      }
+
+      return NULL;
+    }
+
+    private function createBuildTriggerThreshold($dom, $optionsRadios) {
+      $isFailureThreshold = (string) $optionsRadios === '2';
+      $threshold = $dom->createElement('threshold');
+
+      $this->appendTextElement($dom, $threshold, 'name', $isFailureThreshold ? 'FAILURE' : 'SUCCESS');
+      $this->appendTextElement($dom, $threshold, 'ordinal', $isFailureThreshold ? '2' : '0');
+      $this->appendTextElement($dom, $threshold, 'color', $isFailureThreshold ? 'RED' : 'BLUE');
+      $this->appendTextElement($dom, $threshold, 'completeBuild', 'true');
+
+      return $threshold;
+    }
+
+    private function appendDownstreamJobToExistingJob($sourceJobName, $targetJobName, $optionsRadios) {
+      $sourceJobPath = $this->jenkinsJobPath($sourceJobName);
+      $jobResponse = $this->requestJenkins('GET', $sourceJobPath . '/config.xml');
+
+      if ((int) $jobResponse['status'] !== 200) {
+        return array('ok' => FALSE, 'updated' => FALSE, 'status' => $jobResponse['status']);
+      }
+
+      $dom = new DOMDocument();
+      $previousErrors = libxml_use_internal_errors(TRUE);
+      $loaded = $dom->loadXML($jobResponse['body']);
+      libxml_clear_errors();
+      libxml_use_internal_errors($previousErrors);
+
+      if (! $loaded || ! $dom->documentElement) {
+        return array('ok' => FALSE, 'updated' => FALSE, 'status' => 422);
+      }
+
+      $root = $dom->documentElement;
+      $publishers = $this->firstDirectChildElement($root, 'publishers');
+
+      if ($publishers === NULL) {
+        $publishers = $dom->createElement('publishers');
+        $buildWrappers = $this->firstDirectChildElement($root, 'buildWrappers');
+
+        if ($buildWrappers !== NULL) {
+          $root->insertBefore($publishers, $buildWrappers);
+        } else {
+          $root->appendChild($publishers);
+        }
+      }
+
+      $buildTrigger = $this->firstDirectChildElement($publishers, 'hudson.tasks.BuildTrigger');
+      $isNewTrigger = FALSE;
+
+      if ($buildTrigger === NULL) {
+        $buildTrigger = $dom->createElement('hudson.tasks.BuildTrigger');
+        $publishers->appendChild($buildTrigger);
+        $isNewTrigger = TRUE;
+      }
+
+      $childProjects = $this->firstDirectChildElement($buildTrigger, 'childProjects');
+      if ($childProjects === NULL) {
+        $childProjects = $dom->createElement('childProjects');
+        $buildTrigger->insertBefore($childProjects, $buildTrigger->firstChild);
+      }
+
+      $projects = array();
+      foreach (explode(',', $childProjects->textContent) as $projectName) {
+        $projectName = trim($projectName);
+        if ($projectName !== '' && ! in_array($projectName, $projects, TRUE)) {
+          $projects[] = $projectName;
+        }
+      }
+
+      if (in_array($targetJobName, $projects, TRUE)) {
+        return array('ok' => TRUE, 'updated' => FALSE, 'status' => 200);
+      }
+
+      $projects[] = $targetJobName;
+      while ($childProjects->firstChild) {
+        $childProjects->removeChild($childProjects->firstChild);
+      }
+      $childProjects->appendChild($dom->createTextNode(implode(', ', $projects)));
+
+      if ($isNewTrigger || $this->firstDirectChildElement($buildTrigger, 'threshold') === NULL) {
+        $buildTrigger->appendChild($this->createBuildTriggerThreshold($dom, $optionsRadios));
+      }
+
+      $saveResponse = $this->requestJenkins('POST', $sourceJobPath . '/config.xml', $dom->saveXML(), 'text/xml');
+
+      return array(
+        'ok' => $this->isSuccessfulJenkinsStatus($saveResponse['status']),
+        'updated' => TRUE,
+        'status' => $saveResponse['status']
+      );
+    }
+
     private function jobCreationDatesPath() {
       return APPPATH . 'cache/job_creation_dates.json';
     }
@@ -1354,6 +1490,14 @@ class JobCreation extends BaseController
                 $job_name = $jobNames[0];
                 $description = trim((string) $this->security->xss_clean($this->input->post('description')));
                 $triggerAfterSave = $this->security->xss_clean($this->input->post('trigger_after_save')) == '1' ? '1' : '0';
+                $submittedUpstreamJobs = $this->cleanSubmittedJobNameList($this->input->post('upstreamJobList'));
+
+                if (! $submittedUpstreamJobs['ok']) {
+                  $this->session->set_flashdata('error', $submittedUpstreamJobs['message']);
+                  redirect('JobCreation');
+                }
+
+                $upstreamJobNames = $submittedUpstreamJobs['names'];
 
                 // Timestamp Checkbox
                 $timestamp = $this->security->xss_clean($this->input->post('timestamp'));
@@ -2060,25 +2204,7 @@ class JobCreation extends BaseController
                     $childProjects = $dom->createElement('childProjects', $jobListString );
                     $BuildTrigger->appendChild($childProjects);
 
-                    if ($optionsRadios == "1"){
-                      $threshold = $dom->createElement('threshold');
-                      $thresholdName = $dom->createElement('name', 'SUCCESS' );
-                      $thresholdOrdinal = $dom->createElement('ordinal', '0' );
-                      $thresholdColor = $dom->createElement('color', 'BLUE' );
-                      $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
-                    } else if ($optionsRadios == "2") {
-                      $threshold = $dom->createElement('threshold');
-                      $thresholdName = $dom->createElement('name', 'FAILURE' );
-                      $thresholdOrdinal = $dom->createElement('ordinal', '2' );
-                      $thresholdColor = $dom->createElement('color', 'RED' );
-                      $thresholdCompleteBuild = $dom->createElement('completeBuild', 'true' );
-                    }
-
-                    $threshold->appendChild($thresholdName);
-                    $threshold->appendChild($thresholdOrdinal);
-                    $threshold->appendChild($thresholdColor);
-                    $threshold->appendChild($thresholdCompleteBuild);
-                    $BuildTrigger->appendChild($threshold);
+                    $BuildTrigger->appendChild($this->createBuildTriggerThreshold($dom, $optionsRadios));
                   }
                 }
 
@@ -2153,8 +2279,10 @@ class JobCreation extends BaseController
                 $createdCount = 0;
                 $updatedCount = 0;
                 $triggeredCount = 0;
+                $upstreamWireCount = 0;
                 $saveFailures = array();
                 $triggerFailures = array();
+                $upstreamWireFailures = array();
 
                 foreach ($jobNames as $targetJobName) {
                   $saveResult = $this->saveGeneratedJenkinsJob($targetJobName, $xmlContent);
@@ -2191,7 +2319,29 @@ class JobCreation extends BaseController
                   redirect('JobCreation');
                 }
 
+                foreach ($upstreamJobNames as $upstreamJobName) {
+                  foreach ($savedJobNames as $targetJobName) {
+                    if ($upstreamJobName === $targetJobName) {
+                      continue;
+                    }
+
+                    $wireResult = $this->appendDownstreamJobToExistingJob($upstreamJobName, $targetJobName, $optionsRadios);
+
+                    if ($wireResult['ok']) {
+                      if ($wireResult['updated']) {
+                        $upstreamWireCount += 1;
+                      }
+                    } else {
+                      $upstreamWireFailures[] = $upstreamJobName.' -> '.$targetJobName.' (HTTP '.$wireResult['status'].')';
+                    }
+                  }
+                }
+
                 $successMessage = count($savedJobNames).' job(s) saved: '.$createdCount.' created, '.$updatedCount.' updated.';
+
+                if ($upstreamWireCount > 0) {
+                  $successMessage .= ' '.$upstreamWireCount.' upstream link(s) updated.';
+                }
 
                 if ($triggerAfterSave === '1') {
                   $successMessage .= ' '.$triggeredCount.' trigger request(s) sent.';
@@ -2203,6 +2353,9 @@ class JobCreation extends BaseController
                 }
                 if (! empty($triggerFailures)) {
                   $warnings[] = 'Some saved jobs failed to trigger: '.implode(', ', $triggerFailures).'.';
+                }
+                if (! empty($upstreamWireFailures)) {
+                  $warnings[] = 'Some upstream links failed to save: '.implode(', ', $upstreamWireFailures).'.';
                 }
 
                 if (! empty($warnings)) {
