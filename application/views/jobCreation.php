@@ -62,6 +62,34 @@
     flex-direction: column;
   }
 
+  @media (min-width: 1200px) {
+    .job-form-row > .job-input-column {
+      flex: 0 0 clamp(390px, 30%, 470px);
+      max-width: 470px;
+      width: clamp(390px, 30%, 470px);
+    }
+
+    .job-form-row > .job-config-column {
+      flex: 1 1 calc(100% - clamp(390px, 30%, 470px));
+      max-width: calc(100% - clamp(390px, 30%, 470px));
+      width: calc(100% - clamp(390px, 30%, 470px));
+    }
+  }
+
+  @media (min-width: 1600px) {
+    .job-form-row > .job-input-column {
+      flex-basis: clamp(440px, 28%, 540px);
+      max-width: 540px;
+      width: clamp(440px, 28%, 540px);
+    }
+
+    .job-form-row > .job-config-column {
+      flex-basis: calc(100% - clamp(440px, 28%, 540px));
+      max-width: calc(100% - clamp(440px, 28%, 540px));
+      width: calc(100% - clamp(440px, 28%, 540px));
+    }
+  }
+
   .job-option-grid {
     display: grid;
     gap: 8px;
@@ -827,6 +855,22 @@
     width: 100%;
   }
 
+  .job-config-canvas #runJob > .col-lg-6 {
+    display: flex;
+  }
+
+  .job-config-canvas #runJob .box {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: clamp(620px, calc(100vh - 255px), 960px);
+  }
+
+  .job-config-canvas #runJob .box-body.job-flow-panel {
+    flex: 1 1 auto;
+    max-height: none;
+  }
+
   @media (max-width: 600px) {
     .job-config-header-actions {
       text-align: left;
@@ -879,6 +923,32 @@
     .job-creation-review dd {
       margin-left: 0;
     }
+
+    .job-flow-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .job-flow-palette {
+      border-bottom: 1px solid #d7dde5;
+      border-right: 0;
+    }
+
+    .job-flow-palette-list {
+      max-height: 260px;
+    }
+
+    .job-flow-canvas {
+      grid-template-columns: 1fr;
+    }
+
+    .job-flow-canvas:before {
+      bottom: 8%;
+      height: auto;
+      left: 50%;
+      right: auto;
+      top: 8%;
+      width: 3px;
+    }
   }
 
   #build .box-body,
@@ -916,6 +986,334 @@
 
   #myTable .available-job-actions > .btn {
     float: none;
+  }
+
+  .job-flow-panel {
+    background: #f6f8fb;
+    display: flex;
+    min-height: clamp(560px, calc(100vh - 300px), 920px);
+    overflow: hidden !important;
+    padding: 0 !important;
+  }
+
+  .job-flow-builder {
+    background: #fff;
+    border: 1px solid #d7dde5;
+    border-radius: 6px;
+    box-shadow: 0 12px 28px rgba(34, 45, 50, .08);
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .job-flow-toolbar {
+    align-items: center;
+    background: linear-gradient(135deg, #16222d 0%, #253746 56%, #32506a 100%);
+    color: #fff;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 14px 16px;
+  }
+
+  .job-flow-toolbar h4 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 2px 0 0;
+  }
+
+  .job-flow-kicker {
+    color: #9fd7c2;
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .job-flow-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .job-flow-toolbar-actions .btn {
+    border-color: rgba(255, 255, 255, .38);
+    color: #fff;
+  }
+
+  .job-flow-toolbar-actions .btn:hover,
+  .job-flow-toolbar-actions .btn:focus {
+    background: rgba(255, 255, 255, .14);
+    color: #fff;
+  }
+
+  .job-flow-layout {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: 260px minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .job-flow-palette {
+    background: #fbfcfd;
+    border-right: 1px solid #d7dde5;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .job-flow-palette-header {
+    border-bottom: 1px solid #e2e7ed;
+    padding: 12px;
+  }
+
+  .job-flow-palette-header label,
+  .job-flow-lane-title,
+  .job-flow-active-label {
+    color: #51616f;
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    margin-bottom: 7px;
+    text-transform: uppercase;
+  }
+
+  .job-flow-palette-list {
+    flex: 1 1 auto;
+    max-height: none;
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  .job-flow-palette-section + .job-flow-palette-section {
+    margin-top: 14px;
+  }
+
+  .job-flow-section-title {
+    color: #7b8791;
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .job-flow-node {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #d7dde5;
+    border-radius: 6px;
+    cursor: grab;
+    display: flex;
+    gap: 9px;
+    margin-bottom: 8px;
+    min-height: 48px;
+    min-width: 0;
+    padding: 8px 10px;
+    position: relative;
+    text-align: left;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    width: 100%;
+  }
+
+  .job-flow-node:hover,
+  .job-flow-node:focus,
+  .job-flow-node.is-selected {
+    border-color: #2f80a4;
+    box-shadow: 0 8px 18px rgba(47, 128, 164, .16);
+    outline: 0;
+    transform: translateY(-1px);
+  }
+
+  .job-flow-node:active {
+    cursor: grabbing;
+  }
+
+  .job-flow-node-icon {
+    align-items: center;
+    border-radius: 50%;
+    color: #fff;
+    display: inline-flex;
+    flex: 0 0 30px;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+  }
+
+  .job-flow-node-draft .job-flow-node-icon {
+    background: #00a65a;
+  }
+
+  .job-flow-node-existing .job-flow-node-icon {
+    background: #3c8dbc;
+  }
+
+  .job-flow-node-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .job-flow-node-title {
+    color: #26323b;
+    display: block;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .job-flow-node-meta {
+    color: #7b8791;
+    display: block;
+    font-size: 11px;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .job-flow-canvas {
+    background:
+      linear-gradient(rgba(60, 141, 188, .08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(60, 141, 188, .08) 1px, transparent 1px),
+      #f8fafc;
+    background-size: 28px 28px;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(160px, 1fr) minmax(170px, .8fr) minmax(160px, 1fr);
+    min-height: 0;
+    min-width: 0;
+    padding: 18px;
+    position: relative;
+  }
+
+  .job-flow-canvas:before {
+    background: linear-gradient(90deg, rgba(0, 166, 90, .55), rgba(60, 141, 188, .35), rgba(245, 105, 84, .55));
+    content: '';
+    height: 3px;
+    left: 8%;
+    position: absolute;
+    right: 8%;
+    top: 50%;
+  }
+
+  .job-flow-lane,
+  .job-flow-active-column {
+    position: relative;
+    z-index: 1;
+  }
+
+  .job-flow-lane {
+    background: rgba(255, 255, 255, .92);
+    border: 1px dashed #b7c3cf;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .job-flow-lane.is-drag-over {
+    background: #ecf7ff;
+    border-color: #3c8dbc;
+    box-shadow: inset 0 0 0 2px rgba(60, 141, 188, .18);
+  }
+
+  .job-flow-lane-title {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+  }
+
+  .job-flow-drop-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .job-flow-empty-lane,
+  .job-flow-empty-palette {
+    align-items: center;
+    border: 1px dashed #d5dce3;
+    border-radius: 6px;
+    color: #7b8791;
+    display: flex;
+    font-size: 12px;
+    justify-content: center;
+    min-height: 74px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .job-flow-active-column {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: 0;
+  }
+
+  .job-flow-active-card {
+    background: #fff;
+    border: 2px solid #253746;
+    border-radius: 8px;
+    box-shadow: 0 14px 34px rgba(34, 45, 50, .16);
+    max-width: 100%;
+    padding: 16px;
+    text-align: center;
+    width: 100%;
+  }
+
+  .job-flow-active-node {
+    cursor: pointer;
+    justify-content: center;
+    margin-bottom: 0;
+  }
+
+  .job-flow-edge-node {
+    cursor: grab;
+    padding-right: 36px;
+  }
+
+  .job-flow-remove-edge {
+    background: transparent;
+    border: 0;
+    color: #9aa6b2;
+    padding: 4px;
+    position: absolute;
+    right: 7px;
+    top: 10px;
+  }
+
+  .job-flow-remove-edge:hover,
+  .job-flow-remove-edge:focus {
+    color: #dd4b39;
+    outline: 0;
+  }
+
+  .job-flow-selected {
+    background: #fdf7e7;
+    border-top: 1px solid #ead6a0;
+    color: #7a5a16;
+    display: none;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  .job-flow-selected.is-visible {
+    display: block;
+  }
+
+  .job-flow-condition {
+    background: #fff;
+    border-top: 1px solid #e2e7ed;
+    padding: 12px 16px 14px;
   }
 
   .job-log-output pre {
@@ -1087,7 +1485,7 @@
   <button type="button" id="clearEditJob" class="btn btn-default btn-xs pull-right"><i class="fa fa-plus"></i> New Job</button>
 </div>
 <div class="row job-form-row">
-  <div class="col-lg-4 col-md-12 col-xs-12">
+  <div class="col-lg-4 col-md-12 col-xs-12 job-input-column">
     <div class="box box-primary job-form-card" style="padding-bottom: 15px;">
       <div class="overlay" style="display:none;">
         <i class="fa fa-refresh fa-spin"></i>
@@ -1160,7 +1558,7 @@
       </div>
     </div>
 
-    <div class="col-lg-8 col-md-12 col-xs-12">
+    <div class="col-lg-8 col-md-12 col-xs-12 job-config-column">
       <div class="job-config-canvas">
     <div class="job-config-header">
       <div>
@@ -1224,8 +1622,8 @@
             <label class="job-option-card" data-option-panel="#runJob">
               <input type="checkbox" name="runJobCheck" id="runJobCheck" value="1">
               <i class="fa fa-sitemap job-option-icon"></i>
-              <span class="job-option-title">Downstream Jobs</span>
-              <span class="job-option-detail">Trigger one or more jobs after this build.</span>
+              <span class="job-option-title">Pipeline Wiring</span>
+              <span class="job-option-detail">Wire upstream and downstream Jenkins jobs.</span>
               <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
             </label>
             <label class="job-option-card" data-option-panel="#enableEmail">
@@ -1839,21 +2237,50 @@
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                       </div>
                       <h3 class="box-title">
-                        <b>Execute another job</b></h3>
+                        <b>Wire job pipeline</b></h3>
                       </div>
-                      <div class="box-body">
-                        <div class="row">
-                          <div class="col-md-6">
-                            <div class="form-group">
-                              <label for="timeoutStrategy">Select next jobs to be executed</label><br>
-                              <select class="form-control select2" id="jobList" name="jobList[]" multiple="multiple" style="width: 200px;">
-                              </select>
+                      <div class="box-body job-flow-panel">
+                        <select id="jobList" name="jobList[]" multiple="multiple" style="display: none;"></select>
+                        <select id="upstreamJobList" name="upstreamJobList[]" multiple="multiple" style="display: none;"></select>
+                        <div class="job-flow-builder" id="jobFlowBuilder">
+                          <div class="job-flow-toolbar">
+                            <div>
+                              <span class="job-flow-kicker">Pipeline wiring</span>
+                              <h4><i class="fa fa-random"></i> Upstream and Downstream Graph</h4>
+                            </div>
+                            <div class="job-flow-toolbar-actions">
+                              <button type="button" class="btn btn-xs btn-link" id="refreshJobGraph"><i class="fa fa-refresh"></i> Refresh</button>
+                              <button type="button" class="btn btn-xs btn-link" id="chainJobDrafts"><i class="fa fa-link"></i> Chain Drafts</button>
+                              <button type="button" class="btn btn-xs btn-link" id="clearActiveWiring"><i class="fa fa-eraser"></i> Clear Active</button>
                             </div>
                           </div>
-                        </div>
-                        <div class="row">
-                          <hr>
-                          <div class="col-lg-12 col-md-12 col-xs-12">
+                          <div class="job-flow-layout">
+                            <div class="job-flow-palette">
+                              <div class="job-flow-palette-header">
+                                <label for="jobFlowSearch"><i class="fa fa-search"></i> Job Palette</label>
+                                <input type="text" class="form-control input-sm" id="jobFlowSearch" autocomplete="off" placeholder="Filter jobs">
+                              </div>
+                              <div class="job-flow-palette-list" id="jobFlowPalette"></div>
+                            </div>
+                            <div class="job-flow-canvas">
+                              <div class="job-flow-lane job-flow-drop-zone" data-flow-lane="upstream">
+                                <span class="job-flow-lane-title"><i class="fa fa-arrow-left"></i> Upstream</span>
+                                <div class="job-flow-drop-list" id="jobFlowUpstreamList"></div>
+                              </div>
+                              <div class="job-flow-active-column">
+                                <div class="job-flow-active-card">
+                                  <span class="job-flow-active-label">Active Draft</span>
+                                  <div id="jobFlowActiveNode"></div>
+                                </div>
+                              </div>
+                              <div class="job-flow-lane job-flow-drop-zone" data-flow-lane="downstream">
+                                <span class="job-flow-lane-title"><i class="fa fa-arrow-right"></i> Downstream</span>
+                                <div class="job-flow-drop-list" id="jobFlowDownstreamList"></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="job-flow-selected" id="jobFlowSelected"></div>
+                          <div class="job-flow-condition">
                             <h5><b>Select an option for your next jobs.</b></h5>
                             <div class="form-group">
                               <div class="radio">
@@ -2058,6 +2485,96 @@
         switchJobDraft(parseInt($(this).data('draft-index'), 10));
       });
 
+      $('#jobFlowSearch').on('input', function() {
+        renderJobPipelineGraph();
+      });
+
+      $('#refreshJobGraph').on('click', function() {
+        ensureAvailableJobsLoaded(true);
+        refreshAvailableJobsTable(false);
+      });
+
+      $('#chainJobDrafts').on('click', function() {
+        chainJobDraftTabs();
+      });
+
+      $('#clearActiveWiring').on('click', function() {
+        clearActiveJobWiring();
+      });
+
+      $(document).on('dragstart', '.job-flow-node', function(event) {
+        var dataTransfer = event.originalEvent && event.originalEvent.dataTransfer;
+        if (! dataTransfer) {
+          return;
+        }
+
+        var node = jobFlowNodeFromElement(this);
+        dataTransfer.effectAllowed = 'copyMove';
+        dataTransfer.setData('application/json', JSON.stringify(node));
+        dataTransfer.setData('text/plain', node.name);
+      });
+
+      $(document).on('dragover', '.job-flow-drop-zone', function(event) {
+        event.preventDefault();
+        $(this).addClass('is-drag-over');
+      });
+
+      $(document).on('dragleave drop', '.job-flow-drop-zone', function() {
+        $(this).removeClass('is-drag-over');
+      });
+
+      $(document).on('drop', '.job-flow-drop-zone', function(event) {
+        event.preventDefault();
+
+        var dataTransfer = event.originalEvent && event.originalEvent.dataTransfer;
+        if (! dataTransfer) {
+          return;
+        }
+
+        var rawPayload = dataTransfer.getData('application/json');
+        var node = null;
+
+        try {
+          node = JSON.parse(rawPayload);
+        } catch (error) {
+          node = { type: 'existing', name: dataTransfer.getData('text/plain'), draftIndex: -1 };
+        }
+
+        if ($(this).data('flow-lane') === 'upstream') {
+          addJobFlowConnection(node, activeJobFlowNode());
+        } else {
+          addJobFlowConnection(activeJobFlowNode(), node);
+        }
+
+        jobFlowSelectedNode = null;
+        renderJobPipelineGraph();
+      });
+
+      $(document).on('click', '.job-flow-node', function(event) {
+        if ($(event.target).closest('.job-flow-remove-edge').length) {
+          return;
+        }
+
+        selectOrConnectJobFlowNode(jobFlowNodeFromElement(this));
+      });
+
+      $(document).on('keydown', '.job-flow-node', function(event) {
+        if (event.which === 13 || event.which === 32) {
+          event.preventDefault();
+          selectOrConnectJobFlowNode(jobFlowNodeFromElement(this));
+        }
+      });
+
+      $(document).on('click', '.job-flow-remove-edge', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        removeActiveJobFlowConnection($(this).attr('data-flow-lane'), {
+          type: $(this).attr('data-flow-type'),
+          name: $(this).attr('data-flow-name'),
+          draftIndex: $(this).attr('data-flow-draft-index')
+        });
+      });
+
       $('#InsertDbSettings').on('submit', function(event) {
         syncPythonInlineFilesInput();
         if (submitJobDraftsIfNeeded()) {
@@ -2152,6 +2669,9 @@
       var activeDraftIndex = 0;
       var applyingJobDraft = false;
       var activeConfigPanel = '';
+      var availableJobCache = [];
+      var availableJobsLoading = false;
+      var jobFlowSelectedNode = null;
       var pythonInlineOpenPanes = { code: true, requirements: false, dockerfile: false, extra: false };
       var pythonInlineActivePane = 'code';
       var pythonInlineActiveExtraPath = '';
@@ -2159,7 +2679,7 @@
       var pythonInlineDirectories = [];
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'timestamp', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'];
       var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
-      var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList'];
+      var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
         return [
@@ -2279,6 +2799,528 @@
         }
 
         return names;
+      }
+
+      function normalizeJobFlowName(value) {
+        return $.trim(String(value == null ? '' : value));
+      }
+
+      function findDraftIndexByName(jobName) {
+        jobName = normalizeJobFlowName(jobName);
+
+        for (var index = 0; index < jobDrafts.length; index++) {
+          if (normalizeJobFlowName(jobDrafts[index].job_name) === jobName) {
+            return index;
+          }
+        }
+
+        return -1;
+      }
+
+      function draftNameMap() {
+        var names = {};
+
+        $.each(jobDrafts, function(index, draft) {
+          var name = normalizeJobFlowName(draft.job_name);
+          if (name !== '') {
+            names[name] = index;
+          }
+        });
+
+        return names;
+      }
+
+      function ensureDraftNameForFlow(index) {
+        ensureJobDraftsInitialized();
+
+        if (index < 0 || index >= jobDrafts.length) {
+          return '';
+        }
+
+        var draft = jobDrafts[index];
+        var name = normalizeJobFlowName(draft.job_name);
+
+        if (name === '') {
+          name = generateJobName();
+          draft.job_name = name;
+
+          if (index === activeDraftIndex) {
+            $('#job_name').val(name);
+          }
+
+          updateDraftNamesTextarea();
+          renderJobDraftTabs();
+          renderJobDraftComparison();
+        }
+
+        return name;
+      }
+
+      function normalizeAvailableJobs(jobs) {
+        var names = [];
+        var seen = {};
+
+        $.each(jobs || [], function(index, row) {
+          var name = normalizeJobFlowName(jobNameFromRow(row));
+          if (name !== '' && ! seen[name]) {
+            seen[name] = true;
+            names.push({ name: name, row: row });
+          }
+        });
+
+        names.sort(function(left, right) {
+          return left.name.localeCompare(right.name);
+        });
+
+        return names;
+      }
+
+      function updateJobFlowSelectOptions() {
+        $.each(availableJobCache, function(index, item) {
+          ensureSelectOption('#jobList', item.name);
+          ensureSelectOption('#upstreamJobList', item.name);
+        });
+
+        $.each(jobDrafts, function(index, draft) {
+          var name = normalizeJobFlowName(draft.job_name);
+          if (name !== '') {
+            ensureSelectOption('#jobList', name);
+            ensureSelectOption('#upstreamJobList', name);
+          }
+        });
+      }
+
+      function rememberAvailableJobs(jobs) {
+        availableJobCache = normalizeAvailableJobs(jobs);
+        updateJobFlowSelectOptions();
+        renderJobPipelineGraph();
+      }
+
+      function ensureAvailableJobsLoaded(forceRefresh) {
+        if (availableJobsLoading || (! forceRefresh && availableJobCache.length)) {
+          return;
+        }
+
+        availableJobsLoading = true;
+        renderJobPipelineGraph();
+
+        $.ajax({
+          url: '<?php echo base_url(); ?>jobCreation/availableJobs',
+          type: 'GET',
+          dataType: 'json'
+        }).done(function(response) {
+          rememberAvailableJobs(response && response.jobs ? response.jobs : []);
+        }).fail(function(xhr) {
+          var message = xhr && xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Failed to fetch available jobs from server';
+          toastr.error(message, 'Job Graph');
+        }).always(function() {
+          availableJobsLoading = false;
+          renderJobPipelineGraph();
+        });
+      }
+
+      function addUniqueDraftArrayValue(draft, field, value) {
+        value = normalizeJobFlowName(value);
+        if (value === '') {
+          return false;
+        }
+
+        if ($.inArray(value, normalizeArray(draft[field])) !== -1) {
+          return false;
+        }
+
+        draft[field] = uniqueValues(normalizeArray(draft[field]).concat([value]));
+        return true;
+      }
+
+      function removeDraftArrayValue(draft, field, value) {
+        value = normalizeJobFlowName(value);
+        draft[field] = $.grep(normalizeArray(draft[field]), function(item) {
+          return normalizeJobFlowName(item) !== value;
+        });
+      }
+
+      function refreshDraftPipelineEnabled(draft) {
+        if (! draft) {
+          return;
+        }
+
+        if (normalizeArray(draft.jobList).length || normalizeArray(draft.upstreamJobList).length) {
+          draft.runJobCheck = '1';
+        } else if (draft.runJobCheck !== '1') {
+          draft.runJobCheck = '0';
+        }
+      }
+
+      function draftForJobFlowNode(node) {
+        if (! node || node.type !== 'draft') {
+          return null;
+        }
+
+        var index = parseInt(node.draftIndex, 10);
+        if (isNaN(index) || index < 0 || index >= jobDrafts.length) {
+          index = findDraftIndexByName(node.name);
+        }
+
+        return index >= 0 ? { draft: jobDrafts[index], index: index } : null;
+      }
+
+      function normalizeJobFlowNode(node) {
+        node = $.extend({ type: 'existing', name: '', draftIndex: -1 }, node || {});
+        node.type = node.type === 'draft' ? 'draft' : 'existing';
+        node.draftIndex = parseInt(node.draftIndex, 10);
+
+        if (node.type === 'draft') {
+          if (isNaN(node.draftIndex) || node.draftIndex < 0) {
+            node.draftIndex = findDraftIndexByName(node.name);
+          }
+          node.name = ensureDraftNameForFlow(node.draftIndex);
+        } else {
+          node.name = normalizeJobFlowName(node.name);
+        }
+
+        return node;
+      }
+
+      function activeJobFlowNode() {
+        return normalizeJobFlowNode({
+          type: 'draft',
+          draftIndex: activeDraftIndex,
+          name: jobDrafts[activeDraftIndex] ? jobDrafts[activeDraftIndex].job_name : ''
+        });
+      }
+
+      function syncActiveDraftPipelineFields() {
+        ensureJobDraftsInitialized();
+        var activeDraft = jobDrafts[activeDraftIndex] || createEmptyDraft('');
+
+        refreshDraftPipelineEnabled(activeDraft);
+        updateJobFlowSelectOptions();
+        setSelectValues('#jobList', normalizeArray(activeDraft.jobList));
+        setSelectValues('#upstreamJobList', normalizeArray(activeDraft.upstreamJobList));
+        $('#runJobCheck').prop('checked', draftChecked(activeDraft, 'runJobCheck'));
+        refreshJobOptionPanels();
+      }
+
+      function addJobFlowConnection(sourceNode, targetNode) {
+        ensureJobDraftsInitialized();
+        saveActiveJobDraft(false);
+
+        sourceNode = normalizeJobFlowNode(sourceNode);
+        targetNode = normalizeJobFlowNode(targetNode);
+
+        if (sourceNode.name === '' || targetNode.name === '') {
+          toastr.error('Both jobs need names before they can be wired.', 'Job Graph');
+          return false;
+        }
+
+        if (sourceNode.name === targetNode.name) {
+          toastr.warning('A job cannot trigger itself.', 'Job Graph');
+          return false;
+        }
+
+        if (sourceNode.type === 'existing' && targetNode.type === 'existing') {
+          toastr.warning('Existing-to-existing links are managed from the source job in Jenkins.', 'Job Graph');
+          return false;
+        }
+
+        var sourceDraftInfo = draftForJobFlowNode(sourceNode);
+        var targetDraftInfo = draftForJobFlowNode(targetNode);
+        var changed = false;
+
+        if (sourceDraftInfo) {
+          changed = addUniqueDraftArrayValue(sourceDraftInfo.draft, 'jobList', targetNode.name);
+          sourceDraftInfo.draft.runJobCheck = '1';
+        } else if (targetDraftInfo) {
+          changed = addUniqueDraftArrayValue(targetDraftInfo.draft, 'upstreamJobList', sourceNode.name);
+          targetDraftInfo.draft.runJobCheck = '1';
+        } else {
+          return false;
+        }
+
+        if (! changed) {
+          toastr.info('That link already exists.', 'Job Graph');
+          return false;
+        }
+
+        if (sourceDraftInfo && targetDraftInfo) {
+          removeDraftArrayValue(targetDraftInfo.draft, 'upstreamJobList', sourceNode.name);
+        }
+
+        syncActiveDraftPipelineFields();
+        updateJobCreationReview();
+        return true;
+      }
+
+      function removeActiveJobFlowConnection(lane, node) {
+        ensureJobDraftsInitialized();
+        saveActiveJobDraft(false);
+
+        var activeDraft = jobDrafts[activeDraftIndex] || createEmptyDraft('');
+        var activeName = ensureDraftNameForFlow(activeDraftIndex);
+        node = normalizeJobFlowNode(node);
+
+        if (lane === 'downstream') {
+          removeDraftArrayValue(activeDraft, 'jobList', node.name);
+        } else if (lane === 'upstream') {
+          if (node.type === 'draft') {
+            var sourceDraftInfo = draftForJobFlowNode(node);
+            if (sourceDraftInfo) {
+              removeDraftArrayValue(sourceDraftInfo.draft, 'jobList', activeName);
+              refreshDraftPipelineEnabled(sourceDraftInfo.draft);
+            }
+          } else {
+            removeDraftArrayValue(activeDraft, 'upstreamJobList', node.name);
+          }
+        }
+
+        refreshDraftPipelineEnabled(activeDraft);
+        if (! normalizeArray(activeDraft.jobList).length && ! normalizeArray(activeDraft.upstreamJobList).length) {
+          activeDraft.runJobCheck = '0';
+        }
+
+        syncActiveDraftPipelineFields();
+        updateJobCreationReview();
+      }
+
+      function inferJobFlowNode(jobName) {
+        var draftIndex = findDraftIndexByName(jobName);
+
+        return {
+          type: draftIndex >= 0 ? 'draft' : 'existing',
+          draftIndex: draftIndex,
+          name: jobName
+        };
+      }
+
+      function activeUpstreamFlowNodes(activeDraft) {
+        var nodes = [];
+        var seen = {};
+        var activeName = normalizeJobFlowName(activeDraft.job_name);
+
+        $.each(normalizeArray(activeDraft.upstreamJobList), function(index, jobName) {
+          jobName = normalizeJobFlowName(jobName);
+          if (jobName !== '' && ! seen['existing:' + jobName]) {
+            seen['existing:' + jobName] = true;
+            nodes.push({ type: 'existing', draftIndex: -1, name: jobName });
+          }
+        });
+
+        if (activeName !== '') {
+          $.each(jobDrafts, function(index, draft) {
+            if (index === activeDraftIndex || $.inArray(activeName, normalizeArray(draft.jobList)) === -1) {
+              return;
+            }
+
+            var sourceName = normalizeJobFlowName(draft.job_name);
+            if (sourceName !== '' && ! seen['draft:' + sourceName]) {
+              seen['draft:' + sourceName] = true;
+              nodes.push({ type: 'draft', draftIndex: index, name: sourceName });
+            }
+          });
+        }
+
+        return nodes;
+      }
+
+      function activeDownstreamFlowNodes(activeDraft) {
+        var nodes = [];
+        var seen = {};
+
+        $.each(normalizeArray(activeDraft.jobList), function(index, jobName) {
+          jobName = normalizeJobFlowName(jobName);
+          if (jobName === '' || seen[jobName]) {
+            return;
+          }
+
+          seen[jobName] = true;
+          nodes.push(inferJobFlowNode(jobName));
+        });
+
+        return nodes;
+      }
+
+      function jobFlowNodeIcon(type) {
+        return type === 'draft' ? 'fa fa-file-code-o' : 'fa fa-cogs';
+      }
+
+      function jobFlowNodeMeta(node) {
+        if (node.type === 'draft') {
+          return node.draftIndex === activeDraftIndex ? 'Active draft' : 'Draft tab ' + (node.draftIndex + 1);
+        }
+
+        return 'Existing Jenkins job';
+      }
+
+      function jobFlowNodeIdentity(node) {
+        return (node.type || 'existing') + ':' + normalizeJobFlowName(node.name);
+      }
+
+      function renderJobFlowNode(node, options) {
+        options = options || {};
+        node = $.extend({ type: 'existing', draftIndex: -1, name: '' }, node || {});
+
+        var name = normalizeJobFlowName(node.name);
+        var label = name || (node.type === 'draft' ? draftName(jobDrafts[node.draftIndex], node.draftIndex, true) : 'Unnamed job');
+        var isSelected = jobFlowSelectedNode && jobFlowNodeIdentity(jobFlowSelectedNode) === jobFlowNodeIdentity(node);
+        var removeButton = '';
+
+        if (options.removable) {
+          removeButton = '<button type="button" class="job-flow-remove-edge" title="Remove link" data-flow-lane="' + escapeAttribute(options.lane || '') + '" data-flow-type="' + escapeAttribute(node.type) + '" data-flow-name="' + escapeAttribute(name) + '" data-flow-draft-index="' + escapeAttribute(node.draftIndex) + '"><i class="fa fa-times"></i></button>';
+        }
+
+        return '<div class="job-flow-node job-flow-node-' + escapeAttribute(node.type) + (options.active ? ' job-flow-active-node' : '') + (options.removable ? ' job-flow-edge-node' : '') + (isSelected ? ' is-selected' : '') + '" role="button" tabindex="0" draggable="true" data-flow-type="' + escapeAttribute(node.type) + '" data-flow-name="' + escapeAttribute(name) + '" data-flow-draft-index="' + escapeAttribute(node.draftIndex) + '">' +
+          '<span class="job-flow-node-icon"><i class="' + escapeAttribute(jobFlowNodeIcon(node.type)) + '"></i></span>' +
+          '<span class="job-flow-node-main"><span class="job-flow-node-title">' + escapeHtml(label) + '</span><span class="job-flow-node-meta">' + escapeHtml(jobFlowNodeMeta(node)) + '</span></span>' +
+          removeButton +
+        '</div>';
+      }
+
+      function jobFlowNodeMatchesSearch(name, query) {
+        return query === '' || name.toLowerCase().indexOf(query) !== -1;
+      }
+
+      function renderJobPipelineGraph() {
+        if (! $('#jobFlowBuilder').length) {
+          return;
+        }
+
+        ensureJobDraftsInitialized();
+        updateJobFlowSelectOptions();
+
+        var query = $.trim($('#jobFlowSearch').val() || '').toLowerCase();
+        var activeDraft = jobDrafts[activeDraftIndex] || createEmptyDraft('');
+        var activeNode = {
+          type: 'draft',
+          draftIndex: activeDraftIndex,
+          name: normalizeJobFlowName(activeDraft.job_name)
+        };
+        var draftNames = draftNameMap();
+        var draftPalette = [];
+        var existingPalette = [];
+
+        $.each(jobDrafts, function(index, draft) {
+          if (index === activeDraftIndex) {
+            return;
+          }
+
+          var label = draftName(draft, index, true);
+          if (jobFlowNodeMatchesSearch(label, query)) {
+            draftPalette.push(renderJobFlowNode({ type: 'draft', draftIndex: index, name: normalizeJobFlowName(draft.job_name) }));
+          }
+        });
+
+        $.each(availableJobCache, function(index, item) {
+          if (draftNames[item.name] != null || ! jobFlowNodeMatchesSearch(item.name, query)) {
+            return;
+          }
+
+          existingPalette.push(renderJobFlowNode({ type: 'existing', draftIndex: -1, name: item.name }));
+        });
+
+        $('#jobFlowPalette').html(
+          '<div class="job-flow-palette-section"><span class="job-flow-section-title">Temporary Drafts</span>' +
+          (draftPalette.length ? draftPalette.join('') : '<div class="job-flow-empty-palette">No other drafts</div>') +
+          '</div><div class="job-flow-palette-section"><span class="job-flow-section-title">Created Jobs</span>' +
+          (existingPalette.length ? existingPalette.join('') : '<div class="job-flow-empty-palette">' + (availableJobsLoading ? 'Loading jobs...' : 'No matching jobs') + '</div>') +
+          '</div>'
+        );
+
+        $('#jobFlowActiveNode').html(renderJobFlowNode(activeNode, { active: true }));
+
+        var upstreamNodes = activeUpstreamFlowNodes(activeDraft);
+        var downstreamNodes = activeDownstreamFlowNodes(activeDraft);
+
+        $('#jobFlowUpstreamList').html(upstreamNodes.length ? $.map(upstreamNodes, function(node) {
+          return renderJobFlowNode(node, { removable: true, lane: 'upstream' });
+        }).join('') : '<div class="job-flow-empty-lane">No upstream jobs</div>');
+
+        $('#jobFlowDownstreamList').html(downstreamNodes.length ? $.map(downstreamNodes, function(node) {
+          return renderJobFlowNode(node, { removable: true, lane: 'downstream' });
+        }).join('') : '<div class="job-flow-empty-lane">No downstream jobs</div>');
+
+        if (jobFlowSelectedNode) {
+          $('#jobFlowSelected').addClass('is-visible').html('<i class="fa fa-crosshairs"></i> Source selected: <b>' + escapeHtml(jobFlowSelectedNode.name || 'Unnamed job') + '</b>');
+        } else {
+          $('#jobFlowSelected').removeClass('is-visible').empty();
+        }
+      }
+
+      function jobFlowNodeFromElement(element) {
+        var node = {
+          type: $(element).attr('data-flow-type') || 'existing',
+          name: $(element).attr('data-flow-name') || '',
+          draftIndex: $(element).attr('data-flow-draft-index') || -1
+        };
+
+        return normalizeJobFlowNode(node);
+      }
+
+      function selectOrConnectJobFlowNode(node) {
+        if (! node || node.name === '') {
+          return;
+        }
+
+        if (! jobFlowSelectedNode) {
+          jobFlowSelectedNode = node;
+          renderJobPipelineGraph();
+          return;
+        }
+
+        if (jobFlowNodeIdentity(jobFlowSelectedNode) === jobFlowNodeIdentity(node)) {
+          jobFlowSelectedNode = null;
+          renderJobPipelineGraph();
+          return;
+        }
+
+        addJobFlowConnection(jobFlowSelectedNode, node);
+        jobFlowSelectedNode = null;
+        renderJobPipelineGraph();
+      }
+
+      function chainJobDraftTabs() {
+        ensureJobDraftsInitialized();
+        saveActiveJobDraft(false);
+
+        if (jobDrafts.length < 2) {
+          toastr.info('Add at least two drafts before chaining.', 'Job Graph');
+          return;
+        }
+
+        for (var index = 0; index < jobDrafts.length; index++) {
+          ensureDraftNameForFlow(index);
+        }
+
+        for (var sourceIndex = 0; sourceIndex < jobDrafts.length - 1; sourceIndex++) {
+          addUniqueDraftArrayValue(jobDrafts[sourceIndex], 'jobList', jobDrafts[sourceIndex + 1].job_name);
+          jobDrafts[sourceIndex].runJobCheck = '1';
+        }
+
+        syncActiveDraftPipelineFields();
+        updateJobCreationReview();
+        toastr.success('Draft tabs chained in order.', 'Job Graph');
+      }
+
+      function clearActiveJobWiring() {
+        ensureJobDraftsInitialized();
+        saveActiveJobDraft(false);
+
+        var activeName = ensureDraftNameForFlow(activeDraftIndex);
+        var activeDraft = jobDrafts[activeDraftIndex] || createEmptyDraft('');
+        activeDraft.jobList = [];
+        activeDraft.upstreamJobList = [];
+        activeDraft.runJobCheck = '0';
+
+        $.each(jobDrafts, function(index, draft) {
+          if (index !== activeDraftIndex) {
+            removeDraftArrayValue(draft, 'jobList', activeName);
+            refreshDraftPipelineEnabled(draft);
+          }
+        });
+
+        jobFlowSelectedNode = null;
+        syncActiveDraftPipelineFields();
+        updateJobCreationReview();
       }
 
       function setBulkDraftsVisible(isVisible) {
@@ -3034,6 +4076,7 @@
           timeoutSeconds: '60',
           timeoutMinutes: '1',
           jobList: [],
+          upstreamJobList: [],
           optionsRadios: '1',
           onSuccess: '0',
           attSuccess: 'true',
@@ -3205,7 +4248,12 @@
       }
 
       function draftDownstreamSummary(draft) {
-        return draftChecked(draft, 'runJobCheck') ? draftListValue(draft, 'jobList', 'Not selected') : 'None';
+        return draftChecked(draft, 'runJobCheck') ? draftListValue(draft, 'jobList', 'None') : 'None';
+      }
+
+      function draftUpstreamSummary(draft) {
+        var upstreamNames = normalizeArray(draft ? draft.upstreamJobList : []);
+        return upstreamNames.length ? upstreamNames.join(',') : 'None';
       }
 
       function saveActiveJobDraft(renderAfterSave) {
@@ -3232,10 +4280,10 @@
       }
 
       function renderJobDraftComparison() {
-        var rows = ['<thead><tr><th>Job</th><th>Execution</th><th>Schedule</th><th>Environment</th><th>Controls</th></tr></thead><tbody>'];
+        var rows = ['<thead><tr><th>Job</th><th>Execution</th><th>Schedule</th><th>Environment</th><th>Pipeline</th><th>Controls</th></tr></thead><tbody>'];
 
         $.each(jobDrafts, function(index, draft) {
-          rows.push('<tr' + (index === activeDraftIndex ? ' class="active-draft-row"' : '') + '><td><b>' + escapeHtml(draftName(draft, index, true)) + '</b></td><td>' + escapeHtml(draftCommandSummary(draft)) + '</td><td>' + escapeHtml(draftScheduleSummary(draft)) + '</td><td>' + escapeHtml(draftEnvironmentSummary(draft)) + '</td><td>' + escapeHtml(draftControlSummary(draft)) + '</td></tr>');
+          rows.push('<tr' + (index === activeDraftIndex ? ' class="active-draft-row"' : '') + '><td><b>' + escapeHtml(draftName(draft, index, true)) + '</b></td><td>' + escapeHtml(draftCommandSummary(draft)) + '</td><td>' + escapeHtml(draftScheduleSummary(draft)) + '</td><td>' + escapeHtml(draftEnvironmentSummary(draft)) + '</td><td><b>Up:</b> ' + escapeHtml(draftUpstreamSummary(draft)) + '<br><b>Down:</b> ' + escapeHtml(draftDownstreamSummary(draft)) + '</td><td>' + escapeHtml(draftControlSummary(draft)) + '</td></tr>');
         });
 
         rows.push('</tbody>');
@@ -3664,11 +4712,13 @@
           '<dt>Environment</dt><dd>' + escapeHtml(draftEnvironmentSummary(activeDraft)) + '</dd>' +
           '<dt>Controls</dt><dd>' + escapeHtml(draftControlSummary(activeDraft)) + '</dd>' +
           '<dt>Notifications</dt><dd>' + escapeHtml(draftNotificationSummary(activeDraft)) + '</dd>' +
+          '<dt>Upstream</dt><dd>' + escapeHtml(draftUpstreamSummary(activeDraft)) + '</dd>' +
           '<dt>Downstream</dt><dd>' + escapeHtml(draftDownstreamSummary(activeDraft)) + '</dd>'
         );
 
         renderJobDraftTabs();
         renderJobDraftComparison();
+        renderJobPipelineGraph();
       }
 
       function generateBatchNames(count) {
@@ -3978,6 +5028,8 @@
       $('#job_names').val('');
       setBulkDraftsVisible(false);
       $('#trigger_after_save').val('0');
+      $('#jobList, #upstreamJobList').val([]);
+      jobFlowSelectedNode = null;
       $('.editJobBanner').hide();
       $('.editJobName').text('');
       $('.saveJobStatus').hide().text('');
@@ -4542,36 +5594,13 @@
      // Logic for run another job after this build function
      $('#runJobCheck').click(function(){
       if($(this).is(":checked")){
-       $('#jobList option').remove();
-       $.ajax({
-        url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
-        method: 'GET',
-        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-        beforeSend: function() {
-
-          $('#overlay').fadeIn();
-        }
-      }).done(function(data) {
-
-       $.each(data["jobs"], function (key, item) {
-         newJson = item.name;
-         $('#jobList').append($('<option>', {
-          value: newJson,
-          text: newJson
-        }))
-       });
-
-       $('#overlay').fadeOut();
-
-     }).fail(function() {
-      console.error(arguments);
-      toastr.error("Failed to fetch available jobs from server", "Fail to fetch jobs")
-    });
-
-     $('#runJob').fadeIn();
+       ensureAvailableJobsLoaded(false);
+       $('#runJob').fadeIn();
+       renderJobPipelineGraph();
    }
    else if($(this).is(":not(:checked)")){
     $('#runJob').fadeOut();
+    jobFlowSelectedNode = null;
   }
 });
 
@@ -4935,6 +5964,7 @@ function loadTable () {
             "url": '<?php echo base_url(); ?>jobCreation/availableJobs',
             "type": 'GET',
             "dataSrc": function(response) {
+              rememberAvailableJobs(response && response.jobs ? response.jobs : []);
               return response && response.jobs ? response.jobs : [];
             },
             "error": function(xhr) {
