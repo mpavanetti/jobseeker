@@ -187,6 +187,138 @@
     display: inline-block;
   }
 
+  .linux-execution-mode-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 16px;
+  }
+
+  .linux-execution-mode {
+    background: #fff;
+    border: 1px solid #d2d6de;
+    border-radius: 5px;
+    color: #3c4b55;
+    min-height: 82px;
+    padding: 12px 12px 12px 46px;
+    position: relative;
+    text-align: left;
+    transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+    width: 100%;
+  }
+
+  .linux-execution-mode:hover,
+  .linux-execution-mode:focus {
+    background: #f9fafc;
+    border-color: #9ab6c8;
+    outline: 0;
+  }
+
+  .linux-execution-mode.active {
+    background: #f4fbff;
+    border-color: #3c8dbc;
+    box-shadow: inset 4px 0 0 #3c8dbc;
+  }
+
+  .linux-execution-mode i {
+    color: #3c8dbc;
+    font-size: 20px;
+    left: 14px;
+    position: absolute;
+    top: 14px;
+  }
+
+  .linux-execution-mode strong,
+  .linux-execution-mode span {
+    display: block;
+  }
+
+  .linux-execution-mode span {
+    color: #777;
+    font-size: 12px;
+    line-height: 1.35;
+    margin-top: 5px;
+  }
+
+  .linux-execution-section {
+    background: #f9fafc;
+    border: 1px solid #e2e7ee;
+    border-radius: 5px;
+    margin-bottom: 16px;
+    padding: 12px;
+  }
+
+  .linux-execution-section-header {
+    margin-bottom: 10px;
+  }
+
+  .linux-execution-section-header strong,
+  .linux-execution-section-header span {
+    display: block;
+  }
+
+  .linux-execution-section-header strong {
+    color: #243b53;
+  }
+
+  .linux-execution-section-header span {
+    color: #777;
+    font-size: 12px;
+    line-height: 1.35;
+    margin-top: 3px;
+  }
+
+  .linux-execution-choice-grid {
+    display: grid;
+    gap: 9px;
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  }
+
+  .linux-execution-choice {
+    background: #fff;
+    border: 1px solid #d2d6de;
+    border-radius: 4px;
+    color: #3c4b55;
+    min-height: 54px;
+    padding: 9px 10px;
+    text-align: left;
+    transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+    width: 100%;
+  }
+
+  .linux-execution-choice:hover,
+  .linux-execution-choice:focus {
+    background: #fff;
+    border-color: #9ab6c8;
+    outline: 0;
+  }
+
+  .linux-execution-choice.active {
+    border-color: #3c8dbc;
+    box-shadow: inset 3px 0 0 #3c8dbc;
+  }
+
+  .linux-execution-choice i {
+    color: #3c8dbc;
+    margin-right: 6px;
+  }
+
+  .linux-execution-choice strong,
+  .linux-execution-choice span {
+    display: block;
+  }
+
+  .linux-execution-choice span {
+    color: #777;
+    font-size: 12px;
+    line-height: 1.3;
+    margin-top: 4px;
+  }
+
+  .linuxLegacyExecutionFields {
+    display: none !important;
+  }
+
   .job-config-action-menu {
     align-items: center;
     background: #f9fafc;
@@ -1044,6 +1176,10 @@
       top: 8%;
       width: 3px;
     }
+
+    .linux-execution-mode-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   #build .box-body,
@@ -1647,6 +1783,7 @@
 <?php $this->load->helper("form"); ?>
 <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post">
 <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1" checked style="display: none;">
+<input type="hidden" name="timestamp" id="timestamp" value="1">
 <div class="alert alert-info editJobBanner" style="display: none;">
   <i class="fa fa-pencil"></i>
   Editing <b class="editJobName"></b>. Saving will update this Jenkins job unless you change the job name.
@@ -1755,7 +1892,7 @@
                 <input type="checkbox" name="linuxCommand" id="linuxCommand" value="1">
                 <i class="fa fa-terminal job-option-icon"></i>
                 <span class="job-option-title">Linux Execution</span>
-                <span class="job-option-detail">Shell command, Bash, Talend, or Python source.</span>
+                <span class="job-option-detail">Choose Bash/Shell or Python in the execution panel.</span>
                 <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
               </label>
             <?php }?>
@@ -1771,13 +1908,6 @@
               <i class="fa fa-hourglass-half job-option-icon"></i>
               <span class="job-option-title">Timeout</span>
               <span class="job-option-detail">Abort jobs after no activity or an absolute limit.</span>
-              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
-            </label>
-            <label class="job-option-card">
-              <input type="checkbox" name="timestamp" id="timestamp" value="1">
-              <i class="fa fa-clock-o job-option-icon"></i>
-              <span class="job-option-title">Console Timestamps</span>
-              <span class="job-option-detail">Add Jenkins timestamps to console output.</span>
               <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
             </label>
             <label class="job-option-card" data-option-panel="#runJob">
@@ -1891,9 +2021,44 @@
                     <button id="hideLinuxCommand" type="button" class="btn btn-box-tool"><i class="fa fa-times"></i></button>
                   </div>
                   <h3 class="box-title">
-                    <b>Execute a Linux Command</b></h3>
+                    <b>Linux Execution</b></h3>
                   </div><div class="box-body">
-                    <div class="row">
+                    <div class="linux-execution-mode-grid">
+                      <button type="button" class="linux-execution-mode" data-linux-mode="bash">
+                        <i class="fa fa-terminal"></i>
+                        <strong>Bash / Shell</strong>
+                        <span>Run a command, upload a Bash archive, or use the shell runtime.</span>
+                      </button>
+                      <button type="button" class="linux-execution-mode" data-linux-mode="python">
+                        <i class="fa fa-code"></i>
+                        <strong>Python</strong>
+                        <span>Open the inline Python workspace with runtime and dependency controls.</span>
+                      </button>
+                    </div>
+                    <div class="linux-execution-section linux-shell-options" style="display: none;">
+                      <div class="linux-execution-section-header">
+                        <strong>Shell execution</strong>
+                        <span>Use these for direct shell commands, Bash archives, and Talend shell packages.</span>
+                      </div>
+                      <div class="linux-execution-choice-grid">
+                        <button type="button" class="linux-execution-choice" data-linux-shell-choice="command"><i class="fa fa-terminal"></i><strong>Command</strong><span>Paste and run shell commands.</span></button>
+                        <button type="button" class="linux-execution-choice" data-linux-shell-choice="bash"><i class="fa fa-file-archive-o"></i><strong>Bash Script</strong><span>Upload a Bash zip package.</span></button>
+                        <button type="button" class="linux-execution-choice" data-linux-shell-choice="talend"><i class="fa fa-cubes"></i><strong>Talend Script</strong><span>Upload a Talend Linux package.</span></button>
+                      </div>
+                    </div>
+                    <div class="linux-execution-section linux-python-options" style="display: none;">
+                      <div class="linux-execution-section-header">
+                        <strong>Python execution</strong>
+                        <span>Use these for inline workspaces, uploaded Python packages, repository paths, or Git sources.</span>
+                      </div>
+                      <div class="linux-execution-choice-grid">
+                        <button type="button" class="linux-execution-choice" data-linux-python-choice="inline"><i class="fa fa-code"></i><strong>Inline Workspace</strong><span>Edit Python files directly here.</span></button>
+                        <button type="button" class="linux-execution-choice" data-linux-python-choice="upload"><i class="fa fa-upload"></i><strong>Upload Python</strong><span>Upload a .py file or zip package.</span></button>
+                        <button type="button" class="linux-execution-choice" data-linux-python-choice="path"><i class="fa fa-folder-open"></i><strong>Repository Path</strong><span>Run Python already in the repository.</span></button>
+                        <button type="button" class="linux-execution-choice" data-linux-python-choice="git"><i class="fa fa-code-fork"></i><strong>Git Source</strong><span>Clone and run a branch or tag.</span></button>
+                      </div>
+                    </div>
+                    <div class="row linuxLegacyExecutionFields">
                       <div class="col-md-6">
                         <div class="form-group">
                           <label for="linuxExecutionStrategy">Execution Strategy</label>
@@ -2559,34 +2724,10 @@
                 </div>
                 <!-- Close Job Execution Area -->
 
-                <!-- Open Environment Area -->
-                <div id="environmentBox" class="job-creation-environment-panel">
-                <div class="col-lg-6 col-md-6 col-xs-12">
-                  <div class="box box-primary">
-                    <div class="overlay" style="display:none;">
-                        <i class="fa fa-refresh fa-spin"></i>
-                    </div>
-                    <div class="box-header with-border">
-                      <div class="box-tools pull-right">
-                        <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
-                      </div>
-                      <h3 class="box-title">
-                        <b>Runtime Environment</b></h3>
-                      </div>
-                      <div class="box-body" style="padding: 20px;">
-                        <div class="col-md-6">
-                          <div class="form-group">
-                            <label for="environment">Global Environment</label>
-                            <select class="form-control env" id="environment" name="environment" required>
-                            </select>
-                            <p class="help-block" id="jobCreationEnvironmentHelp">Select a concrete environment in the global selector before saving.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div id="environmentBox" class="job-creation-environment-panel" style="display: none;">
+                  <select class="env" id="environment" name="environment" required style="display: none;"></select>
+                  <span id="jobCreationEnvironmentHelp" style="display: none;"></span>
                 </div>
-                <!-- Close Environment Area -->
 
               </div>
             </div>
@@ -2877,7 +3018,7 @@
         normalize: function(value) { return $.trim(String(value || '')).toUpperCase(); },
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
-      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'timestamp', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'];
+      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'];
       var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
@@ -4499,7 +4640,7 @@
           checkBuild: '0',
           checkEnvironment: '1',
           abort: '0',
-          timestamp: '0',
+          timestamp: '1',
           winCommand: '0',
           linuxCommand: '0',
           runJobCheck: '0',
@@ -4691,10 +4832,7 @@
       }
 
       function draftControlSummary(draft) {
-        var labels = [];
-        if (draftChecked(draft, 'timestamp')) {
-          labels.push('timestamps');
-        }
+        var labels = ['timestamps'];
         if (draftChecked(draft, 'abort')) {
           labels.push('timeout');
         }
@@ -4860,7 +4998,7 @@
 
       function refreshJobOptionPanels() {
         updateSchedulePanel();
-        $('#environmentBox').show();
+        $('#environmentBox').hide();
         $('#checkEnvironment').prop('checked', true);
         $('#abortIfStuck').toggle($('#abort').is(':checked'));
         $('#enableEmail').toggle($('#emailCheck').is(':checked'));
@@ -4876,6 +5014,7 @@
         $('.linuxScriptTypeForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script');
         $('.linuxCommandForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'command');
         updatePythonSourceControls();
+        syncLinuxExecutionChoiceControls();
         syncOptionCards();
       }
 
@@ -5041,6 +5180,7 @@
         formData.append('job_names', '');
         formData.append('description', draft.description || '');
         formData.append('trigger_after_save', triggerAfterSave || '0');
+        formData.append('timestamp', '1');
 
         $.each(draftCheckboxFields, function(index, field) {
           if (draftChecked(draft, field)) {
@@ -5309,8 +5449,9 @@
       function syncLinuxExecutionControls(resetScriptType) {
         if (! $('#linuxCommand').is(':checked')) {
           $('#runlinuxCommand').hide();
-          $('.linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm').hide();
+          $('.linux-shell-options, .linux-python-options, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm').hide();
           $('.destroyDropzone').remove();
+          syncLinuxExecutionChoiceControls();
           return;
         }
 
@@ -5340,6 +5481,92 @@
           $('.destroyDropzone').remove();
           updatePythonSourceControls();
         }
+
+        syncLinuxExecutionChoiceControls();
+      }
+
+      function currentLinuxExecutionMode() {
+        return linuxExecutionUsesPython() ? 'python' : 'bash';
+      }
+
+      function syncLinuxExecutionChoiceControls() {
+        var enabled = $('#linuxCommand').is(':checked');
+        var mode = enabled ? currentLinuxExecutionMode() : '';
+        var strategy = $('#linuxExecutionStrategy').val();
+        var scriptType = $('#linuxScriptType').val();
+
+        $('.linux-execution-mode, .linux-execution-choice').removeClass('active');
+        $('.linux-shell-options, .linux-python-options').hide();
+
+        if (! enabled) {
+          return;
+        }
+
+        $('.linux-execution-mode[data-linux-mode="' + mode + '"]').addClass('active');
+
+        if (mode == 'python') {
+          var pythonChoice = strategy == 'python_inline' ? 'inline' : ($('#pythonSourceMode').val() || 'upload');
+          $('.linux-python-options').show();
+          $('.linux-execution-choice[data-linux-python-choice="' + pythonChoice + '"]').addClass('active');
+        } else {
+          var shellChoice = strategy == 'script' ? (scriptType == 'talend' ? 'talend' : 'bash') : 'command';
+          $('.linux-shell-options').show();
+          $('.linux-execution-choice[data-linux-shell-choice="' + shellChoice + '"]').addClass('active');
+        }
+      }
+
+      function applyLinuxExecutionMode(mode) {
+        $('#linuxCommand').prop('checked', true);
+        activeConfigPanel = '#runlinuxCommand';
+
+        if (mode == 'python' && ! linuxExecutionUsesPython()) {
+          setSelectValue('#linuxExecutionStrategy', 'python_inline');
+          $('#linuxScriptType').val(0);
+          setSelectValue('#pythonSourceMode', 'upload');
+        } else if (mode != 'python' && linuxExecutionUsesPython()) {
+          setSelectValue('#linuxExecutionStrategy', 'command');
+          $('#linuxScriptType').val(0);
+        }
+
+        syncLinuxExecutionControls(true);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
+      }
+
+      function applyLinuxShellChoice(choice) {
+        $('#linuxCommand').prop('checked', true);
+        activeConfigPanel = '#runlinuxCommand';
+
+        if (choice == 'bash' || choice == 'talend') {
+          setSelectValue('#linuxExecutionStrategy', 'script');
+          setSelectValue('#linuxScriptType', choice);
+        } else {
+          setSelectValue('#linuxExecutionStrategy', 'command');
+          $('#linuxScriptType').val(0);
+        }
+
+        syncLinuxExecutionControls(true);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
+      }
+
+      function applyLinuxPythonChoice(choice) {
+        $('#linuxCommand').prop('checked', true);
+        activeConfigPanel = '#runlinuxCommand';
+
+        if (choice == 'inline') {
+          setSelectValue('#linuxExecutionStrategy', 'python_inline');
+          $('#linuxScriptType').val(0);
+          setSelectValue('#pythonSourceMode', 'upload');
+        } else {
+          setSelectValue('#linuxExecutionStrategy', 'script');
+          setSelectValue('#linuxScriptType', 'python');
+          setSelectValue('#pythonSourceMode', choice || 'upload');
+        }
+
+        syncLinuxExecutionControls(true);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
       }
 
       $('#pythonSourceMode').change(function() {
@@ -5347,6 +5574,7 @@
         if ($('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python' && $('#pythonSourceMode').val() == 'upload') {
           syncLinuxScriptUpload();
         }
+        syncLinuxExecutionChoiceControls();
       });
 
       $('#linuxExecutionStrategy').change(function() {
@@ -5365,6 +5593,18 @@
         syncLinuxExecutionControls(false);
         refreshJobOptionPanels();
         updateJobCreationReview();
+      });
+
+      $(document).on('click', '.linux-execution-mode', function() {
+        applyLinuxExecutionMode($(this).data('linux-mode'));
+      });
+
+      $(document).on('click', '.linux-execution-choice[data-linux-shell-choice]', function() {
+        applyLinuxShellChoice($(this).data('linux-shell-choice'));
+      });
+
+      $(document).on('click', '.linux-execution-choice[data-linux-python-choice]', function() {
+        applyLinuxPythonChoice($(this).data('linux-python-choice'));
       });
 
      // get Jenkins credentials
@@ -5678,7 +5918,7 @@
       $('#pythonDockerfileText').val('');
       $('#pythonInlineFilesJson').val('{"files":[],"directories":[]}');
       $('.singleForm, .repetitive, .tags, .customCronForm, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm, #enableEmail, #abortIfStuck, #runJob, #editableEmail').hide();
-      $('#environmentBox').show();
+      $('#environmentBox').hide();
       $('#timeoutMinutes, #timeoutSeconds').prop('required', false);
       $('#environment').prop('required', true);
       $('.destroyDropzone').remove();
