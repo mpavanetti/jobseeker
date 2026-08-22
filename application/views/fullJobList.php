@@ -317,8 +317,11 @@ pre {
     var jenkins_url = '<?php echo $jenkins_url; ?>';
     var jenkins_username = '';
     var jenkins_token = '';
+    var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
+    var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
     var logCache = {};
     var currentLogQuery = '';
+    var jobMetadata = {};
     var selectedJobEnvironmentInfo = {environment: 'Unknown', source: 'Not detected', unknown: true};
     var environmentHelper = window.JobSeekerEnvironment || {
       detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
@@ -328,6 +331,24 @@ pre {
     };
 
     loadJobs();
+
+    function fullJobEnvironmentRequestValue() {
+      var value = jobEnvironmentFilter || 'all';
+
+      if (String(value).toLowerCase() === 'all') {
+        return 'all';
+      }
+
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+        return window.JobSeekerGlobalEnvironment.normalize(value);
+      }
+
+      if (window.JobSeekerEnvironment && window.JobSeekerEnvironment.normalize) {
+        return window.JobSeekerEnvironment.normalize(value) || value;
+      }
+
+      return String(value || '').toUpperCase();
+    }
 
     function escapeHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
@@ -494,7 +515,7 @@ pre {
     }
 
     function loadSelectedJobEnvironment(jobName) {
-      var fallback = environmentHelper.detectFromJob({name: jobName, fullName: jobName});
+      var fallback = environmentHelper.detectFromJob(jobMetadata[jobName] || {name: jobName, fullName: jobName});
       setSelectedJobEnvironment(fallback);
 
       if (! jobName) {
@@ -582,16 +603,22 @@ pre {
       setBusy(true, 'Loading Jenkins jobs...');
 
       $.ajax({
-        url: jenkins_url + 'api/json?tree=jobs[name,fullName,color,buildable]',
+        url: availableJobsUrl,
         method: 'GET',
-        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+        data: {environment: fullJobEnvironmentRequestValue()}
       }).done(function(data) {
         var jobs = data && Array.isArray(data.jobs) ? data.jobs : [];
         var options = '<option value="">Select a Jenkins job</option>';
+        jobMetadata = {};
+
+        jobs.sort(function(left, right) {
+          return String(left.fullName || left.name || '').localeCompare(String(right.fullName || right.name || ''));
+        });
 
         $.each(jobs, function(index, item) {
           var name = item.fullName || item.name || '';
           if (name !== '') {
+            jobMetadata[name] = item;
             options += '<option value="' + escapeAttribute(name) + '">' + escapeHtml(name) + '</option>';
           }
         });
@@ -605,6 +632,11 @@ pre {
         setBusy(false);
       });
     }
+
+    $(document).on('jobseeker:environment-change', function(event, environment) {
+      jobEnvironmentFilter = environment || 'all';
+      loadJobs();
+    });
 
     function responseMessage(xhr, fallback) {
       return xhr && xhr.responseText ? xhr.responseText : fallback;

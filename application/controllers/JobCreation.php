@@ -156,6 +156,317 @@ class JobCreation extends BaseController
       return $properties;
     }
 
+    private function createShellCommandJobXml($description, $command, $environment) {
+      $dom = new DOMDocument();
+      $dom->encoding = 'UTF-8';
+      $dom->xmlVersion = '1.1';
+      $dom->formatOutput = true;
+
+      $root = $dom->createElement('project');
+      $this->appendTextElement($dom, $root, 'description', $description);
+      $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment));
+
+      $builders = $dom->createElement('builders');
+      $shell = $dom->createElement('hudson.tasks.Shell');
+      $this->appendTextElement($dom, $shell, 'command', $command);
+      $builders->appendChild($shell);
+      $root->appendChild($builders);
+
+      $root->appendChild($dom->createElement('publishers'));
+
+      $buildWrappers = $dom->createElement('buildWrappers');
+      $timestamper = $dom->createElement('hudson.plugins.timestamper.TimestamperBuildWrapper');
+      $timestamper->setAttributeNode(new DOMAttr('plugin', 'timestamper@1.10'));
+      $buildWrappers->appendChild($timestamper);
+      $root->appendChild($buildWrappers);
+
+      $dom->appendChild($root);
+
+      return $dom->saveXML();
+    }
+
+    private function jsonJobCreationResponse($payload, $status = 200) {
+      $this->output
+        ->set_status_header((int) $status)
+        ->set_content_type('application/json', 'utf-8')
+        ->set_output(json_encode($payload));
+    }
+
+    private function jenkinsQueueIdFromHeaders($headers) {
+      foreach (is_array($headers) ? $headers : array() as $header) {
+        if (stripos($header, 'Location:') !== 0) {
+          continue;
+        }
+
+        if (preg_match('#/queue/item/(\d+)/?#', $header, $matches)) {
+          return $matches[1];
+        }
+      }
+
+      return '';
+    }
+
+    private function waitForJenkinsBuildResult($jobName, $queueId, $timeoutSeconds) {
+      $jobPath = $this->jenkinsJobPath($jobName);
+      $deadline = microtime(TRUE) + max(5, (int) $timeoutSeconds);
+      $buildNumber = '';
+      $queueWhy = '';
+
+      while (microtime(TRUE) <= $deadline) {
+        if ($queueId !== '' && $buildNumber === '') {
+          $queueResponse = $this->requestJenkins('GET', 'queue/item/' . rawurlencode($queueId) . '/api/json?tree=id,why,cancelled,executable[number,url]');
+          if ((int) $queueResponse['status'] === 200) {
+            $queuePayload = json_decode($queueResponse['body']);
+            if (is_object($queuePayload)) {
+              if (isset($queuePayload->cancelled) && $queuePayload->cancelled) {
+                return array('ok' => FALSE, 'status' => 'CANCELLED', 'buildNumber' => '', 'queueWhy' => 'Cancelled in Jenkins.');
+              }
+
+              if (isset($queuePayload->why)) {
+                $queueWhy = (string) $queuePayload->why;
+              }
+
+              if (isset($queuePayload->executable) && isset($queuePayload->executable->number)) {
+                $buildNumber = (string) $queuePayload->executable->number;
+              }
+            }
+          }
+        }
+
+        if ($buildNumber === '') {
+          $jobResponse = $this->requestJenkins('GET', $jobPath . '/api/json?tree=queueItem[id,why],lastBuild[number,building,result]');
+          if ((int) $jobResponse['status'] === 200) {
+            $jobPayload = json_decode($jobResponse['body']);
+            if (is_object($jobPayload)) {
+              if (isset($jobPayload->queueItem) && isset($jobPayload->queueItem->why)) {
+                $queueWhy = (string) $jobPayload->queueItem->why;
+              }
+
+              if (isset($jobPayload->lastBuild) && isset($jobPayload->lastBuild->number)) {
+                $buildNumber = (string) $jobPayload->lastBuild->number;
+              }
+            }
+          }
+        }
+
+        if ($buildNumber !== '') {
+          $buildResponse = $this->requestJenkins('GET', $jobPath . '/' . rawurlencode($buildNumber) . '/api/json?tree=number,building,result,duration,timestamp,url');
+          if ((int) $buildResponse['status'] === 200) {
+            $buildPayload = json_decode($buildResponse['body']);
+            if (is_object($buildPayload) && isset($buildPayload->building) && $buildPayload->building !== TRUE) {
+              $result = isset($buildPayload->result) && $buildPayload->result !== NULL ? (string) $buildPayload->result : 'UNKNOWN';
+              return array('ok' => $result === 'SUCCESS', 'status' => $result, 'buildNumber' => $buildNumber, 'queueWhy' => $queueWhy);
+            }
+          }
+        }
+
+        usleep(1000000);
+      }
+
+      return array('ok' => FALSE, 'status' => 'TIMEOUT', 'buildNumber' => $buildNumber, 'queueWhy' => $queueWhy);
+    }
+
+    private function jenkinsBuildConsoleText($jobName, $buildNumber) {
+      if ($buildNumber === '') {
+        return '';
+      }
+
+      $response = $this->requestJenkins('GET', $this->jenkinsJobPath($jobName) . '/' . rawurlencode($buildNumber) . '/consoleText');
+      if ((int) $response['status'] !== 200) {
+        return 'Unable to read Jenkins console output. HTTP '.$response['status'].'.';
+      }
+
+      return strlen($response['body']) > 120000 ? substr($response['body'], -120000) : $response['body'];
+    }
+
+    private function availableJobsTree($depth) {
+      $fields = '_class,name,fullName,displayName,url,color,description,buildable,inQueue,nextBuildNumber,queueItem[id,why],healthReport[description,score],property[parameterDefinitions[name,defaultParameterValue[value]]],lastBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName,actions[parameters[name,value]]],lastCompletedBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName],lastFailedBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName],lastStableBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName]';
+
+      if ($depth <= 0) {
+        return 'jobs['.$fields.']';
+      }
+
+      return 'jobs['.$fields.','.$this->availableJobsTree($depth - 1).']';
+    }
+
+    private function isRunnableAvailableJob($job) {
+      return isset($job->buildable) || isset($job->color) || isset($job->lastBuild) || isset($job->lastCompletedBuild) || isset($job->lastFailedBuild) || isset($job->lastStableBuild) || isset($job->nextBuildNumber);
+    }
+
+    private function collectAvailableJobs($jobs, &$availableJobs, $environmentFilter = '') {
+      foreach (is_array($jobs) ? $jobs : array() as $job) {
+        $jobName = isset($job->fullName) && $job->fullName !== '' ? $job->fullName : (isset($job->name) ? $job->name : '');
+
+        if ($jobName !== '' && strpos((string) $jobName, '__jobseeker_') !== 0 && $this->isRunnableAvailableJob($job)) {
+          $environment = $this->jenkinsEnvironmentFromJobData($job, $jobName);
+
+          if ($environmentFilter === '' || $environmentFilter === 'ALL' || $environment === $environmentFilter) {
+            $job->environment = $environment;
+            $job->jobseekerEnvironment = $environment;
+            $job->environmentSource = $environment === '' ? 'Not detected' : 'Jenkins metadata';
+
+            if (isset($job->jobs)) {
+              unset($job->jobs);
+            }
+
+            $availableJobs[] = $job;
+          }
+        }
+
+        if (isset($job->jobs) && is_array($job->jobs)) {
+          $this->collectAvailableJobs($job->jobs, $availableJobs, $environmentFilter);
+        }
+      }
+    }
+
+    private function wrapPreviewShellCommand($command, $timeoutSeconds) {
+      $timeoutSeconds = max(5, (int) $timeoutSeconds);
+      $wrappedCommand = escapeshellarg($command);
+
+      return 'if command -v timeout >/dev/null 2>&1; then timeout '.$timeoutSeconds.'s sh -lc '.$wrappedCommand.'; else sh -lc '.$wrappedCommand.'; fi';
+    }
+
+    public function runInlinePythonPreview() {
+      if (! $this->canManageJobs()) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+        return;
+      }
+
+      @set_time_limit(180);
+
+      $environment = trim((string) $this->input->post('environment'));
+      if ($environment === '' || $environment === '0' || strtoupper($environment) === 'ALL') {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Select a concrete runtime environment before running the inline Python preview.'), 400);
+        return;
+      }
+
+      $this->load->model('Context_model');
+      if ((int) $this->Context_model->validateEnvironment($environment) === 0) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'The selected runtime environment is not configured in Context Settings.'), 400);
+        return;
+      }
+
+      $entryPointRaw = $this->input->post('pythonEntryPoint');
+      $entryPoint = trim((string) $entryPointRaw) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPointRaw, TRUE);
+      if ($entryPoint === FALSE) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Invalid inline Python entry file.'), 400);
+        return;
+      }
+
+      $sourceCode = str_replace(array("\r\n", "\r"), "\n", (string) $this->input->post('pythonInlineCode'));
+      if (trim($sourceCode) === '' || strlen($sourceCode) > 50000 || strpos($sourceCode, "\0") !== FALSE) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Enter valid inline Python code before running the preview.'), 400);
+        return;
+      }
+
+      $requirementsText = $this->cleanPythonRequirementsText($this->input->post('pythonRequirementsText'));
+      if ($requirementsText === FALSE) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your Python requirements.txt content is too large or contains invalid characters.'), 400);
+        return;
+      }
+
+      $inlineFiles = $this->cleanPythonInlineFilesJson($this->input->post('pythonInlineFilesJson'), $entryPoint);
+      if ($inlineFiles === FALSE) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your inline Python workspace contains invalid file paths or too much content.'), 400);
+        return;
+      }
+
+      $pythonExecutable = $this->cleanPythonExecutable($this->input->post('pythonVersion'));
+      if ($pythonExecutable === FALSE) {
+        $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Please select a valid Python version.'), 400);
+        return;
+      }
+
+      try {
+        $token = substr(bin2hex(random_bytes(5)), 0, 10);
+      } catch (Exception $exception) {
+        $token = substr(str_replace('.', '', uniqid('', TRUE)), -10);
+      }
+
+      $previewJobName = '__jobseeker_py_preview_' . date('YmdHis') . '_' . $token;
+      $jenkinsHome = $this->global['jenkins_home'];
+      $repositoryRoot = ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+      $pythonExecution = NULL;
+      $jobSaved = FALSE;
+      $buildNumber = '';
+      $previewTimeoutSeconds = 45;
+
+      try {
+        if (! $this->ensurePythonSharedLibrary($repositoryRoot)) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Unable to prepare the JobSeeker Python SDK for Jenkins.'), 500);
+          return;
+        }
+
+        $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $previewJobName, $entryPoint, $sourceCode, $requirementsText, NULL, $inlineFiles);
+        if ($pythonExecution === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'JobSeeker could not prepare the inline Python preview workspace.'), 400);
+          return;
+        }
+
+        $slotCheck = $this->checkJenkinsEnvironmentSlots($previewJobName, $environment);
+        if (! $slotCheck['ok']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $slotCheck['message']), isset($slotCheck['status']) ? (int) $slotCheck['status'] : 429);
+          return;
+        }
+
+        $command = "export JOBSEEKER_PREVIEW=1\nexport JOBSEEKER_PREVIEW_MAX_ROWS=5\n" . $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, 1), array(
+          'mode' => 'local',
+          'pythonExecutable' => $pythonExecutable,
+          'requirementsText' => $requirementsText,
+          'dockerfileText' => ''
+        ));
+        $command = $this->wrapPreviewShellCommand($command, $previewTimeoutSeconds);
+
+        $xml = $this->createShellCommandJobXml('Temporary JobSeeker inline Python preview. This job is deleted automatically after the run.', $command, $environment);
+        $saveResult = $this->saveGeneratedJenkinsJob($previewJobName, $xml);
+        if (! $saveResult['ok']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Unable to create the temporary Jenkins preview job. HTTP '.$saveResult['status'].'.'), 502);
+          return;
+        }
+
+        $jobSaved = TRUE;
+        $triggerBody = http_build_query(array('ENVIRONMENT' => $environment));
+        $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($previewJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
+
+        if (! $this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Unable to start the temporary Jenkins preview job. HTTP '.$triggerResponse['status'].'.'), 502);
+          return;
+        }
+
+        $queueId = $this->jenkinsQueueIdFromHeaders(isset($triggerResponse['headers']) ? $triggerResponse['headers'] : array());
+          $wait = $this->waitForJenkinsBuildResult($previewJobName, $queueId, $previewTimeoutSeconds + 20);
+        $buildNumber = isset($wait['buildNumber']) ? $wait['buildNumber'] : '';
+        $output = $this->jenkinsBuildConsoleText($previewJobName, $buildNumber);
+
+        if ($wait['status'] === 'TIMEOUT' && $buildNumber !== '') {
+          $this->requestJenkins('POST', $this->jenkinsJobPath($previewJobName) . '/' . rawurlencode($buildNumber) . '/stop');
+        }
+
+        $message = $wait['ok'] ? 'Inline Python preview succeeded with Jenkins Python.' : 'Inline Python preview finished with status '.$wait['status'].'.';
+        if ($wait['status'] === 'TIMEOUT') {
+          $message = 'Inline Python preview timed out after '.$previewTimeoutSeconds.' seconds.';
+        }
+
+        $this->jsonJobCreationResponse(array(
+          'ok' => $wait['ok'],
+          'status' => $wait['status'],
+          'message' => $message,
+          'output' => $output,
+          'environment' => $environment,
+          'runtime' => 'Jenkins Agent '.$pythonExecutable,
+          'queueWhy' => isset($wait['queueWhy']) ? $wait['queueWhy'] : ''
+        ));
+      } finally {
+        if ($jobSaved) {
+          $this->requestJenkins('POST', $this->jenkinsJobPath($previewJobName) . '/doDelete');
+        }
+
+        if (is_array($pythonExecution) && isset($pythonExecution['sourceDirectory']) && is_dir($pythonExecution['sourceDirectory'])) {
+          $this->removeUploadDirectory($pythonExecution['sourceDirectory']);
+        }
+      }
+    }
+
     private function appendDownstreamJobToExistingJob($sourceJobName, $targetJobName, $optionsRadios) {
       $sourceJobPath = $this->jenkinsJobPath($sourceJobName);
       $jobResponse = $this->requestJenkins('GET', $sourceJobPath . '/config.xml');
@@ -371,7 +682,7 @@ class JobCreation extends BaseController
       
      }
 
-      $allowedExtensions = $safeScriptType === 'python' ? array('zip', 'py') : array('zip');
+      $allowedExtensions = $safeScriptType === 'python' ? array('zip', 'py') : ($safeScriptType === 'bash' ? array('zip', 'sh') : array('zip'));
       $upload = $this->getUploadedFile('file', $allowedExtensions, 104857600);
       if (! $upload['ok']) {
         $this->output->set_status_header(400);
@@ -396,6 +707,24 @@ class JobCreation extends BaseController
         }
 
         echo 'Python file uploaded.';
+        return;
+      }
+
+      if ($safeScriptType === 'bash' && $upload['extension'] === 'sh') {
+        if (! $this->ensureDirectory($targetJobPath)) {
+          $this->output->set_status_header(500);
+          echo 'Unable to create upload directory.';
+          return;
+        }
+
+        $targetFile = $targetJobPath . $ds . $upload['safe_name'];
+        if (! move_uploaded_file($upload['tmp_name'], $targetFile)) {
+          $this->output->set_status_header(500);
+          echo 'Unable to store uploaded file.';
+          return;
+        }
+
+        echo 'Bash script uploaded.';
         return;
       }
 
@@ -1292,7 +1621,8 @@ class JobCreation extends BaseController
           return;
         }
 
-        $response = $this->requestJenkins('GET', 'api/json?tree=jobs[name,fullName,color,buildable,lastBuild[number,result,timestamp]]');
+        $environmentFilter = $this->normalizeJobSeekerEnvironment($this->input->get('environment'));
+        $response = $this->requestJenkins('GET', 'api/json?tree='.$this->availableJobsTree(3));
         $this->output->set_status_header((int) $response['status']);
         $this->output->set_content_type('application/json');
 
@@ -1301,7 +1631,18 @@ class JobCreation extends BaseController
           return;
         }
 
-        echo $response['body'];
+        $payload = json_decode($response['body']);
+        if (! is_object($payload) || ! isset($payload->jobs) || ! is_array($payload->jobs)) {
+          $this->output->set_status_header(502);
+          echo json_encode(array('jobs' => array(), 'error' => 'Jenkins returned an invalid jobs payload.'));
+          return;
+        }
+
+        $availableJobs = array();
+        $this->collectAvailableJobs($payload->jobs, $availableJobs, $environmentFilter);
+        $payload->jobs = $availableJobs;
+
+        echo json_encode($payload);
       }
 
       private function pythonEnvironmentArgument($environment, $checkEnvironment) {
@@ -2133,9 +2474,9 @@ class JobCreation extends BaseController
 
                   $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
 
-                  $this->appendTextElement($dom, $email, 'subject', $listMailTemplates[0]->subject);
+                  $this->appendTextElement($dom, $email, 'subject', $this->failureEmailSubject($listMailTemplates[0]->subject, $environment));
 
-                  $this->appendTextElement($dom, $email, 'body', $listMailTemplates[0]->msg);
+                  $this->appendTextElement($dom, $email, 'body', $this->failureEmailBodyWithEnvironment($listMailTemplates[0]->msg, $environment));
 
                   $recipientProviders = $dom->createElement('recipientProviders');
                   $email->appendChild($recipientProviders);
@@ -2264,7 +2605,7 @@ class JobCreation extends BaseController
                         $configuredTriggers = $emailExtPublisher['configuredTriggers'];
                       }
 
-                      $this->appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients);
+                      $this->appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients, $environment);
                     
                     }
                   }
@@ -2377,6 +2718,12 @@ class JobCreation extends BaseController
                   }
 
                   if ($triggerAfterSave === '1') {
+                    $slotCheck = $this->checkJenkinsEnvironmentSlots($targetJobName, $environment);
+                    if (! $slotCheck['ok']) {
+                      $triggerFailures[] = $targetJobName.' ('.$slotCheck['message'].')';
+                      continue;
+                    }
+
                     $triggerBody = http_build_query(array('ENVIRONMENT' => $environment));
                     $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
 
@@ -2490,7 +2837,7 @@ class JobCreation extends BaseController
       return $recipients;
     }
 
-    private function appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients) {
+    private function appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients, $environment = '') {
       $failureTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
       $configuredTriggers->appendChild($failureTrigger);
 
@@ -2500,11 +2847,11 @@ class JobCreation extends BaseController
       $recipientList = $dom->createElement('recipientList', $recipients);
       $email->appendChild($recipientList);
 
-      $subject = $dom->createElement('subject', '[${BUILD_STATUS}] ${PROJECT_NAME} #${BUILD_NUMBER}');
+      $subject = $dom->createElement('subject', $this->failureEmailSubject('[${BUILD_STATUS}] ${PROJECT_NAME} #${BUILD_NUMBER}', $environment));
       $email->appendChild($subject);
 
       $body = $dom->createElement('body');
-      $body->appendChild($dom->createCDATASection($this->defaultFailureEmailBody()));
+      $body->appendChild($dom->createCDATASection($this->defaultFailureEmailBody($environment)));
       $email->appendChild($body);
 
       $recipientProviders = $dom->createElement('recipientProviders');
@@ -2529,17 +2876,70 @@ class JobCreation extends BaseController
       $email->appendChild($contentType);
     }
 
-    private function defaultFailureEmailBody() {
-      return <<<'HTML'
+    private function environmentEmailPalette($environment) {
+      switch ($this->normalizeJobSeekerEnvironment($environment)) {
+        case 'DEV':
+          return array('start' => '#0f4c81', 'end' => '#2563eb', 'text' => '#dbeafe');
+        case 'QA':
+          return array('start' => '#047857', 'end' => '#14b8a6', 'text' => '#ccfbf1');
+        case 'UAT':
+          return array('start' => '#7c3aed', 'end' => '#0ea5e9', 'text' => '#e0f2fe');
+        case 'PREPROD':
+        case 'HML':
+          return array('start' => '#b45309', 'end' => '#f59e0b', 'text' => '#fff7ed');
+        case 'PROD':
+          return array('start' => '#7f1d1d', 'end' => '#dc2626', 'text' => '#fee2e2');
+        case 'LOCAL':
+          return array('start' => '#334155', 'end' => '#64748b', 'text' => '#e2e8f0');
+        default:
+          return array('start' => '#4A00E0', 'end' => '#8E2DE2', 'text' => '#ede9fe');
+      }
+    }
+
+    private function emailEnvironmentLabel($environment) {
+      $environment = $this->normalizeJobSeekerEnvironment($environment);
+      return $environment === '' || $environment === '0' || $environment === 'ALL' ? 'Runtime Environment' : $environment;
+    }
+
+    private function failureEmailEnvironmentHeader($environment) {
+      $palette = $this->environmentEmailPalette($environment);
+      $environmentLabel = htmlspecialchars($this->emailEnvironmentLabel($environment), ENT_QUOTES, 'UTF-8');
+
+      return '<div style="background:'.$palette['start'].'; background:linear-gradient(to right, '.$palette['start'].', '.$palette['end'].'); color:#ffffff; padding:20px 24px;">'
+        .'<p style="margin:0 0 6px; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:'.$palette['text'].';">${BUILD_STATUS} - '.$environmentLabel.'</p>'
+        .'<h1 style="margin:0; font-size:23px; line-height:1.3;">'.$environmentLabel.' - ${PROJECT_NAME} #${BUILD_NUMBER} failed</h1>'
+        .'<p style="margin:8px 0 0; font-size:14px; line-height:1.4; color:'.$palette['text'].';">${CAUSE}</p>'
+        .'</div>';
+    }
+
+    private function failureEmailSubject($subject, $environment) {
+      $environmentLabel = $this->emailEnvironmentLabel($environment);
+      return '['.$environmentLabel.'] '.trim((string) $subject);
+    }
+
+    private function failureEmailBodyWithEnvironment($body, $environment) {
+      $banner = $this->failureEmailEnvironmentHeader($environment);
+      $body = (string) $body;
+
+      if (preg_match('/<body\b[^>]*>/i', $body)) {
+        return preg_replace_callback('/<body\b[^>]*>/i', function($matches) use ($banner) {
+          return $matches[0].$banner;
+        }, $body, 1);
+      }
+
+      return $banner.$body;
+    }
+
+    private function defaultFailureEmailBody($environment = '') {
+      return str_replace(
+        array('@@JOBSEEKER_ENVIRONMENT_EMAIL_HEADER@@', '@@JOBSEEKER_EMAIL_ENVIRONMENT@@'),
+        array($this->failureEmailEnvironmentHeader($environment), htmlspecialchars($this->emailEnvironmentLabel($environment), ENT_QUOTES, 'UTF-8')),
+        <<<'HTML'
 <html>
   <body style="margin:0; padding:0; background:#f3f4f6; color:#17202a; font-family:Arial, Helvetica, sans-serif;">
     <div style="max-width:780px; margin:0 auto; padding:24px;">
       <div style="background:#ffffff; border:1px solid #d8dee9; border-radius:6px; overflow:hidden;">
-        <div style="background:#991b1b; color:#ffffff; padding:20px 24px;">
-          <p style="margin:0 0 6px; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:#fee2e2;">${BUILD_STATUS}</p>
-          <h1 style="margin:0; font-size:23px; line-height:1.3;">${PROJECT_NAME} #${BUILD_NUMBER} failed</h1>
-          <p style="margin:8px 0 0; font-size:14px; line-height:1.4; color:#fee2e2;">${CAUSE}</p>
-        </div>
+        @@JOBSEEKER_ENVIRONMENT_EMAIL_HEADER@@
         <div style="padding:24px;">
           <p style="margin:0 0 18px; font-size:15px; line-height:1.55;">Jenkins marked this JobSeeker build as failed. Start with the highlighted error excerpt, then open the console log if the surrounding context is needed.</p>
           <p style="margin:0 0 20px;">
@@ -2550,6 +2950,7 @@ class JobCreation extends BaseController
           </p>
           <table style="width:100%; border-collapse:collapse; margin:0 0 20px; font-size:14px;">
             <tr><th align="left" style="width:150px; padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Job</th><td style="padding:8px; border:1px solid #d8dee9;">${PROJECT_NAME}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Environment</th><td style="padding:8px; border:1px solid #d8dee9; font-weight:bold;">@@JOBSEEKER_EMAIL_ENVIRONMENT@@</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build</th><td style="padding:8px; border:1px solid #d8dee9;">#${BUILD_NUMBER}</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d8dee9; color:#991b1b; font-weight:bold;">${BUILD_STATUS}</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build ID</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_ID"}</td></tr>
@@ -2568,7 +2969,8 @@ class JobCreation extends BaseController
     </div>
   </body>
 </html>
-HTML;
+HTML
+  );
     }
 
     public function readXML() {

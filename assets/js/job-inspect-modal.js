@@ -36,7 +36,13 @@
 
   function environmentInfo(configText, jobName, data) {
     if (window.JobSeekerEnvironment) {
-      return window.JobSeekerEnvironment.detectFromConfig(configText || '', jobName || data.fullName || data.name || '');
+      var configInfo = window.JobSeekerEnvironment.detectFromConfig(configText || '', jobName || data.fullName || data.name || '');
+
+      if (! configInfo || configInfo.unknown) {
+        return window.JobSeekerEnvironment.detectFromJob(data || {name: jobName});
+      }
+
+      return configInfo;
     }
 
     return {environment: 'Unknown', source: 'Not detected', unknown: true};

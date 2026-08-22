@@ -84,11 +84,17 @@ export JOBSEEKER_DB_PASSWORD="replace-with-a-database-password"
 export JOBSEEKER_MYSQL_ROOT_PASSWORD="replace-with-a-root-password"
 export JENKINS_ADMIN_PASSWORD="replace-with-a-jenkins-password-or-token"
 export JENKINS_NUM_EXECUTORS="5"
+export JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS="1"
+export JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS="DEV=2,QA=1,PROD=1"
 
 docker compose up -d --build
 ```
 
 Jenkins parallelism is controlled by `JENKINS_NUM_EXECUTORS`. The default Docker setup uses 5 executors, so independent jobs can run at the same time.
+
+JobSeeker also gates build triggers by runtime environment before they reach Jenkins. `JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS` sets the per-environment default, and `JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` can override individual environments with comma-separated values such as `DEV=2,QA=1,PROD=2`. This prevents JobSeeker-triggered DEV jobs from consuming the configured PROD capacity.
+
+Increasing `JENKINS_NUM_EXECUTORS` adds more parallel worker slots inside the current Jenkins container; it does not automatically start more worker containers. To scale like Airflow workers, add Jenkins agents with Docker, Kubernetes, or inbound agent containers, label them by environment or workload, and let JobSeeker assign generated jobs to those labels. The Executor Monitor page shows both the global Jenkins executor pool and the JobSeeker environment slot usage.
 
 Docker Compose is the recommended installation path because it starts the application, database, and Jenkins execution engine together.
 

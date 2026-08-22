@@ -925,6 +925,12 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                   </a>
                 </li>
                 <li>
+                  <a href="<?php echo base_url(); ?>jobExecution/executors" >
+                    <i class="fa fa-tachometer"></i>
+                    <span>Executor Monitor</span>
+                  </a>
+                </li>
+                <li>
                   <a href="<?php echo base_url(); ?>jobView" >
                     <i class="fa fa-eye"></i>
                     <span>View Job</span>

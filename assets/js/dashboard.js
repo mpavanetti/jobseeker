@@ -3,12 +3,40 @@ function dashboardNumber(value) {
   return isNaN(number) ? 0 : number;
 }
 
+function dashboardArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function dashboardPayloadData(payload) {
+  return payload && payload.data && typeof payload.data === 'object' ? payload.data : {};
+}
+
+function dashboardFirstActivity(rows) {
+  rows = dashboardArray(rows);
+  return rows.length && rows[0] ? rows[0].last_activity : '';
+}
+
 function dashboardAjaxJson(url) {
   return $.ajax({
     type: 'GET',
     url: url,
     dataType: 'json'
   });
+}
+
+function dashboardSyncJson(path) {
+  var response = $.ajax({
+    contentType: 'application/json',
+    url: dashboardUrl(path),
+    dataType: 'json',
+    async: false
+  });
+
+  try {
+    return $.parseJSON(response.responseText || '{}');
+  } catch (error) {
+    return {data: {}};
+  }
 }
 
 function dashboardSelectedEnvironment() {
@@ -29,6 +57,11 @@ function dashboardUrl(path) {
   }
 
   return path + (path.indexOf('?') === -1 ? '?' : '&') + 'environment=' + encodeURIComponent(environment);
+}
+
+function dashboardAppUrl(path) {
+  var appBase = typeof baseURL !== 'undefined' ? baseURL : '';
+  return appBase.replace(/\/+$/, '/') + path.replace(/^\/+/, '');
 }
 
 function dashboardJenkinsApiUrl(path) {
@@ -87,6 +120,40 @@ function dashboardDisableEmptyDataTable(tableSelector, emptySelector) {
   $(emptySelector).show();
 }
 
+function dashboardInitDataTable(selector, order) {
+  var table = $(selector);
+
+  if (! table.length || ! table.is(':visible') || table.hasClass('dataTableMobile')) {
+    return true;
+  }
+
+  if (! $.fn.DataTable) {
+    return false;
+  }
+
+  if ($.fn.DataTable.isDataTable(selector)) {
+    return true;
+  }
+
+  table.DataTable({
+    autoWidth: false,
+    lengthMenu: [10, 20, 50, 100, 200, 500],
+    order: order,
+    pageLength: 10,
+    scrollX: true
+  });
+
+  return true;
+}
+
+function dashboardInitTables() {
+  if (! dashboardInitDataTable('#dashboardJobsAmountTable', [[3, 'desc']]) ||
+      ! dashboardInitDataTable('#dashboardJobsStatusAmountTable', [[4, 'desc']]) ||
+      ! dashboardInitDataTable('#dashboardEnvironmentSummaryTable', [[1, 'desc']])) {
+    setTimeout(dashboardInitTables, 100);
+  }
+}
+
 function dashboardShowEmptyDashboard() {
   $('#dashboardEmptyState').show();
   $('#running').html('<h3>0</h3>');
@@ -125,18 +192,37 @@ function loadDashboardJenkinsOverview() {
     return;
   }
 
-  var computerUrl = dashboardJenkinsApiUrl('computer/api/json?tree=computer[displayName,numExecutors,executors[idle,currentExecutable[fullDisplayName]]]');
-  var queueUrl = dashboardJenkinsApiUrl('queue/api/json?tree=items[id,task[name],why]');
+  dashboardAjaxJson(dashboardUrl(dashboardAppUrl('jenkins/environmentSlots'))).done(function(payload) {
+    var selectedEnvironment = dashboardSelectedEnvironment();
+    var environments = payload && payload.environments ? payload.environments : {};
+    var rows = [];
 
-  $.when(dashboardAjaxJson(computerUrl), dashboardAjaxJson(queueUrl)).done(function(computerResponse, queueResponse) {
-    var computerData = computerResponse[0] || {};
-    var queueData = queueResponse[0] || {};
-    var stats = dashboardJenkinsStats(computerData);
-    var queued = queueData.items ? queueData.items.length : 0;
+    if (selectedEnvironment && selectedEnvironment !== 'all') {
+      rows.push($.extend({environment: selectedEnvironment}, environments[selectedEnvironment] || {running: 0, queued: 0, active: 0, limit: payload.defaultLimit || 1, available: payload.defaultLimit || 1}));
+    } else {
+      $.each(environments, function(environment, row) {
+        rows.push($.extend({environment: environment}, row));
+      });
+    }
 
-    $('#dashboardJenkinsCapacity').text(stats.busy + ' / ' + stats.total);
+    var active = 0;
+    var queued = 0;
+    var running = 0;
+    var limited = 0;
+    var scope = selectedEnvironment && selectedEnvironment !== 'all' ? selectedEnvironment : 'All environments';
+
+    $.each(rows, function(index, row) {
+      active += dashboardNumber(row.active);
+      queued += dashboardNumber(row.queued);
+      running += dashboardNumber(row.running);
+      if (dashboardNumber(row.limit) > 0) {
+        limited += dashboardNumber(row.limit);
+      }
+    });
+
+    $('#dashboardJenkinsCapacity').text(limited > 0 ? active + ' / ' + limited : active + ' / unlimited');
     $('#dashboardJenkinsQueue').text(queued);
-    $('#dashboardJenkinsDetail').text(stats.busy + ' ' + dashboardBuildLabel(stats.busy) + ' running across ' + stats.total + ' executors. Last updated ' + moment().format('h:mm:ss a') + '.');
+    $('#dashboardJenkinsDetail').text(scope + ' executor allocation: ' + running + ' running, ' + queued + ' queued. Last updated ' + moment().format('h:mm:ss a') + '.');
   }).fail(function() {
     $('#dashboardJenkinsCapacity').text('N/A');
     $('#dashboardJenkinsQueue').text('N/A');
@@ -361,193 +447,163 @@ function errorGraph(result) {
   readyGraph(result);
   warningGraph(result);
   errorGraph(result);
+  dashboardInitTables();
 
 
 
-var tableAmount = $.parseJSON($.ajax({
-      contentType: "application/json",
-        url:  dashboardUrl('Dashboard/getAmount'),
-        dataType: "json", 
-        async: false,
-        beforeSend: function() {
-        },
-        success: function() {
-        },
-        complete: function(data) {
-            dateRequest = data;
-        }
-
-    }).responseText);
+var tableAmount = dashboardSyncJson('Dashboard/getAmount');
 
 
-$('#dwAmount').append('<b>' + tableAmount.data.dwAmount + ' </b>');
-$('#dimTableAmount').append('<b>' + tableAmount.data.dimTableAmount + ' </b>');
-$('#factTableAmount').append('<b>' + tableAmount.data.factTableAmount + ' </b>');
-$('#stgTableAmount').append('<b>' + tableAmount.data.stgTableAmount + ' </b>');
+var tableAmountData = dashboardPayloadData(tableAmount);
+
+$('#dwAmount').append('<b>' + dashboardNumber(tableAmountData.dwAmount) + ' </b>');
+$('#dimTableAmount').append('<b>' + dashboardNumber(tableAmountData.dimTableAmount) + ' </b>');
+$('#factTableAmount').append('<b>' + dashboardNumber(tableAmountData.factTableAmount) + ' </b>');
+$('#stgTableAmount').append('<b>' + dashboardNumber(tableAmountData.stgTableAmount) + ' </b>');
 
 // label for dm amount exec dimension
- var dmAmountExecLabel = tableAmount.data.dmAmountExec.map(function(e) {
+ var dmAmountExecLabel = dashboardArray(tableAmountData.dmAmountExec).map(function(e) {
      return e.DIMENSION;
   });
 
 //data for dm amount exec amount
- var dmAmountExecAmount = tableAmount.data.dmAmountExec.map(function(e) {
+ var dmAmountExecAmount = dashboardArray(tableAmountData.dmAmountExec).map(function(e) {
      return e.AMOUNT;
   });
 
  // label for dim amount exec dimension
- var dimAmountExecLabel = tableAmount.data.dimAmountExec.map(function(e) {
+ var dimAmountExecLabel = dashboardArray(tableAmountData.dimAmountExec).map(function(e) {
      return e.DIM;
   });
 
 //data for dim amount exec amount
- var dimAmountExecAmount = tableAmount.data.dimAmountExec.map(function(e) {
+ var dimAmountExecAmount = dashboardArray(tableAmountData.dimAmountExec).map(function(e) {
      return e.AMOUNT;
   });
 
   // label for fact amount exec FACT
- var factAmountExecLabel = tableAmount.data.factAmountExec.map(function(e) {
+ var factAmountExecLabel = dashboardArray(tableAmountData.factAmountExec).map(function(e) {
      return e.FACT;
   });
 
 //data for fact amount exec AMOUNT
- var factAmountExecAmount = tableAmount.data.factAmountExec.map(function(e) {
+ var factAmountExecAmount = dashboardArray(tableAmountData.factAmountExec).map(function(e) {
      return e.AMOUNT;
   });
 
    // label for stg amount exec stg
- var stgAmountExecLabel = tableAmount.data.stgAmountExec.map(function(e) {
+ var stgAmountExecLabel = dashboardArray(tableAmountData.stgAmountExec).map(function(e) {
      return e.STG;
   });
 
 //data for stg amount exec amount
- var stgAmountExecAmount = tableAmount.data.stgAmountExec.map(function(e) {
+ var stgAmountExecAmount = dashboardArray(tableAmountData.stgAmountExec).map(function(e) {
      return e.AMOUNT;
   });
 
-var dateRequest = $.parseJSON($.ajax({
-      contentType: "application/json",
-        url:  dashboardUrl('Dashboard/getdate'),
-        dataType: "json", 
-        async: false,
-        beforeSend: function() {
-        },
-        success: function() {
-        },
-        complete: function(data) {
-            dateRequest = data;
-        }
+var dateRequest = dashboardSyncJson('Dashboard/getdate');
 
-    }).responseText); 
 
+  var dateRequestData = dashboardPayloadData(dateRequest);
+  var firstActivity = dashboardFirstActivity(dateRequestData.firstDate);
+  var lastActivity = dashboardFirstActivity(dateRequestData.lastDate);
 
 // Get Amount Value
- var firstdate = moment(dateRequest.data.firstDate[0].last_activity).format('dddd, MMMM Do YYYY');
-var lastDate = moment(dateRequest.data.lastDate[0].last_activity).format('dddd, MMMM Do YYYY');
+   var firstdate = firstActivity ? moment(firstActivity).format('dddd, MMMM Do YYYY') : '';
+  var lastDate = lastActivity ? moment(lastActivity).format('dddd, MMMM Do YYYY') : '';
 
 
 
-$('#date').append('<b>From: </b>' + firstdate + '<b> To: </b>' + lastDate);
+  $('#date').append(firstdate && lastDate ? '<b>From: </b>' + firstdate + '<b> To: </b>' + lastDate : '<b>No monitoring records available yet.</b>');
 
 
 
-    var request2 = $.parseJSON($.ajax({
-      contentType: "application/json",
-        url:  dashboardUrl('Dashboard/graphMonth'),
-        dataType: "json", 
-        async: false,
-        beforeSend: function() {
-            $('.loading').show();
-        },
-        success: function() {
-        },
-        complete: function(data) {
-            request2 = data;
-        }
+    $('.loading').show();
+    var request2 = dashboardSyncJson('Dashboard/graphMonth');
 
-    }).responseText); 
+  var request2Data = dashboardPayloadData(request2);
 
 // Get Amount Value
- var data2 = request2.data.ready.map(function(e) {
+   var data2 = dashboardArray(request2Data.ready).map(function(e) {
      return e.AMOUNT;
   });
 
-var data3 = request2.data.error.map(function(e) {
+  var data3 = dashboardArray(request2Data.error).map(function(e) {
      return e.AMOUNT;
   });
 
-var data4 = request2.data.warning.map(function(e) {
+  var data4 = dashboardArray(request2Data.warning).map(function(e) {
      return e.AMOUNT;
   });
 
-var data5 = request2.data.running.map(function(e) {
+  var data5 = dashboardArray(request2Data.running).map(function(e) {
      return e.AMOUNT;
   });
 
 //MONTHS
-var months = request2.data.months.map(function(e) {
+  var months = dashboardArray(request2Data.months).map(function(e) {
      return e.MONTH;
   });
 
 //GROWTHS X 30 Days
-var readyGrowth = request2.data.readyGrowth.map(function(e) {
+  var readyGrowth = dashboardArray(request2Data.readyGrowth).map(function(e) {
      return e.AMOUNT;
   });
 
-var errorGrowth = request2.data.errorGrowth.map(function(e) {
+  var errorGrowth = dashboardArray(request2Data.errorGrowth).map(function(e) {
      return e.AMOUNT;
   });
 
-var warningGrowth = request2.data.warningGrowth.map(function(e) {
+  var warningGrowth = dashboardArray(request2Data.warningGrowth).map(function(e) {
      return e.AMOUNT;
   });
 
-var runningGrowth = request2.data.runningGrowth.map(function(e) {
+  var runningGrowth = dashboardArray(request2Data.runningGrowth).map(function(e) {
      return e.AMOUNT;
   });
 
 
 //GROWTHS X 90 Days
-var readyGrowthX90 = request2.data.readyGrowthX90.map(function(e) {
+var readyGrowthX90 = dashboardArray(request2Data.readyGrowthX90).map(function(e) {
      return e.AMOUNT;
   });
 
-var errorGrowthX90 = request2.data.errorGrowthX90.map(function(e) {
+var errorGrowthX90 = dashboardArray(request2Data.errorGrowthX90).map(function(e) {
      return e.AMOUNT;
   });
 
-var warningGrowthX90 = request2.data.warningGrowthX90.map(function(e) {
+var warningGrowthX90 = dashboardArray(request2Data.warningGrowthX90).map(function(e) {
      return e.AMOUNT;
   });
 
-var runningGrowthX90 = request2.data.runningGrowthX90.map(function(e) {
+var runningGrowthX90 = dashboardArray(request2Data.runningGrowthX90).map(function(e) {
      return e.AMOUNT;
   });
 
 //GROWTHS X 180 Days
-var readyGrowthX180 = request2.data.readyGrowthX180.map(function(e) {
+var readyGrowthX180 = dashboardArray(request2Data.readyGrowthX180).map(function(e) {
      return e.AMOUNT;
   });
 
-var errorGrowthX180 = request2.data.errorGrowthX180.map(function(e) {
+var errorGrowthX180 = dashboardArray(request2Data.errorGrowthX180).map(function(e) {
      return e.AMOUNT;
   });
 
-var warningGrowthX180 = request2.data.warningGrowthX180.map(function(e) {
+var warningGrowthX180 = dashboardArray(request2Data.warningGrowthX180).map(function(e) {
      return e.AMOUNT;
   });
 
-var runningGrowthX180 = request2.data.runningGrowthX180.map(function(e) {
+var runningGrowthX180 = dashboardArray(request2Data.runningGrowthX180).map(function(e) {
      return e.AMOUNT;
   });
 
 
 
-var statusLabel = request2.data.statusGraph.map(function(e) {
+var statusLabel = dashboardArray(request2Data.statusGraph).map(function(e) {
      return e.STATUS;
   });
 
-var statusAmount = request2.data.statusGraph.map(function(e) {
+var statusAmount = dashboardArray(request2Data.statusGraph).map(function(e) {
      var status = String(e.STATUS || '').toLowerCase();
      return {"labels": [e.STATUS],
              "values": [e.AMOUNT],
@@ -952,7 +1008,10 @@ var myChart = new Chart(ctx, {
             borderWidth: 1
         }]
     },
-   
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
 });// END Pie Chart
 
 // DW execution chart

@@ -175,7 +175,8 @@
 
   .dashboard-percent-card .chart-responsive {
     margin: 0 auto;
-    max-width: 420px;
+    height: 220px;
+    max-width: 320px;
   }
 
   .dashboard-info-row .info-box {
@@ -230,6 +231,30 @@
   .dashboard-empty-panel p {
     margin-bottom: 0;
   }
+
+  .dashboard-table-card .dataTables_wrapper {
+    width: 100%;
+  }
+
+  .dashboard-table-card table {
+    table-layout: fixed;
+    width: 100% !important;
+  }
+
+  .dashboard-table-card th,
+  .dashboard-table-card td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle !important;
+    white-space: nowrap;
+  }
+
+  .dashboard-table-card .dashboard-job-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 </style>
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->
@@ -275,11 +300,11 @@
               <div class="dashboard-jenkins-stats">
                 <div class="dashboard-jenkins-stat">
                   <strong id="dashboardJenkinsCapacity">--</strong>
-                  <span>Executors Busy</span>
+                  <span>Env Executors Used</span>
                 </div>
                 <div class="dashboard-jenkins-stat">
                   <strong id="dashboardJenkinsQueue">--</strong>
-                  <span>Queued Builds</span>
+                  <span>Executor Queue</span>
                 </div>
               </div>
             </div>
@@ -699,7 +724,7 @@
               <div id="dashboardPercentContent" class="row">
                 <div class="col-md-8">
                   <div class="chart-responsive">
-                    <canvas id="pieChart" height="300" width="420" style="width: 420px; height: 300px;"></canvas>
+                    <canvas id="pieChart" height="220" width="320" style="width: 320px; height: 220px;"></canvas>
                   </div>
                   <!-- ./chart-responsive -->
                 </div>
@@ -770,7 +795,7 @@
                 <h4>No job execution amounts</h4>
                 <p>Execution totals by job and dimension will appear here.</p>
               </div>
-              <table id="dashboardJobsAmountTable" class="table table-bordered table-striped<?php echo $hasJobsAmount ? ' table-config dataTable' : ''; ?>" style="<?php echo $hasJobsAmount ? '' : 'display: none;'; ?>">
+              <table id="dashboardJobsAmountTable" class="table table-bordered table-striped<?php echo $hasJobsAmount ? ' table-config' : ''; ?>" style="<?php echo $hasJobsAmount ? '' : 'display: none;'; ?>">
                 <thead>
                 <tr>
                   <th>Job Name</th>
@@ -787,8 +812,8 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->JOB_NAME ?></td>
-                        <td><?php echo $record->DIMENSION ?></td>
+                      <td><span class="dashboard-job-name" title="<?php echo html_escape($record->JOB_NAME); ?>"><?php echo html_escape($record->JOB_NAME); ?></span></td>
+                        <td><?php echo html_escape($record->DIMENSION); ?></td>
                         <td><?php echo $record->ENVIRONMENT === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($record->ENVIRONMENT); ?></td>
                         <td><?php echo $record->AMOUNT ?></td>
                     </tr>
@@ -829,7 +854,7 @@
                 <h4>No status totals</h4>
                 <p>Status totals by job and dimension will appear here.</p>
               </div>
-              <table id="dashboardJobsStatusAmountTable" class="table table-bordered table-striped<?php echo $hasJobsStatusAmount ? ' table-config dataTable' : ''; ?>" style="<?php echo $hasJobsStatusAmount ? '' : 'display: none;'; ?>">
+              <table id="dashboardJobsStatusAmountTable" class="table table-bordered table-striped<?php echo $hasJobsStatusAmount ? ' table-config' : ''; ?>" style="<?php echo $hasJobsStatusAmount ? '' : 'display: none;'; ?>">
                 <thead>
                 <tr>
                   <th>Job Name</th>
@@ -847,11 +872,11 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->JOB_NAME ?></td>
-                        <td><?php echo $record->DIMENSION ?></td>
+                      <td><span class="dashboard-job-name" title="<?php echo html_escape($record->JOB_NAME); ?>"><?php echo html_escape($record->JOB_NAME); ?></span></td>
+                        <td><?php echo html_escape($record->DIMENSION); ?></td>
                         <td><?php echo $record->ENVIRONMENT === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($record->ENVIRONMENT); ?></td>
                         <td><?php 
-                      switch ($record->STATUS) {
+                      switch (strtolower((string) $record->STATUS)) {
                         case 'ready':
                           echo '<span class="label label-success">Ready</span>';
                           break;
@@ -874,7 +899,7 @@
                           break;
                         
                         default:
-                          echo '<span class="label label-danger">404 Error</span>';
+                          echo '<span class="label label-default">Unknown</span>';
                           break;
                       }
                     ?></td>
@@ -919,7 +944,7 @@
                 <h4>No environment activity</h4>
                 <p>Environment totals will appear after TMF records include runtime context.</p>
               </div>
-              <table id="dashboardEnvironmentSummaryTable" class="table table-bordered table-striped<?php echo $hasEnvironmentSummary ? ' table-config dataTable' : ''; ?>" style="<?php echo $hasEnvironmentSummary ? '' : 'display: none;'; ?>">
+              <table id="dashboardEnvironmentSummaryTable" class="table table-bordered table-striped<?php echo $hasEnvironmentSummary ? ' table-config' : ''; ?>" style="<?php echo $hasEnvironmentSummary ? '' : 'display: none;'; ?>">
                 <thead>
                 <tr>
                   <th>Environment</th>
@@ -1152,5 +1177,5 @@ $(document).ready(function(){
     }
 });
 </script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=32"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=35"></script>
 

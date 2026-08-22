@@ -30,39 +30,14 @@
       box-shadow: 0 8px 20px rgba(16, 42, 67, .08);
     }
 
-    .context-summary-row {
-      display: flex;
-      flex-wrap: wrap;
-      padding-top: 15px;
-    }
-
-    .context-summary-row:before,
-    .context-summary-row:after,
-    .context-entry-form:before,
-    .context-entry-form:after {
-      display: none;
-    }
-
-    .context-summary-row > [class*="col-"] {
-      display: flex;
-    }
-
     .context-page .info-box {
-      display: flex;
-      min-height: 104px;
-      width: 100%;
+      min-height: 86px;
     }
 
     .context-page .info-box-icon {
       border-radius: 6px 0 0 6px;
-      flex: 0 0 92px;
-      height: 104px;
-      line-height: 104px;
-    }
-
-    .context-page .info-box-content {
-      align-self: center;
-      flex: 1 1 auto;
+      height: 86px;
+      line-height: 86px;
     }
 
     .context-entry-form label {
@@ -74,30 +49,8 @@
 
     .context-entry-form {
       background: #fff;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
       margin-top: 18px;
-      padding: 18px 18px 6px;
-    }
-
-    .context-entry-form .form-group {
-      min-height: 72px;
-    }
-
-    .context-form-action {
-      align-items: flex-end;
-      display: flex;
-      min-height: 72px;
-    }
-
-    .context-list-card .box-header {
-      min-height: 50px;
-    }
-
-    .context-list-card .box-body {
-      min-height: 360px;
-      overflow-x: auto;
+      padding: 18px 18px 0;
     }
 
     .context-page table th {
@@ -132,7 +85,7 @@
 
     <section class="content">
       <div class="container-fluid context-shell">
-        <div class="row context-summary-row">
+        <div class="row" style="padding-top: 15px;">
         <div class="col-md-3 col-sm-6 col-xs-12">
           <div class="info-box animated flipInX">
             <span class="info-box-icon bg-aqua"><i class="fa fa-pie-chart"></i></span>
@@ -193,8 +146,8 @@
             </div>
           </div>
        
-        <form action="<?php echo base_url() ?>Context/addContext" method="POST" id="searchList">
           <div class="row animated fadeIn context-entry-form">
+            <form action="<?php echo base_url() ?>Context/addContext" method="POST" id="searchList">
             <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
 
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
@@ -271,7 +224,7 @@
                 </div>
               </div>
 
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-12 form-group context-form-action">
+              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-12 form-group" style="margin-top: 25px;">
                 <button type="submit" class="btn btn-md btn-success btn-block searchList pull-right"><i class="fa fa-plus" aria-hidden="true"></i></button> 
               </div>
           </div>
@@ -279,7 +232,7 @@
 
      <div class="row" style="margin-top: 20px;">
         <div class="col-xs-12">
-          <div class="box box-primary context-list-card">
+          <div class="box box-primary">
             <div class="box-header">
               <h3 class="box-title"><b>Available Contexts</b></h3>
             </div>

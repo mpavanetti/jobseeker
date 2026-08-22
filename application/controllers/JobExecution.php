@@ -29,6 +29,12 @@ class JobExecution extends BaseController
                 $this->loadViews("jobExecution", $this->global, $data, NULL);
     }
 
+    public function executors()
+    {
+        $this->global['pageTitle'] = 'Job Seeker : Jenkins Executors';
+        $this->loadViews("jenkinsExecutors", $this->global, array(), NULL);
+    }
+
         private function jobCreationDatesPath() {
             return APPPATH . 'cache/job_creation_dates.json';
         }
