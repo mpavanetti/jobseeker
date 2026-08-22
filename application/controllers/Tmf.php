@@ -56,7 +56,10 @@ class Tmf extends BaseController
             $reprocess = $this->input->post('reprocess');
             $fromDate = $this->input->post('fromDate');
             $toDate = $this->input->post('toDate');
-            $eventText = $this->input->post('eventText');
+            $eventText = trim((string) $this->security->xss_clean($this->input->post('eventText')));
+            if (strlen($eventText) > 200) {
+                $eventText = substr($eventText, 0, 200);
+            }
             $environment = $this->input->post('environment');
 
             $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment);

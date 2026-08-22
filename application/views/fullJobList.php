@@ -30,6 +30,15 @@ pre {
   margin-bottom: 0;
 }
 
+.full-job-environment-line {
+  margin-top: 6px;
+}
+
+.full-job-environment-line .label,
+.full-job-environment-cell .label {
+  display: inline-block;
+}
+
 .full-job-summary {
   margin-top: 10px;
 }
@@ -186,6 +195,7 @@ pre {
         </div>
       </form>
       <p class="full-job-filter-note" id="fullJobFilterStatus">Select a Jenkins job, then search builds. Console text filtering checks the logs from the fetched builds.</p>
+      <p class="full-job-filter-note full-job-environment-line" id="selectedJobEnvironment"><i class="fa fa-globe"></i> Environment: <span id="selectedJobEnvironmentLabel"><span class="label label-default">Unknown</span></span></p>
     </div>
   </div>
 
@@ -269,6 +279,7 @@ pre {
           <thead>
             <tr>
               <th>Build</th>
+              <th>Environment</th>
               <th>Result</th>
               <th>Started</th>
               <th>Duration</th>
@@ -308,6 +319,13 @@ pre {
     var jenkins_token = '';
     var logCache = {};
     var currentLogQuery = '';
+    var selectedJobEnvironmentInfo = {environment: 'Unknown', source: 'Not detected', unknown: true};
+    var environmentHelper = window.JobSeekerEnvironment || {
+      detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
+      detectFromJob: function() { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
+      label: function() { return '<span class="label label-default">Unknown</span>'; },
+      text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
+    };
 
     loadJobs();
 
@@ -465,6 +483,38 @@ pre {
       return '<div class="full-job-build-cell"><strong>#' + renderText(build.number) + '</strong><small title="' + escapeAttribute(build.jobName) + '">' + renderText(build.jobName) + '</small></div>';
     }
 
+    function renderEnvironment(build) {
+      var info = build && build.environmentInfo ? build.environmentInfo : selectedJobEnvironmentInfo;
+      return '<span class="full-job-environment-cell">' + environmentHelper.label(info) + '</span>';
+    }
+
+    function setSelectedJobEnvironment(info) {
+      selectedJobEnvironmentInfo = info || {environment: 'Unknown', source: 'Not detected', unknown: true};
+      $('#selectedJobEnvironmentLabel').html(environmentHelper.label(selectedJobEnvironmentInfo) + ' <small>' + escapeHtml(selectedJobEnvironmentInfo.source || 'Not detected') + '</small>');
+    }
+
+    function loadSelectedJobEnvironment(jobName) {
+      var fallback = environmentHelper.detectFromJob({name: jobName, fullName: jobName});
+      setSelectedJobEnvironment(fallback);
+
+      if (! jobName) {
+        return $.Deferred().resolve(fallback).promise();
+      }
+
+      return $.ajax({
+        contentType: 'application/text',
+        url: jenkins_url + jenkinsJobPath(jobName) + '/config.xml',
+        method: 'GET',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      }).then(function(xmlText) {
+        var info = environmentHelper.detectFromConfig(xmlText || '', jobName);
+        setSelectedJobEnvironment(info);
+        return info;
+      }, function() {
+        return fallback;
+      });
+    }
+
     function renderQueue(build) {
       var queueId = build.queueId == null || build.queueId === '' ? '<span class="text-muted">None</span>' : renderText(build.queueId);
       var state = build.building === true ? '<span class="label label-info">Running</span>' : '<span class="label label-default">Finished</span>';
@@ -496,7 +546,7 @@ pre {
       var jenkinsUrl = jenkinsBuildUrl(build);
       var jenkinsButton = jenkinsUrl ? '<a class="btn btn-sm btn-default" target="_blank" rel="noopener" href="' + escapeAttribute(jenkinsUrl) + '"><i class="fa fa-external-link"></i> Jenkins</a>' : '';
 
-      return '<div class="btn-group btn-group-xs full-job-actions"><button type="button" class="btn btn-info log" data-job="' + escapeAttribute(build.jobName) + '" data-build="' + escapeAttribute(build.number) + '" data-result="' + escapeAttribute(build.result || '') + '" data-date="' + escapeAttribute(renderBuildTime(build.timestamp)) + '"><i class="fa fa-terminal"></i> Logs</button>' + jenkinsButton + '</div>';
+      return '<div class="btn-group btn-group-xs full-job-actions"><button type="button" class="btn btn-info log" data-job="' + escapeAttribute(build.jobName) + '" data-build="' + escapeAttribute(build.number) + '" data-result="' + escapeAttribute(build.result || '') + '" data-date="' + escapeAttribute(renderBuildTime(build.timestamp)) + '" data-environment="' + escapeAttribute(environmentHelper.text(build.environmentInfo)) + '"><i class="fa fa-terminal"></i> Logs</button>' + jenkinsButton + '</div>';
     }
 
     function renderBuildTable(builds) {
@@ -513,6 +563,7 @@ pre {
         },
         columns: [
           {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' ? parseInt(row.number, 10) || 0 : renderBuildIdentity(row); }},
+          {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' || type === 'type' ? environmentHelper.text(row.environmentInfo) : renderEnvironment(row); }},
           {data: null, defaultContent: '', render: function(data, type, row) { return renderResult(row); }},
           {data: 'timestamp', defaultContent: '', render: function(data, type) { return type === 'sort' || type === 'type' ? parseInt(data, 10) || 0 : renderBuildTime(data); }},
           {data: 'duration', defaultContent: '', render: function(data, type) { return type === 'sort' || type === 'type' ? parseInt(data, 10) || 0 : renderDuration(data); }},
@@ -622,6 +673,7 @@ pre {
       }).then(function(data) {
         return $.map(buildsFromJenkinsResponse(data), function(build) {
           build.jobName = filters.jobName;
+          build.environmentInfo = selectedJobEnvironmentInfo;
           build.number = parseInt(build.number, 10) || build.number;
           return build;
         });
@@ -784,22 +836,26 @@ pre {
       }
 
       currentLogQuery = filters.logText;
-      setBusy(true, 'Fetching latest ' + filters.rowLimit + ' build(s) for ' + filters.jobName + '...');
+      setBusy(true, 'Detecting environment for ' + filters.jobName + '...');
 
-      fetchBuilds(filters).done(function(builds) {
-        var basicMatches = applyBasicFilters(builds, filters);
-        $('#fullJobFilterStatus').text(basicMatches.length + ' build(s) match the non-console filters.');
+      loadSelectedJobEnvironment(filters.jobName).always(function() {
+        setBusy(true, 'Fetching latest ' + filters.rowLimit + ' build(s) for ' + filters.jobName + '...');
 
-        filterByConsoleText(filters.jobName, basicMatches, filters.logText, filters.caseSensitive).done(function(filteredBuilds) {
-          renderBuildTable(filteredBuilds);
-          updateSummary(builds, filteredBuilds);
-          $('#fullJobFilterStatus').text('Fetched ' + builds.length + ' build(s); showing ' + filteredBuilds.length + ' matching build(s).');
-        }).always(function() {
+        fetchBuilds(filters).done(function(builds) {
+          var basicMatches = applyBasicFilters(builds, filters);
+          $('#fullJobFilterStatus').text(basicMatches.length + ' build(s) match the non-console filters.');
+
+          filterByConsoleText(filters.jobName, basicMatches, filters.logText, filters.caseSensitive).done(function(filteredBuilds) {
+            renderBuildTable(filteredBuilds);
+            updateSummary(builds, filteredBuilds);
+            $('#fullJobFilterStatus').text('Fetched ' + builds.length + ' build(s) for ' + environmentHelper.text(selectedJobEnvironmentInfo) + '; showing ' + filteredBuilds.length + ' matching build(s).');
+          }).always(function() {
+            setBusy(false);
+          });
+        }).fail(function(xhr) {
+          toastr.error(responseMessage(xhr, 'Unable to fetch builds for this job.'), 'Build Query Failed');
           setBusy(false);
         });
-      }).fail(function(xhr) {
-        toastr.error(responseMessage(xhr, 'Unable to fetch builds for this job.'), 'Build Query Failed');
-        setBusy(false);
       });
     }
 
@@ -808,11 +864,12 @@ pre {
       $('#dateFrom, #dateTo, #buildFrom, #buildTo, #logText').val('');
       $('#rowLimit').val(100);
       $('#caseSensitiveLog').prop('checked', false);
+      setSelectedJobEnvironment({environment: 'Unknown', source: 'Not detected', unknown: true});
       $('#fullJobFilterStatus').text('Filters reset. Search again to refresh the report.');
     }
 
-    function showLog(jobName, buildNumber, result, date, output) {
-      $('#addLog').html('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="120px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr><tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[#' + escapeHtml(buildNumber) + ']</b></td></tr><tr><td>Status</td><td>' + escapeHtml(result || 'No result') + '</td></tr><tr><td>Console Log</td><td><pre>' + escapeHtml(output || 'Console output is empty for this build.') + '</pre></td></tr></tbody></table></div>');
+    function showLog(jobName, buildNumber, result, date, environment, output) {
+      $('#addLog').html('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="120px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr><tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[#' + escapeHtml(buildNumber) + ']</b></td></tr><tr><td>Environment</td><td>' + escapeHtml(environment || 'Unknown') + '</td></tr><tr><td>Status</td><td>' + escapeHtml(result || 'No result') + '</td></tr><tr><td>Console Log</td><td><pre>' + escapeHtml(output || 'Console output is empty for this build.') + '</pre></td></tr></tbody></table></div>');
       $('#modal-default').modal('show');
     }
 
@@ -829,12 +886,18 @@ pre {
       resetFilters();
     });
 
+    $('#job_name').on('change', function() {
+      var jobName = $(this).val() || '';
+      setSelectedJobEnvironment(environmentHelper.detectFromJob({name: jobName, fullName: jobName}));
+    });
+
     $('#fetch').on('click', '.log', function() {
       var button = $(this);
       var jobName = button.data('job') || '';
       var buildNumber = button.data('build') || '';
       var result = button.data('result') || '';
       var date = button.data('date') || '';
+      var environment = button.data('environment') || environmentHelper.text(selectedJobEnvironmentInfo);
 
       if (jobName === '' || buildNumber === '') {
         return;
@@ -844,7 +907,7 @@ pre {
       $('.overlay').show();
 
       fetchConsole(jobName, buildNumber).done(function(output) {
-        showLog(jobName, buildNumber, result, date, output);
+        showLog(jobName, buildNumber, result, date, environment, output);
       }).fail(function(xhr) {
         toastr.error(responseMessage(xhr, 'Unable to fetch console log.'), 'Log Query Failed');
       }).always(function() {

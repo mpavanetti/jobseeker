@@ -121,9 +121,8 @@ foreach($jobs as $tmfJob) {
     $jobNames[$tmfJob->job_name] = true;
   }
 
-  if (!empty($tmfJob->environment)) {
-    $environments[$tmfJob->environment] = true;
-  }
+  $environmentLabel = trim((string) $tmfJob->environment) !== '' ? trim((string) $tmfJob->environment) : 'Unknown';
+  $environments[$environmentLabel] = true;
 
   if ($hasAttention) {
     $attentionCount++;
@@ -158,7 +157,7 @@ $latestActivityLabel = $latestActivityTimestamp !== null ? date('m-d-Y H:i:s', $
 pre { 
     white-space: pre-wrap; 
     word-break: break-word;
-  max-width: 980px;
+  max-width: none;
 }
 
 .tmf-results-page .content {
@@ -166,7 +165,7 @@ pre {
 }
 
 .tmf-results-shell {
-  max-width: 1640px;
+  max-width: none;
   width: 100%;
 }
 
@@ -291,6 +290,11 @@ pre {
   vertical-align: middle;
 }
 
+.tmf-results-page #table6 {
+  min-width: 1500px;
+  width: 100% !important;
+}
+
 .tmf-results-page #table6 td:nth-child(6),
 .tmf-results-page #table6 td:nth-child(8) {
   max-width: 360px;
@@ -299,7 +303,8 @@ pre {
 }
 
 .tmf-table-wrap {
-  overflow: hidden;
+  overflow-x: auto;
+  width: 100%;
 }
 
 .tmf-row-error > td { background: #fff5f5 !important; }
@@ -455,9 +460,10 @@ pre {
                           $rowHasWarnings = isset($record->warnings) && (int) $record->warnings == 1;
                           $rowAttention = in_array($recordStatus, array('error', 'warning'), TRUE) || $rowStale || $rowHasErrors || $rowHasWarnings;
                           $rowReprocess = isset($record->reprocess) && (int) $record->reprocess == 1;
-                          $rowIncomplete = $rowTotal > 0 && $rowProcessed < $rowTotal;
+                            $rowIncomplete = $rowTotal > 0 && $rowProcessed < $rowTotal;
+                            $rowEnvironment = trim((string) $record->environment) !== '' ? trim((string) $record->environment) : 'Unknown';
                     ?>
-                    <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
+                          <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-environment="<?php echo html_escape($rowEnvironment); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
                       <td data-order="<?php echo (int) $record->id; ?>"><?php echo '<span style="color:#3c8dbc;">'.(int) $record->id.'</span>' ?></td>
                       <td data-order="<?php echo html_escape($recordStatus); ?>"><?php
                       switch ($recordStatus) {
@@ -491,7 +497,7 @@ pre {
                          if($role == 1 || $role == 2) {  ?>
                       <td class="text-center" data-order="<?php echo $rowReprocess ? 1 : 0; ?>"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '<span class="text-muted">-</span>' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo html_escape($record->event_text); ?></td>
-                      <td><?php echo html_escape($record->environment); ?></td>
+                      <td data-order="<?php echo html_escape($rowEnvironment); ?>"><?php echo $rowEnvironment === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($rowEnvironment); ?></td>
                       <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
                       <td data-order="<?php echo $rowTotal; ?>"><?php echo number_format($rowTotal); ?></td>
                       <td data-order="<?php echo $rowProgress; ?>"><span class="tmf-progress-label"><?php echo number_format($rowProcessed); ?> / <?php echo number_format($rowTotal); ?> <span class="text-muted"><?php echo $rowProgress; ?>%</span></span><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-<?php echo $rowIncomplete ? 'warning' : 'success'; ?>" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
@@ -888,6 +894,53 @@ function renderJobMessage(value) {
   return $container.html();
 }
 
+function jenkinsJobPath(jobName) {
+  return 'job/' + String(jobName || '').split('/').map(function(segment) {
+    return encodeURIComponent(segment);
+  }).join('/job/');
+}
+
+function hasKnownEnvironment(environment) {
+  return environment && environment !== 'Unknown';
+}
+
+function triggerJenkinsJob(jobName, environment) {
+  if (hasKnownEnvironment(environment)) {
+    return $.ajax({
+      url: jenkins_url + jenkinsJobPath(jobName) + '/buildWithParameters',
+      method: 'POST',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+      data: { ENVIRONMENT: environment }
+    }).then(null, function(xhr) {
+      if (xhr && (xhr.status === 400 || xhr.status === 404)) {
+        return $.ajax({
+          url: jenkins_url + jenkinsJobPath(jobName) + '/build',
+          method: 'POST',
+          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+        });
+      }
+
+      return $.Deferred().rejectWith(this, arguments).promise();
+    });
+  }
+
+  return $.ajax({
+    url: jenkins_url + jenkinsJobPath(jobName) + '/build',
+    method: 'POST',
+    headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+  }).then(null, function(xhr) {
+    if (xhr && (xhr.status === 400 || xhr.status === 404)) {
+      return $.ajax({
+        url: jenkins_url + jenkinsJobPath(jobName) + '/buildWithParameters',
+        method: 'POST',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      });
+    }
+
+    return $.Deferred().rejectWith(this, arguments).promise();
+  });
+}
+
   jQuery(document).on("click", ".deleteUser", function(){
     
     var userId = $(this).data("userid"),
@@ -1069,22 +1122,15 @@ $("#table6").on('click','.btnSelect',function(){
          var currentRow=$(this).closest("tr"); 
          var instanceId=currentRow.find("td:last-child").text(); 
          var jobName=currentRow.find("td:eq(2)").text();
+         var environment=currentRow.attr('data-environment') || 'Unknown';
          var id=currentRow.find("td:eq(0)").text();
 
 
          alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + escapeHtml(jobName) + '</b> ID (' + escapeHtml(id) +') ? \n \n *Please choose your option with caution.',
           function(){ 
 
-             $.ajax({
-         url: jenkins_url + '/job/'+ encodeURIComponent(jobName) +'/build',
-          method: 'POST',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-          beforeSend: function() {
-
-           $('.overlay').show();
-          //  toastr.info("Your reprocess request has been sent to server for job: " + jobName, "Reprocess Data");
-        }
-        }).done(function(data) {
+            $('.overlay').show();
+            triggerJenkinsJob(jobName, environment).done(function(data) {
             toastr.success("Your Execution Request has been sent to server, Please wait some minutes and reload the page.", "Request Sent")
             $('.overlay').hide();
 

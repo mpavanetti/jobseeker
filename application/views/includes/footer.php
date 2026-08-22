@@ -97,6 +97,74 @@
         var y= $('a[href="'+windowURL+'"]');
             y.addClass('active');
             y.parent().addClass('active');
+
+                $('.sidebar-menu li.active').parents('li.treeview').addClass('active menu-open').children('.treeview-menu').show();
+        </script>
+
+        <script type="text/javascript">
+            (function() {
+                var storageKey = 'jobseeker.sidebar.state';
+
+                function storageAvailable() {
+                    try {
+                        window.localStorage.setItem('jobseeker.sidebar.test', '1');
+                        window.localStorage.removeItem('jobseeker.sidebar.test');
+                        return true;
+                    } catch (error) {
+                        return false;
+                    }
+                }
+
+                function isDesktopLayout() {
+                    return window.matchMedia ? window.matchMedia('(min-width: 768px)').matches : $(window).width() >= 768;
+                }
+
+                function savedState() {
+                    if (!storageAvailable()) {
+                        return '';
+                    }
+
+                    return window.localStorage.getItem(storageKey) || '';
+                }
+
+                function saveState(state) {
+                    if (storageAvailable()) {
+                        window.localStorage.setItem(storageKey, state);
+                    }
+                }
+
+                function applySidebarPreference() {
+                    if (!isDesktopLayout()) {
+                        return;
+                    }
+
+                    if (savedState() === 'collapsed') {
+                        $('body').addClass('sidebar-collapse');
+                    } else {
+                        $('body').removeClass('sidebar-collapse');
+                    }
+                }
+
+                $(function() {
+                    applySidebarPreference();
+
+                    $(document).on('expanded.pushMenu collapsed.pushMenu', 'body', function() {
+                        if (isDesktopLayout()) {
+                            saveState($('body').hasClass('sidebar-collapse') ? 'collapsed' : 'expanded');
+                        }
+                    });
+
+                    $('[data-toggle="push-menu"]').on('click', function() {
+                        window.setTimeout(function() {
+                            if (isDesktopLayout()) {
+                                saveState($('body').hasClass('sidebar-collapse') ? 'collapsed' : 'expanded');
+                            }
+                        }, 0);
+                    });
+
+                    $(window).on('resize', applySidebarPreference);
+                });
+            })();
     </script>
   </body>
 </html>

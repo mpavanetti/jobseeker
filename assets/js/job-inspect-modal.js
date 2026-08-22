@@ -34,6 +34,18 @@
     return value ? labelHtml('Yes', 'success') : labelHtml('No', 'default');
   }
 
+  function environmentInfo(configText, jobName, data) {
+    if (window.JobSeekerEnvironment) {
+      return window.JobSeekerEnvironment.detectFromConfig(configText || '', jobName || data.fullName || data.name || '');
+    }
+
+    return {environment: 'Unknown', source: 'Not detected', unknown: true};
+  }
+
+  function environmentLabel(info) {
+    return window.JobSeekerEnvironment ? window.JobSeekerEnvironment.label(info) : labelHtml(info.environment || 'Unknown', 'default');
+  }
+
   function jenkinsJobPath(jobName) {
     return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
       return 'job/' + encodeURIComponent(segment);
@@ -333,6 +345,7 @@
   function renderJobInspect(data, configText, configError, requestedJob) {
     var jobName = data.fullName || data.name || requestedJob;
     var config = parseJobConfig(configText);
+    var jobEnvironment = environmentInfo(configText, jobName, data || {});
     var healthReport = Array.isArray(data.healthReport) && data.healthReport.length ? data.healthReport[0].description : '';
     var command = config.commands.length ? '<pre>' + escapeHtml(config.commands.join('\n\n')) + '</pre>' : noneText();
     var downstream = config.childProjects ? escapeHtml(config.childProjects) : noneText();
@@ -342,6 +355,7 @@
     }
 
     var summary = '<div class="job-inspect-summary">' +
+      renderSummaryTile('Environment', environmentLabel(jobEnvironment)) +
       renderSummaryTile('Situation', renderSituation(data)) +
       renderSummaryTile('Last Result', renderBuildResult(data.lastBuild)) +
       renderSummaryTile('Last Build', renderBuildNumber(data.lastBuild)) +
@@ -350,6 +364,7 @@
 
     var overviewRows = [
       rowHtml('Display Name', jobName),
+      rowHtml('Environment', environmentLabel(jobEnvironment) + '<br><small>' + escapeHtml(jobEnvironment.source || 'Not detected') + '</small>', true),
       rowHtml('Description', data.description),
       rowHtml('Build Situation', renderSituation(data), true),
       rowHtml('Build Description', healthReport),
@@ -373,6 +388,7 @@
     ];
 
     var configRows = [
+      rowHtml('Environment Binding', environmentLabel(jobEnvironment) + '<br><small>' + escapeHtml(jobEnvironment.source || 'Not detected') + '</small>', true),
       rowHtml('Scheduler', renderSchedule(config.schedule), true),
       rowHtml('Command', command, true),
       rowHtml('Abort Timeout Seconds', config.timeoutSeconds ? escapeHtml(config.timeoutSeconds + ' Seconds') : noneText(), true),

@@ -126,6 +126,7 @@ pre {
 }
 
 .schedule-cell small,
+.environment-cell small,
 .next-run-cell small {
   display: block;
   color: #777;
@@ -133,6 +134,10 @@ pre {
   white-space: normal;
 }
 
+.environment-cell .label {
+  display: inline-block;
+  margin-bottom: 3px;
+}
 .job-list-layout {
   width: 100%;
 }
@@ -141,6 +146,16 @@ pre {
   width: 100% !important;
 }
 
+.monitor-environment-filter {
+  display: inline-flex;
+  max-width: 320px;
+  min-width: 240px;
+  vertical-align: middle;
+}
+
+.monitor-environment-filter .input-group-addon {
+  width: auto;
+}
 </style>
 
 <!-- Content Wrapper. Contains page content -->
@@ -232,6 +247,12 @@ pre {
       <button type="button" class="btn btn-default monitor-filter" data-filter="attention">Needs Attention <span class="badge" id="monitor-filter-attention">0</span></button>
       <button type="button" class="btn btn-default monitor-filter" data-filter="scheduled">Scheduled <span class="badge" id="monitor-filter-scheduled">0</span></button>
     </div>
+    <div class="input-group input-group-sm monitor-environment-filter">
+      <span class="input-group-addon"><i class="fa fa-globe"></i> Environment</span>
+      <select id="monitorEnvironmentFilter" class="form-control">
+        <option value="all">All environments</option>
+      </select>
+    </div>
   </div>
 </div>
 
@@ -275,6 +296,7 @@ pre {
               <th>Health</th>
               <th>State</th>
               <th>Job Name</th>
+              <th>Environment</th>
               <th>Schedule</th>
               <th>Next Run</th>
               <th>Current Run</th>
@@ -298,6 +320,7 @@ pre {
               <th>Health</th>
               <th>State</th>
               <th>Job Name</th>
+              <th>Environment</th>
               <th>Schedule</th>
               <th>Next Run</th>
               <th>Current Run</th>
@@ -341,6 +364,7 @@ pre {
           <thead>
             <tr>
             <th>Job Name</th>
+            <th>Environment</th>
             <th>Result</th>
             <th>Last Build Number</th>
             <th>Last Failure Time</th>
@@ -355,6 +379,7 @@ pre {
           <tfoot>
            <tr>
             <th>Job Name</th>
+            <th>Environment</th>
             <th>Result</th>
             <th>Last Build Number</th>
             <th>Last Failure Time</th>
@@ -391,6 +416,7 @@ pre {
           <thead>
             <tr>
             <th>Job Name</th>
+            <th>Environment</th>
             <th>Result</th>
             <th>Last Build Number</th>
             <th>Last Success Time</th>
@@ -405,6 +431,7 @@ pre {
           <tfoot>
            <tr>
             <th>Job Name</th>
+            <th>Environment</th>
             <th>Result</th>
             <th>Last Build Number</th>
             <th>Last Success Time</th>
@@ -444,7 +471,14 @@ pre {
   var jobScheduleCache = {};
   var jobScheduleRequests = {};
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
+  var jobEnvironmentFilter = 'all';
   var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
+  var environmentHelper = window.JobSeekerEnvironment || {
+    detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
+    detectFromJob: function(job) { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
+    label: function() { return '<span class="label label-default">Unknown</span>'; },
+    text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
+  };
 
   function jenkinsJobPath(jobName) {
     return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
@@ -465,6 +499,47 @@ pre {
       method: 'POST',
       dataType: 'json',
       data: {jobs: jobNames}
+    });
+  }
+
+  function hasKnownEnvironment(environment) {
+    return environment && environment !== 'Unknown';
+  }
+
+  function triggerJenkinsJob(jobName, environment, jenkinsUrl, headers) {
+    if (! hasKnownEnvironment(environment)) {
+      return $.ajax({
+        url: jenkinsUrl + jenkinsJobPath(jobName) + '/build',
+        method: 'POST',
+        headers: headers || {}
+      }).then(null, function(xhr) {
+        if (xhr && (xhr.status === 400 || xhr.status === 404)) {
+          return $.ajax({
+            url: jenkinsUrl + jenkinsJobPath(jobName) + '/buildWithParameters',
+            method: 'POST',
+            headers: headers || {}
+          });
+        }
+
+        return $.Deferred().rejectWith(this, arguments).promise();
+      });
+    }
+
+    return $.ajax({
+      url: jenkinsUrl + jenkinsJobPath(jobName) + '/buildWithParameters',
+      method: 'POST',
+      headers: headers || {},
+      data: { ENVIRONMENT: environment }
+    }).then(null, function(xhr) {
+      if (xhr && (xhr.status === 400 || xhr.status === 404)) {
+        return $.ajax({
+          url: jenkinsUrl + jenkinsJobPath(jobName) + '/build',
+          method: 'POST',
+          headers: headers || {}
+        });
+      }
+
+      return $.Deferred().rejectWith(this, arguments).promise();
     });
   }
 
@@ -574,7 +649,80 @@ pre {
     return !!(cached && ! cached.loading && ! cached.error && cached.spec && cached.spec !== 'No cron trigger');
   }
 
+  function environmentInfoForRow(row) {
+    var key = scheduleCacheKey(row);
+    var cached = jobScheduleCache[key];
+
+    if (cached && cached.environmentInfo) {
+      return cached.environmentInfo;
+    }
+
+    return environmentHelper.detectFromJob(row || {});
+  }
+
+  function environmentTextForRow(row) {
+    return environmentHelper.text(environmentInfoForRow(row));
+  }
+
+  function normalizeEnvironmentFilterValue(value) {
+    if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+      return window.JobSeekerGlobalEnvironment.normalize(value);
+    }
+
+    return String(value || '').toUpperCase();
+  }
+
+  function configuredEnvironmentNames() {
+    if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.configuredEnvironmentNames) {
+      return window.JobSeekerGlobalEnvironment.configuredEnvironmentNames();
+    }
+
+    return $.map(window.jobseekerGlobalEnvironmentOptions || [], function(value) {
+      return normalizeEnvironmentFilterValue(value);
+    });
+  }
+
+  function configuredEnvironmentLabel(environment) {
+    var normalized = normalizeEnvironmentFilterValue(environment);
+    var labels = window.jobseekerGlobalEnvironmentOptions || [];
+
+    for (var index = 0; index < labels.length; index++) {
+      if (normalizeEnvironmentFilterValue(labels[index]) === normalized) {
+        return labels[index];
+      }
+    }
+
+    return normalized;
+  }
+
+  function isConfiguredEnvironment(environment) {
+    if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.isConfiguredEnvironment) {
+      return window.JobSeekerGlobalEnvironment.isConfiguredEnvironment(environment);
+    }
+
+    return $.inArray(normalizeEnvironmentFilterValue(environment), configuredEnvironmentNames()) !== -1;
+  }
+
+  function rowMatchesEnvironmentFilter(row) {
+    var environment = normalizeEnvironmentFilterValue(environmentTextForRow(row));
+
+    if (! isConfiguredEnvironment(environment)) {
+      return false;
+    }
+
+    return jobEnvironmentFilter === 'all' || environment === normalizeEnvironmentFilterValue(jobEnvironmentFilter);
+  }
+
+  function renderEnvironment(row) {
+    var info = environmentInfoForRow(row);
+    return '<span class="environment-cell">' + environmentHelper.label(info) + '<small>' + escapeHtml(info.source || 'Not detected') + '</small></span>';
+  }
+
   function rowMatchesMonitorFilter(row, filter) {
+    if (! rowMatchesEnvironmentFilter(row)) {
+      return false;
+    }
+
     if (filter === 'running') {
       return isJobRunning(row);
     }
@@ -595,11 +743,35 @@ pre {
   }
 
   function updateMonitorFilterCounts(jobs) {
-    $('#monitor-filter-all').text(jobs.length);
-    $('#monitor-filter-running').text(jobs.filter(isJobRunning).length);
-    $('#monitor-filter-queued').text(jobs.filter(function(job) { return job && job.inQueue === true; }).length);
-    $('#monitor-filter-attention').text(jobs.filter(isJobAttention).length);
-    $('#monitor-filter-scheduled').text(jobs.filter(isJobScheduled).length);
+    updateEnvironmentFilterOptions(jobs);
+    var environmentJobs = (jobs || []).filter(rowMatchesEnvironmentFilter);
+
+    $('#monitor-filter-all').text(environmentJobs.length);
+    $('#monitor-filter-running').text(environmentJobs.filter(isJobRunning).length);
+    $('#monitor-filter-queued').text(environmentJobs.filter(function(job) { return job && job.inQueue === true; }).length);
+    $('#monitor-filter-attention').text(environmentJobs.filter(isJobAttention).length);
+    $('#monitor-filter-scheduled').text(environmentJobs.filter(isJobScheduled).length);
+  }
+
+  function updateEnvironmentFilterOptions(jobs) {
+    var environments = {};
+    var totalJobs = 0;
+
+    $.each(jobs || [], function(index, job) {
+      var environment = normalizeEnvironmentFilterValue(environmentTextForRow(job));
+      if (isConfiguredEnvironment(environment)) {
+        environments[environment] = (environments[environment] || 0) + 1;
+        totalJobs += 1;
+      }
+    });
+
+    var options = '<option value="all">All environments (' + totalJobs + ')</option>';
+    $.each(configuredEnvironmentNames().sort(), function(index, environment) {
+      options += '<option value="' + escapeAttribute(environment) + '">' + escapeHtml(configuredEnvironmentLabel(environment)) + ' (' + (environments[environment] || 0) + ')</option>';
+    });
+
+    $('#monitorEnvironmentFilter').html(options).val(jobEnvironmentFilter === 'all' || isConfiguredEnvironment(jobEnvironmentFilter) ? normalizeEnvironmentFilterValue(jobEnvironmentFilter) : 'all');
+    jobEnvironmentFilter = $('#monitorEnvironmentFilter').val() || 'all';
   }
 
   function updateMonitorSummary(jobs) {
@@ -849,7 +1021,7 @@ pre {
     return 'Next run unavailable';
   }
 
-  function scheduleInfoFromConfig(xmlText) {
+  function scheduleInfoFromConfig(xmlText, jobName) {
     try {
       var xml = typeof xmlText === 'string' ? $.parseXML(xmlText) : xmlText;
       var spec = firstCronLine($(xml).find('triggers spec').first().text());
@@ -858,6 +1030,7 @@ pre {
         summary: summarizeCronSpec(spec),
         spec: spec || 'No cron trigger',
         nextRunText: estimateNextRun(spec),
+        environmentInfo: environmentHelper.detectFromConfig(xmlText, jobName),
         error: false
       };
     } catch (error) {
@@ -865,6 +1038,7 @@ pre {
         summary: 'Schedule unavailable',
         spec: '',
         nextRunText: 'Unavailable',
+        environmentInfo: environmentHelper.detectFromJob({name: jobName, fullName: jobName}),
         error: true
       };
     }
@@ -945,7 +1119,7 @@ pre {
           return;
         }
 
-        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText);
+        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText, key);
         updateMonitorFilterCounts(table.rows().data().toArray());
         table.rows().invalidate('data').draw(false);
       }).fail(function(request, statusText) {
@@ -957,10 +1131,63 @@ pre {
           summary: 'Schedule unavailable',
           spec: '',
           nextRunText: 'Unavailable',
+          environmentInfo: environmentHelper.detectFromJob(row),
           error: true
         };
         updateMonitorFilterCounts(table.rows().data().toArray());
         table.rows().invalidate('data').draw(false);
+      }).always(function() {
+        delete jobScheduleRequests[key];
+      });
+    });
+  }
+
+  function drawEnvironmentFilteredBuildTables() {
+    ['#listFailedTable', '#listSuccessTable'].forEach(function(selector) {
+      if ($.fn.DataTable.isDataTable(selector)) {
+        $(selector).DataTable().rows().invalidate('data').draw(false);
+      }
+    });
+  }
+
+  function hydrateJobEnvironmentCache(jobs, jenkinsUrl, headers, generation) {
+    $.each(jobs || [], function(index, row) {
+      var key = scheduleCacheKey(row);
+
+      if (! key || jobScheduleCache[key] || jobScheduleRequests[key]) {
+        return;
+      }
+
+      jobScheduleCache[key] = {loading: true, environmentInfo: environmentHelper.detectFromJob(row)};
+      jobScheduleRequests[key] = $.ajax({
+        contentType: 'application/text',
+        url: jenkinsUrl + jenkinsJobPath(key) + '/config.xml',
+        method: 'GET',
+        headers: headers
+      }).done(function(xmlText) {
+        if (generation !== jobListLoadGeneration) {
+          return;
+        }
+
+        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText, key);
+        if ($.fn.DataTable.isDataTable('#listTable')) {
+          var table = $('#listTable').DataTable();
+          updateMonitorFilterCounts(table.rows().data().toArray());
+          table.rows().invalidate('data').draw(false);
+        }
+        drawEnvironmentFilteredBuildTables();
+      }).fail(function(request, statusText) {
+        if (statusText === 'abort' || generation !== jobListLoadGeneration) {
+          return;
+        }
+
+        jobScheduleCache[key] = {
+          summary: 'Schedule unavailable',
+          spec: '',
+          nextRunText: 'Unavailable',
+          environmentInfo: environmentHelper.detectFromJob(row),
+          error: true
+        };
       }).always(function() {
         delete jobScheduleRequests[key];
       });
@@ -973,11 +1200,16 @@ pre {
     }
 
     $.fn.dataTable.ext.search.push(function(settings, searchData, dataIndex, rowData) {
-      if (! settings.nTable || settings.nTable.id !== 'listTable') {
+      if (! settings.nTable || ['listTable', 'listFailedTable', 'listSuccessTable'].indexOf(settings.nTable.id) === -1) {
         return true;
       }
 
       var row = rowData || (settings.aoData && settings.aoData[dataIndex] ? settings.aoData[dataIndex]._aData : null);
+
+      if (settings.nTable.id !== 'listTable') {
+        return rowMatchesEnvironmentFilter(row);
+      }
+
       return rowMatchesMonitorFilter(row, jobMonitorFilter);
     });
 
@@ -1078,6 +1310,20 @@ pre {
     }
   });
 
+  $('#monitorEnvironmentFilter').on('change', function() {
+    jobEnvironmentFilter = $(this).val() || 'all';
+    if ($.fn.DataTable.isDataTable('#listTable')) {
+      updateMonitorFilterCounts($('#listTable').DataTable().rows().data().toArray());
+    }
+
+    ensureMonitorFilterRegistered();
+    ['#listTable', '#listFailedTable', '#listSuccessTable'].forEach(function(selector) {
+      if ($.fn.DataTable.isDataTable(selector)) {
+        $(selector).DataTable().draw(false);
+      }
+    });
+  });
+
   function loadJobListData(options) {
     options = options || {};
 
@@ -1128,6 +1374,7 @@ pre {
             "dataSrc": function(json) {
               var jobs = jobsFromJenkinsResponse(json);
               updateMonitorSummary(jobs);
+              hydrateJobEnvironmentCache(jobs, jenkins_url, jobListHeaders, currentGeneration);
               return jobs;
             }
           },
@@ -1135,6 +1382,7 @@ pre {
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderHealth(row); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderState(row); }},
           {"data": "name", "defaultContent": "", "render": function(data, type, row){ return escapeHtml(row.fullName || data || ''); }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){ return type === 'sort' || type === 'type' ? environmentTextForRow(row) : renderEnvironment(row); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderSchedule(row); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderNextRun(row); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderCurrentRun(row); }},
@@ -1151,7 +1399,7 @@ pre {
           {"data": "description", "defaultContent": "", "render": function(data){ return escapeHtml(data); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
-            return '<button class="btn btn-sm btn-primary run" href="#" value="'+ escapeAttribute(jobName) +'" title="Click to trigger this job build">Build</button>';
+            return '<button class="btn btn-sm btn-primary run" href="#" value="'+ escapeAttribute(jobName) +'" data-environment="' + escapeAttribute(environmentTextForRow(row)) + '" title="Click to trigger this job build">Build</button>';
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
@@ -1159,7 +1407,7 @@ pre {
             var result = lastBuildField(row, 'result');
             var timestamp = lastBuildField(row, 'timestamp');
             var date = renderBuildTime(timestamp, '');
-            return '<button class="btn btn-sm btn-info log" href="#" value="'+ escapeAttribute(jobName) +'" data-build="'+ escapeAttribute(buildNumber) +'" data-result="'+ escapeAttribute(result) +'" data-time="'+ escapeAttribute(date) +'" title="Click to check this job console output">Check</button>';
+            return '<button class="btn btn-sm btn-info log" href="#" value="'+ escapeAttribute(jobName) +'" data-build="'+ escapeAttribute(buildNumber) +'" data-result="'+ escapeAttribute(result) +'" data-time="'+ escapeAttribute(date) +'" data-environment="' + escapeAttribute(environmentTextForRow(row)) + '" title="Click to check this job console output">Check</button>';
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             if (! isJobRunning(row)) {
@@ -1167,7 +1415,7 @@ pre {
             }
 
             var jobName = row.fullName || row.name || '';
-            return '<button class="btn btn-sm btn-danger abort" href="#" value="'+ escapeAttribute(jobName) +'" title="Click to cancel this job execution">Abort</button>';
+            return '<button class="btn btn-sm btn-danger abort" href="#" value="'+ escapeAttribute(jobName) +'" data-environment="' + escapeAttribute(environmentTextForRow(row)) + '" title="Click to cancel this job execution">Abort</button>';
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
@@ -1179,7 +1427,7 @@ pre {
             }
 
             var jobName = row.fullName || row.name || '';
-            return '<button class="btn btn-sm btn-danger delete-job" href="#" value="'+ escapeAttribute(jobName) +'" data-running="'+ (isJobRunning(row) ? '1' : '0') +'" title="Delete this Jenkins job">Delete</button>';
+            return '<button class="btn btn-sm btn-danger delete-job" href="#" value="'+ escapeAttribute(jobName) +'" data-environment="' + escapeAttribute(environmentTextForRow(row)) + '" data-running="'+ (isJobRunning(row) ? '1' : '0') +'" title="Delete this Jenkins job">Delete</button>';
           }}
           ],
           "drawCallback": function() {
@@ -1192,7 +1440,7 @@ pre {
         $('#listFailedTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
-          "order": [[ 3, "desc" ]],
+          "order": [[ 4, "desc" ]],
           "scrollX": true,
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,lastFailedBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
@@ -1201,6 +1449,7 @@ pre {
             "dataSrc": function(json){ return jobsWithBuild(json, 'lastFailedBuild'); }
           },
           "columns": [
+          {"data": "name", "defaultContent": ""},
           {"data": "name", "defaultContent": ""},
           {"data": function(row){ return nestedBuildValue(row, 'lastFailedBuild', 'result'); }, "defaultContent": ""},
           {"data": function(row){ return nestedBuildValue(row, 'lastFailedBuild', 'displayName'); }, "defaultContent": ""},
@@ -1212,19 +1461,21 @@ pre {
           ],
           columnDefs:[{targets:0, render:function(data){
             return renderText(data);
-          }},{targets:1, render:function(data){
-            if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
+          }},{targets:1, render:function(data, type, row){
+            return type === 'sort' || type === 'type' ? environmentTextForRow(row) : environmentHelper.label(environmentInfoForRow(row));
           }},{targets:2, render:function(data){
-            return renderText(data);
+            if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
           }},{targets:3, render:function(data){
-            return renderBuildTime(data, '');
-          }},{targets:4, render:function(data){
-            return renderDuration(data, '');
-          }},{targets:5, render:function(data){
             return renderText(data);
+          }},{targets:4, render:function(data){
+            return renderBuildTime(data, '');
+          }},{targets:5, render:function(data){
+            return renderDuration(data, '');
           }},{targets:6, render:function(data){
             return renderText(data);
           }},{targets:7, render:function(data){
+            return renderText(data);
+          }},{targets:8, render:function(data){
             return renderText(data);
           }}]
        });
@@ -1234,7 +1485,7 @@ pre {
         $('#listSuccessTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
-          "order": [[ 3, "desc" ]],
+          "order": [[ 4, "desc" ]],
           "scrollX": true,
           "ajax": {
             "url": jenkins_url +'api/json?tree=jobs[name,lastStableBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
@@ -1243,6 +1494,7 @@ pre {
             "dataSrc": function(json){ return jobsWithBuild(json, 'lastStableBuild'); }
           },
           "columns": [
+          {"data": "name", "defaultContent": ""},
           {"data": "name", "defaultContent": ""},
           {"data": function(row){ return nestedBuildValue(row, 'lastStableBuild', 'result'); }, "defaultContent": ""},
           {"data": function(row){ return nestedBuildValue(row, 'lastStableBuild', 'displayName'); }, "defaultContent": ""},
@@ -1255,19 +1507,21 @@ pre {
           ],
           columnDefs:[{targets:0, render:function(data){
             return renderText(data);
-          }},{targets:1, render:function(data){
-            if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
+          }},{targets:1, render:function(data, type, row){
+            return type === 'sort' || type === 'type' ? environmentTextForRow(row) : environmentHelper.label(environmentInfoForRow(row));
           }},{targets:2, render:function(data){
-            return renderText(data);
+            if(data != null){if(data == 'SUCCESS') { return '<b style="color: green;">' + data + '</b>'} else {return '<b style="color: red;">' + data + '</b>'}} else {return ''}
           }},{targets:3, render:function(data){
-            return renderBuildTime(data, '');
-          }},{targets:4, render:function(data){
-            return renderDuration(data, '');
-          }},{targets:5, render:function(data){
             return renderText(data);
+          }},{targets:4, render:function(data){
+            return renderBuildTime(data, '');
+          }},{targets:5, render:function(data){
+            return renderDuration(data, '');
           }},{targets:6, render:function(data){
             return renderText(data);
           }},{targets:7, render:function(data){
+            return renderText(data);
+          }},{targets:8, render:function(data){
             return renderText(data);
           }}]
        });
@@ -1296,9 +1550,10 @@ pre {
            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
       var job=$(this).val();
+  var environment = $(this).data('environment') || 'Unknown';
          
 
-            alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Abort Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to Abort the job <b>'+ escapeHtml(job) +' ?</b></p></div></div></div>',
+    alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Abort Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to Abort the job <b>'+ escapeHtml(job) +' ?</b></p><p>Environment: <b>'+ escapeHtml(environment) +'</b></p></div></div></div>',
       function(){ 
 
          $.ajax({
@@ -1333,11 +1588,12 @@ pre {
        var button = $(this),
            jenkins_url = '<?php echo $jenkins_url; ?>',
            job = button.val(),
+             environment = button.data('environment') || 'Unknown',
            isRunning = button.data('running') == 1;
 
        var runningWarning = isRunning ? '<p><b>This job appears to be running. Jenkins may reject deletion until the build is stopped.</b></p>' : '';
 
-       alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Delete Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to delete the job <b>'+ escapeHtml(job) +'</b> permanently?</p>' + runningWarning + '<div class="checkbox text-left"><label><input type="checkbox" id="deleteBuildListRepository" checked> Also delete assigned job repository files.</label></div></div></div></div>',
+           alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Delete Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to delete the job <b>'+ escapeHtml(job) +'</b> permanently?</p><p>Environment: <b>'+ escapeHtml(environment) +'</b></p>' + runningWarning + '<div class="checkbox text-left"><label><input type="checkbox" id="deleteBuildListRepository" checked> Also delete assigned job repository files.</label></div></div></div></div>',
       function(){
         var deleteRepository = $('#deleteBuildListRepository').is(':checked');
         $('.overlay').show();
@@ -1382,25 +1638,25 @@ pre {
            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
       var job=$(this).val();
+  var environment = $(this).data('environment') || 'Unknown';
          
 
-            alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Trigger Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to trigger the job <b>'+ escapeHtml(job) +' ?</b></p></div></div></div>',
+    alertify.confirm('Job <b style="color:red;">'+ escapeHtml(job) +'</b> Trigger Request','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p>Are you sure you want to trigger the job <b>'+ escapeHtml(job) +' ?</b></p><p>Environment: <b>'+ escapeHtml(environment) +'</b></p></div></div></div>',
       function(){ 
 
-         $.ajax({
-         url: jenkins_url + jenkinsJobPath(job) +'/build',
-          method: 'POST',
-          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-          beforeSend: function() {
-            $('.overlay').show();
-        }
-        }).done(function(data) {
+        $('.overlay').show();
+        triggerJenkinsJob(job, environment, jenkins_url, {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)})
+          .done(function(data) {
             toastr.warning("Your Execution Request has been sent to server.", "Request Sent")
              setTimeout(function(){
             reloadJobTables();
          }, 1000);
             $('.overlay').hide();
-          })
+          }).fail(function(xhr) {
+            var message = xhr && xhr.responseText ? xhr.responseText : 'Unable to trigger this job.';
+            toastr.error(message, 'Trigger Failed');
+            $('.overlay').hide();
+          });
     }, 
       function(){ 
         alertify.error('Operation Aborted')
@@ -1424,11 +1680,12 @@ $("#listTable").on('click','.log',function(){
            name = button.val(),
            result = button.data('result') || '',
            buildNumber = button.data('build') || '',
-           date = button.data('time') || '';
+           date = button.data('time') || '',
+           environment = button.data('environment') || 'Unknown';
 
         if(buildNumber == '' || buildNumber == null){
           var output = 'Your requested job ' + name + ' has not been executed yet. Please, try again later.';
-          $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
+          $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Environment</td><td>'+ escapeHtml(environment) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
           $('#modal-default').modal('show');
           return;
         }
@@ -1447,7 +1704,7 @@ $("#listTable").on('click','.log',function(){
             toastr.error("Error during console log query.", "Query Data Error");
             },
           success: function(output) {
-              $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
+              $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Environment</td><td>'+ escapeHtml(environment) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
               $('#modal-default').modal('show');
             },
             complete: function(data) {

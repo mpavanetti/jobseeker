@@ -234,7 +234,7 @@
         <div class="tmf-query-card animated fadeIn">
           <div class="tmf-query-card-header">
             <h3><i class="fa fa-filter"></i> Query Filters</h3>
-            <span><?php echo count($listStatus); ?> statuses &middot; <?php echo count($listJobName); ?> jobs &middot; <?php echo count($listEnvironment); ?> environments</span>
+              <span><?php echo count($listStatus); ?> statuses &middot; <?php echo count($listJobName); ?> jobs &middot; <?php echo count($listEnvironment); ?> configured or observed environments</span>
           </div>
            <form action="<?php echo base_url() ?>Tmf/fetchData" method="POST" id="searchList">
             <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
@@ -281,18 +281,23 @@
                 </div>
               </div>
 
-              <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
+              <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group tmf-builder-environment-filter">
                 <div class="input-group" style="width: 100%;">
-                  <label>Available Environments</label>
+                  <label>Environment</label>
                       <select class="form-control select2" name="environment[]" multiple="multiple">
                         <option value="*" selected>All</option>
+                        <option value="__UNKNOWN__">Unknown / not recorded</option>
                            <?php
                           if(!empty($listEnvironment))
                           {
                               foreach($listEnvironment as $record)
                               {
+                                $environmentValue = isset($record->environment) ? trim((string) $record->environment) : '';
+                                if ($environmentValue === '') {
+                                  continue;
+                                }
                           ?>
-                           <option value="<?php echo $record->environment ?>"><?php echo $record->environment ?></option>
+                           <option value="<?php echo html_escape($environmentValue); ?>"><?php echo html_escape($environmentValue); ?></option>
                          <?php
                            }
                          }
@@ -338,7 +343,11 @@
                 </div>
               </div>
               <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
-                <input id="searchText" type="text" name="eventText" value="" class="form-control" placeholder="Event Text"/>
+                <label for="searchText">Event Text</label>
+                <div class="input-group">
+                  <input id="searchText" type="search" name="eventText" value="" class="form-control" placeholder="Search event text" maxlength="200" autocomplete="off" spellcheck="false" />
+                  <span class="input-group-addon"><i class="fa fa-font"></i></span>
+                </div>
               </div>
               <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
                 <div class="tmf-date-shortcuts">

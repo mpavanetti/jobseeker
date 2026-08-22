@@ -1646,6 +1646,7 @@
 
 <?php $this->load->helper("form"); ?>
 <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post">
+<input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1" checked style="display: none;">
 <div class="alert alert-info editJobBanner" style="display: none;">
   <i class="fa fa-pencil"></i>
   Editing <b class="editJobName"></b>. Saving will update this Jenkins job unless you change the job name.
@@ -1765,13 +1766,6 @@
               <span class="job-option-detail">Cron-style single, repetitive, or tag based timing.</span>
               <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
             </label>
-            <label class="job-option-card" data-option-panel="#environmentBox">
-              <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1">
-              <i class="fa fa-database job-option-icon"></i>
-              <span class="job-option-title">Environment</span>
-              <span class="job-option-detail">Attach one managed environment/context to the run.</span>
-              <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
-            </label>
             <label class="job-option-card" data-option-panel="#abortIfStuck">
               <input type="checkbox" name="abort" id="abort" value="1">
               <i class="fa fa-hourglass-half job-option-icon"></i>
@@ -1812,7 +1806,7 @@
     <div class="job-config-empty-state" id="jobOptionEmptyState">
       <i class="fa fa-mouse-pointer fa-2x"></i>
       <h4>No optional configuration enabled</h4>
-      <p>Select an option card above to add schedule, execution, notification, timeout, environment, or downstream settings.</p>
+      <p>Select an option card above to add schedule, execution, notification, timeout, or downstream settings.</p>
     </div>
 
     <div class="job-config-workbench is-empty" id="jobConfigWorkbench">
@@ -2145,6 +2139,7 @@
                               <option value="single">Single Execution</option>
                               <option value="repetitive">Repetitive Executions</option>
                               <option value="tags">Execution Tags Options</option>
+                              <option value="cron">Custom Cron Expression</option>
                             </select>
                           </div>
                         </div>
@@ -2315,6 +2310,17 @@
                               }
                               ?>
                             </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="row customCronForm" style="display: none;">
+                        <hr>
+                        <div class="col-md-12">
+                          <div class="form-group">
+                            <label for="customCronExpression">Jenkins Cron Expression</label>
+                            <input type="text" class="form-control" id="customCronExpression" name="customCronExpression" maxlength="120" autocomplete="off" placeholder="H 2 * * 1-5">
+                            <p class="help-block">Use a five-field Jenkins cron expression such as <code>H 2 * * 1-5</code> or <code>H/15 * * * *</code>.</p>
                           </div>
                         </div>
                       </div>
@@ -2554,7 +2560,7 @@
                 <!-- Close Job Execution Area -->
 
                 <!-- Open Environment Area -->
-                <div id="environmentBox" style="display: none;">
+                <div id="environmentBox" class="job-creation-environment-panel">
                 <div class="col-lg-6 col-md-6 col-xs-12">
                   <div class="box box-primary">
                     <div class="overlay" style="display:none;">
@@ -2565,14 +2571,15 @@
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                       </div>
                       <h3 class="box-title">
-                        <b>Select an Environment</b></h3>
+                        <b>Runtime Environment</b></h3>
                       </div>
                       <div class="box-body" style="padding: 20px;">
                         <div class="col-md-6">
                           <div class="form-group">
-                            <label for="environment">Environment</label>
-                            <select class="form-control env" id="environment" name="environment">
+                            <label for="environment">Global Environment</label>
+                            <select class="form-control env" id="environment" name="environment" required>
                             </select>
+                            <p class="help-block" id="jobCreationEnvironmentHelp">Select a concrete environment in the global selector before saving.</p>
                           </div>
                         </div>
                       </div>
@@ -2751,6 +2758,12 @@
       });
 
       $('#InsertDbSettings').on('submit', function(event) {
+        if (! requireConcreteGlobalEnvironment()) {
+          event.preventDefault();
+          return false;
+        }
+
+        syncAllDraftEnvironments($('#environment').val() || '0');
         syncPythonInlineFilesInput();
         if (submitJobDraftsIfNeeded()) {
           event.preventDefault();
@@ -2767,6 +2780,10 @@
 
       $('#pythonInlineCode').on('input change scroll', function() {
         updatePythonInlineEditor();
+      });
+
+      $('#pythonInlineCode, #pythonInlineExtraCode').on('keydown', function(event) {
+        handleCodeEditorTab(event, this);
       });
 
       $('#pythonRequirementsText').on('input change scroll', function() {
@@ -2840,20 +2857,28 @@
       var petNameSuffixes = ['sunny', 'maple', 'pixel', 'river', 'coco', 'sage', 'mango', 'ember'];
       var singleEveryMinuteAcknowledged = false;
       var repetitiveEveryMinuteAcknowledged = false;
+      var customCronEveryMinuteAcknowledged = false;
       var jobDrafts = [];
       var activeDraftIndex = 0;
       var applyingJobDraft = false;
       var activeConfigPanel = '';
       var availableJobCache = [];
       var availableJobsLoading = false;
+      var availableJobEnvironmentRequests = {};
       var jobFlowSelectedNode = null;
       var pythonInlineOpenPanes = { code: true, requirements: false, dockerfile: false, extra: false };
       var pythonInlineActivePane = 'code';
       var pythonInlineActiveExtraPath = '';
       var pythonInlineExtraFiles = [];
       var pythonInlineDirectories = [];
+      var environmentHelper = window.JobSeekerEnvironment || {
+        detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName, fullName: jobName}); },
+        detectFromJob: function(job) { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
+        normalize: function(value) { return $.trim(String(value || '')).toUpperCase(); },
+        text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
+      };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'timestamp', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -3051,7 +3076,19 @@
       }
 
       function updateJobFlowSelectOptions() {
+        var downstreamSelection = normalizeArray($('#jobList').val());
+        var upstreamSelection = normalizeArray($('#upstreamJobList').val());
+        var availableNames = {};
+        var draftNames = draftNameMap();
+
+        $('#jobList, #upstreamJobList').empty();
+
         $.each(availableJobCache, function(index, item) {
+          if (! availableJobMatchesGlobalEnvironment(item)) {
+            return;
+          }
+
+          availableNames[item.name] = true;
           ensureSelectOption('#jobList', item.name);
           ensureSelectOption('#upstreamJobList', item.name);
         });
@@ -3063,10 +3100,27 @@
             ensureSelectOption('#upstreamJobList', name);
           }
         });
+
+        $('#jobList').val($.grep(downstreamSelection, function(value) { return availableNames[value] || draftNames[value] != null; }));
+        $('#upstreamJobList').val($.grep(upstreamSelection, function(value) { return availableNames[value] || draftNames[value] != null; }));
       }
 
       function rememberAvailableJobs(jobs) {
+        var previousRows = {};
+
+        $.each(availableJobCache, function(index, item) {
+          previousRows[item.name] = item.row;
+        });
+
         availableJobCache = normalizeAvailableJobs(jobs);
+        $.each(availableJobCache, function(index, item) {
+          if (previousRows[item.name] && previousRows[item.name].environmentHydrated) {
+            item.row.environmentInfo = previousRows[item.name].environmentInfo;
+            item.row.environmentHydrated = true;
+          }
+        });
+
+        hydrateAvailableJobEnvironments();
         updateJobFlowSelectOptions();
         renderJobPipelineGraph();
       }
@@ -3386,7 +3440,7 @@
         });
 
         $.each(availableJobCache, function(index, item) {
-          if (draftNames[item.name] != null || ! jobFlowNodeMatchesSearch(item.name, query)) {
+          if (draftNames[item.name] != null || ! availableJobMatchesGlobalEnvironment(item) || ! jobFlowNodeMatchesSearch(item.name, query)) {
             return;
           }
 
@@ -3677,6 +3731,82 @@
         });
         html.push('</ul>');
         panel.addClass('active').html(html.join(''));
+      }
+
+      function handleCodeEditorTab(event, element) {
+        if (! event || event.key !== 'Tab') {
+          return;
+        }
+
+        event.preventDefault();
+
+        var textarea = element;
+        var value = textarea.value;
+        var start = textarea.selectionStart;
+        var end = textarea.selectionEnd;
+        var indent = '    ';
+
+        if (start !== end) {
+          var blockStart = value.lastIndexOf('\n', start - 1) + 1;
+          var blockEndAnchor = end > start && value.charAt(end - 1) === '\n' ? end - 1 : end;
+          var blockEnd = value.indexOf('\n', blockEndAnchor);
+          var selectionStartOffset = start - blockStart;
+          var selectionEndOffset = end - blockStart;
+          var block;
+          var lines;
+          var updatedLines;
+          var removedBeforeStart = 0;
+          var removedBeforeEnd = 0;
+          var currentOffset = 0;
+
+          blockEnd = blockEnd === -1 ? value.length : blockEnd;
+          block = value.substring(blockStart, blockEnd);
+          lines = block.split('\n');
+
+          if (event.shiftKey) {
+            updatedLines = $.map(lines, function(line) {
+              var removeCount = line.substr(0, indent.length) === indent ? indent.length : (line.charAt(0) === '\t' ? 1 : 0);
+
+              if (currentOffset < selectionStartOffset) {
+                removedBeforeStart += Math.min(removeCount, selectionStartOffset - currentOffset);
+              }
+
+              if (currentOffset < selectionEndOffset) {
+                removedBeforeEnd += Math.min(removeCount, selectionEndOffset - currentOffset);
+              }
+
+              currentOffset += line.length + 1;
+              return line.substring(removeCount);
+            });
+          } else {
+            updatedLines = $.map(lines, function(line) {
+              currentOffset += line.length + 1;
+              return indent + line;
+            });
+          }
+
+          textarea.value = value.substring(0, blockStart) + updatedLines.join('\n') + value.substring(blockEnd);
+          textarea.selectionStart = event.shiftKey ? Math.max(blockStart, start - removedBeforeStart) : start + indent.length;
+          textarea.selectionEnd = event.shiftKey ? Math.max(textarea.selectionStart, end - removedBeforeEnd) : end + (indent.length * updatedLines.length);
+          $(textarea).trigger('input');
+          return;
+        }
+
+        if (event.shiftKey) {
+          var lineStart = value.lastIndexOf('\n', start - 1) + 1;
+          var removeCount = value.substr(lineStart, indent.length) === indent ? indent.length : (value.charAt(lineStart) === '\t' ? 1 : 0);
+
+          if (removeCount > 0) {
+            textarea.value = value.substring(0, lineStart) + value.substring(lineStart + removeCount);
+            textarea.selectionStart = Math.max(lineStart, start - removeCount);
+            textarea.selectionEnd = Math.max(lineStart, end - removeCount);
+          }
+        } else {
+          textarea.value = value.substring(0, start) + indent + value.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start + indent.length;
+        }
+
+        $(textarea).trigger('input');
       }
 
       function updatePythonInlineEditor() {
@@ -4309,6 +4439,10 @@
           return 'Tag: ' + ($('#tag').val() || 'Not selected');
         }
 
+        if (action == 'cron') {
+          return 'Cron: ' + ($.trim($('#customCronExpression').val() || '') || 'Not set');
+        }
+
         return 'Schedule enabled, action not selected';
       }
 
@@ -4363,7 +4497,7 @@
           job_name: name || '',
           description: '',
           checkBuild: '0',
-          checkEnvironment: '0',
+          checkEnvironment: '1',
           abort: '0',
           timestamp: '0',
           winCommand: '0',
@@ -4391,6 +4525,7 @@
           linuxCommandLine: '',
           action: '0',
           tag: '@hourly',
+          customCronExpression: '',
           singleMinute: ['*'],
           singleHour: ['*'],
           singleDayOfMonth: ['*'],
@@ -4414,12 +4549,13 @@
           attFailure: 'true',
           onAbort: '0',
           attAbort: 'true',
-          environment: '0'
+          environment: isConfiguredGlobalEnvironment(currentGlobalEnvironmentValue()) ? normalizeGlobalEnvironment(currentGlobalEnvironmentValue()) : '0'
         };
       }
 
       function draftFromForm() {
         syncPythonInlineFilesInput();
+        syncEnvironmentFromGlobal(false);
         var draft = createEmptyDraft($.trim($('#job_name').val()));
 
         $.each(draftCheckboxFields, function(index, field) {
@@ -4481,6 +4617,10 @@
 
         if (draft.action === 'tags') {
           return 'Tag: ' + (draft.tag || 'Not selected');
+        }
+
+        if (draft.action === 'cron') {
+          return 'Cron: ' + (draft.customCronExpression || 'Not set');
         }
 
         return 'Schedule enabled';
@@ -4574,7 +4714,7 @@
       }
 
       function draftEnvironmentSummary(draft) {
-        return draftChecked(draft, 'checkEnvironment') ? draftSelectedValue(draft, 'environment', 'Not selected') : 'No environment';
+        return draftSelectedValue(draft, 'environment', 'Not selected');
       }
 
       function draftDownstreamSummary(draft) {
@@ -4720,7 +4860,8 @@
 
       function refreshJobOptionPanels() {
         updateSchedulePanel();
-        $('#environmentBox').toggle($('#checkEnvironment').is(':checked'));
+        $('#environmentBox').show();
+        $('#checkEnvironment').prop('checked', true);
         $('#abortIfStuck').toggle($('#abort').is(':checked'));
         $('#enableEmail').toggle($('#emailCheck').is(':checked'));
         $('#editableEmail').toggle($('#editableEmailCheck').is(':checked'));
@@ -4740,6 +4881,8 @@
 
       function loadJobDraft(draft) {
         var normalizedDraft = $.extend(true, createEmptyDraft(''), draft || {});
+        normalizedDraft.checkEnvironment = '1';
+        normalizedDraft.environment = isConfiguredGlobalEnvironment(currentGlobalEnvironmentValue()) ? normalizeGlobalEnvironment(currentGlobalEnvironmentValue()) : '0';
 
         applyingJobDraft = true;
 
@@ -5236,6 +5379,7 @@
       var savedJobCreatedAt = <?php echo json_encode($savedJobCreatedAt); ?>;
       var savedJobCreationDates = <?php echo json_encode($savedJobCreationDates); ?> || {};
       var jobCreationDates = <?php echo json_encode($jobCreationDates); ?> || {};
+      var jobCreationAvailableFilterRegistered = false;
 
       $.each(savedJobCreationDates, function(jobName, createdAt) {
         jobCreationDates[jobName] = createdAt;
@@ -5255,6 +5399,160 @@
 
     function jobNameFromRow(row) {
       return row && (row.fullName || row.name) ? (row.fullName || row.name) : '';
+    }
+
+    function normalizeGlobalEnvironment(value) {
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+        return window.JobSeekerGlobalEnvironment.normalize(value);
+      }
+
+      if (environmentHelper.normalize) {
+        return environmentHelper.normalize(value);
+      }
+
+      return $.trim(String(value || '')).toUpperCase();
+    }
+
+    function configuredGlobalEnvironmentNames() {
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.configuredEnvironmentNames) {
+        return window.JobSeekerGlobalEnvironment.configuredEnvironmentNames();
+      }
+
+      return $.map(window.jobseekerGlobalEnvironmentOptions || [], function(value) {
+        return normalizeGlobalEnvironment(value);
+      });
+    }
+
+    function configuredGlobalEnvironmentLabel(value) {
+      var normalized = normalizeGlobalEnvironment(value);
+      var labels = window.jobseekerGlobalEnvironmentOptions || [];
+
+      for (var index = 0; index < labels.length; index++) {
+        if (normalizeGlobalEnvironment(labels[index]) === normalized) {
+          return labels[index];
+        }
+      }
+
+      return normalized;
+    }
+
+    function isConfiguredGlobalEnvironment(value) {
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.isConfiguredEnvironment) {
+        return window.JobSeekerGlobalEnvironment.isConfiguredEnvironment(value);
+      }
+
+      return $.inArray(normalizeGlobalEnvironment(value), configuredGlobalEnvironmentNames()) !== -1;
+    }
+
+    function currentGlobalEnvironmentValue() {
+      var value = $('#globalEnvironmentSelector').val() || '';
+
+      if (! value && window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected) {
+        value = window.JobSeekerGlobalEnvironment.selected();
+      }
+
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.coerceToOption) {
+        return window.JobSeekerGlobalEnvironment.coerceToOption(value);
+      }
+
+      value = normalizeGlobalEnvironment(value);
+      return value || 'all';
+    }
+
+    function syncAllDraftEnvironments(environment) {
+      ensureJobDraftsInitialized();
+      $.each(jobDrafts, function(index, draft) {
+        draft.checkEnvironment = '1';
+        draft.environment = environment || '0';
+      });
+    }
+
+    function syncEnvironmentFromGlobal(updateDrafts) {
+      var environment = currentGlobalEnvironmentValue();
+      var isValidEnvironment = isConfiguredGlobalEnvironment(environment);
+      var environmentValue = isValidEnvironment ? normalizeGlobalEnvironment(environment) : '0';
+      var environmentLabel = isValidEnvironment ? configuredGlobalEnvironmentLabel(environment) : 'Select an environment in the global selector';
+
+      $('#checkEnvironment').prop('checked', true);
+      $('#environment').empty().append($('<option>', {
+        value: environmentValue,
+        text: environmentLabel
+      })).val(environmentValue).prop('required', true);
+
+      $('#jobCreationEnvironmentHelp')
+        .toggleClass('text-danger', ! isValidEnvironment)
+        .toggleClass('text-muted', isValidEnvironment)
+        .text(isValidEnvironment ? 'This job will be saved with ENVIRONMENT=' + environmentValue + '.' : 'Choose a configured Context environment in the top bar before saving.');
+
+      if (updateDrafts !== false) {
+        syncAllDraftEnvironments(environmentValue);
+      }
+
+      return isValidEnvironment;
+    }
+
+    function requireConcreteGlobalEnvironment() {
+      if (syncEnvironmentFromGlobal(false)) {
+        return true;
+      }
+
+      toastr.warning('Select a configured environment in the global selector before creating a job.', 'Environment Required');
+      return false;
+    }
+
+    function availableJobEnvironmentInfo(row) {
+      if (row && row.environmentInfo) {
+        return row.environmentInfo;
+      }
+
+      return environmentHelper.detectFromJob(row || {});
+    }
+
+    function availableJobEnvironmentText(row) {
+      return environmentHelper.text(availableJobEnvironmentInfo(row));
+    }
+
+    function availableJobMatchesGlobalEnvironment(rowOrItem) {
+      var row = rowOrItem && rowOrItem.row ? rowOrItem.row : rowOrItem;
+      var environment = normalizeGlobalEnvironment(availableJobEnvironmentText(row));
+
+      if (! isConfiguredGlobalEnvironment(environment)) {
+        return false;
+      }
+
+      var selectedEnvironment = currentGlobalEnvironmentValue();
+      return selectedEnvironment === 'all' || environment === normalizeGlobalEnvironment(selectedEnvironment);
+    }
+
+    function hydrateAvailableJobEnvironment(item) {
+      if (! item || ! item.name || item.row.environmentHydrated || availableJobEnvironmentRequests[item.name]) {
+        return;
+      }
+
+      availableJobEnvironmentRequests[item.name] = $.ajax({
+        url: jenkins_url + jenkinsJobPath(item.name) + '/config.xml',
+        method: 'GET',
+        dataType: 'text',
+        headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+      }).done(function(xmlText) {
+        item.row.environmentInfo = environmentHelper.detectFromConfig(xmlText || '', item.name);
+      }).fail(function() {
+        item.row.environmentInfo = environmentHelper.detectFromJob(item.row || {name: item.name, fullName: item.name});
+      }).always(function() {
+        item.row.environmentHydrated = true;
+        delete availableJobEnvironmentRequests[item.name];
+        updateJobFlowSelectOptions();
+        renderJobPipelineGraph();
+        if ($.fn.DataTable.isDataTable('#myTable')) {
+          $('#myTable').DataTable().draw(false);
+        }
+      });
+    }
+
+    function hydrateAvailableJobEnvironments() {
+      $.each(availableJobCache, function(index, item) {
+        hydrateAvailableJobEnvironment(item);
+      });
     }
 
     function renderJobCreationDate(jobName, type) {
@@ -5334,6 +5632,7 @@
       $('#checkBuild').prop('checked', false);
       $('#action').val('0');
       $('#tag').val('@hourly');
+        $('#customCronExpression').val('');
       setSelectValues('#singleMinute', ['*']);
       setSelectValues('#singleHour', ['*']);
       setSelectValues('#singleDayOfMonth', ['*']);
@@ -5344,9 +5643,10 @@
       setSelectValue('#repetitiveDayOfMonth', '*');
       setSelectValue('#repetitiveMonth', '*');
       setSelectValue('#repetitiveDayOfWeek', '*');
-      $('.singleForm, .repetitive, .tags, #build').stop(true, true).hide();
+      $('.singleForm, .repetitive, .tags, .customCronForm, #build').stop(true, true).hide();
       singleEveryMinuteAcknowledged = false;
       repetitiveEveryMinuteAcknowledged = false;
+      customCronEveryMinuteAcknowledged = false;
     }
 
     function resetJobCreationForm() {
@@ -5370,13 +5670,17 @@
       $('#linuxScriptType').val('0');
       $('#executionStrategy').val('0');
       $('#scriptType').val('0');
+      $('#checkEnvironment').prop('checked', true);
+      syncEnvironmentFromGlobal(true);
       $('#pythonRuntimeMode').val('local');
       $('#pythonVersion').val('python3');
       $('#pythonDockerImage').val('');
       $('#pythonDockerfileText').val('');
       $('#pythonInlineFilesJson').val('{"files":[],"directories":[]}');
-      $('.singleForm, .repetitive, .tags, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm, #enableEmail, #abortIfStuck, #runJob, #environmentBox, #editableEmail').hide();
-      $('#timeoutMinutes, #timeoutSeconds, #environment').prop('required', false);
+      $('.singleForm, .repetitive, .tags, .customCronForm, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm, #enableEmail, #abortIfStuck, #runJob, #editableEmail').hide();
+      $('#environmentBox').show();
+      $('#timeoutMinutes, #timeoutSeconds').prop('required', false);
+      $('#environment').prop('required', true);
       $('.destroyDropzone').remove();
       resetPythonInlineWorkspaceState();
       updatePythonInlineEditor();
@@ -5407,7 +5711,7 @@
         setSelectValue('#action', 'tags');
         setSelectValue('#tag', spec);
         $('.tags').show();
-        $('.singleForm, .repetitive').hide();
+        $('.singleForm, .repetitive, .customCronForm').hide();
         return;
       }
 
@@ -5424,7 +5728,15 @@
         setSelectValue('#repetitiveMonth', parts[3]);
         setSelectValue('#repetitiveDayOfWeek', parts[4]);
         $('.repetitive').show();
-        $('.singleForm, .tags').hide();
+        $('.singleForm, .tags, .customCronForm').hide();
+        return;
+      }
+
+      if (! cronSpecFitsSingleControls(parts)) {
+        setSelectValue('#action', 'cron');
+        $('#customCronExpression').val(spec);
+        $('.customCronForm').show();
+        $('.singleForm, .repetitive, .tags').hide();
         return;
       }
 
@@ -5435,7 +5747,41 @@
       setSelectValues('#singleMonth', cronValues(parts[3]));
       setSelectValues('#singleDayOfWeek', cronValues(parts[4]));
       $('.singleForm').show();
-      $('.repetitive, .tags').hide();
+      $('.repetitive, .tags, .customCronForm').hide();
+    }
+
+    function cronPartFitsSingleControls(value, min, max) {
+      var values = cronValues(value);
+
+      if (! values.length) {
+        return false;
+      }
+
+      for (var index = 0; index < values.length; index++) {
+        if (values[index] === '*') {
+          continue;
+        }
+
+        if (! /^\d+$/.test(values[index])) {
+          return false;
+        }
+
+        var number = parseInt(values[index], 10);
+        if (number < min || number > max) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    function cronSpecFitsSingleControls(parts) {
+      return parts.length === 5 &&
+        cronPartFitsSingleControls(parts[0], 0, 59) &&
+        cronPartFitsSingleControls(parts[1], 0, 23) &&
+        cronPartFitsSingleControls(parts[2], 1, 31) &&
+        cronPartFitsSingleControls(parts[3], 1, 12) &&
+        cronPartFitsSingleControls(parts[4], 1, 7);
     }
 
     function unquoteShellValue(value) {
@@ -5486,62 +5832,16 @@
       return scriptPath.split('/').pop();
     }
 
-    function loadEnvironmentOptions(selectedEnvironment) {
-      selectedEnvironment = selectedEnvironment || '';
-
-      $('.env option').remove();
-      $('.env').append($('<option>', {
-        value: 0,
-        text: "Please, select an option"
-      }));
-
-      if (selectedEnvironment !== '') {
-        setSelectValue('#environment', selectedEnvironment);
-      }
-
-      return $.ajax({
-        type: "GET",
-        url: "<?php echo base_url(); ?>Context/fetchEnvironments",
-        dataType: "html",
-        beforeSend: function(){
-          $('.overlay').fadeIn();
-        },
-        success: function(data){
-          var json = JSON.parse(data);
-
-          $('.env option').remove();
-          $('.env').append($('<option>', {
-            value: 0,
-            text: "Please, select an option"
-          }));
-
-          $.each(json["data"], function(i, item) {
-            var newJson = item.Environment;
-
-            $('.env').append($('<option>', {
-              value: newJson,
-              text: newJson
-            }));
-          });
-
-          if (selectedEnvironment !== '') {
-            setSelectValue('#environment', selectedEnvironment);
-          }
-
-          $('.overlay').fadeOut();
-        },
-        error: function(arguments){
-          toastr.error('Fail to fetch environments data' + arguments, 'Error to Fech Data')
-          $('.overlay').fadeOut();
-        }
-      });
+    function loadEnvironmentOptions() {
+      syncEnvironmentFromGlobal(true);
+      return $.Deferred().resolve().promise();
     }
 
-    function showEnvironmentEditor(selectedEnvironment) {
+    function showEnvironmentEditor() {
       $('#checkEnvironment').prop('checked', true);
       $('#environmentBox').show();
       $('#environment').prop('required', true);
-      loadEnvironmentOptions(selectedEnvironment);
+      loadEnvironmentOptions();
     }
 
     function hydrateEnvironmentFromPythonCommand(command) {
@@ -6043,13 +6343,14 @@
       var val = $('#action').val();
 
       if (! $('#checkBuild').is(':checked') || val == '0') {
-        $('.singleForm, .repetitive, .tags').stop(true, true).hide();
+        $('.singleForm, .repetitive, .tags, .customCronForm').stop(true, true).hide();
         return;
       }
 
       $('.singleForm').toggle(val == 'single');
       $('.repetitive').toggle(val == 'repetitive');
       $('.tags').toggle(val == 'tags');
+      $('.customCronForm').toggle(val == 'cron');
     }
 
     function updateSchedulePanel() {
@@ -6106,6 +6407,21 @@
           }
           );
         }
+      } else if (val == 'cron') {
+        var customCronExpression = $.trim($('#customCronExpression').val() || '').replace(/\s+/g, ' ');
+
+        if (! customCronEveryMinuteAcknowledged && customCronExpression == '* * * * *') {
+          alertify.confirm('Allow job execution every minute','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you totally sure you need to execute this job every single minute ?</b></p><p>This option might be dangerous and request big efforts from server.</p></div></div></div>',
+            function(){
+             alertify.success('You has agreeded with your choice, be careful !');
+             customCronEveryMinuteAcknowledged = true;
+           },
+           function(){
+            alertify.error('Operation Aborted');
+            customCronEveryMinuteAcknowledged = false;
+          }
+          );
+        }
       }
     }
 
@@ -6146,20 +6462,6 @@ $('#abort').click(function(){
   }
 });
 
-$('#checkEnvironment').click(function(){
-  if($(this).is(":checked")){
-
-    $('#environmentBox').fadeIn();
-    $("#environment").prop('required',true);
-    loadEnvironmentOptions($('#environment').val() != '0' ? $('#environment').val() : '');
-
-  }
-  else if($(this).is(":not(:checked)")){
-    $('#environmentBox').fadeOut();
-  }
-});
-
-
   function jenkinsJobPath(jobName) {
     return String(jobName == null ? '' : jobName).split('/').map(function(segment) {
       return 'job/' + encodeURIComponent(segment);
@@ -6175,6 +6477,41 @@ $('#checkEnvironment').click(function(){
     if ($.fn.DataTable.isDataTable('#myTable')) {
       $('#myTable').DataTable().ajax.reload(null, resetPaging === true);
     }
+  }
+
+  function ensureAvailableJobFilterRegistered() {
+    if (jobCreationAvailableFilterRegistered || ! $.fn.DataTable) {
+      return;
+    }
+
+    $.fn.DataTable.ext.search.push(function(settings, data, dataIndex, rowData) {
+      if (! settings || ! settings.nTable || settings.nTable.id !== 'myTable') {
+        return true;
+      }
+
+      var row = rowData || (settings.aoData && settings.aoData[dataIndex] ? settings.aoData[dataIndex]._aData : null);
+      return availableJobMatchesGlobalEnvironment(row || {});
+    });
+
+    jobCreationAvailableFilterRegistered = true;
+  }
+
+  function triggerAvailableJobRequest(jobName) {
+    return $.ajax({
+      url: jenkins_url + jenkinsJobPath(jobName) + '/build?delay=0sec',
+      type: 'POST',
+      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+    }).then(null, function(xhr) {
+      if (xhr && (xhr.status === 400 || xhr.status === 404)) {
+        return $.ajax({
+          url: jenkins_url + jenkinsJobPath(jobName) + '/buildWithParameters?delay=0sec',
+          type: 'POST',
+          headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
+        });
+      }
+
+      return $.Deferred().rejectWith(this, arguments).promise();
+    });
   }
 
   function startAvailableJobsAutoRefresh() {
@@ -6196,24 +6533,20 @@ $('#checkEnvironment').click(function(){
 
     triggerButton.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Triggering');
 
-    $.ajax({
-      url: jenkins_url + jenkinsJobPath(jobName) + '/build?delay=0sec',
-      type: 'POST',
-      headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-      success: function() {
+    triggerAvailableJobRequest(jobName)
+      .done(function() {
         toastr.success('Execution request sent for ' + jobName + '.', 'Job Triggered');
         setTimeout(function() {
           refreshAvailableJobsTable(false);
         }, 1500);
-      },
-      error: function(xhr) {
+      })
+      .fail(function(xhr) {
         var message = xhr && xhr.responseText ? xhr.responseText : 'Unable to trigger job.';
         toastr.error(message, 'Trigger Failed');
-      },
-      complete: function() {
+      })
+      .always(function() {
         triggerButton.prop('disabled', false).html('<i class="fa fa-play"></i> Trigger');
-      }
-    });
+      });
   }
 
   function formatBuildTime(timestamp) {
@@ -6286,6 +6619,7 @@ function loadTable () {
      if (savedJobName) {
        expandAvailableJobsBox();
      }
+        ensureAvailableJobFilterRegistered();
         $("#myTable").dataTable().fnDestroy();
         $('#myTable').DataTable({
           "lengthMenu": [3,5,10,13,20,100,200,500,1000,2000,5000],
@@ -6347,8 +6681,19 @@ function loadTable () {
 
 setTimeout(function(){ loadTable() }, 1000);
 ensureJobDraftsInitialized();
+syncEnvironmentFromGlobal(true);
 refreshJobOptionPanels();
 updateJobCreationReview();
+
+$(document).on('jobseeker:environment-change', function() {
+  syncEnvironmentFromGlobal(true);
+  updateJobFlowSelectOptions();
+  renderJobPipelineGraph();
+  if ($.fn.DataTable.isDataTable('#myTable')) {
+    $('#myTable').DataTable().draw(false);
+  }
+  updateJobCreationReview();
+});
 
 $(document).on('click', '.triggerAvailableJob', function() {
   triggerAvailableJob($(this).data('job') || '', this);

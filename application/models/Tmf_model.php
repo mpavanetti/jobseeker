@@ -53,6 +53,11 @@ class Tmf_model extends CI_Model
         $job_name = (array) $job_name;
         $dimension = (array) $dimension;
         $environment = (array) $environment;
+        $includeUnknownEnvironment = in_array('__UNKNOWN__', $environment, TRUE);
+        $environment = array_values(array_filter($environment, function($value) {
+            $value = trim((string) $value);
+            return $value !== '' && $value !== '__UNKNOWN__';
+        }));
 
     // Check Status
      if (!empty($status) && !in_array('*', $status, TRUE)) {
@@ -74,8 +79,23 @@ class Tmf_model extends CI_Model
         }
 
         // Check Environment
-             if (!empty($environment) && !in_array('*', $environment, TRUE)) {
-                    $this->db->where_in('environment',$environment);
+                  if (!empty($environment) && !in_array('*', $environment, TRUE)) {
+                      $this->db->group_start();
+                      $this->db->where_in('environment',$environment);
+
+                      if ($includeUnknownEnvironment) {
+                       $this->db->or_group_start();
+                       $this->db->where('environment IS NULL', null, false);
+                       $this->db->or_where('TRIM(environment) =', '');
+                       $this->db->group_end();
+                      }
+
+                      $this->db->group_end();
+                  } elseif ($includeUnknownEnvironment && !in_array('*', $environment, TRUE)) {
+                      $this->db->group_start();
+                      $this->db->where('environment IS NULL', null, false);
+                      $this->db->or_where('TRIM(environment) =', '');
+                      $this->db->group_end();
              }
 
         // Check Event Text
@@ -202,7 +222,7 @@ class Tmf_model extends CI_Model
 
     function listEnvironment() {
 
-     $query = $this->db->query('SELECT DISTINCT(environment) FROM tmf');
+     $query = $this->db->query('SELECT DISTINCT normalized_environment AS environment FROM (SELECT NULLIF(TRIM(environment), "") AS normalized_environment FROM tmf UNION SELECT NULLIF(TRIM(Environment), "") AS normalized_environment FROM environment WHERE IsActive = 1) env WHERE normalized_environment IS NOT NULL ORDER BY normalized_environment');
         return $query->result();
     }
 

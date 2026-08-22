@@ -9,8 +9,11 @@ It gives data teams one place to create and trigger Jenkins jobs, schedule recur
 ## Highlights
 
 - Create, update, schedule, trigger, stop, inspect, and delete Jenkins jobs from a controlled web UI.
-- Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history and console output.
-- Query TMF records by job, status, environment, date range, dimension, event text, and reprocess flag.
+- Bind Jenkins jobs to runtime environments, then filter and inspect that environment across creation, listing, viewing, execution, deletion, TMF, and dashboards. A global environment selector in the top bar keeps those views aligned.
+- Schedule jobs with guided single-run, repetitive, tag-based, or custom Jenkins cron expressions.
+- Promote Jenkins jobs between environments with dependency discovery, context-variable promotion, artifact folder copy, dry-run previews, and rollback checkpoints.
+- Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history, console output, environment badges, and focused environment filters.
+- Query TMF records by job, status, environment, date/time range, dimension, event text, and reprocess flag.
 - Run Python jobs with the bundled `jobseeker` SDK for TMF logging, context lookup, progress updates, and Jenkins-agent or Docker execution.
 - Track processed records, warnings, errors, messages, hostnames, users, and execution timing.
 - Manage database settings, generic key-value settings, SMTP settings, email templates, file paths, projects, environments, and context variables.
@@ -103,6 +106,16 @@ Docker Compose restores those assets automatically through the `assets` service 
 ```bash
 docker compose run --rm assets
 ```
+
+Generated runtime cache files under `application/cache`, including job creation timestamps and promotion rollback checkpoints, are local artifacts and are ignored by Git.
+
+## Environment Promotion
+
+The Context Settings menu contains projects, environments, context variables, and the Environment Promotion workbench.
+
+Environment promotion is Jenkins-job based: JobSeeker reads the source job configuration, detects its current environment, rewrites environment-bound parameters and downstream links for the target environment, optionally promotes dependencies and context variables, and can copy matching artifact folders. Preview mode shows the planned job, context, artifact, and rollback impact before writing changes.
+
+Jobs created through JobSeeker now require a runtime environment. Existing Jenkins jobs without a detectable environment remain visible as `Unknown` so older jobs can still be listed, inspected, filtered, and cleaned up safely. Use the top-bar environment selector to keep job lists, run/view/delete filters, TMF queries, and new job creation focused on the same environment.
 
 ## Demo Data
 

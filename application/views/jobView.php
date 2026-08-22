@@ -61,6 +61,28 @@
     margin-top: 3px;
   }
 
+  .job-view-job-environment,
+  .job-environment-source {
+    color: #777;
+    display: block;
+    font-size: 12px;
+    margin-top: 3px;
+  }
+
+  .job-view-job-environment {
+    margin-left: 24px;
+  }
+
+  .job-view-job-environment .label,
+  .job-environment-source .label {
+    display: inline-block;
+    margin-left: 4px;
+  }
+
+  .job-view-environment-filter {
+    margin-bottom: 12px;
+  }
+
   .job-view-summary .info-box {
     margin-bottom: 12px;
     min-height: 72px;
@@ -325,6 +347,12 @@
                 <label for="jobFilter">Filter jobs</label>
                 <input type="text" id="jobFilter" class="form-control" placeholder="Type a job name">
               </div>
+              <div class="form-group job-view-environment-filter">
+                <label for="jobEnvironmentFilter">Filter by environment</label>
+                <select id="jobEnvironmentFilter" class="form-control">
+                  <option value="all">All environments</option>
+                </select>
+              </div>
               <div class="form-group">
                 <label>Available jobs</label>
                 <div id="jobSelectorList" class="job-view-job-list">
@@ -439,7 +467,17 @@
     var selectedJobNames = {};
     var requestedJobs = initialRequestedJobs();
     var requestedJobsApplied = false;
+    var jobEnvironmentFilter = 'all';
+    var jobEnvironmentRequests = {};
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
+    var environmentHelper = window.JobSeekerEnvironment || {
+      detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
+      detectFromJob: function() { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
+      detectFromName: function() { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
+      normalize: function(value) { return $.trim(String(value || '')).toUpperCase(); },
+      label: function() { return '<span class="label label-default">Unknown</span>'; },
+      text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
+    };
 
     if (jenkinsUrl && jenkinsUrl.charAt(jenkinsUrl.length - 1) !== '/') {
       jenkinsUrl += '/';
@@ -621,6 +659,128 @@
       }
 
       return 'Created: ' + new Date(timestamp).toLocaleString();
+    }
+
+    function environmentInfoForJob(job) {
+      if (job && job.environmentInfo) {
+        return job.environmentInfo;
+      }
+
+      return environmentHelper.detectFromJob(job || {});
+    }
+
+    function environmentTextForJob(job) {
+      return environmentHelper.text(environmentInfoForJob(job));
+    }
+
+    function normalizeEnvironmentFilterValue(value) {
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+        return window.JobSeekerGlobalEnvironment.normalize(value);
+      }
+
+      return environmentHelper.normalize(value);
+    }
+
+    function configuredEnvironmentNames() {
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.configuredEnvironmentNames) {
+        return window.JobSeekerGlobalEnvironment.configuredEnvironmentNames();
+      }
+
+      return $.map(window.jobseekerGlobalEnvironmentOptions || [], function(value) {
+        return normalizeEnvironmentFilterValue(value);
+      });
+    }
+
+    function configuredEnvironmentLabel(environment) {
+      var normalized = normalizeEnvironmentFilterValue(environment);
+      var labels = window.jobseekerGlobalEnvironmentOptions || [];
+
+      for (var index = 0; index < labels.length; index++) {
+        if (normalizeEnvironmentFilterValue(labels[index]) === normalized) {
+          return labels[index];
+        }
+      }
+
+      return normalized;
+    }
+
+    function isConfiguredEnvironment(environment) {
+      if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.isConfiguredEnvironment) {
+        return window.JobSeekerGlobalEnvironment.isConfiguredEnvironment(environment);
+      }
+
+      return $.inArray(normalizeEnvironmentFilterValue(environment), configuredEnvironmentNames()) !== -1;
+    }
+
+    function jobMatchesEnvironmentFilter(job) {
+      var environment = normalizeEnvironmentFilterValue(environmentTextForJob(job));
+
+      if (! isConfiguredEnvironment(environment)) {
+        return false;
+      }
+
+      return jobEnvironmentFilter === 'all' || environment === normalizeEnvironmentFilterValue(jobEnvironmentFilter);
+    }
+
+    function renderEnvironmentInfo(info) {
+      info = info || environmentHelper.detectFromName('');
+      return environmentHelper.label(info) + '<small class="job-environment-source">' + escapeHtml(info.source || 'Not detected') + '</small>';
+    }
+
+    function renderJobEnvironment(job) {
+      return '<span class="job-view-job-environment"><i class="fa fa-globe"></i> Environment ' + environmentHelper.label(environmentInfoForJob(job)) + '</span>';
+    }
+
+    function updateEnvironmentFilterOptions() {
+      var counts = {};
+      var totalJobs = 0;
+
+      $.each(visibleJobs || [], function(index, job) {
+        var environment = normalizeEnvironmentFilterValue(environmentTextForJob(job));
+        if (isConfiguredEnvironment(environment)) {
+          counts[environment] = (counts[environment] || 0) + 1;
+          totalJobs += 1;
+        }
+      });
+
+      var currentValue = jobEnvironmentFilter;
+      var options = '<option value="all">All environments (' + totalJobs + ')</option>';
+      $.each(configuredEnvironmentNames().sort(), function(index, environment) {
+        options += '<option value="' + escapeAttribute(environment) + '">' + escapeHtml(configuredEnvironmentLabel(environment)) + ' (' + (counts[environment] || 0) + ')</option>';
+      });
+
+      $('#jobEnvironmentFilter').html(options);
+      $('#jobEnvironmentFilter').val(currentValue === 'all' || isConfiguredEnvironment(currentValue) ? normalizeEnvironmentFilterValue(currentValue) : 'all');
+      jobEnvironmentFilter = $('#jobEnvironmentFilter').val() || 'all';
+    }
+
+    function hydrateJobEnvironment(job) {
+      var jobName = job && (job.fullName || job.name) ? job.fullName || job.name : '';
+
+      if (! jobName || job.environmentHydrated || jobEnvironmentRequests[jobName]) {
+        return;
+      }
+
+      jobEnvironmentRequests[jobName] = jenkinsRequest(jenkinsJobPath(jobName) + '/config.xml', 'GET', {dataType: 'text'})
+        .done(function(xmlText) {
+          job.environmentInfo = environmentHelper.detectFromConfig(xmlText || '', jobName);
+          job.environmentHydrated = true;
+          updateEnvironmentFilterOptions();
+          renderJobOptions($('#jobFilter').val());
+        })
+        .fail(function() {
+          job.environmentInfo = environmentHelper.detectFromJob(job);
+          job.environmentHydrated = true;
+        })
+        .always(function() {
+          delete jobEnvironmentRequests[jobName];
+        });
+    }
+
+    function hydrateJobEnvironments() {
+      $.each(visibleJobs, function(index, job) {
+        hydrateJobEnvironment(job);
+      });
     }
 
     function formatDuration(milliseconds) {
@@ -890,6 +1050,7 @@
     function renderRuntimeConfig(config) {
       var runtime = config && config.runtime ? config.runtime : parseRuntimeConfig([]);
       var html = '<div class="job-runtime-grid">' +
+        runtimeField('Environment', renderEnvironmentInfo(config ? config.environmentInfo : environmentHelper.detectFromName(''))) +
         runtimeField('Runtime', renderRuntimeBadges(config)) +
         runtimeField('Docker Image', runtime.dockerImage ? escapeHtml(runtime.dockerImage) : renderMuted('No Docker image')) +
         runtimeField('Job Type', escapeHtml(runtime.type || 'Shell')) +
@@ -907,9 +1068,10 @@
       return html;
     }
 
-    function parseJobConfig(xmlText) {
+    function parseJobConfig(xmlText, jobName) {
       var config = {
         commands: [],
+        environmentInfo: environmentHelper.detectFromName(jobName || ''),
         schedules: [],
         timeouts: [],
         downstream: [],
@@ -946,6 +1108,7 @@
         }
 
         config.commands = allText('command');
+        config.environmentInfo = environmentHelper.detectFromConfig(xmlText, jobName || '');
         config.runtime = parseRuntimeConfig(config.commands);
         config.schedules = allText('spec');
         config.downstream = allText('childProjects');
@@ -1024,16 +1187,23 @@
       var normalizedFilter = String(filter || '').toLowerCase();
       var html = '';
 
+      updateEnvironmentFilterOptions();
+
       $.each(visibleJobs, function(index, job) {
         var name = job.fullName || job.name || '';
         if (normalizedFilter && name.toLowerCase().indexOf(normalizedFilter) === -1) {
           return;
         }
 
-        html += '<label class="job-view-job-option" title="' + escapeAttribute(name) + '">' +
+        if (! jobMatchesEnvironmentFilter(job)) {
+          return;
+        }
+
+        html += '<label class="job-view-job-option" title="' + escapeAttribute(name + ' - environment: ' + environmentTextForJob(job)) + '">' +
           '<input type="checkbox" class="job-view-job-check" value="' + escapeAttribute(name) + '" ' + (selectedJobNames[name] ? 'checked ' : '') + '>' +
           '<span class="job-view-job-name">' + escapeHtml(name) + '</span>' +
           '<span class="pull-right">' + renderJobStateLabel(job) + '</span>' +
+          renderJobEnvironment(job) +
           '<span class="job-view-job-created"><i class="fa fa-calendar-o"></i> ' + escapeHtml(formatJobCreationDate(name)) + '</span>' +
         '</label>';
       });
@@ -1043,7 +1213,7 @@
     }
 
     function updateSelectedJobCount() {
-      $('#selectedJobCount').text(Object.keys(selectedJobNames).length);
+      $('#selectedJobCount').text(selectedJobList().length);
     }
 
     function selectedJobList() {
@@ -1052,14 +1222,14 @@
 
       $.each(visibleJobs, function(index, job) {
         var name = job.fullName || job.name || '';
-        if (selectedJobNames[name]) {
+        if (selectedJobNames[name] && jobMatchesEnvironmentFilter(job)) {
           selected.push(name);
           included[name] = true;
         }
       });
 
       $.each(Object.keys(selectedJobNames).sort(), function(index, name) {
-        if (! included[name]) {
+        if (! included[name] && jobsByName[name] && jobMatchesEnvironmentFilter(jobsByName[name])) {
           selected.push(name);
         }
       });
@@ -1089,7 +1259,7 @@
       $.each(requestedJobs, function(index, jobName) {
         selectedJobNames[jobName] = true;
         if (! jobsByName[jobName]) {
-          jobsByName[jobName] = {name: jobName, fullName: jobName, buildable: true};
+          jobsByName[jobName] = {name: jobName, fullName: jobName, buildable: true, environmentInfo: environmentHelper.detectFromName(jobName)};
           visibleJobs.unshift(jobsByName[jobName]);
         }
       });
@@ -1125,11 +1295,13 @@
 
           $.each(visibleJobs, function(index, job) {
             var name = job.fullName || job.name || '';
+            job.environmentInfo = environmentHelper.detectFromJob(job);
             jobsByName[name] = job;
           });
 
           renderJobOptions($('#jobFilter').val());
           applyRequestedJobs();
+          hydrateJobEnvironments();
         })
         .fail(function(xhr) {
           toastr.error(responseMessage(xhr, 'Unable to load Jenkins jobs.'), 'Jenkins');
@@ -1149,9 +1321,9 @@
         .done(function(data) {
           var configRequest = jenkinsRequest(jobPath + '/config.xml', 'GET', {dataType: 'text'})
             .then(function(xmlText) {
-              return {xmlText: xmlText || '', config: parseJobConfig(xmlText || ''), error: ''};
+              return {xmlText: xmlText || '', config: parseJobConfig(xmlText || '', jobName), error: ''};
             }, function(xhr) {
-              return {xmlText: '', config: parseJobConfig(''), error: responseMessage(xhr, 'Unable to fetch config.xml.')};
+              return {xmlText: '', config: parseJobConfig('', jobName), error: responseMessage(xhr, 'Unable to fetch config.xml.')};
             });
 
           var consoleRequest = $.Deferred().resolve({consoleText: '', error: ''}).promise();
@@ -1185,7 +1357,7 @@
               lastUnstableBuild: data.lastUnstableBuild || null,
               lastUnsuccessfulBuild: data.lastUnsuccessfulBuild || null,
               builds: Array.isArray(data.builds) ? data.builds : [],
-              config: configResult.config || parseJobConfig(''),
+              config: configResult.config || parseJobConfig('', fullName),
               configXml: configResult.xmlText || '',
               configError: configResult.error || '',
               consoleText: consoleResult.consoleText || '',
@@ -1206,7 +1378,7 @@
             inQueue: false,
             healthReport: [],
             builds: [],
-            config: parseJobConfig(''),
+            config: parseJobConfig('', jobName),
             configXml: '',
             consoleText: '',
             jenkinsUrl: jenkinsJobUrl(jobName)
@@ -1307,6 +1479,7 @@
 
       var rows = [
         {label: 'Status', render: function(detail) { return statusLabel(detail.status); }},
+        {label: 'Environment', render: function(detail) { return renderEnvironmentInfo(detail.config ? detail.config.environmentInfo : environmentHelper.detectFromName(detail.name)); }},
         {label: 'Health', render: healthText},
         {label: 'Buildable', render: function(detail) { return boolLabel(detail.buildable && ! detail.disabled); }},
         {label: 'In Queue', render: function(detail) { return detail.inQueue ? '<span class="label label-warning">Queued</span><br><small>' + escapeHtml(detail.queueWhy || '') + '</small>' : '<span class="label label-default">No</span>'; }},
@@ -1407,7 +1580,7 @@
           return;
         }
 
-        var config = detail.config || parseJobConfig('');
+        var config = detail.config || parseJobConfig('', detail.name);
         var consoleText = detail.consoleText || '';
         var boxClass = detail.status === 'FAILURE' || detail.status === 'ABORTED' || detail.status === 'UNSTABLE' ? 'box-danger' : (detail.status === 'SUCCESS' ? 'box-success' : 'box-primary');
         var description = detail.description || 'No description.';
@@ -1419,7 +1592,7 @@
 
         html += '<div class="box ' + boxClass + ' job-detail-card">' +
           '<div class="box-header with-border">' +
-            '<h3 class="box-title"><b>' + escapeHtml(detail.name) + '</b></h3>' +
+            '<h3 class="box-title"><b>' + escapeHtml(detail.name) + '</b> ' + environmentHelper.label(config.environmentInfo) + '</h3>' +
             '<div class="box-tools pull-right job-detail-actions">' +
               (detail.jenkinsUrl ? '<a class="btn btn-box-tool" href="' + escapeAttribute(detail.jenkinsUrl) + '" target="_blank" rel="noopener"><i class="fa fa-external-link"></i> Jenkins</a>' : '') +
               (detail.jenkinsUrl ? '<a class="btn btn-box-tool" href="' + escapeAttribute(detail.jenkinsUrl + 'configure') + '" target="_blank" rel="noopener"><i class="fa fa-cog"></i> Configure</a>' : '') +
@@ -1428,6 +1601,7 @@
           '<div class="box-body">' +
             '<div class="job-overview-grid">' +
               metric('Status', statusLabel(detail.status)) +
+              metric('Environment', renderEnvironmentInfo(config.environmentInfo)) +
               metric('Health', detail.healthReport.length ? escapeHtml((detail.healthReport[0].score == null ? 'Reported' : detail.healthReport[0].score + '%')) : renderMuted('None')) +
               metric('Buildable', boolLabel(detail.buildable && ! detail.disabled)) +
               metric('Queue', detail.inQueue ? '<span class="label label-warning">Queued</span>' : '<span class="label label-default">None</span>') +
@@ -1465,6 +1639,11 @@
 
     $('#jobFilter').on('keyup', function() {
       renderJobOptions($(this).val());
+    });
+
+    $('#jobEnvironmentFilter').on('change', function() {
+      jobEnvironmentFilter = normalizeEnvironmentFilterValue($(this).val() || 'all');
+      renderJobOptions($('#jobFilter').val());
     });
 
     $(document).on('change', '.job-view-job-check', function() {

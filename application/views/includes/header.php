@@ -1,3 +1,51 @@
+<?php
+if (! function_exists('jobseeker_normalize_global_environment')) {
+  function jobseeker_normalize_global_environment($value) {
+    $normalized = strtoupper(trim((string) $value));
+    $aliases = array(
+      'QAS' => 'QA',
+      'PRD' => 'PROD',
+      'PRODUCTION' => 'PROD',
+      'HOMOLOG' => 'HML',
+      'HOMOLOGATION' => 'HML'
+    );
+
+    return isset($aliases[$normalized]) ? $aliases[$normalized] : $normalized;
+  }
+}
+
+$jobseekerGlobalEnvironmentOptions = array();
+if (class_exists('CI_Model')) {
+  $CI =& get_instance();
+  $CI->load->model('Context_model');
+  $environmentRecords = $CI->Context_model->listEnvironments();
+
+  if (! empty($environmentRecords)) {
+    foreach ($environmentRecords as $environmentRecord) {
+      $environmentName = isset($environmentRecord->Environment) ? trim((string) $environmentRecord->Environment) : '';
+      if ($environmentName !== '') {
+        $jobseekerGlobalEnvironmentOptions[] = $environmentName;
+      }
+    }
+  }
+}
+
+$jobseekerGlobalEnvironmentOptions = array_values(array_unique($jobseekerGlobalEnvironmentOptions));
+sort($jobseekerGlobalEnvironmentOptions);
+$jobseekerGlobalEnvironmentOptionValues = array_values(array_unique(array_map('jobseeker_normalize_global_environment', $jobseekerGlobalEnvironmentOptions)));
+$jobseekerSelectedEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE);
+$jobseekerSelectedEnvironment = trim((string) $jobseekerSelectedEnvironment);
+if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*' || strtolower($jobseekerSelectedEnvironment) === 'all') {
+  $jobseekerSelectedEnvironment = 'all';
+} elseif ($jobseekerSelectedEnvironment === '__UNKNOWN__' || strtolower($jobseekerSelectedEnvironment) === 'unknown') {
+  $jobseekerSelectedEnvironment = 'all';
+} else {
+  $jobseekerSelectedEnvironment = jobseeker_normalize_global_environment($jobseekerSelectedEnvironment);
+  if (! in_array($jobseekerSelectedEnvironment, $jobseekerGlobalEnvironmentOptionValues, TRUE)) {
+    $jobseekerSelectedEnvironment = 'all';
+  }
+}
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -35,6 +83,7 @@
   }
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
   window.jobseekerCsrf = {
@@ -43,6 +92,8 @@
   };
   window.jobseekerJenkinsUrl = <?php echo json_encode($jenkins_url); ?>;
   window.jobseekerJenkinsProxyUrl = <?php echo json_encode(base_url() . 'jenkins/proxy'); ?>;
+  window.jobseekerGlobalEnvironmentOptions = <?php echo json_encode($jobseekerGlobalEnvironmentOptions); ?>;
+  window.jobseekerDashboardEnvironment = <?php echo json_encode($jobseekerSelectedEnvironment); ?>;
 
   function addJobseekerCsrfToForm(form) {
     if (! window.jobseekerCsrf || ! window.jobseekerCsrf.name || ! window.jobseekerCsrf.hash) {
@@ -99,6 +150,302 @@
     options.data = encodeURIComponent(window.jobseekerCsrf.name) + '=' + encodeURIComponent(window.jobseekerCsrf.hash);
   }
 
+  window.JobSeekerGlobalEnvironment = (function() {
+    var storageKey = 'jobseeker.global.environment';
+    var applying = false;
+    var retryTimer = null;
+    var dashboardRedirecting = false;
+
+    function configuredEnvironmentNames() {
+      var names = [];
+
+      $.each(window.jobseekerGlobalEnvironmentOptions || [], function(index, value) {
+        var normalized = normalize(value);
+        if (normalized !== '' && $.inArray(normalized, names) === -1) {
+          names.push(normalized);
+        }
+      });
+
+      return names;
+    }
+
+    function readStored() {
+      try {
+        return window.localStorage.getItem(storageKey) || 'all';
+      } catch (error) {
+        return 'all';
+      }
+    }
+
+    function store(value) {
+      try {
+        window.localStorage.setItem(storageKey, value || 'all');
+      } catch (error) {
+        return;
+      }
+    }
+
+    function normalize(value) {
+      var raw = $.trim(String(value || ''));
+
+      if (raw === '' || raw === '*' || raw.toLowerCase() === 'all') {
+        return 'all';
+      }
+
+      if (raw === '__UNKNOWN__' || raw.toLowerCase() === 'unknown') {
+        return '__UNKNOWN__';
+      }
+
+      if (window.JobSeekerEnvironment && window.JobSeekerEnvironment.normalize) {
+        return window.JobSeekerEnvironment.normalize(raw) || raw.toUpperCase();
+      }
+
+      return raw.toUpperCase();
+    }
+
+    function hasGlobalOption(value) {
+      value = normalize(value);
+      return value === 'all' || $.inArray(value, configuredEnvironmentNames()) !== -1;
+    }
+
+    function coerceToOption(value) {
+      value = normalize(value);
+      return hasGlobalOption(value) ? value : 'all';
+    }
+
+    function isConfiguredEnvironment(value) {
+      value = normalize(value);
+      return value !== '' && value !== 'all' && value !== '__UNKNOWN__' && $.inArray(value, configuredEnvironmentNames()) !== -1;
+    }
+
+    function valuesForSelection(value) {
+      var normalized = normalize(value);
+      var values = [];
+
+      if (normalized === 'all') {
+        return ['all', '*'];
+      }
+
+      if (normalized === '__UNKNOWN__') {
+        return ['__UNKNOWN__', 'Unknown'];
+      }
+
+      values.push(String(value || ''));
+      values.push(normalized);
+
+      if (normalized === 'QA') {
+        values.push('QAS');
+      }
+
+      if (normalized === 'PROD') {
+        values.push('PRD', 'PRODUCTION');
+      }
+
+      if (normalized === 'HML') {
+        values.push('HOMOLOG', 'HOMOLOGATION');
+      }
+
+      return $.grep(values, function(item, index) {
+        return item !== '' && $.inArray(item, values) === index;
+      });
+    }
+
+    function currentUrlEnvironment() {
+      try {
+        var url = new URL(window.location.href);
+        return url.searchParams.has('environment') ? normalize(url.searchParams.get('environment')) : '';
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function isDashboardPath() {
+      return /\/dashboard\/?$/i.test(window.location.pathname) || /\/Dashboard\/?$/.test(window.location.pathname) || window.location.pathname.replace(/\/+$/, '') === '';
+    }
+
+    function syncDashboardUrl(value) {
+      value = normalize(value);
+
+      if (! isDashboardPath()) {
+        return false;
+      }
+
+      try {
+        var url = new URL(window.location.href);
+        var currentValue = url.searchParams.has('environment') ? normalize(url.searchParams.get('environment')) : 'all';
+
+        if (currentValue === value) {
+          return false;
+        }
+
+        if (value === 'all') {
+          url.searchParams.delete('environment');
+        } else {
+          url.searchParams.set('environment', value);
+        }
+
+        dashboardRedirecting = true;
+        window.jobseekerDashboardEnvironmentRedirecting = true;
+        window.location.replace(url.toString());
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function initialEnvironment() {
+      var urlEnvironment = currentUrlEnvironment();
+      var serverEnvironment = normalize(window.jobseekerDashboardEnvironment || '');
+
+      if (urlEnvironment) {
+        return coerceToOption(urlEnvironment);
+      }
+
+      if (serverEnvironment !== 'all') {
+        return coerceToOption(serverEnvironment);
+      }
+
+      return coerceToOption(readStored());
+    }
+
+    function matchingValue($select, values) {
+      var selectedValue = '';
+
+      $.each(values, function(index, value) {
+        if (selectedValue !== '') {
+          return false;
+        }
+
+        $select.find('option').each(function() {
+          if ($(this).val() === value) {
+            selectedValue = value;
+            return false;
+          }
+        });
+      });
+
+      return selectedValue;
+    }
+
+    function syncControl($select, value) {
+      var id = $select.attr('id') || '';
+      var name = $select.attr('name') || '';
+      var isFilter = id === 'monitorEnvironmentFilter' || id === 'jobEnvironmentFilter' || id === 'deleteEnvironmentFilter';
+      var isTmfMulti = name === 'environment[]';
+      var isJobEnvironment = id === 'environment';
+      var normalized = normalize(value);
+      var targetValue = matchingValue($select, valuesForSelection(value));
+
+      if (! isFilter && ! isTmfMulti && ! isJobEnvironment) {
+        return false;
+      }
+
+      if ((normalized === 'all' || normalized === '__UNKNOWN__') && isJobEnvironment) {
+        return false;
+      }
+
+      if (! targetValue) {
+        return false;
+      }
+
+      applying = true;
+      if (isTmfMulti) {
+        if (($select.val() || []).join('|') !== targetValue) {
+          $select.val([targetValue]).trigger('change');
+        }
+      } else if ($select.val() !== targetValue) {
+        $select.val(targetValue).trigger('change');
+      }
+      applying = false;
+      return true;
+    }
+
+    function syncControls(value) {
+      value = coerceToOption(value || readStored());
+
+      if (dashboardRedirecting) {
+        return;
+      }
+
+      $('#monitorEnvironmentFilter, #jobEnvironmentFilter, #deleteEnvironmentFilter, #environment, select[name="environment[]"]').each(function() {
+        syncControl($(this), value);
+      });
+    }
+
+    function apply(value, notify) {
+      value = coerceToOption(value || readStored());
+
+      syncControls(value);
+
+      if (notify !== false && ! dashboardRedirecting) {
+        $(document).trigger('jobseeker:environment-change', [value]);
+      }
+    }
+
+    function scheduleApply(value) {
+      var attempts = 0;
+      value = coerceToOption(value || readStored());
+      clearInterval(retryTimer);
+      if (syncDashboardUrl(value)) {
+        return;
+      }
+      apply(value);
+      retryTimer = setInterval(function() {
+        attempts += 1;
+        if (syncDashboardUrl(value)) {
+          clearInterval(retryTimer);
+          return;
+        }
+        syncControls(value);
+
+        if (attempts >= 12) {
+          clearInterval(retryTimer);
+        }
+      }, 500);
+    }
+
+    function set(value) {
+      var normalized = coerceToOption(value);
+      store(normalized);
+      $('#globalEnvironmentSelector').val(normalized);
+      scheduleApply(normalized);
+    }
+
+    $(document).on('change', '#globalEnvironmentSelector', function() {
+      set($(this).val());
+    });
+
+    $(document).on('change', '#monitorEnvironmentFilter, #jobEnvironmentFilter, #deleteEnvironmentFilter', function() {
+      if (applying) {
+        return;
+      }
+
+      var value = normalize($(this).val() || 'all');
+      store(value);
+      $('#globalEnvironmentSelector').val(value);
+    });
+
+    $(function() {
+      var selected = initialEnvironment();
+      store(selected);
+      $('#globalEnvironmentSelector').val(selected);
+      scheduleApply(selected);
+    });
+
+    return {
+      apply: apply,
+      coerceToOption: coerceToOption,
+      configuredEnvironmentNames: configuredEnvironmentNames,
+      isConfiguredEnvironment: isConfiguredEnvironment,
+      normalize: normalize,
+      scheduleApply: scheduleApply,
+      selected: function() { return coerceToOption($('#globalEnvironmentSelector').val() || readStored()); },
+      set: set,
+      syncControls: syncControls,
+      storageKey: storageKey
+    };
+  })();
+
   $.ajaxPrefilter(function(options) {
     var jenkinsUrl = window.jobseekerJenkinsUrl || '';
 
@@ -138,6 +485,9 @@
           $.each(mutation.addedNodes, function(nodeIndex, node) {
             if (node.nodeType === 1) {
               addJobseekerCsrfToForms(node);
+              if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.syncControls) {
+                window.JobSeekerGlobalEnvironment.syncControls();
+              }
             }
           });
         });
@@ -175,6 +525,106 @@
     background-color: #500ceb;
   }
 
+  .jobseeker-global-environment {
+    padding: 7px 10px;
+    min-width: 255px;
+  }
+
+  .jobseeker-env-control {
+    align-items: center;
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.28);
+    border-radius: 999px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 8px 18px rgba(46, 12, 107, .18);
+    display: flex;
+    gap: 9px;
+    min-height: 36px;
+    padding: 5px 34px 5px 8px;
+    position: relative;
+  }
+
+  .jobseeker-env-icon {
+    align-items: center;
+    background: rgba(255,255,255,.92);
+    border-radius: 50%;
+    color: #5b21b6;
+    display: inline-flex;
+    height: 24px;
+    justify-content: center;
+    width: 24px;
+  }
+
+  .jobseeker-env-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .jobseeker-global-environment label {
+    color: rgba(255,255,255,.86);
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0;
+  }
+
+  .jobseeker-global-environment .form-control {
+    appearance: none;
+    -moz-appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    height: 18px;
+    line-height: 18px;
+    padding: 0;
+  }
+
+  .jobseeker-global-environment .form-control option {
+    color: #25364a;
+  }
+
+  .jobseeker-env-caret {
+    color: rgba(255,255,255,.86);
+    position: absolute;
+    right: 13px;
+    top: 12px;
+  }
+
+  .monitor-environment-filter,
+  .execution-environment-filter,
+  .job-view-environment-filter,
+  .delete-environment-filter-bar,
+  .tmf-builder-environment-filter {
+    display: none !important;
+  }
+
+  @media (max-width: 767px) {
+    .jobseeker-global-environment {
+      min-width: 170px;
+      padding: 8px 6px;
+    }
+
+    .jobseeker-env-icon,
+    .jobseeker-global-environment label {
+      display: none;
+    }
+
+    .jobseeker-env-control {
+      border-radius: 6px;
+      min-height: 30px;
+      padding: 6px 28px 6px 10px;
+    }
+
+    .jobseeker-env-caret {
+      top: 9px;
+    }
+  }
+
 
 
 </style>
@@ -198,6 +648,21 @@
         </a>
         <div class="navbar-custom-menu">
           <ul class="nav navbar-nav">
+            <li class="jobseeker-global-environment">
+              <div class="jobseeker-env-control">
+                <span class="jobseeker-env-icon"><i class="fa fa-globe"></i></span>
+                <div class="jobseeker-env-copy">
+                  <label for="globalEnvironmentSelector">Environment</label>
+                  <select id="globalEnvironmentSelector" class="form-control input-sm" title="Global environment selector">
+                    <option value="all">All environments</option>
+                    <?php foreach ($jobseekerGlobalEnvironmentOptions as $jobseekerGlobalEnvironmentOption) { ?>
+                      <option value="<?php echo html_escape(jobseeker_normalize_global_environment($jobseekerGlobalEnvironmentOption)); ?>"><?php echo html_escape($jobseekerGlobalEnvironmentOption); ?></option>
+                    <?php } ?>
+                  </select>
+                </div>
+                <i class="fa fa-angle-down jobseeker-env-caret"></i>
+              </div>
+            </li>
             <li class="dropdown tasks-menu">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown" aria-expanded="true">
                 <i class="fa fa-history"></i>
@@ -348,19 +813,20 @@
                 <span>Smtp Settings</span>
               </a>
             </li>
-          <li class="treeview">
-             <a href="#">
-                <i class="fa fa-cogs"></i> <span>Context Settings</span>
-                <span class="pull-right-container">
-                  <i class="fa fa-angle-left pull-right"></i>
-                </span>
-              </a>
-            <ul class="treeview-menu">
-              <li><a href="<?php echo base_url(); ?>Context/projectDetails"><i class="fa fa-table"></i><span>Project Details</span></a></li>
-              <li><a href="<?php echo base_url(); ?>Context/environment"><i class="fa fa-table"></i><span>Environment Details</span></a></li>
-              <li><a href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-table"></i><span>Context Details</span></a></li>
-            </ul>
-          </li>
+          </ul>
+        </li>
+        <li class="treeview">
+          <a href="#">
+            <i class="fa fa-sitemap"></i> <span>Context Settings</span>
+            <span class="pull-right-container">
+              <i class="fa fa-angle-left pull-right"></i>
+            </span>
+          </a>
+          <ul class="treeview-menu">
+            <li><a href="<?php echo base_url(); ?>Context/projectDetails"><i class="fa fa-table"></i><span>Project Details</span></a></li>
+            <li><a href="<?php echo base_url(); ?>Context/environment"><i class="fa fa-globe"></i><span>Environment Details</span></a></li>
+            <li><a href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-sliders"></i><span>Context Details</span></a></li>
+            <li><a href="<?php echo base_url(); ?>Context/promotion"><i class="fa fa-level-up"></i><span>Environment Promotion</span></a></li>
           </ul>
         </li>
         <?php  if ($jenkins_enabled == true) { 
