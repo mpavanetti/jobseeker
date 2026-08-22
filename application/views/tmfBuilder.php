@@ -4,7 +4,6 @@
   });
 </script>
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/bower_components/bootstrap-datepicker/dist/css/bootstrap-datepicker3.min.css" />
 <style>
   .tmf-builder-page .content {
     padding: 18px;
@@ -250,8 +249,10 @@
                           {
                               foreach($listStatus as $record)
                               {
+                                $statusValue = isset($record->status) ? $record->status : '';
+                                $statusLabel = isset($record->status_label) ? $record->status_label : ucfirst($statusValue);
                           ?>
-                           <option value="<?php echo $record->status ?>"><?php echo $record->status ?></option>
+                           <option value="<?php echo html_escape($statusValue); ?>"><?php echo html_escape($statusLabel); ?></option>
                          <?php
                            }
                          }
@@ -323,15 +324,17 @@
 
            <div class="row animated fadeIn" style="margin-top: 25px;">
               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
+                <label for="fromDate">From Date / Time</label>
                 <div class="input-group">
-                  <input id="fromDate" type="text" name="fromDate" value="" class="form-control datepicker" placeholder="From Date" autocomplete="off" />
-                  <span class="input-group-addon"><label for="fromDate"><i class="fa fa-calendar"></i></label></span>
+                  <input id="fromDate" type="datetime-local" name="fromDate" value="" class="form-control" title="From date and time" step="60" autocomplete="off" />
+                  <span class="input-group-addon"><i class="fa fa-calendar"></i></span>
                 </div>
               </div>
               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
+                <label for="toDate">To Date / Time</label>
                 <div class="input-group">
-                  <input id="toDate" type="text" name="toDate" value="" class="form-control datepicker" placeholder="To Date" autocomplete="off" />
-                  <span class="input-group-addon"><label for="toDate"><i class="fa fa-calendar"></i></label></span>
+                  <input id="toDate" type="datetime-local" name="toDate" value="" class="form-control" title="To date and time" step="60" autocomplete="off" />
+                  <span class="input-group-addon"><i class="fa fa-calendar"></i></span>
                 </div>
               </div>
               <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
@@ -380,7 +383,6 @@
 </div> 
 
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
-<script src="<?php echo base_url(); ?>assets/bower_components/bootstrap-datepicker/dist/js/bootstrap-datepicker.min.js"></script>
 
 <script type="text/javascript">
   $(document).ready(function() {
@@ -389,18 +391,22 @@
        allowClear: true
     });
 
-      $('.datepicker').datepicker({
-          autoclose: true,
-          format : "dd-mm-yyyy"
-        });
+      function formatDateTimeLocal(value) {
+        var month = String(value.getMonth() + 1).padStart(2, '0');
+        var day = String(value.getDate()).padStart(2, '0');
+        var hours = String(value.getHours()).padStart(2, '0');
+        var minutes = String(value.getMinutes()).padStart(2, '0');
+        return value.getFullYear() + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
+      }
 
       $('.tmf-date-shortcut').on('click', function() {
         var days = parseInt($(this).data('days'), 10) || 0;
         var endDate = new Date();
         var startDate = new Date();
         startDate.setDate(endDate.getDate() - days);
-        $('#fromDate').datepicker('setDate', startDate);
-        $('#toDate').datepicker('setDate', endDate);
+        startDate.setHours(0, 0, 0, 0);
+        $('#fromDate').val(formatDateTimeLocal(startDate));
+        $('#toDate').val(formatDateTimeLocal(endDate));
       });
 
       $('.resetFilters').on('click', function() {

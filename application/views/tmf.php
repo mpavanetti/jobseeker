@@ -9,10 +9,54 @@ $totalRecords = 0;
 $totalProcessed = 0;
 $jobNames = array();
 $environments = array();
-$attentionRows = array();
-$slowestRows = array();
+$attentionCount = 0;
+$reprocessEligible = 0;
+$incompleteRuns = 0;
 $staleRunning = 0;
 $latestActivityTimestamp = null;
+$currentTimestamp = time();
+$staleThresholdSeconds = 900;
+
+if (!function_exists('tmfTimestamp')) {
+  function tmfTimestamp($value) {
+    if (empty($value)) {
+      return false;
+    }
+
+    $timestamp = strtotime((string) $value);
+    return $timestamp === false ? false : $timestamp;
+  }
+}
+
+if (!function_exists('formatTmfDateValue')) {
+  function formatTmfDateValue($value) {
+    $timestamp = tmfTimestamp($value);
+    return $timestamp === false ? '-' : date('m-d-Y H:i:s', $timestamp);
+  }
+}
+
+if (!function_exists('formatTmfAge')) {
+  function formatTmfAge($timestamp) {
+    if ($timestamp === false) {
+      return 'no activity';
+    }
+
+    $seconds = max(0, time() - (int) $timestamp);
+    if ($seconds < 60) {
+      return 'just now';
+    }
+
+    if ($seconds < 3600) {
+      return floor($seconds / 60).'m ago';
+    }
+
+    if ($seconds < 86400) {
+      return floor($seconds / 3600).'h ago';
+    }
+
+    return floor($seconds / 86400).'d ago';
+  }
+}
 
 if (!function_exists('formatTmfDuration')) {
   function formatTmfDuration($seconds) {
@@ -34,12 +78,23 @@ if (!function_exists('formatTmfDuration')) {
 }
 
 foreach($jobs as $tmfJob) {
+  $lastTimestamp = tmfTimestamp($tmfJob->last_activity);
+  if ($lastTimestamp !== false && ($latestActivityTimestamp === null || $lastTimestamp > $latestActivityTimestamp)) {
+    $latestActivityTimestamp = $lastTimestamp;
+  }
+}
+
+$activityReferenceTimestamp = $latestActivityTimestamp !== null ? max($currentTimestamp, $latestActivityTimestamp) : $currentTimestamp;
+
+foreach($jobs as $tmfJob) {
   $status = strtolower((string) $tmfJob->status);
   $recordsTotal = isset($tmfJob->records_total) ? (int) $tmfJob->records_total : 0;
   $recordsProcessed = isset($tmfJob->records_processed) ? (int) $tmfJob->records_processed : 0;
-  $startTimestamp = !empty($tmfJob->start_time) ? strtotime($tmfJob->start_time) : false;
-  $lastTimestamp = !empty($tmfJob->last_activity) ? strtotime($tmfJob->last_activity) : false;
+  $startTimestamp = tmfTimestamp($tmfJob->start_time);
+  $lastTimestamp = tmfTimestamp($tmfJob->last_activity);
   $durationSeconds = ($startTimestamp !== false && $lastTimestamp !== false) ? max(0, $lastTimestamp - $startTimestamp) : 0;
+  $isStaleRunning = ($status == 'running' && $lastTimestamp !== false && ($activityReferenceTimestamp - $lastTimestamp) > $staleThresholdSeconds);
+  $hasAttention = in_array($status, array('error', 'warning'), TRUE) || $isStaleRunning || (isset($tmfJob->distict_errors) && (int) $tmfJob->distict_errors == 1) || (isset($tmfJob->warnings) && (int) $tmfJob->warnings == 1);
 
   switch ($status) {
     case 'ready':
@@ -70,40 +125,26 @@ foreach($jobs as $tmfJob) {
     $environments[$tmfJob->environment] = true;
   }
 
-  if ($lastTimestamp !== false && ($latestActivityTimestamp === null || $lastTimestamp > $latestActivityTimestamp)) {
-    $latestActivityTimestamp = $lastTimestamp;
+  if ($hasAttention) {
+    $attentionCount++;
   }
 
-  if (in_array($status, array('error', 'warning', 'running'), TRUE)) {
-    $attentionRows[] = array(
-      'id' => $tmfJob->id,
-      'status' => $status,
-      'job_name' => $tmfJob->job_name,
-      'environment' => $tmfJob->environment,
-      'last_activity' => $lastTimestamp !== false ? date('m-d-Y H:i:s', $lastTimestamp) : 'No activity'
-    );
-  }
-
-  if ($status == 'running' && $lastTimestamp !== false && (time() - $lastTimestamp) > 900) {
+  if ($isStaleRunning) {
     $staleRunning++;
   }
 
-  if ($durationSeconds > 0) {
-    $slowestRows[] = array(
-      'job_name' => $tmfJob->job_name,
-      'environment' => $tmfJob->environment,
-      'duration' => $durationSeconds
-    );
+  if (isset($tmfJob->reprocess) && (int) $tmfJob->reprocess == 1) {
+    $reprocessEligible++;
+  }
+
+  if ($recordsTotal > 0 && $recordsProcessed < $recordsTotal) {
+    $incompleteRuns++;
   }
 }
 
 $totalJobs = count($jobs);
 $throughputRate = $totalRecords > 0 ? min(100, round(($totalProcessed / $totalRecords) * 100)) : 0;
 $latestActivityLabel = $latestActivityTimestamp !== null ? date('m-d-Y H:i:s', $latestActivityTimestamp) : 'No activity';
-usort($slowestRows, function($left, $right) {
-  return $right['duration'] - $left['duration'];
-});
-$slowestRows = array_slice($slowestRows, 0, 5);
 ?>
  <script>
   $(document).ready(function(){
@@ -114,23 +155,6 @@ $slowestRows = array_slice($slowestRows, 0, 5);
   } );
 </script>
 <style>
-    .digital-clock {
-      /*margin: auto; 
-      position: absolute;*/
-      top: 0;
-      left: 0;
-      bottom: 0;
-      right: 0;
-      width: 180px;
-      height: 50px;
-      color: #00000;
-    /*  border: 2px solid #999; */
-      border-radius: 10px;
-      text-align: center;
-      font: 40px/50px 'DIGITAL', Helvetica;
-     /* background: linear-gradient(90deg, #4A00E0, #000); */
-}
-
 pre { 
     white-space: pre-wrap; 
     word-break: break-word;
@@ -153,129 +177,74 @@ pre {
   margin-top: 15px;
 }
 
-.tmf-results-summary {
-  margin-top: 18px;
+.tmf-refresh-note {
+  color: #52616f;
+  font-weight: 600;
 }
 
-.tmf-ops-card,
-.tmf-metric {
+.tmf-workbench {
   background: #fff;
   border: 1px solid #d8e0e8;
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(16, 42, 67, .08);
-  padding: 16px;
-}
-
-.tmf-ops-card {
-  min-height: 214px;
-}
-
-.tmf-ops-card h3 {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 12px;
-}
-
-.tmf-ops-card h3 small {
-  color: #829ab1;
-  display: block;
-  font-size: 12px;
-  font-weight: 400;
-  margin-top: 3px;
+  margin-top: 14px;
+  padding: 12px;
 }
 
 .tmf-quick-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 12px;
+  margin: 10px 0;
 }
 
-.tmf-attention-list,
-.tmf-slowest-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.tmf-quick-filters .badge {
+  background: rgba(0,0,0,.18);
+  margin-left: 4px;
 }
 
-.tmf-attention-list li,
-.tmf-slowest-list li {
+.tmf-quick-filters .btn[disabled] {
+  opacity: .48;
+}
+
+.tmf-workbench-actions {
   align-items: center;
-  border-top: 1px solid #edf1f5;
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
   justify-content: space-between;
-  padding: 8px 0;
 }
 
-.tmf-attention-list li:first-child,
-.tmf-slowest-list li:first-child {
-  border-top: 0;
+.tmf-result-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.tmf-attention-main,
-.tmf-slowest-main {
-  min-width: 0;
-}
-
-.tmf-attention-title,
-.tmf-slowest-title {
-  color: #102a43;
-  display: block;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tmf-attention-meta,
-.tmf-slowest-meta {
-  color: #829ab1;
-  display: block;
-  font-size: 12px;
-}
-
-.tmf-empty-note {
-  border: 1px dashed #d8e0e8;
+.tmf-signal {
+  background: #f8fafc;
+  border: 1px solid #e3e8ef;
   border-radius: 4px;
-  color: #829ab1;
-  padding: 16px;
-  text-align: center;
-}
-
-.tmf-throughput-bar {
-  background: #edf2f7;
-  border-radius: 12px;
-  height: 12px;
-  margin-top: 12px;
-  overflow: hidden;
-}
-
-.tmf-throughput-fill {
-  background: linear-gradient(90deg, #2f855a, #38a169);
-  height: 100%;
-}
-
-.tmf-metric-label {
   color: #6b7c8f;
-  display: block;
+  display: inline-flex;
   font-size: 12px;
-  letter-spacing: .03em;
-  text-transform: uppercase;
+  gap: 6px;
+  padding: 6px 9px;
 }
 
-.tmf-metric-value {
+.tmf-signal strong {
   color: #102a43;
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  margin-top: 4px;
+  font-size: 13px;
 }
 
-.tmf-metric-foot {
-  color: #829ab1;
-  display: block;
-  margin-top: 4px;
+.tmf-signal-danger strong { color: #c53030; }
+.tmf-signal-warning strong { color: #b7791f; }
+.tmf-signal-info strong { color: #2b6cb0; }
+
+.tmf-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .tmf-status-strip {
@@ -336,12 +305,39 @@ pre {
 .tmf-row-error > td { background: #fff5f5 !important; }
 .tmf-row-warning > td { background: #fffaf0 !important; }
 .tmf-row-running > td { background: #ebf8ff !important; }
+.tmf-row-stale > td { box-shadow: inset 3px 0 0 #c53030; }
+.tmf-row-selected > td { background: #e6fffa !important; }
+
+.tmf-progress-label {
+  display: block;
+  font-weight: 600;
+}
+
+.tmf-age {
+  color: #829ab1;
+  display: block;
+  font-size: 12px;
+}
+
+.tmf-instance-id {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 @media (max-width: 767px) {
   .tmf-results-toolbar {
     align-items: flex-start;
     flex-direction: column;
     gap: 12px;
+  }
+
+  .tmf-workbench-actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>
@@ -373,78 +369,37 @@ pre {
       <div class="container-fluid tmf-results-shell">
         <div class="tmf-results-toolbar">
           <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning"><i class="fa fa-arrow-left"></i> Back to Query</a>
-          <div class="digital-clock">00:00:00</div>
+          <span class="tmf-refresh-note"><i class="fa fa-database"></i> <?php echo number_format($totalJobs); ?> rows returned &middot; latest <?php echo html_escape($latestActivityLabel); ?></span>
         </div>
-        <div class="row tmf-results-summary">
-          <div class="col-lg-8 col-md-12 col-xs-12">
-            <div class="tmf-ops-card">
-              <h3><i class="fa fa-heartbeat"></i> Triage Board <small><?php echo number_format($totalJobs); ?> rows across <?php echo count($jobNames); ?> jobs and <?php echo count($environments); ?> environments</small></h3>
-              <div class="tmf-quick-filters">
-                <button type="button" class="btn btn-default btn-sm tmf-table-filter" data-filter="all"><i class="fa fa-list"></i> All</button>
-                <button type="button" class="btn btn-danger btn-sm tmf-table-filter" data-filter="error"><i class="fa fa-times"></i> Errors</button>
-                <button type="button" class="btn btn-warning btn-sm tmf-table-filter" data-filter="warning"><i class="fa fa-warning"></i> Warnings</button>
-                <button type="button" class="btn btn-info btn-sm tmf-table-filter" data-filter="running"><i class="fa fa-refresh"></i> Running</button>
-                <button type="button" class="btn btn-primary btn-sm tmf-table-filter" data-filter="attention"><i class="fa fa-bell"></i> Attention</button>
-              </div>
-              <?php if(!empty($attentionRows)) { ?>
-              <ul class="tmf-attention-list">
-                <?php foreach(array_slice($attentionRows, 0, 5) as $attentionRow) { ?>
-                <li>
-                  <span class="tmf-attention-main">
-                    <span class="tmf-attention-title"><?php echo html_escape($attentionRow['job_name']); ?></span>
-                    <span class="tmf-attention-meta">#<?php echo (int) $attentionRow['id']; ?> in <?php echo html_escape($attentionRow['environment']); ?> &middot; last activity <?php echo html_escape($attentionRow['last_activity']); ?></span>
-                  </span>
-                  <span class="label label-<?php echo ($attentionRow['status'] == 'error') ? 'danger' : (($attentionRow['status'] == 'warning') ? 'warning' : 'info'); ?>"><?php echo html_escape(ucfirst($attentionRow['status'])); ?></span>
-                </li>
-                <?php } ?>
-              </ul>
-              <?php } else { ?>
-              <div class="tmf-empty-note">No errors, warnings, or running rows in this result set.</div>
-              <?php } ?>
+        <div class="tmf-workbench animated fadeIn">
+          <div class="tmf-result-signals">
+            <span class="tmf-signal"><strong><?php echo number_format($totalJobs); ?></strong> rows</span>
+            <?php if($attentionCount > 0) { ?><span class="tmf-signal tmf-signal-danger"><strong><?php echo number_format($attentionCount); ?></strong> needs review</span><?php } ?>
+            <?php if($running > 0) { ?><span class="tmf-signal tmf-signal-info"><strong><?php echo number_format($running); ?></strong> running</span><?php } ?>
+            <?php if($staleRunning > 0) { ?><span class="tmf-signal tmf-signal-danger"><strong><?php echo number_format($staleRunning); ?></strong> stale running</span><?php } ?>
+            <?php if($incompleteRuns > 0) { ?><span class="tmf-signal tmf-signal-warning"><strong><?php echo number_format($incompleteRuns); ?></strong> incomplete</span><?php } ?>
+            <?php if($reprocessEligible > 0) { ?><span class="tmf-signal"><strong><?php echo number_format($reprocessEligible); ?></strong> reprocess eligible</span><?php } ?>
+            <span class="tmf-signal"><strong><?php echo $throughputRate; ?>%</strong> processed</span>
+          </div>
+          <div class="tmf-workbench-actions">
+            <div class="tmf-quick-filters btn-group" role="group" aria-label="TMF row filters">
+              <button type="button" class="btn btn-default btn-sm tmf-table-filter active" data-filter="all"><i class="fa fa-list"></i> All <span class="badge"><?php echo number_format($totalJobs); ?></span></button>
+              <button type="button" class="btn btn-danger btn-sm tmf-table-filter" data-filter="attention"<?php echo $attentionCount == 0 ? ' disabled' : ''; ?>><i class="fa fa-bell"></i> Needs Review <span class="badge"><?php echo number_format($attentionCount); ?></span></button>
+              <button type="button" class="btn btn-danger btn-sm tmf-table-filter" data-filter="error"<?php echo $error == 0 ? ' disabled' : ''; ?>><i class="fa fa-times"></i> Errors <span class="badge"><?php echo number_format($error); ?></span></button>
+              <button type="button" class="btn btn-warning btn-sm tmf-table-filter" data-filter="warning"<?php echo $warning == 0 ? ' disabled' : ''; ?>><i class="fa fa-warning"></i> Warnings <span class="badge"><?php echo number_format($warning); ?></span></button>
+              <button type="button" class="btn btn-info btn-sm tmf-table-filter" data-filter="running"<?php echo $running == 0 ? ' disabled' : ''; ?>><i class="fa fa-refresh"></i> Running <span class="badge"><?php echo number_format($running); ?></span></button>
+              <button type="button" class="btn btn-default btn-sm tmf-table-filter" data-filter="stale"<?php echo $staleRunning == 0 ? ' disabled' : ''; ?>><i class="fa fa-clock-o"></i> Stale <span class="badge"><?php echo number_format($staleRunning); ?></span></button>
+              <button type="button" class="btn btn-default btn-sm tmf-table-filter" data-filter="incomplete"<?php echo $incompleteRuns == 0 ? ' disabled' : ''; ?>><i class="fa fa-tasks"></i> Incomplete <span class="badge"><?php echo number_format($incompleteRuns); ?></span></button>
+              <button type="button" class="btn btn-default btn-sm tmf-table-filter" data-filter="reprocess"<?php echo $reprocessEligible == 0 ? ' disabled' : ''; ?>><i class="fa fa-repeat"></i> Reprocess <span class="badge"><?php echo number_format($reprocessEligible); ?></span></button>
+            </div>
+            <div class="tmf-table-actions">
+              <button type="button" class="btn btn-default btn-sm tmf-focus-selected" title="Show only the selected rows in the current result" disabled><i class="fa fa-eye"></i> Focus Selected</button>
+              <button type="button" class="btn btn-default btn-sm tmf-export-csv" title="Export selected rows when any are selected; otherwise export the current filtered table"><i class="fa fa-download"></i> Export CSV</button>
+              <button type="button" class="btn btn-default btn-sm tmf-clear-selection" title="Clear selected rows" disabled><i class="fa fa-eraser"></i> Clear</button>
+              <span class="label label-primary"><span id="tmfVisibleRows"><?php echo number_format($totalJobs); ?></span> visible</span>
+              <span class="label label-default"><span id="tmfSelectionCount">0</span> selected</span>
             </div>
           </div>
-          <div class="col-lg-4 col-md-12 col-xs-12">
-            <div class="tmf-ops-card">
-              <h3><i class="fa fa-tachometer"></i> Run Signals <small>Latest activity <?php echo html_escape($latestActivityLabel); ?></small></h3>
-              <span class="tmf-metric-label">Throughput</span>
-              <span class="tmf-metric-value"><?php echo $throughputRate; ?>%</span>
-              <span class="tmf-metric-foot"><?php echo number_format($totalProcessed); ?> processed of <?php echo number_format($totalRecords); ?> records</span>
-              <div class="tmf-throughput-bar"><div class="tmf-throughput-fill" style="width: <?php echo $throughputRate; ?>%;"></div></div>
-              <div class="tmf-status-strip">
-                <span class="tmf-status-pill tmf-status-running"><i class="fa fa-refresh"></i><?php echo number_format($running); ?> running</span>
-                <span class="tmf-status-pill tmf-status-error"><i class="fa fa-clock-o"></i><?php echo number_format($staleRunning); ?> stale</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="row" style="margin-top: 14px;">
-          <div class="col-lg-12 col-md-12 col-xs-12">
-            <div class="tmf-ops-card">
-              <h3><i class="fa fa-sort-amount-desc"></i> Slowest Runs <small>Use this to spot expensive jobs in the current query result</small></h3>
-              <?php if(!empty($slowestRows)) { ?>
-              <ul class="tmf-slowest-list">
-                <?php foreach($slowestRows as $slowestRow) { ?>
-                <li>
-                  <span class="tmf-slowest-main">
-                    <span class="tmf-slowest-title"><?php echo html_escape($slowestRow['job_name']); ?></span>
-                    <span class="tmf-slowest-meta"><?php echo html_escape($slowestRow['environment']); ?></span>
-                  </span>
-                  <span class="label label-primary"><?php echo html_escape(formatTmfDuration($slowestRow['duration'])); ?></span>
-                </li>
-                <?php } ?>
-              </ul>
-              <?php } else { ?>
-              <div class="tmf-empty-note">No completed duration data in this result set.</div>
-              <?php } ?>
-            </div>
-          </div>
-        </div>
-        <div class="tmf-status-strip">
-          <span class="tmf-status-pill tmf-status-ready"><i class="fa fa-check"></i><?php echo number_format($ready); ?> ready</span>
-          <span class="tmf-status-pill tmf-status-running"><i class="fa fa-refresh"></i><?php echo number_format($running); ?> running</span>
-          <span class="tmf-status-pill tmf-status-error"><i class="fa fa-times"></i><?php echo number_format($error); ?> error</span>
-          <span class="tmf-status-pill tmf-status-warning"><i class="fa fa-warning"></i><?php echo number_format($warning); ?> warning</span>
-          <span class="tmf-status-pill tmf-status-cancelled"><i class="fa fa-ban"></i><?php echo number_format($cancelled); ?> cancelled</span>
         </div>
       <div class="row" style="margin-top: 12px;">
         <div class="col-xs-12">
@@ -453,7 +408,7 @@ pre {
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
             <div class="box-header">
-              <h3 class="box-title"><b>Available Jobs</b></h3>
+              <h3 class="box-title"><b>Transaction Runs</b></h3>
             </div>
             <!-- /.box-header -->
             <div class="box-body tmf-table-wrap">
@@ -488,16 +443,32 @@ pre {
                     {
                         foreach($jobs as $record)
                         {
+                          $recordStatus = strtolower((string) $record->status);
+                          $rowTotal = isset($record->records_total) ? (int) $record->records_total : 0;
+                          $rowProcessed = isset($record->records_processed) ? (int) $record->records_processed : 0;
+                          $rowProgress = $rowTotal > 0 ? min(100, round(($rowProcessed / $rowTotal) * 100)) : 0;
+                          $rowStartTimestamp = tmfTimestamp($record->start_time);
+                          $rowLastTimestamp = tmfTimestamp($record->last_activity);
+                          $rowDurationSeconds = ($rowStartTimestamp !== false && $rowLastTimestamp !== false) ? max(0, $rowLastTimestamp - $rowStartTimestamp) : 0;
+                          $rowStale = ($recordStatus == 'running' && $rowLastTimestamp !== false && ($activityReferenceTimestamp - $rowLastTimestamp) > $staleThresholdSeconds);
+                          $rowHasErrors = isset($record->distict_errors) && (int) $record->distict_errors == 1;
+                          $rowHasWarnings = isset($record->warnings) && (int) $record->warnings == 1;
+                          $rowAttention = in_array($recordStatus, array('error', 'warning'), TRUE) || $rowStale || $rowHasErrors || $rowHasWarnings;
+                          $rowReprocess = isset($record->reprocess) && (int) $record->reprocess == 1;
+                          $rowIncomplete = $rowTotal > 0 && $rowProcessed < $rowTotal;
                     ?>
-                    <tr class="tmf-row-<?php echo html_escape(strtolower((string) $record->status)); ?>">
-                      <td><?php echo '<span style="color:#3c8dbc;">'.$record->id.'</span>' ?></td>
-                      <td id="status"><?php 
-                      switch ($record->status) {
+                    <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
+                      <td data-order="<?php echo (int) $record->id; ?>"><?php echo '<span style="color:#3c8dbc;">'.(int) $record->id.'</span>' ?></td>
+                      <td data-order="<?php echo html_escape($recordStatus); ?>"><?php
+                      switch ($recordStatus) {
                           case 'ready':
                              echo '<span class="label label-success">Ready</span>';
                               break;
                           case 'running':
-                             echo '<a class="btn btn-sm btn-info cancel" title="Click to Cancel this job">Running</a>';
+                             echo '<a class="btn btn-sm btn-info cancel" title="Click to cancel this job">Running</a>';
+                             if ($rowStale) {
+                               echo ' <span class="label label-danger">Stale</span>';
+                             }
                               break;
                           case 'error':
                              echo '<span class="label label-danger">Error</span>';
@@ -518,25 +489,20 @@ pre {
                           <td><?php echo html_escape($record->dimension); ?></td>
                       <?php  if ($jenkins_enabled == true) { 
                          if($role == 1 || $role == 2) {  ?>
-                      <td class="text-center"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
+                      <td class="text-center" data-order="<?php echo $rowReprocess ? 1 : 0; ?>"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '<span class="text-muted">-</span>' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo html_escape($record->event_text); ?></td>
                       <td><?php echo html_escape($record->environment); ?></td>
                       <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
-                      <td><?php echo (int) $record->records_total; ?></td>
-                      <td><?php $rowTotal = (int) $record->records_total; $rowProcessed = (int) $record->records_processed; $rowProgress = $rowTotal > 0 ? min(100, round(($rowProcessed / $rowTotal) * 100)) : 0; echo (int) $record->records_processed; ?><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-success" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
-                      <td><?php echo date('m-d-Y H:i:s', strtotime($record->start_time)) ?></td>
-                      <td><?php echo date('m-d-Y H:i:s', strtotime($record->last_activity)) ?></td>
-                       <td><?php
-                        $d1 = new DateTime($record->start_time);
-                        $d2 = new DateTime($record->last_activity);
-                        $interval = $d2->diff($d1);
-                        echo $interval->format('%d days, %H hours, %I minutes, %S seconds');
-                        ?></td>
-                       <td ><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect"> Show Error </a>' : '' ?></td>
-                       <td ><?php echo ($record->warnings == 1) ? '<a href="#" class="btn btn-warning">Warning</a>' : '' ?></td>
+                      <td data-order="<?php echo $rowTotal; ?>"><?php echo number_format($rowTotal); ?></td>
+                      <td data-order="<?php echo $rowProgress; ?>"><span class="tmf-progress-label"><?php echo number_format($rowProcessed); ?> / <?php echo number_format($rowTotal); ?> <span class="text-muted"><?php echo $rowProgress; ?>%</span></span><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-<?php echo $rowIncomplete ? 'warning' : 'success'; ?>" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
+                      <td data-order="<?php echo $rowStartTimestamp !== false ? (int) $rowStartTimestamp : 0; ?>"><?php echo html_escape(formatTmfDateValue($record->start_time)); ?></td>
+                      <td data-order="<?php echo $rowLastTimestamp !== false ? (int) $rowLastTimestamp : 0; ?>"><?php echo html_escape(formatTmfDateValue($record->last_activity)); ?><span class="tmf-age"><?php echo html_escape(formatTmfAge($rowLastTimestamp)); ?></span></td>
+                       <td data-order="<?php echo (int) $rowDurationSeconds; ?>"><?php echo html_escape(formatTmfDuration($rowDurationSeconds)); ?></td>
+                       <td data-order="<?php echo $rowHasErrors ? 1 : 0; ?>"><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect">View Errors</a>' : '<span class="text-muted">-</span>' ?></td>
+                       <td data-order="<?php echo $rowHasWarnings ? 1 : 0; ?>"><?php echo ($record->warnings == 1) ? '<span class="label label-warning">Warning</span>' : '<span class="text-muted">-</span>' ?></td>
                          <td><?php echo html_escape($record->hostname); ?></td>
                          <td><?php echo html_escape($record->username); ?></td>
-                         <td><?php echo html_escape($record->instance_id); ?></td>
+                         <td class="tmf-instance-id" title="<?php echo html_escape($record->instance_id); ?>"><?php echo html_escape($record->instance_id); ?></td>
                       <?php if($role == 1 || $role == 2) {  ?> <td class="text-center">
                           <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
@@ -633,10 +599,10 @@ pre {
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script type="text/javascript">
-    $(document).ready(function() {
+var activeTmfFilter = 'all';
+var activeTmfSelectionOnly = false;
 
-  clockUpdate();
-  setInterval(clockUpdate, 1000);
+    $(document).ready(function() {
 
   var amount = "<?php echo count($jobs); ?>";
   var ready = "<?php echo $ready; ?>";
@@ -674,30 +640,211 @@ pre {
         toastr.info("No data has been found on database.", "No Data Available");
       }
 
+      if ($.fn.dataTable && $.fn.dataTable.ext) {
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+          if (! settings.nTable || settings.nTable.id !== 'table6') {
+            return true;
+          }
+
+          var row = settings.aoData[dataIndex].nTr;
+          if (! row) {
+            return true;
+          }
+
+          var $row = $(row);
+          var matchesFilter = activeTmfFilter === 'all';
+          var rowStatus = String($row.attr('data-status') || '').toLowerCase();
+          var rowStale = $row.attr('data-stale') === '1';
+          var rowAttention = $row.attr('data-attention') === '1';
+          var rowReprocess = $row.attr('data-reprocess') === '1';
+          var rowIncomplete = $row.attr('data-incomplete') === '1';
+
+          if (activeTmfFilter === 'attention') {
+            matchesFilter = rowAttention;
+          } else if (activeTmfFilter === 'stale') {
+            matchesFilter = rowStale;
+          } else if (activeTmfFilter === 'reprocess') {
+            matchesFilter = rowReprocess;
+          } else if (activeTmfFilter === 'incomplete') {
+            matchesFilter = rowIncomplete;
+          } else if (activeTmfFilter !== 'all') {
+            matchesFilter = rowStatus === activeTmfFilter;
+          }
+
+          return matchesFilter && (! activeTmfSelectionOnly || $row.hasClass('tmf-row-selected'));
+        });
+      }
+
       $('.tmf-table-filter').on('click', function() {
-        var filter = $(this).data('filter');
+        activeTmfFilter = $(this).data('filter');
+        activeTmfSelectionOnly = false;
         $('.tmf-table-filter').removeClass('active');
         $(this).addClass('active');
+        $('.tmf-focus-selected').removeClass('active');
 
-        if (! $.fn.DataTable || ! $.fn.DataTable.isDataTable('#table6')) {
+        var table = getTmfTable();
+        if (table) {
+          table.draw();
+          updateTmfVisibleRows();
+        }
+      });
+
+      $('#table6').on('draw.dt search.dt', updateTmfVisibleRows);
+
+      $('#table6 tbody').on('click', 'tr', function(event) {
+        if ($(event.target).closest('a, button, input, label').length) {
           return;
         }
 
-        var table = $('#table6').DataTable();
-        if (filter == 'all') {
-          table.column(1).search('').draw();
-        } else if (filter == 'attention') {
-          table.column(1).search('Error|Warning|Running', true, false, true).draw();
-        } else {
-          table.column(1).search(String(filter), false, false, true).draw();
+        $(this).toggleClass('tmf-row-selected');
+        syncTmfSelectionTools();
+        if (activeTmfSelectionOnly) {
+          var table = getTmfTable();
+          if (table) {
+            table.draw();
+          }
         }
       });
+
+      $('.tmf-clear-selection').on('click', function() {
+        getAllTmfRows().removeClass('tmf-row-selected');
+        activeTmfSelectionOnly = false;
+        $('.tmf-focus-selected').removeClass('active');
+        var table = getTmfTable();
+        if (table) {
+          table.draw();
+        }
+        syncTmfSelectionTools();
+      });
+
+      $('.tmf-focus-selected').on('click', function() {
+        var selectedRows = getTmfVisibleRows().filter('.tmf-row-selected');
+        if (! selectedRows.length) {
+          toastr.warning('Select one or more rows before focusing the result set.', 'Focus Selected');
+          return;
+        }
+
+        activeTmfSelectionOnly = ! activeTmfSelectionOnly;
+        $(this).toggleClass('active', activeTmfSelectionOnly);
+
+        var table = getTmfTable();
+        if (table) {
+          table.draw();
+        }
+        syncTmfSelectionTools();
+      });
+
+      $('.tmf-export-csv').on('click', exportTmfCsv);
+      setTimeout(updateTmfVisibleRows, 250);
 
     //load 
  // $('#loading').fadeOut();
 //  $('#main').delay(500).fadeIn();
 
 });
+
+function getTmfTable() {
+  if ($.fn.DataTable && $.fn.DataTable.isDataTable('#table6')) {
+    return $('#table6').DataTable();
+  }
+
+  return null;
+}
+
+function getTmfVisibleRows() {
+  var table = getTmfTable();
+  if (table) {
+    return $(table.rows({ search: 'applied' }).nodes());
+  }
+
+  return $('#table6 tbody tr');
+}
+
+function getAllTmfRows() {
+  var table = getTmfTable();
+  if (table) {
+    return $(table.rows().nodes());
+  }
+
+  return $('#table6 tbody tr');
+}
+
+function updateTmfVisibleRows() {
+  var visibleRows = getTmfVisibleRows().length;
+  $('#tmfVisibleRows').text(visibleRows);
+  syncTmfSelectionTools();
+}
+
+function getTmfRowsForExport() {
+  var visibleRows = getTmfVisibleRows();
+  var selectedRows = visibleRows.filter('.tmf-row-selected');
+  return {
+    rows: selectedRows.length ? selectedRows : visibleRows,
+    scope: selectedRows.length ? 'selected' : 'visible'
+  };
+}
+
+function syncTmfSelectionTools() {
+  var selectedCount = getTmfVisibleRows().filter('.tmf-row-selected').length;
+  $('#tmfSelectionCount').text(selectedCount);
+  $('.tmf-focus-selected').prop('disabled', selectedCount === 0);
+  $('.tmf-clear-selection').prop('disabled', selectedCount === 0);
+
+  if (selectedCount === 0 && activeTmfSelectionOnly) {
+    activeTmfSelectionOnly = false;
+    $('.tmf-focus-selected').removeClass('active');
+  }
+}
+
+function csvEscape(value) {
+  var cleanValue = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  return '"' + cleanValue.replace(/"/g, '""') + '"';
+}
+
+function getTmfCellText(cell) {
+  var clone = $(cell).clone();
+  clone.find('.progress, .spin, script').remove();
+  return $.trim(clone.text());
+}
+
+function exportTmfCsv() {
+  var exportScope = getTmfRowsForExport();
+  var rows = exportScope.rows;
+  if (! rows.length) {
+    toastr.warning('No visible TMF rows to export.', 'CSV Export');
+    return;
+  }
+
+  var columnIndexes = [];
+  var headers = [];
+  $('#table6 thead th').each(function(index) {
+    var headerText = $.trim($(this).text());
+    if (headerText.toLowerCase() !== 'action') {
+      columnIndexes.push(index);
+      headers.push(headerText);
+    }
+  });
+
+  var csvRows = [headers.map(csvEscape).join(',')];
+  rows.each(function() {
+    var cells = $(this).children('td');
+    var values = $.map(columnIndexes, function(index) {
+      return csvEscape(getTmfCellText(cells.eq(index)));
+    });
+    csvRows.push(values.join(','));
+  });
+
+  var blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = 'tmf-results-' + moment().format('YYYYMMDD-HHmmss') + '.csv';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toastr.success(rows.length + ' ' + exportScope.scope + ' TMF rows exported.', 'CSV Export');
+}
 
 function escapeHtml(value) {
   return $('<div>').text(value == null ? '' : value).html();
@@ -965,33 +1112,4 @@ $("#table6").on('click','.btnSelect',function(){
      $('.spin').hide();
      $('.reprocess-erro').fadeIn();
      });
-
-
-function clockUpdate() {
-  var date = new Date();
-  function addZero(x) {
-    if (x < 10) {
-      return x = '0' + x;
-    } else {
-      return x;
-    }
-  }
-
-  function twelveHour(x) {
-    if (x > 12) {
-      return x = x - 12;
-    } else if (x == 0) {
-      return x = 12;
-    } else {
-      return x;
-    }
-  }
-
-  var h = addZero(twelveHour(date.getHours()));
-  var m = addZero(date.getMinutes());
-  var s = addZero(date.getSeconds());
-
-  $('.digital-clock').text(h + ':' + m + ':' + s)
-
-}
 </script>
