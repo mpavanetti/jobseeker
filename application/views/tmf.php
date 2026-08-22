@@ -1,4 +1,110 @@
- <?php $ready = 0; $error = 0; $warning = 0; $running = 0; ?>
+<?php
+$jobs = isset($jobs) ? (array) $jobs : array();
+$ready = 0;
+$error = 0;
+$warning = 0;
+$running = 0;
+$cancelled = 0;
+$totalRecords = 0;
+$totalProcessed = 0;
+$jobNames = array();
+$environments = array();
+$attentionRows = array();
+$slowestRows = array();
+$staleRunning = 0;
+$latestActivityTimestamp = null;
+
+if (!function_exists('formatTmfDuration')) {
+  function formatTmfDuration($seconds) {
+    $seconds = max(0, (int) $seconds);
+    $hours = floor($seconds / 3600);
+    $minutes = floor(($seconds % 3600) / 60);
+    $remainingSeconds = $seconds % 60;
+
+    if ($hours > 0) {
+      return $hours.'h '.$minutes.'m';
+    }
+
+    if ($minutes > 0) {
+      return $minutes.'m '.$remainingSeconds.'s';
+    }
+
+    return $remainingSeconds.'s';
+  }
+}
+
+foreach($jobs as $tmfJob) {
+  $status = strtolower((string) $tmfJob->status);
+  $recordsTotal = isset($tmfJob->records_total) ? (int) $tmfJob->records_total : 0;
+  $recordsProcessed = isset($tmfJob->records_processed) ? (int) $tmfJob->records_processed : 0;
+  $startTimestamp = !empty($tmfJob->start_time) ? strtotime($tmfJob->start_time) : false;
+  $lastTimestamp = !empty($tmfJob->last_activity) ? strtotime($tmfJob->last_activity) : false;
+  $durationSeconds = ($startTimestamp !== false && $lastTimestamp !== false) ? max(0, $lastTimestamp - $startTimestamp) : 0;
+
+  switch ($status) {
+    case 'ready':
+      $ready++;
+      break;
+    case 'running':
+      $running++;
+      break;
+    case 'error':
+      $error++;
+      break;
+    case 'warning':
+      $warning++;
+      break;
+    case 'cancelled':
+      $cancelled++;
+      break;
+  }
+
+  $totalRecords += $recordsTotal;
+  $totalProcessed += $recordsProcessed;
+
+  if (!empty($tmfJob->job_name)) {
+    $jobNames[$tmfJob->job_name] = true;
+  }
+
+  if (!empty($tmfJob->environment)) {
+    $environments[$tmfJob->environment] = true;
+  }
+
+  if ($lastTimestamp !== false && ($latestActivityTimestamp === null || $lastTimestamp > $latestActivityTimestamp)) {
+    $latestActivityTimestamp = $lastTimestamp;
+  }
+
+  if (in_array($status, array('error', 'warning', 'running'), TRUE)) {
+    $attentionRows[] = array(
+      'id' => $tmfJob->id,
+      'status' => $status,
+      'job_name' => $tmfJob->job_name,
+      'environment' => $tmfJob->environment,
+      'last_activity' => $lastTimestamp !== false ? date('m-d-Y H:i:s', $lastTimestamp) : 'No activity'
+    );
+  }
+
+  if ($status == 'running' && $lastTimestamp !== false && (time() - $lastTimestamp) > 900) {
+    $staleRunning++;
+  }
+
+  if ($durationSeconds > 0) {
+    $slowestRows[] = array(
+      'job_name' => $tmfJob->job_name,
+      'environment' => $tmfJob->environment,
+      'duration' => $durationSeconds
+    );
+  }
+}
+
+$totalJobs = count($jobs);
+$throughputRate = $totalRecords > 0 ? min(100, round(($totalProcessed / $totalRecords) * 100)) : 0;
+$latestActivityLabel = $latestActivityTimestamp !== null ? date('m-d-Y H:i:s', $latestActivityTimestamp) : 'No activity';
+usort($slowestRows, function($left, $right) {
+  return $right['duration'] - $left['duration'];
+});
+$slowestRows = array_slice($slowestRows, 0, 5);
+?>
  <script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse')
@@ -28,10 +134,218 @@
 pre { 
     white-space: pre-wrap; 
     word-break: break-word;
-    max-width: 750px;
+  max-width: 980px;
+}
+
+.tmf-results-page .content {
+  padding: 18px;
+}
+
+.tmf-results-shell {
+  max-width: 1640px;
+  width: 100%;
+}
+
+.tmf-results-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+}
+
+.tmf-results-summary {
+  margin-top: 18px;
+}
+
+.tmf-ops-card,
+.tmf-metric {
+  background: #fff;
+  border: 1px solid #d8e0e8;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(16, 42, 67, .08);
+  padding: 16px;
+}
+
+.tmf-ops-card {
+  min-height: 214px;
+}
+
+.tmf-ops-card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.tmf-ops-card h3 small {
+  color: #829ab1;
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 3px;
+}
+
+.tmf-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tmf-attention-list,
+.tmf-slowest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tmf-attention-list li,
+.tmf-slowest-list li {
+  align-items: center;
+  border-top: 1px solid #edf1f5;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.tmf-attention-list li:first-child,
+.tmf-slowest-list li:first-child {
+  border-top: 0;
+}
+
+.tmf-attention-main,
+.tmf-slowest-main {
+  min-width: 0;
+}
+
+.tmf-attention-title,
+.tmf-slowest-title {
+  color: #102a43;
+  display: block;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tmf-attention-meta,
+.tmf-slowest-meta {
+  color: #829ab1;
+  display: block;
+  font-size: 12px;
+}
+
+.tmf-empty-note {
+  border: 1px dashed #d8e0e8;
+  border-radius: 4px;
+  color: #829ab1;
+  padding: 16px;
+  text-align: center;
+}
+
+.tmf-throughput-bar {
+  background: #edf2f7;
+  border-radius: 12px;
+  height: 12px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.tmf-throughput-fill {
+  background: linear-gradient(90deg, #2f855a, #38a169);
+  height: 100%;
+}
+
+.tmf-metric-label {
+  color: #6b7c8f;
+  display: block;
+  font-size: 12px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.tmf-metric-value {
+  color: #102a43;
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.tmf-metric-foot {
+  color: #829ab1;
+  display: block;
+  margin-top: 4px;
+}
+
+.tmf-status-strip {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 6px;
+}
+
+.tmf-status-pill {
+  border-radius: 16px;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 6px;
+  padding: 5px 10px;
+}
+
+.tmf-status-ready { background: #2f855a; }
+.tmf-status-running { background: #2b6cb0; }
+.tmf-status-error { background: #c53030; }
+.tmf-status-warning { background: #b7791f; }
+.tmf-status-cancelled { background: #718096; }
+
+.tmf-results-page .box {
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgba(16, 42, 67, .08);
+}
+
+.tmf-results-page .box-header {
+  border-bottom: 1px solid #edf1f5;
+}
+
+.tmf-results-page #table6 th {
+  color: #243b53;
+  font-size: 12px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tmf-results-page #table6 td {
+  vertical-align: middle;
+}
+
+.tmf-results-page #table6 td:nth-child(6),
+.tmf-results-page #table6 td:nth-child(8) {
+  max-width: 360px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.tmf-table-wrap {
+  overflow: hidden;
+}
+
+.tmf-row-error > td { background: #fff5f5 !important; }
+.tmf-row-warning > td { background: #fffaf0 !important; }
+.tmf-row-running > td { background: #ebf8ff !important; }
+
+@media (max-width: 767px) {
+  .tmf-results-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 </style>
-<div class="content-wrapper">    
+<div class="content-wrapper tmf-results-page">
     <section class="content-header">
       <h1>
         Transaction Monitoring Framework
@@ -55,11 +369,84 @@ pre {
     </div>
 
     <!-- Main content -->
-    <section id="main" class="content">
-      <div class="container">
-        <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning" style="margin-top: 15px;"><i class="fa fa-arrow-left"></i> Back to Query </a>
-        <div class="digital-clock pull-right" >00:00:00</div>
-      <div class="row" style="margin-top: 30px;">
+    <section id="main" class="content tmf-results-content">
+      <div class="container-fluid tmf-results-shell">
+        <div class="tmf-results-toolbar">
+          <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning"><i class="fa fa-arrow-left"></i> Back to Query</a>
+          <div class="digital-clock">00:00:00</div>
+        </div>
+        <div class="row tmf-results-summary">
+          <div class="col-lg-8 col-md-12 col-xs-12">
+            <div class="tmf-ops-card">
+              <h3><i class="fa fa-heartbeat"></i> Triage Board <small><?php echo number_format($totalJobs); ?> rows across <?php echo count($jobNames); ?> jobs and <?php echo count($environments); ?> environments</small></h3>
+              <div class="tmf-quick-filters">
+                <button type="button" class="btn btn-default btn-sm tmf-table-filter" data-filter="all"><i class="fa fa-list"></i> All</button>
+                <button type="button" class="btn btn-danger btn-sm tmf-table-filter" data-filter="error"><i class="fa fa-times"></i> Errors</button>
+                <button type="button" class="btn btn-warning btn-sm tmf-table-filter" data-filter="warning"><i class="fa fa-warning"></i> Warnings</button>
+                <button type="button" class="btn btn-info btn-sm tmf-table-filter" data-filter="running"><i class="fa fa-refresh"></i> Running</button>
+                <button type="button" class="btn btn-primary btn-sm tmf-table-filter" data-filter="attention"><i class="fa fa-bell"></i> Attention</button>
+              </div>
+              <?php if(!empty($attentionRows)) { ?>
+              <ul class="tmf-attention-list">
+                <?php foreach(array_slice($attentionRows, 0, 5) as $attentionRow) { ?>
+                <li>
+                  <span class="tmf-attention-main">
+                    <span class="tmf-attention-title"><?php echo html_escape($attentionRow['job_name']); ?></span>
+                    <span class="tmf-attention-meta">#<?php echo (int) $attentionRow['id']; ?> in <?php echo html_escape($attentionRow['environment']); ?> &middot; last activity <?php echo html_escape($attentionRow['last_activity']); ?></span>
+                  </span>
+                  <span class="label label-<?php echo ($attentionRow['status'] == 'error') ? 'danger' : (($attentionRow['status'] == 'warning') ? 'warning' : 'info'); ?>"><?php echo html_escape(ucfirst($attentionRow['status'])); ?></span>
+                </li>
+                <?php } ?>
+              </ul>
+              <?php } else { ?>
+              <div class="tmf-empty-note">No errors, warnings, or running rows in this result set.</div>
+              <?php } ?>
+            </div>
+          </div>
+          <div class="col-lg-4 col-md-12 col-xs-12">
+            <div class="tmf-ops-card">
+              <h3><i class="fa fa-tachometer"></i> Run Signals <small>Latest activity <?php echo html_escape($latestActivityLabel); ?></small></h3>
+              <span class="tmf-metric-label">Throughput</span>
+              <span class="tmf-metric-value"><?php echo $throughputRate; ?>%</span>
+              <span class="tmf-metric-foot"><?php echo number_format($totalProcessed); ?> processed of <?php echo number_format($totalRecords); ?> records</span>
+              <div class="tmf-throughput-bar"><div class="tmf-throughput-fill" style="width: <?php echo $throughputRate; ?>%;"></div></div>
+              <div class="tmf-status-strip">
+                <span class="tmf-status-pill tmf-status-running"><i class="fa fa-refresh"></i><?php echo number_format($running); ?> running</span>
+                <span class="tmf-status-pill tmf-status-error"><i class="fa fa-clock-o"></i><?php echo number_format($staleRunning); ?> stale</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 14px;">
+          <div class="col-lg-12 col-md-12 col-xs-12">
+            <div class="tmf-ops-card">
+              <h3><i class="fa fa-sort-amount-desc"></i> Slowest Runs <small>Use this to spot expensive jobs in the current query result</small></h3>
+              <?php if(!empty($slowestRows)) { ?>
+              <ul class="tmf-slowest-list">
+                <?php foreach($slowestRows as $slowestRow) { ?>
+                <li>
+                  <span class="tmf-slowest-main">
+                    <span class="tmf-slowest-title"><?php echo html_escape($slowestRow['job_name']); ?></span>
+                    <span class="tmf-slowest-meta"><?php echo html_escape($slowestRow['environment']); ?></span>
+                  </span>
+                  <span class="label label-primary"><?php echo html_escape(formatTmfDuration($slowestRow['duration'])); ?></span>
+                </li>
+                <?php } ?>
+              </ul>
+              <?php } else { ?>
+              <div class="tmf-empty-note">No completed duration data in this result set.</div>
+              <?php } ?>
+            </div>
+          </div>
+        </div>
+        <div class="tmf-status-strip">
+          <span class="tmf-status-pill tmf-status-ready"><i class="fa fa-check"></i><?php echo number_format($ready); ?> ready</span>
+          <span class="tmf-status-pill tmf-status-running"><i class="fa fa-refresh"></i><?php echo number_format($running); ?> running</span>
+          <span class="tmf-status-pill tmf-status-error"><i class="fa fa-times"></i><?php echo number_format($error); ?> error</span>
+          <span class="tmf-status-pill tmf-status-warning"><i class="fa fa-warning"></i><?php echo number_format($warning); ?> warning</span>
+          <span class="tmf-status-pill tmf-status-cancelled"><i class="fa fa-ban"></i><?php echo number_format($cancelled); ?> cancelled</span>
+        </div>
+      <div class="row" style="margin-top: 12px;">
         <div class="col-xs-12">
           <div class="box box-primary">
             <div class="overlay" style="display:none;">
@@ -69,7 +456,8 @@ pre {
               <h3 class="box-title"><b>Available Jobs</b></h3>
             </div>
             <!-- /.box-header -->
-            <div class="box-body">
+            <div class="box-body tmf-table-wrap">
+              <div class="table-responsive">
               <table id="table6" class="table table-bordered table-striped">
                 <thead>
                 <tr>
@@ -101,25 +489,21 @@ pre {
                         foreach($jobs as $record)
                         {
                     ?>
-                    <tr>
+                    <tr class="tmf-row-<?php echo html_escape(strtolower((string) $record->status)); ?>">
                       <td><?php echo '<span style="color:#3c8dbc;">'.$record->id.'</span>' ?></td>
                       <td id="status"><?php 
                       switch ($record->status) {
                           case 'ready':
                              echo '<span class="label label-success">Ready</span>';
-                             $ready = $ready + 1;
                               break;
                           case 'running':
                              echo '<a class="btn btn-sm btn-info cancel" title="Click to Cancel this job">Running</a>';
-                             $running = $running + 1;
                               break;
                           case 'error':
                              echo '<span class="label label-danger">Error</span>';
-                             $error = $error + 1;
                               break;
                           case 'warning':
                              echo '<span class="label label-warning">Warning</span>';
-                             $warning = $warning + 1;
                               break;
                             case 'cancelled':
                             case 'Cancelled':
@@ -139,7 +523,7 @@ pre {
                       <td><?php echo html_escape($record->environment); ?></td>
                       <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
                       <td><?php echo (int) $record->records_total; ?></td>
-                      <td><?php echo (int) $record->records_processed; ?></td>
+                      <td><?php $rowTotal = (int) $record->records_total; $rowProcessed = (int) $record->records_processed; $rowProgress = $rowTotal > 0 ? min(100, round(($rowProcessed / $rowTotal) * 100)) : 0; echo (int) $record->records_processed; ?><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-success" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
                       <td><?php echo date('m-d-Y H:i:s', strtotime($record->start_time)) ?></td>
                       <td><?php echo date('m-d-Y H:i:s', strtotime($record->last_activity)) ?></td>
                        <td><?php
@@ -186,6 +570,7 @@ pre {
                 </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
             <!-- /.box-body -->
           </div>
@@ -288,6 +673,25 @@ pre {
       if (ready == 0 && error == 0 && warning == 0 && running == 0){
         toastr.info("No data has been found on database.", "No Data Available");
       }
+
+      $('.tmf-table-filter').on('click', function() {
+        var filter = $(this).data('filter');
+        $('.tmf-table-filter').removeClass('active');
+        $(this).addClass('active');
+
+        if (! $.fn.DataTable || ! $.fn.DataTable.isDataTable('#table6')) {
+          return;
+        }
+
+        var table = $('#table6').DataTable();
+        if (filter == 'all') {
+          table.column(1).search('').draw();
+        } else if (filter == 'attention') {
+          table.column(1).search('Error|Warning|Running', true, false, true).draw();
+        } else {
+          table.column(1).search(String(filter), false, false, true).draw();
+        }
+      });
 
     //load 
  // $('#loading').fadeOut();

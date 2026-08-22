@@ -5,7 +5,152 @@
 </script>
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/bower_components/bootstrap-datepicker/dist/css/bootstrap-datepicker3.min.css" />
-<div class="content-wrapper">    
+<style>
+  .tmf-builder-page .content {
+    padding: 18px;
+  }
+
+  .tmf-shell {
+    max-width: 1560px;
+    width: 100%;
+  }
+
+  .tmf-hero {
+    align-items: center;
+    background: linear-gradient(135deg, #102a43 0%, #1f6f78 52%, #f2a154 100%);
+    border-radius: 6px;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    min-height: 112px;
+    overflow: hidden;
+    padding: 22px 24px;
+    position: relative;
+  }
+
+  .tmf-hero:after {
+    background: repeating-linear-gradient(135deg, rgba(255,255,255,.18) 0, rgba(255,255,255,.18) 1px, transparent 1px, transparent 12px);
+    bottom: 0;
+    content: "";
+    opacity: .35;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 34%;
+  }
+
+  .tmf-hero h2 {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+
+  .tmf-hero p {
+    color: rgba(255,255,255,.82);
+    margin: 0;
+  }
+
+  .tmf-hero .btn {
+    border: 0;
+    box-shadow: 0 8px 18px rgba(0,0,0,.18);
+    position: relative;
+    z-index: 1;
+  }
+
+  .tmf-summary-row {
+    padding-top: 18px;
+  }
+
+  .tmf-builder-page .info-box {
+    border: 1px solid #edf1f5;
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(16, 42, 67, .08);
+    min-height: 86px;
+  }
+
+  .tmf-builder-page .info-box-icon {
+    border-radius: 6px 0 0 6px;
+    height: 86px;
+    line-height: 86px;
+  }
+
+  .tmf-query-card {
+    background: #fff;
+    border: 1px solid #d8e0e8;
+    border-radius: 6px;
+    box-shadow: 0 10px 24px rgba(16, 42, 67, .08);
+    margin-top: 18px;
+    padding: 18px;
+  }
+
+  .tmf-query-card-header {
+    align-items: center;
+    border-bottom: 1px solid #edf1f5;
+    display: flex;
+    justify-content: space-between;
+    margin: -2px 0 18px;
+    padding-bottom: 12px;
+  }
+
+  .tmf-query-card-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .tmf-query-card-header span {
+    color: #6b7c8f;
+  }
+
+  .tmf-query-card .form-group label {
+    color: #243b53;
+    font-size: 12px;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+
+  .tmf-query-card .select2-container--default .select2-selection--multiple,
+  .tmf-query-card .form-control {
+    border-color: #d8e0e8;
+    border-radius: 4px;
+    min-height: 38px;
+  }
+
+  .tmf-date-shortcuts {
+    display: flex;
+    gap: 6px;
+    margin-top: 24px;
+  }
+
+  .tmf-date-shortcuts .btn {
+    flex: 1 1 auto;
+  }
+
+  .tmf-action-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 25px;
+  }
+
+  .tmf-action-group .btn {
+    min-width: 105px;
+  }
+
+  @media (max-width: 767px) {
+    .tmf-hero {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .tmf-date-shortcuts,
+    .tmf-action-group {
+      margin-top: 0;
+    }
+  }
+</style>
+<div class="content-wrapper tmf-builder-page">
     <section class="content-header">
       <h1>
         <i class="fa fa-dashboard"></i> Transaction Monitoring Framework <b>Query Builder</b>
@@ -18,10 +163,17 @@
     </section>
 
 
-    <section class="content">
+    <section class="content tmf-builder-content">
 
-      <div class="container">
-        <div class="row" style="padding-top: 15px;">
+      <div class="container-fluid tmf-shell">
+        <div class="tmf-hero animated fadeIn">
+          <div>
+            <h2>Transaction Monitor</h2>
+            <p>Build a precise TMF query across status, environment, job, dimensions, text, and run dates.</p>
+          </div>
+          <a href="<?php echo base_url(); ?>Tmf/data" class="btn btn-default"><i class="fa fa-table"></i> Open All Results</a>
+        </div>
+        <div class="row tmf-summary-row">
         <div class="col-md-3 col-sm-6 col-xs-12">
           <div class="info-box animated flipInX">
             <span class="info-box-icon bg-aqua"><i class="fa fa-pie-chart"></i></span>
@@ -80,8 +232,14 @@
         <!-- /.col -->
       </div>
        
-        <div class="row animated fadeIn" style="margin-top: 25px;">
+        <div class="tmf-query-card animated fadeIn">
+          <div class="tmf-query-card-header">
+            <h3><i class="fa fa-filter"></i> Query Filters</h3>
+            <span><?php echo count($listStatus); ?> statuses &middot; <?php echo count($listJobName); ?> jobs &middot; <?php echo count($listEnvironment); ?> environments</span>
+          </div>
            <form action="<?php echo base_url() ?>Tmf/fetchData" method="POST" id="searchList">
+            <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
+            <div class="row">
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
                   <label>Status</label>
@@ -161,7 +319,7 @@
                   </select>
                 </div>
               </div>
-          </div>
+           </div>
 
            <div class="row animated fadeIn" style="margin-top: 25px;">
               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
@@ -179,6 +337,13 @@
               <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
                 <input id="searchText" type="text" name="eventText" value="" class="form-control" placeholder="Event Text"/>
               </div>
+              <div class="col-lg-3 col-md-3 col-sm-12 col-xs-12 form-group">
+                <div class="tmf-date-shortcuts">
+                  <button type="button" class="btn btn-default tmf-date-shortcut" data-days="0">Today</button>
+                  <button type="button" class="btn btn-default tmf-date-shortcut" data-days="7">7 days</button>
+                  <button type="button" class="btn btn-default tmf-date-shortcut" data-days="30">30 days</button>
+                </div>
+              </div>
               
 
             </div>
@@ -193,16 +358,17 @@
                   </select>
                 </div>
               </div>
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group" style="margin-top: 25px;">
-                <button type="submit" class="btn btn-md btn-primary btn-block searchList pull-right"><i class="fa fa-search" aria-hidden="true"></i></button> 
-              </div>
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group" style="margin-top: 25px;">
-                <button type="reset" class="btn btn-md btn-default btn-block pull-right resetFilters"><i class="fa fa-refresh" aria-hidden="true"></i></button>
+              <div class="col-lg-4 col-md-5 col-sm-12 col-xs-12 form-group">
+                <div class="tmf-action-group">
+                  <button type="submit" class="btn btn-md btn-primary searchList"><i class="fa fa-search" aria-hidden="true"></i> Run Query</button>
+                  <button type="reset" class="btn btn-md btn-default resetFilters"><i class="fa fa-refresh" aria-hidden="true"></i> Reset</button>
+                </div>
               </div>
 
             </div>
             
          </form>
+        </div>
          
     </div>
       
@@ -219,7 +385,7 @@
 <script type="text/javascript">
   $(document).ready(function() {
     $('.select2').select2({
-       placeholder: " Click to Select a option to fetch",
+       placeholder: "Select filters",
        allowClear: true
     });
 
@@ -227,6 +393,23 @@
           autoclose: true,
           format : "dd-mm-yyyy"
         });
+
+      $('.tmf-date-shortcut').on('click', function() {
+        var days = parseInt($(this).data('days'), 10) || 0;
+        var endDate = new Date();
+        var startDate = new Date();
+        startDate.setDate(endDate.getDate() - days);
+        $('#fromDate').datepicker('setDate', startDate);
+        $('#toDate').datepicker('setDate', endDate);
+      });
+
+      $('.resetFilters').on('click', function() {
+        setTimeout(function() {
+          $('select[name="status[]"], select[name="job_name[]"], select[name="environment[]"], select[name="dimension[]"]').val(['*']).trigger('change');
+          $('select[name="reprocess"]').val('*');
+          $('#fromDate, #toDate, #searchText').val('');
+        }, 0);
+      });
 
       toastr.options = {
         "closeButton": true,
