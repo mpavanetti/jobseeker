@@ -335,6 +335,8 @@
     background: #252526;
     display: flex;
     min-height: 320px;
+    min-width: 0;
+    width: 100%;
   }
 
   .python-inline-sidebar {
@@ -380,6 +382,7 @@
   }
 
   .python-inline-file-list {
+    height: 100%;
     max-height: 314px;
     overflow: auto;
     padding: 6px 0;
@@ -526,12 +529,16 @@
   }
 
   .python-inline-editor-panel.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
   .python-inline-editor-panel .linux-code-editor {
     border: 0;
     border-radius: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
     min-height: 100%;
   }
 
@@ -543,8 +550,48 @@
   .linux-code-editor-body {
     align-items: stretch;
     display: flex;
+    flex: 1 1 auto;
     min-height: 240px;
+    min-width: 0;
   }
+
+  .linux-code-editor-source {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 240px;
+    min-width: 0;
+    position: relative;
+  }
+
+  .python-syntax-highlight {
+    background: #1e1e1e;
+    bottom: 0;
+    color: #d4d4d4;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    left: 0;
+    line-height: 20px;
+    margin: 0;
+    max-width: none;
+    min-height: 240px;
+    min-width: 100%;
+    overflow: hidden;
+    padding: 10px 12px;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 0;
+    white-space: pre;
+    word-break: normal;
+    word-wrap: normal;
+  }
+
+  .python-syntax-highlight .py-keyword { color: #569cd6; }
+  .python-syntax-highlight .py-builtin { color: #4ec9b0; }
+  .python-syntax-highlight .py-string { color: #ce9178; }
+  .python-syntax-highlight .py-comment { color: #6a9955; }
+  .python-syntax-highlight .py-number { color: #b5cea8; }
+  .python-syntax-highlight .py-decorator { color: #dcdcaa; }
 
   .linux-code-editor-lines {
     background: #1b1b1b;
@@ -561,7 +608,7 @@
   }
 
   .linux-code-editor textarea.form-control {
-    background: #1e1e1e;
+    background: transparent;
     border: 0;
     border-radius: 0;
     box-shadow: none;
@@ -571,9 +618,25 @@
     font-size: 13px;
     line-height: 20px;
     min-height: 240px;
+    min-width: 100%;
     padding: 10px 12px;
     resize: vertical;
     white-space: pre;
+    width: 100%;
+  }
+
+  .linux-code-editor textarea.python-highlighted-input {
+    color: transparent;
+    caret-color: #ffffff;
+    overflow: auto;
+    position: relative;
+    resize: none;
+    z-index: 1;
+  }
+
+  .linux-code-editor textarea.python-highlighted-input::selection {
+    background: rgba(38, 79, 120, 0.78);
+    color: transparent;
   }
 
   .linux-code-editor textarea.form-control:focus {
@@ -600,6 +663,38 @@
   .linux-code-editor-status span {
     margin-left: 12px;
   }
+
+  .python-lint-panel {
+    background: #252526;
+    border-top: 1px solid #333;
+    color: #cccccc;
+    display: none;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    max-height: 120px;
+    overflow: auto;
+    padding: 8px 12px;
+  }
+
+  .python-lint-panel.active {
+    display: block;
+  }
+
+  .python-lint-panel strong {
+    color: #dcdcaa;
+  }
+
+  .python-lint-panel ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+  }
+
+  .python-lint-panel li {
+    margin-bottom: 3px;
+  }
+
+  .python-lint-panel .python-lint-warning { color: #d7ba7d; }
+  .python-lint-panel .python-lint-error { color: #f48771; }
 
   .job-batch-tools {
     align-items: center;
@@ -961,6 +1056,78 @@
   #editableEmail .box-body {
     max-height: 540px;
     overflow-y: auto;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded > .col-lg-6 {
+    display: flex;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .box {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: clamp(650px, calc(100vh - 255px), 980px);
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .box-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    max-height: none;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .pythonSourceForm,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .pythonRuntimeForm,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .pythonInlineSourceForm {
+    flex: 0 0 auto;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .pythonInlineSourceForm {
+    display: flex !important;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .pythonInlineSourceForm > .col-md-12,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .pythonInlineSourceForm .form-group {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .python-inline-workspace {
+    flex: 1 1 auto;
+    min-height: clamp(430px, calc(100vh - 450px), 720px);
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .python-inline-file-list {
+    flex: 1 1 auto;
+    max-height: none;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .python-inline-main,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .python-inline-editor-panel,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor-body,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor-source,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor textarea.form-control,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .python-syntax-highlight {
+    min-height: 0;
+  }
+
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor-source,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor textarea.form-control,
+  .job-config-canvas #runlinuxCommand.python-inline-expanded .python-syntax-highlight {
+    height: 100%;
+  }
+
+  @media (max-width: 600px) {
+    .job-config-canvas #runlinuxCommand.python-inline-expanded .box {
+      min-height: 720px;
+    }
   }
 
   #myTable tr.jobRecentlySaved > td {
@@ -1868,8 +2035,12 @@
                                 </div>
                                 <div class="linux-code-editor-body">
                                   <div class="linux-code-editor-lines" id="pythonInlineCodeNumbers" aria-hidden="true">1</div>
-                                  <textarea class="form-control" id="pythonInlineCode" name="pythonInlineCode" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="def main():&#10;    print(&quot;Hello from JobSeeker&quot;)&#10;&#10;if __name__ == &quot;__main__&quot;:&#10;    main()"></textarea>
+                                  <div class="linux-code-editor-source">
+                                    <pre class="python-syntax-highlight" id="pythonInlineCodeHighlight" aria-hidden="true"></pre>
+                                    <textarea class="form-control python-highlighted-input" id="pythonInlineCode" name="pythonInlineCode" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="def main():&#10;    print(&quot;Hello from JobSeeker&quot;)&#10;&#10;if __name__ == &quot;__main__&quot;:&#10;    main()"></textarea>
+                                  </div>
                                 </div>
+                                <div class="python-lint-panel" id="pythonInlineLintPanel" aria-live="polite"></div>
                                 <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
                               </div>
                               </div>
@@ -1907,8 +2078,12 @@
                                   </div>
                                   <div class="linux-code-editor-body">
                                     <div class="linux-code-editor-lines" id="pythonInlineExtraCodeNumbers" aria-hidden="true">1</div>
-                                    <textarea class="form-control" id="pythonInlineExtraCode" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="def helper():&#10;    return &quot;ready&quot;"></textarea>
+                                    <div class="linux-code-editor-source">
+                                      <pre class="python-syntax-highlight" id="pythonInlineExtraCodeHighlight" aria-hidden="true"></pre>
+                                      <textarea class="form-control python-highlighted-input" id="pythonInlineExtraCode" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="def helper():&#10;    return &quot;ready&quot;"></textarea>
+                                    </div>
                                   </div>
+                                  <div class="python-lint-panel" id="pythonInlineExtraLintPanel" aria-live="polite"></div>
                                   <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
                                 </div>
                               </div>
@@ -3353,6 +3528,157 @@
         lineNumbers.scrollTop(editor.scrollTop());
       }
 
+      function escapePythonSyntaxHtml(value) {
+        return String(value || '').replace(/[&<>]/g, function(character) {
+          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character];
+        });
+      }
+
+      function renderPythonSyntaxLine(line) {
+        var tokens = [];
+        var tokenPattern = /("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|#.*|@[A-Za-z_][\w.]*|\b\d+(?:\.\d+)?\b|\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b|\b(?:abs|all|any|bool|dict|enumerate|filter|float|int|len|list|map|max|min|open|print|range|set|str|sum|tuple|zip)\b)/g;
+        var cursor = 0;
+        var match;
+
+        while ((match = tokenPattern.exec(line)) !== null) {
+          tokens.push(escapePythonSyntaxHtml(line.slice(cursor, match.index)));
+          var token = match[0];
+          var className = 'py-keyword';
+
+          if (token.charAt(0) === '#') {
+            className = 'py-comment';
+          } else if (token.charAt(0) === '\"' || token.charAt(0) === "'") {
+            className = 'py-string';
+          } else if (token.charAt(0) === '@') {
+            className = 'py-decorator';
+          } else if (/^\d/.test(token)) {
+            className = 'py-number';
+          } else if (/^(?:abs|all|any|bool|dict|enumerate|filter|float|int|len|list|map|max|min|open|print|range|set|str|sum|tuple|zip)$/.test(token)) {
+            className = 'py-builtin';
+          }
+
+          tokens.push('<span class="' + className + '">' + escapePythonSyntaxHtml(token) + '</span>');
+          cursor = match.index + token.length;
+        }
+
+        tokens.push(escapePythonSyntaxHtml(line.slice(cursor)));
+        return tokens.join('');
+      }
+
+      function renderPythonSyntaxHighlight(editor, highlight) {
+        if (! editor.length || ! highlight.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var rendered = $.map(value.split('\n'), function(line) {
+          return renderPythonSyntaxLine(line) || ' ';
+        }).join('\n');
+
+        highlight.html(rendered);
+        highlight.scrollTop(editor.scrollTop());
+        highlight.scrollLeft(editor.scrollLeft());
+      }
+
+      function stripPythonLineForLint(line) {
+        var cleaned = '';
+        var quote = '';
+        var escaped = false;
+
+        for (var index = 0; index < line.length; index++) {
+          var character = line.charAt(index);
+
+          if (quote !== '') {
+            if (escaped) {
+              escaped = false;
+            } else if (character === '\\') {
+              escaped = true;
+            } else if (character === quote) {
+              quote = '';
+            }
+            cleaned += ' ';
+            continue;
+          }
+
+          if (character === '#') {
+            break;
+          }
+
+          if (character === '"' || character === "'") {
+            quote = character;
+            cleaned += ' ';
+            continue;
+          }
+
+          cleaned += character;
+        }
+
+        return cleaned;
+      }
+
+      function lintPythonInlineCode(source) {
+        var issues = [];
+        var lines = String(source || '').split('\n');
+        var stack = [];
+        var pairs = { '(': ')', '[': ']', '{': '}' };
+        var closing = { ')': '(', ']': '[', '}': '{' };
+
+        $.each(lines, function(index, line) {
+          var lineNumber = index + 1;
+          var trimmed = $.trim(line);
+          var codeOnly = stripPythonLineForLint(line);
+
+          if (/\t/.test(line)) {
+            issues.push({ type: 'warning', line: lineNumber, text: 'Tab indentation detected. Prefer spaces for Python blocks.' });
+          }
+
+          if (/\s+$/.test(line)) {
+            issues.push({ type: 'warning', line: lineNumber, text: 'Trailing whitespace.' });
+          }
+
+          if (/^(if|elif|else|for|while|def|class|try|except|finally|with)\b/.test(trimmed) && stripPythonLineForLint(trimmed).indexOf(':') === -1) {
+            issues.push({ type: 'error', line: lineNumber, text: 'Likely missing colon at the end of this block statement.' });
+          }
+
+          for (var cursor = 0; cursor < codeOnly.length; cursor++) {
+            var character = codeOnly.charAt(cursor);
+            if (pairs[character]) {
+              stack.push({ character: character, line: lineNumber });
+            } else if (closing[character]) {
+              var expected = closing[character];
+              var last = stack.pop();
+              if (! last || last.character !== expected) {
+                issues.push({ type: 'error', line: lineNumber, text: 'Unmatched closing bracket ' + character + '.' });
+              }
+            }
+          }
+        });
+
+        $.each(stack, function(index, item) {
+          issues.push({ type: 'error', line: item.line, text: 'Unclosed bracket ' + item.character + '.' });
+        });
+
+        return issues.slice(0, 8);
+      }
+
+      function renderPythonLintPanel(panel, issues) {
+        if (! panel.length) {
+          return;
+        }
+
+        if (! issues.length) {
+          panel.removeClass('active').empty();
+          return;
+        }
+
+        var html = ['<strong><i class="fa fa-exclamation-triangle"></i> Python checks</strong><ul>'];
+        $.each(issues, function(index, issue) {
+          html.push('<li class="python-lint-' + issue.type + '">Line ' + issue.line + ': ' + escapePythonSyntaxHtml(issue.text) + '</li>');
+        });
+        html.push('</ul>');
+        panel.addClass('active').html(html.join(''));
+      }
+
       function updatePythonInlineEditor() {
         var editor = $('#pythonInlineCode');
         var lineNumbers = $('#pythonInlineCodeNumbers');
@@ -3372,6 +3698,8 @@
 
         lineNumbers.html(lines.join('<br>'));
         lineNumbers.scrollTop(editor.scrollTop());
+        renderPythonSyntaxHighlight(editor, $('#pythonInlineCodeHighlight'));
+        renderPythonLintPanel($('#pythonInlineLintPanel'), lintPythonInlineCode(value));
         $('#pythonInlineEditorFile, #pythonInlineEditorActiveFile').text($.trim($('#pythonEntryPoint').val()) || 'main.py');
       }
 
@@ -3436,6 +3764,8 @@
 
         lineNumbers.html(lines.join('<br>'));
         lineNumbers.scrollTop(editor.scrollTop());
+        renderPythonSyntaxHighlight(editor, $('#pythonInlineExtraCodeHighlight'));
+        renderPythonLintPanel($('#pythonInlineExtraLintPanel'), lintPythonInlineCode(value));
         $('#pythonInlineExtraTabFile, #pythonInlineExtraEditorFile').text(pythonInlineActiveExtraPath || 'lib.py');
       }
 
@@ -4761,6 +5091,7 @@
         $('.pythonPathSourceForm').toggle(isPythonScript && sourceMode == 'path');
         $('.pythonGitSourceForm').toggle(isPythonScript && sourceMode == 'git');
         $('.pythonInlineSourceForm').toggle(isInlinePythonExecution);
+        $('#runlinuxCommand').toggleClass('python-inline-expanded', $('#linuxCommand').is(':checked') && isInlinePythonExecution);
         $('#pythonWorkspaceLabel').text('Inline Python Workspace');
 
         if (isInlinePythonExecution && $.trim($('#pythonEntryPoint').val()) === '') {
