@@ -60,6 +60,7 @@ class Tmf extends BaseController
             $environment = $this->input->post('environment');
 
             $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment);
+            $data["role"] = $this->isManager();
 
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
@@ -70,6 +71,7 @@ class Tmf extends BaseController
     {
        
             $data["jobs"] = $this->model->fetchDataStatus($status);
+            $data["role"] = $this->isManager();
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
                
@@ -79,6 +81,7 @@ class Tmf extends BaseController
     {
        
             $data["jobs"] = $this->model->fetchDataJobName($jobName);
+            $data["role"] = $this->isManager();
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
                

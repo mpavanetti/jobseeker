@@ -4,6 +4,26 @@
 class Tmf_model extends CI_Model
 {
 
+    private function parseFilterDate($value, $endOfDay)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $date = DateTime::createFromFormat('d-m-Y', $value);
+        if ($date === false) {
+            $timestamp = strtotime($value);
+            if ($timestamp === false) {
+                return '';
+            }
+            $date = new DateTime(date('Y-m-d', $timestamp));
+        }
+
+        $date->setTime($endOfDay ? 23 : 0, $endOfDay ? 59 : 0, $endOfDay ? 59 : 0);
+        return $date->format('Y-m-d H:i:s');
+    }
+
     function listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment) {
 
         $this->db->select('*');
@@ -48,14 +68,17 @@ class Tmf_model extends CI_Model
 
         // Check Dates From date and To Date (Interval between dates)
         if ($fromDate !== '' || $toDate !== '') {
-	        $startDate = $fromDate !== '' ? date('Y-m-d 00:00:00', strtotime($fromDate)) : date('2010-01-01 00:00:00');
-	        $endDate = $toDate !== '' ? date('Y-m-d 23:59:59', strtotime($toDate)) : date('Y-m-d 23:59:59');
+            $startDate = $this->parseFilterDate($fromDate, false);
+            $endDate = $this->parseFilterDate($toDate, true);
+            $startDate = $startDate !== '' ? $startDate : '2010-01-01 00:00:00';
+            $endDate = $endDate !== '' ? $endDate : date('Y-m-d 23:59:59');
 			$this->db->where('start_time >=',$startDate);
 			$this->db->where('start_time <=',$endDate);
         }
 
        
 
+        $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();
         
@@ -65,6 +88,7 @@ class Tmf_model extends CI_Model
 
         $this->db->select('*');
         $this->db->from('tmf');
+        $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();
     }
@@ -83,6 +107,7 @@ class Tmf_model extends CI_Model
         $this->db->select('*');
         $this->db->from('tmf');
         $this->db->where('status', $status);
+        $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();
     }
@@ -92,6 +117,7 @@ class Tmf_model extends CI_Model
         $this->db->select('*');
         $this->db->from('tmf');
         $this->db->where('job_name', $jobName);
+        $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();
     }
