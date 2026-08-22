@@ -360,12 +360,19 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       return true;
     }
 
+    function applyEnvironmentTheme(value) {
+      var environment = coerceToOption(value || readStored());
+      $('body').attr('data-jobseeker-environment', environment);
+    }
+
     function syncControls(value) {
       value = coerceToOption(value || readStored());
 
       if (dashboardRedirecting) {
         return;
       }
+
+      applyEnvironmentTheme(value);
 
       $('#monitorEnvironmentFilter, #jobEnvironmentFilter, #deleteEnvironmentFilter, #environment, select[name="environment[]"]').each(function() {
         syncControl($(this), value);
@@ -441,6 +448,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       scheduleApply: scheduleApply,
       selected: function() { return coerceToOption($('#globalEnvironmentSelector').val() || readStored()); },
       set: set,
+      applyEnvironmentTheme: applyEnvironmentTheme,
       syncControls: syncControls,
       storageKey: storageKey
     };
@@ -498,31 +506,88 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 <style>
-  .skin-purple .main-header .navbar { 
-    background: #8E2DE2; 
-    background: -webkit-linear-gradient(to right, #4A00E0, #8E2DE2); 
-    background: linear-gradient(to right, #4A00E0, #8E2DE2); !important 
+  body {
+    --jobseeker-env-navbar-start: #4A00E0;
+    --jobseeker-env-navbar-end: #8E2DE2;
+    --jobseeker-env-navbar-hover: #500ceb;
+    --jobseeker-env-accent: #5b21b6;
+    --jobseeker-env-shadow: rgba(46, 12, 107, .18);
+  }
+
+  body[data-jobseeker-environment="DEV"] {
+    --jobseeker-env-navbar-start: #0f4c81;
+    --jobseeker-env-navbar-end: #2563eb;
+    --jobseeker-env-navbar-hover: #1d4ed8;
+    --jobseeker-env-accent: #1e40af;
+    --jobseeker-env-shadow: rgba(30, 64, 175, .22);
+  }
+
+  body[data-jobseeker-environment="QA"] {
+    --jobseeker-env-navbar-start: #047857;
+    --jobseeker-env-navbar-end: #14b8a6;
+    --jobseeker-env-navbar-hover: #0f766e;
+    --jobseeker-env-accent: #047857;
+    --jobseeker-env-shadow: rgba(4, 120, 87, .2);
+  }
+
+  body[data-jobseeker-environment="UAT"] {
+    --jobseeker-env-navbar-start: #7c3aed;
+    --jobseeker-env-navbar-end: #0ea5e9;
+    --jobseeker-env-navbar-hover: #6d28d9;
+    --jobseeker-env-accent: #6d28d9;
+    --jobseeker-env-shadow: rgba(109, 40, 217, .22);
+  }
+
+  body[data-jobseeker-environment="PREPROD"],
+  body[data-jobseeker-environment="HML"] {
+    --jobseeker-env-navbar-start: #b45309;
+    --jobseeker-env-navbar-end: #f59e0b;
+    --jobseeker-env-navbar-hover: #92400e;
+    --jobseeker-env-accent: #b45309;
+    --jobseeker-env-shadow: rgba(180, 83, 9, .2);
+  }
+
+  body[data-jobseeker-environment="PROD"] {
+    --jobseeker-env-navbar-start: #7f1d1d;
+    --jobseeker-env-navbar-end: #dc2626;
+    --jobseeker-env-navbar-hover: #991b1b;
+    --jobseeker-env-accent: #991b1b;
+    --jobseeker-env-shadow: rgba(153, 27, 27, .24);
+  }
+
+  body[data-jobseeker-environment="LOCAL"] {
+    --jobseeker-env-navbar-start: #334155;
+    --jobseeker-env-navbar-end: #64748b;
+    --jobseeker-env-navbar-hover: #475569;
+    --jobseeker-env-accent: #334155;
+    --jobseeker-env-shadow: rgba(51, 65, 85, .2);
+  }
+
+  .skin-purple .main-header .navbar {
+    background: var(--jobseeker-env-navbar-end) !important;
+    background: -webkit-linear-gradient(to right, var(--jobseeker-env-navbar-start), var(--jobseeker-env-navbar-end)) !important;
+    background: linear-gradient(to right, var(--jobseeker-env-navbar-start), var(--jobseeker-env-navbar-end)) !important;
   }
 
   .skin-purple .main-header .logo {
-    background: #4A00E0; 
+    background: var(--jobseeker-env-navbar-start) !important;
 
   }
 
   .skin-purple .main-header .navbar .sidebar-toggle:hover {
-    background: #500ceb;
+    background: var(--jobseeker-env-navbar-hover);
   }
 
   .skin-purple .main-header .logo:hover {
-    background-color: #500ceb;
+    background-color: var(--jobseeker-env-navbar-hover) !important;
   }
 
   .skin-purple .sidebar-menu>li.active>a {
-    border-left-color: #500ceb;
+    border-left-color: var(--jobseeker-env-navbar-hover);
   }
 
   .skin-purple .main-header li.user-header {
-    background-color: #500ceb;
+    background-color: var(--jobseeker-env-navbar-hover);
   }
 
   .jobseeker-global-environment {
@@ -535,7 +600,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     background: rgba(255,255,255,.14);
     border: 1px solid rgba(255,255,255,.28);
     border-radius: 999px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 8px 18px rgba(46, 12, 107, .18);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 8px 18px var(--jobseeker-env-shadow);
     display: flex;
     gap: 9px;
     min-height: 36px;
@@ -547,7 +612,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     align-items: center;
     background: rgba(255,255,255,.92);
     border-radius: 50%;
-    color: #5b21b6;
+    color: var(--jobseeker-env-accent);
     display: inline-flex;
     height: 24px;
     justify-content: center;

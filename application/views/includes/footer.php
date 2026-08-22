@@ -89,16 +89,28 @@
  
 
     <script type="text/javascript">
-        var windowURL = window.location.href;
-        pageURL = windowURL.substring(0, windowURL.lastIndexOf('/'));
-        var x= $('a[href="'+pageURL+'"]');
-            x.addClass('active');
-            x.parent().addClass('active');
-        var y= $('a[href="'+windowURL+'"]');
-            y.addClass('active');
-            y.parent().addClass('active');
+        (function() {
+            function sidebarUrlKey(url) {
+                var link = document.createElement('a');
+                link.href = url;
 
-                $('.sidebar-menu li.active').parents('li.treeview').addClass('active menu-open').children('.treeview-menu').show();
+                return link.origin + link.pathname.replace(/\/+$/, '').toLowerCase();
+            }
+
+            var currentKey = sidebarUrlKey(window.location.href);
+            var activeLink = $();
+
+            $('.sidebar-menu a[href]').each(function() {
+                if (sidebarUrlKey(this.href) === currentKey) {
+                    activeLink = $(this);
+                    return false;
+                }
+            });
+
+            activeLink.addClass('active');
+            activeLink.parent().addClass('active');
+            $('.sidebar-menu li.active').parents('li.treeview').addClass('active menu-open').children('.treeview-menu').show();
+        })();
         </script>
 
         <script type="text/javascript">

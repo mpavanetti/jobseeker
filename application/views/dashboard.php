@@ -2,6 +2,7 @@
   $hasJobsAmount = !empty($jobsAmount);
   $hasJobsStatusAmount = !empty($jobsStatusAmount);
   $hasEnvironmentSummary = !empty($environmentSummary);
+  $dashboardEnvironmentLabel = (isset($selectedEnvironment) && $selectedEnvironment !== '' && strtolower((string) $selectedEnvironment) !== 'all') ? strtoupper((string) $selectedEnvironment) : 'All environments';
  ?>
  <script>
   $(document).ready(function(){
@@ -119,6 +120,23 @@
     width: 100%;
   }
 
+  .dashboard-environment-scope {
+    align-items: center;
+    background: #f7fbff;
+    border: 1px solid #dbe8f4;
+    border-radius: 5px;
+    color: #2f4054;
+    display: inline-flex;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 7px 10px;
+  }
+
+  .dashboard-environment-scope .label {
+    font-size: 12px;
+    padding: 4px 7px;
+  }
+
   .dashboard-card > .box-body {
     flex: 1 1 auto;
   }
@@ -223,6 +241,11 @@
     </section>
 
     <div id="loading">
+      <div class="dashboard-environment-scope">
+        <i class="fa fa-globe"></i>
+        <span>Metrics scoped to</span>
+        <span class="label label-primary"><?php echo html_escape($dashboardEnvironmentLabel); ?></span>
+      </div>
       <div class="row" style="margin-top: 15px;">
         <div class="container text-center">
           <img class="img img-responsive" src="<?php echo base_url(); ?>assets/images/gifs/loading.gif" style="display: inline;">
