@@ -828,6 +828,46 @@
   .python-lint-panel .python-lint-warning { color: #d7ba7d; }
   .python-lint-panel .python-lint-error { color: #f48771; }
 
+  .python-preview-panel {
+    background: #1e1e1e;
+    border-top: 1px solid #333;
+    color: #cccccc;
+    display: none;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    max-height: 220px;
+    overflow: auto;
+    padding: 10px 12px;
+  }
+
+  .python-preview-panel.active {
+    display: block;
+  }
+
+  .python-preview-panel strong {
+    color: #dcdcaa;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .python-preview-panel.python-preview-success strong {
+    color: #89d185;
+  }
+
+  .python-preview-panel.python-preview-failed strong {
+    color: #f48771;
+  }
+
+  .python-preview-panel pre {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    margin: 0;
+    padding: 0;
+    white-space: pre-wrap;
+  }
+
   .job-batch-tools {
     align-items: center;
     display: flex;
@@ -1740,6 +1780,7 @@
             <tr>
               <th>Build Situation</th>
             <th>Job Name</th>
+            <th>Environment</th>
             <th>Created</th>
             <th>Actions</th>
             </tr>
@@ -1750,6 +1791,7 @@
            <tr>
             <th>Build Situation</th>
             <th>Job Name</th>
+            <th>Environment</th>
             <th>Created</th>
             <th>Actions</th>
           </tr>
@@ -2188,6 +2230,7 @@
                                 <div class="linux-code-editor-bar">
                                   <span class="linux-code-editor-tab"><i class="fa fa-code"></i> <span id="pythonInlineEditorActiveFile">main.py</span></span>
                                   <span class="linux-code-editor-actions">
+                                    <button type="button" class="btn btn-xs" id="runPythonInlinePreview" title="Run with Jenkins Python"><i class="fa fa-play"></i></button>
                                     <button type="button" class="btn btn-xs" id="applyPythonInlineTemplate" title="Insert JobSeeker template"><i class="fa fa-magic"></i></button>
                                     <span class="linux-code-editor-meta">python</span>
                                   </span>
@@ -2200,6 +2243,7 @@
                                   </div>
                                 </div>
                                 <div class="python-lint-panel" id="pythonInlineLintPanel" aria-live="polite"></div>
+                                <div class="python-preview-panel" id="pythonInlinePreviewPanel" aria-live="polite"></div>
                                 <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
                               </div>
                               </div>
@@ -2950,6 +2994,10 @@
         applyPythonInlineJobSeekerTemplate(true);
       });
 
+      $('#runPythonInlinePreview').on('click', function() {
+        runPythonInlinePreview();
+      });
+
       $('.python-inline-tabs').on('click', '.python-inline-tab', function(event) {
         var pane = $(this).attr('data-python-inline-pane');
         if ($(event.target).closest('.python-inline-tab-close').length) {
@@ -3026,6 +3074,7 @@
         return [
           'import sys',
           'import time',
+          'import os',
           'from os import path',
           '',
           'from jobseeker import JobSeeker',
@@ -3033,17 +3082,20 @@
           '',
           'JOB_NAME = path.basename(__file__).replace(".py", "")',
           'ENVIRONMENT = sys.argv[1] if len(sys.argv) > 1 else "LOCAL"',
+          'PREVIEW = os.getenv("JOBSEEKER_PREVIEW") == "1"',
           '',
           '',
           'def operation():',
           '    with JobSeeker(environment=ENVIRONMENT, job=JOB_NAME) as js:',
           '        with js.task("Inline Python Job", "DW_Master") as tmf:',
           '            rows = tmf.context("rows", cast=int, default=5)',
+          '            rows = min(rows, 5) if PREVIEW else rows',
+          '            wait_seconds = 0.2 if PREVIEW else 1',
           '',
           '            for index in range(1, rows + 1):',
           '                print("Processing row {}/{}".format(index, rows))',
           '                tmf.progress(total=rows, processed=index, msg="Processed {} of {} rows".format(index, rows))',
-          '                time.sleep(1)',
+          '                time.sleep(wait_seconds)',
           '',
           '            tmf.finish(total=rows, processed=rows, msg="Inline JobSeeker Python job completed")',
           '',
@@ -3277,10 +3329,15 @@
         $.ajax({
           url: '<?php echo base_url(); ?>jobCreation/availableJobs',
           type: 'GET',
-          dataType: 'json'
+          dataType: 'json',
+          data: availableJobsRequestData()
         }).done(function(response) {
           rememberAvailableJobs(response && response.jobs ? response.jobs : []);
-        }).fail(function(xhr) {
+        }).fail(function(xhr, textStatus) {
+          if (textStatus === 'abort' || (xhr && xhr.status === 0)) {
+            return;
+          }
+
           var message = xhr && xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Failed to fetch available jobs from server';
           toastr.error(message, 'Job Graph');
         }).always(function() {
@@ -4247,6 +4304,7 @@
         $('.python-inline-tab').removeClass('active').filter('[data-python-inline-pane="' + pythonInlineActivePane + '"]').addClass('active');
         $('.python-inline-editor-panel').removeClass('active').filter('[data-python-inline-pane="' + pythonInlineActivePane + '"]').addClass('active');
         $('#pythonInlineEmptyState').toggleClass('active', pythonInlineActivePane === '');
+        $('#runPythonInlinePreview').toggle(isInline);
 
         var rows = [];
         if (isInline) {
@@ -4544,6 +4602,77 @@
         });
 
         return sourceRequest;
+      }
+
+      function renderPythonInlinePreview(state, title, output) {
+        var panel = $('#pythonInlinePreviewPanel');
+        panel
+          .removeClass('python-preview-success python-preview-failed')
+          .addClass('active')
+          .toggleClass('python-preview-success', state === 'success')
+          .toggleClass('python-preview-failed', state === 'failed')
+          .html('<strong>' + escapeHtml(title) + '</strong><pre>' + escapeHtml(output || '') + '</pre>');
+      }
+
+      function pythonInlinePreviewError(xhr, fallback) {
+        if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+          return xhr.responseJSON.message;
+        }
+
+        if (xhr && xhr.responseText) {
+          return xhr.responseText;
+        }
+
+        return fallback || 'Unable to run the inline Python preview.';
+      }
+
+      function runPythonInlinePreview() {
+        if (! pythonWorkspaceAllowsInlineCode()) {
+          toastr.warning('Select Inline Workspace before running the Python preview.', 'Inline Python');
+          return;
+        }
+
+        if (! requireConcreteGlobalEnvironment()) {
+          return;
+        }
+
+        syncPythonInlineFilesInput();
+
+        var button = $('#runPythonInlinePreview');
+        var originalHtml = button.html();
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+        renderPythonInlinePreview('running', 'Running with Jenkins Python...', 'Waiting for Jenkins to start the temporary preview job.');
+
+        $.ajax({
+          type: 'POST',
+          url: '<?php echo base_url(); ?>jobCreation/runInlinePythonPreview',
+          dataType: 'json',
+          data: {
+            environment: $('#environment').val() || '',
+            pythonEntryPoint: $('#pythonEntryPoint').val() || 'main.py',
+            pythonInlineCode: $('#pythonInlineCode').val() || '',
+            pythonRequirementsText: $('#pythonRequirementsText').val() || '',
+            pythonInlineFilesJson: $('#pythonInlineFilesJson').val() || '{"files":[],"directories":[]}',
+            pythonVersion: $('#pythonVersion').val() || 'python3'
+          }
+        }).done(function(response) {
+          var ok = !!(response && response.ok);
+          var output = response && response.output ? response.output : '';
+          var title = response && response.message ? response.message : (ok ? 'Inline Python preview succeeded.' : 'Inline Python preview failed.');
+
+          renderPythonInlinePreview(ok ? 'success' : 'failed', title, output || 'Jenkins finished without console output.');
+          if (ok) {
+            toastr.success('Inline Python ran successfully on Jenkins.', 'Inline Python');
+          } else {
+            toastr.error(title, 'Inline Python');
+          }
+        }).fail(function(xhr) {
+          var message = pythonInlinePreviewError(xhr, 'Unable to run the inline Python preview.');
+          renderPythonInlinePreview('failed', 'Inline Python preview could not start.', message);
+          toastr.error(message, 'Inline Python');
+        }).always(function() {
+          button.prop('disabled', false).html(originalHtml);
+        });
       }
 
       function selectedText(selector, fallback) {
@@ -5014,6 +5143,9 @@
         $('.linuxScriptTypeForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script');
         $('.linuxCommandForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'command');
         updatePythonSourceControls();
+        if ($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() != '0') {
+          syncLinuxScriptUpload();
+        }
         syncLinuxExecutionChoiceControls();
         syncOptionCards();
       }
@@ -5387,7 +5519,7 @@
         updatePythonRuntimeControls();
         renderPythonInlineWorkspace();
 
-        if (! isPythonScript || sourceMode != 'upload') {
+        if (! isScriptExecution || scriptType == '0' || scriptType == '' || (isPythonScript && sourceMode != 'upload')) {
           $('.linuxUploadScript').hide();
           $('.destroyDropzone').remove();
         }
@@ -5420,8 +5552,8 @@
           return;
         }
 
-        var acceptedFiles = scriptType == 'python' ? '.py,.zip' : '.zip';
-        var uploadMessage = scriptType == 'python' ? 'Drop Python .py or .zip files here or click to upload.' : 'Drop zip files here or click to upload.';
+        var acceptedFiles = scriptType == 'python' ? '.py,.zip' : (scriptType == 'bash' ? '.sh,.zip' : '.zip');
+        var uploadMessage = scriptType == 'python' ? 'Drop Python .py or .zip files here or click to upload.' : (scriptType == 'bash' ? 'Drop Bash .sh or .zip files here or click to upload.' : 'Drop Talend zip packages here or click to upload.');
         $('.linuxUploadScript').show();
         $('.destroyDropzone').remove();
         $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>' + uploadMessage + '</b></h3><BR></DIV></form></DIV>'));
@@ -5754,14 +5886,23 @@
 
     function availableJobMatchesGlobalEnvironment(rowOrItem) {
       var row = rowOrItem && rowOrItem.row ? rowOrItem.row : rowOrItem;
+      var selectedEnvironment = currentGlobalEnvironmentValue();
+
+      if (selectedEnvironment === 'all') {
+        return true;
+      }
+
       var environment = normalizeGlobalEnvironment(availableJobEnvironmentText(row));
 
       if (! isConfiguredGlobalEnvironment(environment)) {
         return false;
       }
 
-      var selectedEnvironment = currentGlobalEnvironmentValue();
-      return selectedEnvironment === 'all' || environment === normalizeGlobalEnvironment(selectedEnvironment);
+      return environment === normalizeGlobalEnvironment(selectedEnvironment);
+    }
+
+    function availableJobsRequestData() {
+      return {environment: currentGlobalEnvironmentValue()};
     }
 
     function hydrateAvailableJobEnvironment(item) {
@@ -6864,15 +7005,22 @@ function loadTable () {
         $('#myTable').DataTable({
           "lengthMenu": [3,5,10,13,20,100,200,500,1000,2000,5000],
           "pageLength": 5,
-          "order": [[ 2, "desc" ], [ 1, "asc" ]],
+          "order": [[ 3, "desc" ], [ 1, "asc" ]],
           "ajax": {
             "url": '<?php echo base_url(); ?>jobCreation/availableJobs',
             "type": 'GET',
+            "data": function(request) {
+              $.extend(request, availableJobsRequestData());
+            },
             "dataSrc": function(response) {
               rememberAvailableJobs(response && response.jobs ? response.jobs : []);
               return response && response.jobs ? response.jobs : [];
             },
-            "error": function(xhr) {
+            "error": function(xhr, textStatus) {
+              if (textStatus === 'abort' || (xhr && xhr.status === 0)) {
+                return;
+              }
+
               var message = xhr && xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Failed to refresh available jobs.';
               toastr.error(message, 'Available Jobs');
             }
@@ -6880,6 +7028,7 @@ function loadTable () {
           "columns": [
           {"data": "color"},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return escapeHtml(jobNameFromRow(row)); }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){ return type === 'sort' || type === 'type' ? availableJobEnvironmentText(row) : environmentHelper.label(availableJobEnvironmentInfo(row)); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderJobCreationDate(jobNameFromRow(row), type); }},
           {"data": null, "defaultContent": ""}
           ],
@@ -6895,7 +7044,7 @@ function loadTable () {
                  return '<img class="img img-responsive" width="32" height="32" src="<?php echo base_url(); ?>assets/images/items/loading.gif">';
               }
             } else {return ''}
-          }}, {targets:3, orderable:false, searchable:false, className:'available-job-actions-cell', width:'230px', render:function(data, type, row){
+          }}, {targets:4, orderable:false, searchable:false, className:'available-job-actions-cell', width:'230px', render:function(data, type, row){
             var jobName = jobNameFromRow(row);
             var build = row && row.lastBuild ? row.lastBuild : {};
             var buildNumber = build.number || '';
@@ -6927,10 +7076,12 @@ updateJobCreationReview();
 
 $(document).on('jobseeker:environment-change', function() {
   syncEnvironmentFromGlobal(true);
+  availableJobCache = [];
+  ensureAvailableJobsLoaded(true);
   updateJobFlowSelectOptions();
   renderJobPipelineGraph();
   if ($.fn.DataTable.isDataTable('#myTable')) {
-    $('#myTable').DataTable().draw(false);
+    $('#myTable').DataTable().ajax.reload(null, true);
   }
   updateJobCreationReview();
 });

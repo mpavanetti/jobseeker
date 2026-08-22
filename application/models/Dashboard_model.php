@@ -66,30 +66,36 @@ class Dashboard_model extends CI_Model
         $this->db->group_end();
     }
 
+    private function applyDashboardFilter($environment) {
+        $this->db->group_start();
+        $this->db->where('job_name IS NULL', null, false);
+        $this->db->or_where('LEFT(job_name, 12) <> '.$this->db->escape('__jobseeker_'), null, false);
+        $this->db->group_end();
+        $this->applyEnvironmentFilter($environment);
+    }
+
     private function environmentSql($environment, $prefix = 'WHERE') {
         $environment = $this->normalizeEnvironmentFilter($environment);
-
-        if ($environment === '') {
-            return '';
-        }
+        $conditions = array('(job_name IS NULL OR LEFT(job_name, 12) <> '.$this->db->escape('__jobseeker_').')');
 
         if ($environment === '__UNKNOWN__') {
-            return ' '.$prefix.' (environment IS NULL OR TRIM(environment) = "")';
+            $conditions[] = '(environment IS NULL OR TRIM(environment) = "")';
+        } else if ($environment !== '') {
+            $environmentConditions = array();
+            foreach ($this->environmentFilterValues($environment) as $value) {
+                $environmentConditions[] = 'UPPER(TRIM(environment)) = '.$this->db->escape($value);
+            }
+            $conditions[] = '('.implode(' OR ', $environmentConditions).')';
         }
 
-        $conditions = array();
-        foreach ($this->environmentFilterValues($environment) as $value) {
-            $conditions[] = 'UPPER(TRIM(environment)) = '.$this->db->escape($value);
-        }
-
-        return ' '.$prefix.' ('.implode(' OR ', $conditions).')';
+        return ' '.$prefix.' '.implode(' AND ', $conditions);
     }
 
 	function getLastjobs($environment = '') {
 
         $this->db->select('status,job_name,event_text,records_processed,environment');
         $this->db->from('tmf');
-        $this->applyEnvironmentFilter($environment);
+        $this->applyDashboardFilter($environment);
         $this->db->order_by('id', 'DESC');
         $this->db->limit(6);
         $query = $this->db->get();
@@ -100,8 +106,8 @@ class Dashboard_model extends CI_Model
 
         $this->db->select('*');
         $this->db->from('tmf');
-        $this->db->where('status', $status);
-        $this->applyEnvironmentFilter($environment);
+        $this->db->where('LOWER(status) =', strtolower((string) $status));
+        $this->applyDashboardFilter($environment);
         $query = $this->db->get();
         return $query->num_rows();
     }
@@ -109,7 +115,7 @@ class Dashboard_model extends CI_Model
     function countAll($environment = ''){
 
         $this->db->from('tmf');
-        $this->applyEnvironmentFilter($environment);
+    $this->applyDashboardFilter($environment);
         $query = $this->db->get();
         return $query->num_rows();
     }
@@ -225,7 +231,7 @@ class Dashboard_model extends CI_Model
     }
 
     function jobsStatusAmount($environment = '') {
-	    $query = $this->db->query('SELECT JOB_NAME,DIMENSION,STATUS,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") AS ENVIRONMENT,COUNT(STATUS) AS AMOUNT FROM tmf'.$this->environmentSql($environment).' GROUP BY JOB_NAME,DIMENSION,STATUS,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") ORDER BY DIMENSION ASC, ENVIRONMENT ASC');
+        $query = $this->db->query('SELECT JOB_NAME,DIMENSION,LOWER(STATUS) AS STATUS,COALESCE(NULLIF(TRIM(environment), ""), "Unknown") AS ENVIRONMENT,COUNT(STATUS) AS AMOUNT FROM tmf'.$this->environmentSql($environment).' GROUP BY JOB_NAME,DIMENSION,LOWER(STATUS),COALESCE(NULLIF(TRIM(environment), ""), "Unknown") ORDER BY DIMENSION ASC, ENVIRONMENT ASC');
     	return $query->result();
     }
 

@@ -354,6 +354,18 @@
                 </select>
               </div>
               <div class="form-group">
+                <label for="jobStatusFilter">Filter by status</label>
+                <select id="jobStatusFilter" class="form-control">
+                  <option value="all">All statuses</option>
+                  <option value="healthy">Healthy / Success</option>
+                  <option value="running">Running</option>
+                  <option value="queued">Queued</option>
+                  <option value="attention">Needs Attention</option>
+                  <option value="disabled">Disabled</option>
+                  <option value="never-built">Never Built</option>
+                </select>
+              </div>
+              <div class="form-group">
                 <label>Available jobs</label>
                 <div id="jobSelectorList" class="job-view-job-list">
                   <div class="text-muted text-center" style="padding: 24px;">Loading Jenkins jobs...</div>
@@ -462,12 +474,14 @@
 <script type="text/javascript">
   $(document).ready(function() {
     var jenkinsUrl = window.jobseekerJenkinsUrl || <?php echo json_encode(isset($jenkins_url) ? $jenkins_url : ''); ?>;
+    var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
     var jobsByName = {};
     var visibleJobs = [];
     var selectedJobNames = {};
     var requestedJobs = initialRequestedJobs();
     var requestedJobsApplied = false;
-    var jobEnvironmentFilter = 'all';
+    var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
+    var jobStatusFilter = 'all';
     var jobEnvironmentRequests = {};
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
     var environmentHelper = window.JobSeekerEnvironment || {
@@ -712,7 +726,53 @@
       return $.inArray(normalizeEnvironmentFilterValue(environment), configuredEnvironmentNames()) !== -1;
     }
 
+    function isAllEnvironmentFilter(value) {
+      return String(value || '').toLowerCase() === 'all';
+    }
+
+    function jobEnvironmentRequestValue() {
+      return isAllEnvironmentFilter(jobEnvironmentFilter) ? 'all' : normalizeEnvironmentFilterValue(jobEnvironmentFilter);
+    }
+
+    function normalizeJobStatus(value) {
+      return String(value || '').toUpperCase().replace(/\s+/g, '_');
+    }
+
+    function jobMatchesStatusFilter(job) {
+      var status = normalizeJobStatus(statusText(job));
+
+      if (jobStatusFilter === 'healthy') {
+        return status === 'SUCCESS';
+      }
+
+      if (jobStatusFilter === 'running') {
+        return status === 'RUNNING';
+      }
+
+      if (jobStatusFilter === 'queued') {
+        return status === 'QUEUED';
+      }
+
+      if (jobStatusFilter === 'attention') {
+        return $.inArray(status, ['FAILURE', 'ABORTED', 'UNSTABLE', 'NOT_BUILT', 'ERROR', 'UNAVAILABLE']) !== -1;
+      }
+
+      if (jobStatusFilter === 'disabled') {
+        return status === 'DISABLED';
+      }
+
+      if (jobStatusFilter === 'never-built') {
+        return status === 'NEVER_BUILT';
+      }
+
+      return true;
+    }
+
     function jobMatchesEnvironmentFilter(job) {
+      if (isAllEnvironmentFilter(jobEnvironmentFilter)) {
+        return true;
+      }
+
       var environment = normalizeEnvironmentFilterValue(environmentTextForJob(job));
 
       if (! isConfiguredEnvironment(environment)) {
@@ -733,13 +793,12 @@
 
     function updateEnvironmentFilterOptions() {
       var counts = {};
-      var totalJobs = 0;
+      var totalJobs = (visibleJobs || []).length;
 
       $.each(visibleJobs || [], function(index, job) {
         var environment = normalizeEnvironmentFilterValue(environmentTextForJob(job));
         if (isConfiguredEnvironment(environment)) {
           counts[environment] = (counts[environment] || 0) + 1;
-          totalJobs += 1;
         }
       });
 
@@ -750,7 +809,7 @@
       });
 
       $('#jobEnvironmentFilter').html(options);
-      $('#jobEnvironmentFilter').val(currentValue === 'all' || isConfiguredEnvironment(currentValue) ? normalizeEnvironmentFilterValue(currentValue) : 'all');
+      $('#jobEnvironmentFilter').val(isAllEnvironmentFilter(currentValue) ? 'all' : (isConfiguredEnvironment(currentValue) ? normalizeEnvironmentFilterValue(currentValue) : 'all'));
       jobEnvironmentFilter = $('#jobEnvironmentFilter').val() || 'all';
     }
 
@@ -1199,6 +1258,10 @@
           return;
         }
 
+        if (! jobMatchesStatusFilter(job)) {
+          return;
+        }
+
         html += '<label class="job-view-job-option" title="' + escapeAttribute(name + ' - environment: ' + environmentTextForJob(job)) + '">' +
           '<input type="checkbox" class="job-view-job-check" value="' + escapeAttribute(name) + '" ' + (selectedJobNames[name] ? 'checked ' : '') + '>' +
           '<span class="job-view-job-name">' + escapeHtml(name) + '</span>' +
@@ -1222,14 +1285,14 @@
 
       $.each(visibleJobs, function(index, job) {
         var name = job.fullName || job.name || '';
-        if (selectedJobNames[name] && jobMatchesEnvironmentFilter(job)) {
+        if (selectedJobNames[name] && jobMatchesEnvironmentFilter(job) && jobMatchesStatusFilter(job)) {
           selected.push(name);
           included[name] = true;
         }
       });
 
       $.each(Object.keys(selectedJobNames).sort(), function(index, name) {
-        if (! included[name] && jobsByName[name] && jobMatchesEnvironmentFilter(jobsByName[name])) {
+        if (! included[name] && jobsByName[name] && jobMatchesEnvironmentFilter(jobsByName[name]) && jobMatchesStatusFilter(jobsByName[name])) {
           selected.push(name);
         }
       });
@@ -1277,7 +1340,7 @@
       setSelectorBusy(true);
       $('#jobSelectorList').html('<div class="text-muted text-center" style="padding: 24px;">Loading Jenkins jobs...</div>');
 
-      jenkinsRequest('api/json?tree=jobs[name,fullName,displayName,color,description,buildable,inQueue,nextBuildNumber,lastBuild[number,result,building,timestamp,duration],healthReport[description,score]]')
+      $.ajax({url: availableJobsUrl, method: 'GET', dataType: 'json', cache: false, data: {environment: jobEnvironmentRequestValue()}})
         .done(function(data) {
           var jobs = Array.isArray(data.jobs) ? data.jobs : [];
           jobsByName = {};
@@ -1295,7 +1358,8 @@
 
           $.each(visibleJobs, function(index, job) {
             var name = job.fullName || job.name || '';
-            job.environmentInfo = environmentHelper.detectFromJob(job);
+            job.environmentInfo = job.environmentInfo || environmentHelper.detectFromJob(job);
+            job.environmentHydrated = ! job.environmentInfo.unknown;
             jobsByName[name] = job;
           });
 
@@ -1642,8 +1706,19 @@
     });
 
     $('#jobEnvironmentFilter').on('change', function() {
-      jobEnvironmentFilter = normalizeEnvironmentFilterValue($(this).val() || 'all');
+      var value = $(this).val() || 'all';
+      jobEnvironmentFilter = isAllEnvironmentFilter(value) ? 'all' : normalizeEnvironmentFilterValue(value);
+      loadJobs();
+    });
+
+    $('#jobStatusFilter').on('change', function() {
+      jobStatusFilter = $(this).val() || 'all';
       renderJobOptions($('#jobFilter').val());
+    });
+
+    $(document).on('jobseeker:environment-change', function(event, environment) {
+      jobEnvironmentFilter = isAllEnvironmentFilter(environment) ? 'all' : normalizeEnvironmentFilterValue(environment || 'all');
+      loadJobs();
     });
 
     $(document).on('change', '.job-view-job-check', function() {

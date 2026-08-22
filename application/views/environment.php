@@ -30,67 +30,20 @@
       box-shadow: 0 8px 20px rgba(16, 42, 67, .08);
     }
 
-    .environment-summary-row {
-      display: flex;
-      flex-wrap: wrap;
-      padding-top: 15px;
-    }
-
-    .environment-summary-row:before,
-    .environment-summary-row:after,
-    .environment-entry-form:before,
-    .environment-entry-form:after {
-      display: none;
-    }
-
-    .environment-summary-row > [class*="col-"] {
-      display: flex;
-    }
-
     .environment-page .info-box {
-      display: flex;
-      min-height: 104px;
-      width: 100%;
+      min-height: 86px;
     }
 
     .environment-page .info-box-icon {
       border-radius: 6px 0 0 6px;
-      flex: 0 0 92px;
-      height: 104px;
-      line-height: 104px;
-    }
-
-    .environment-page .info-box-content {
-      align-self: center;
-      flex: 1 1 auto;
+      height: 86px;
+      line-height: 86px;
     }
 
     .environment-entry-form {
       background: #fff;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
       margin-top: 18px;
-      padding: 18px 18px 6px;
-    }
-
-    .environment-entry-form .form-group {
-      min-height: 72px;
-    }
-
-    .environment-form-action {
-      align-items: flex-end;
-      display: flex;
-      min-height: 72px;
-    }
-
-    .environment-list-card .box-header {
-      min-height: 50px;
-    }
-
-    .environment-list-card .box-body {
-      min-height: 360px;
-      overflow-x: auto;
+      padding: 18px 18px 0;
     }
 
     .environment-entry-form label,
@@ -138,7 +91,7 @@
     <section class="content">
 
       <div class="container-fluid environment-shell">
-        <div class="row environment-summary-row">
+        <div class="row" style="padding-top: 15px;">
         <div class="col-md-3 col-sm-6 col-xs-12">
           <div class="info-box animated flipInX">
             <span class="info-box-icon bg-aqua"><i class="fa fa-pie-chart"></i></span>
@@ -199,8 +152,8 @@
             </div>
           </div>
        
-        <form action="<?php echo base_url() ?>Context/addEnvironment" method="POST" id="searchList">
           <div class="row animated fadeIn environment-entry-form">
+            <form action="<?php echo base_url() ?>Context/addEnvironment" method="POST" id="searchList">
             <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
@@ -211,7 +164,7 @@
 
                <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
-                  <label>Active Environment</label>
+                  <label>Active Project</label>
                       <select id="active" class="form-control" name="active">
                         <option value="1">True</option>
                         <option value="0">False</option>
@@ -226,7 +179,7 @@
                 </div>
               </div>
 
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-12 form-group environment-form-action">
+              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-12 form-group" style="margin-top: 25px;">
                 <button type="submit" class="btn btn-md btn-success btn-block searchList pull-right" title="Add environment"><i class="fa fa-plus" aria-hidden="true"></i></button>
               </div>
           </div>
@@ -234,7 +187,7 @@
 
      <div class="row" style="margin-top: 20px;">
         <div class="col-xs-12">
-          <div class="box box-primary environment-list-card">
+          <div class="box box-primary">
             <div class="box-header">
               <h3 class="box-title"><b>Available Environments</b></h3>
             </div>

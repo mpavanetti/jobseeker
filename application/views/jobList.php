@@ -242,6 +242,7 @@ pre {
   <div class="col-xs-12">
     <div class="btn-group" role="group" aria-label="Job monitor quick filters">
       <button type="button" class="btn btn-default monitor-filter active" data-filter="all">All <span class="badge" id="monitor-filter-all">0</span></button>
+      <button type="button" class="btn btn-default monitor-filter" data-filter="healthy">Healthy <span class="badge" id="monitor-filter-healthy">0</span></button>
       <button type="button" class="btn btn-default monitor-filter" data-filter="running">Running <span class="badge" id="monitor-filter-running">0</span></button>
       <button type="button" class="btn btn-default monitor-filter" data-filter="queued">Queued <span class="badge" id="monitor-filter-queued">0</span></button>
       <button type="button" class="btn btn-default monitor-filter" data-filter="attention">Needs Attention <span class="badge" id="monitor-filter-attention">0</span></button>
@@ -471,8 +472,9 @@ pre {
   var jobScheduleCache = {};
   var jobScheduleRequests = {};
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
-  var jobEnvironmentFilter = 'all';
+  var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
   var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
+  var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
   var environmentHelper = window.JobSeekerEnvironment || {
     detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
     detectFromJob: function(job) { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
@@ -638,6 +640,12 @@ pre {
     return !!(build && build.building === true) || /_anime$/.test(String(row && row.color ? row.color : ''));
   }
 
+  function isJobHealthy(row) {
+    var result = lastBuildField(row, 'result');
+    var color = normalizedJobColor(row && row.color);
+    return row && row.buildable !== false && row.inQueue !== true && ! isJobRunning(row) && (result === 'SUCCESS' || color === 'blue');
+  }
+
   function isJobAttention(row) {
     var result = lastBuildField(row, 'result');
     var color = normalizedJobColor(row && row.color);
@@ -703,7 +711,19 @@ pre {
     return $.inArray(normalizeEnvironmentFilterValue(environment), configuredEnvironmentNames()) !== -1;
   }
 
+  function isAllEnvironmentFilter(value) {
+    return String(value || '').toLowerCase() === 'all';
+  }
+
+  function jobEnvironmentRequestValue() {
+    return isAllEnvironmentFilter(jobEnvironmentFilter) ? 'all' : normalizeEnvironmentFilterValue(jobEnvironmentFilter);
+  }
+
   function rowMatchesEnvironmentFilter(row) {
+    if (isAllEnvironmentFilter(jobEnvironmentFilter)) {
+      return true;
+    }
+
     var environment = normalizeEnvironmentFilterValue(environmentTextForRow(row));
 
     if (! isConfiguredEnvironment(environment)) {
@@ -727,6 +747,10 @@ pre {
       return isJobRunning(row);
     }
 
+    if (filter === 'healthy') {
+      return isJobHealthy(row);
+    }
+
     if (filter === 'queued') {
       return !!(row && row.inQueue === true);
     }
@@ -747,6 +771,7 @@ pre {
     var environmentJobs = (jobs || []).filter(rowMatchesEnvironmentFilter);
 
     $('#monitor-filter-all').text(environmentJobs.length);
+    $('#monitor-filter-healthy').text(environmentJobs.filter(isJobHealthy).length);
     $('#monitor-filter-running').text(environmentJobs.filter(isJobRunning).length);
     $('#monitor-filter-queued').text(environmentJobs.filter(function(job) { return job && job.inQueue === true; }).length);
     $('#monitor-filter-attention').text(environmentJobs.filter(isJobAttention).length);
@@ -755,13 +780,12 @@ pre {
 
   function updateEnvironmentFilterOptions(jobs) {
     var environments = {};
-    var totalJobs = 0;
+    var totalJobs = (jobs || []).length;
 
     $.each(jobs || [], function(index, job) {
       var environment = normalizeEnvironmentFilterValue(environmentTextForRow(job));
       if (isConfiguredEnvironment(environment)) {
         environments[environment] = (environments[environment] || 0) + 1;
-        totalJobs += 1;
       }
     });
 
@@ -770,16 +794,18 @@ pre {
       options += '<option value="' + escapeAttribute(environment) + '">' + escapeHtml(configuredEnvironmentLabel(environment)) + ' (' + (environments[environment] || 0) + ')</option>';
     });
 
-    $('#monitorEnvironmentFilter').html(options).val(jobEnvironmentFilter === 'all' || isConfiguredEnvironment(jobEnvironmentFilter) ? normalizeEnvironmentFilterValue(jobEnvironmentFilter) : 'all');
+    $('#monitorEnvironmentFilter').html(options).val(isAllEnvironmentFilter(jobEnvironmentFilter) ? 'all' : (isConfiguredEnvironment(jobEnvironmentFilter) ? normalizeEnvironmentFilterValue(jobEnvironmentFilter) : 'all'));
     jobEnvironmentFilter = $('#monitorEnvironmentFilter').val() || 'all';
   }
 
   function updateMonitorSummary(jobs) {
-    var running = jobs.filter(isJobRunning).length;
-    var queued = jobs.filter(function(job) { return job && job.inQueue === true; }).length;
-    var attention = jobs.filter(isJobAttention).length;
+    jobs = jobs || [];
+    var environmentJobs = jobs.filter(rowMatchesEnvironmentFilter);
+    var running = environmentJobs.filter(isJobRunning).length;
+    var queued = environmentJobs.filter(function(job) { return job && job.inQueue === true; }).length;
+    var attention = environmentJobs.filter(isJobAttention).length;
 
-    $('#monitor-total-jobs').text(jobs.length);
+    $('#monitor-total-jobs').text(environmentJobs.length);
     $('#monitor-running-jobs').text(running);
     $('#monitor-queued-jobs').text(queued);
     $('#monitor-attention-jobs').text(attention);
@@ -1021,16 +1047,21 @@ pre {
     return 'Next run unavailable';
   }
 
-  function scheduleInfoFromConfig(xmlText, jobName) {
+  function scheduleInfoFromConfig(xmlText, jobName, fallbackRow) {
     try {
       var xml = typeof xmlText === 'string' ? $.parseXML(xmlText) : xmlText;
       var spec = firstCronLine($(xml).find('triggers spec').first().text());
+      var environmentInfo = environmentHelper.detectFromConfig(xmlText, jobName);
+
+      if (! environmentInfo || environmentInfo.unknown) {
+        environmentInfo = environmentHelper.detectFromJob(fallbackRow || {name: jobName, fullName: jobName});
+      }
 
       return {
         summary: summarizeCronSpec(spec),
         spec: spec || 'No cron trigger',
         nextRunText: estimateNextRun(spec),
-        environmentInfo: environmentHelper.detectFromConfig(xmlText, jobName),
+        environmentInfo: environmentInfo,
         error: false
       };
     } catch (error) {
@@ -1038,7 +1069,7 @@ pre {
         summary: 'Schedule unavailable',
         spec: '',
         nextRunText: 'Unavailable',
-        environmentInfo: environmentHelper.detectFromJob({name: jobName, fullName: jobName}),
+        environmentInfo: environmentHelper.detectFromJob(fallbackRow || {name: jobName, fullName: jobName}),
         error: true
       };
     }
@@ -1119,8 +1150,8 @@ pre {
           return;
         }
 
-        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText, key);
-        updateMonitorFilterCounts(table.rows().data().toArray());
+        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText, key, row);
+        updateMonitorSummary(table.rows().data().toArray());
         table.rows().invalidate('data').draw(false);
       }).fail(function(request, statusText) {
         if (statusText === 'abort' || generation !== jobListLoadGeneration || ! $.fn.DataTable.isDataTable('#listTable')) {
@@ -1134,7 +1165,7 @@ pre {
           environmentInfo: environmentHelper.detectFromJob(row),
           error: true
         };
-        updateMonitorFilterCounts(table.rows().data().toArray());
+        updateMonitorSummary(table.rows().data().toArray());
         table.rows().invalidate('data').draw(false);
       }).always(function() {
         delete jobScheduleRequests[key];
@@ -1169,10 +1200,10 @@ pre {
           return;
         }
 
-        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText, key);
+        jobScheduleCache[key] = scheduleInfoFromConfig(xmlText, key, row);
         if ($.fn.DataTable.isDataTable('#listTable')) {
           var table = $('#listTable').DataTable();
-          updateMonitorFilterCounts(table.rows().data().toArray());
+          updateMonitorSummary(table.rows().data().toArray());
           table.rows().invalidate('data').draw(false);
         }
         drawEnvironmentFilteredBuildTables();
@@ -1312,16 +1343,18 @@ pre {
 
   $('#monitorEnvironmentFilter').on('change', function() {
     jobEnvironmentFilter = $(this).val() || 'all';
-    if ($.fn.DataTable.isDataTable('#listTable')) {
-      updateMonitorFilterCounts($('#listTable').DataTable().rows().data().toArray());
-    }
-
     ensureMonitorFilterRegistered();
-    ['#listTable', '#listFailedTable', '#listSuccessTable'].forEach(function(selector) {
-      if ($.fn.DataTable.isDataTable(selector)) {
-        $(selector).DataTable().draw(false);
-      }
-    });
+    abortScheduleRequests();
+    reloadJobTables();
+  });
+
+  $(document).on('jobseeker:environment-change', function(event, environment) {
+    jobEnvironmentFilter = isAllEnvironmentFilter(environment) ? 'all' : normalizeEnvironmentFilterValue(environment || 'all');
+    ensureMonitorFilterRegistered();
+    abortScheduleRequests();
+    if ($.fn.DataTable.isDataTable('#listTable')) {
+      reloadJobTables();
+    }
   });
 
   function loadJobListData(options) {
@@ -1368,9 +1401,11 @@ pre {
           "order": [[ 2, "asc" ]],
           "scrollX": true,
           "ajax": {
-            "url": jenkins_url +'api/json?tree=jobs[name,fullName,displayName,color,description,buildable,inQueue,nextBuildNumber,queueItem[id,why],lastBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName],lastCompletedBuild[number,result,timestamp,duration,url,queueId,building,displayName],lastFailedBuild[displayName,result,timestamp,duration,url,queueId,building],lastStableBuild[displayName,result,timestamp,duration,url,queueId,building]]',
+            "url": availableJobsUrl,
             "type": 'GET',
-            "headers": jobListHeaders,
+            "data": function(request) {
+              request.environment = jobEnvironmentRequestValue();
+            },
             "dataSrc": function(json) {
               var jobs = jobsFromJenkinsResponse(json);
               updateMonitorSummary(jobs);
@@ -1443,9 +1478,11 @@ pre {
           "order": [[ 4, "desc" ]],
           "scrollX": true,
           "ajax": {
-            "url": jenkins_url +'api/json?tree=jobs[name,lastFailedBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
+            "url": availableJobsUrl,
             "type": 'GET',
-            "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+            "data": function(request) {
+              request.environment = jobEnvironmentRequestValue();
+            },
             "dataSrc": function(json){ return jobsWithBuild(json, 'lastFailedBuild'); }
           },
           "columns": [
@@ -1488,9 +1525,11 @@ pre {
           "order": [[ 4, "desc" ]],
           "scrollX": true,
           "ajax": {
-            "url": jenkins_url +'api/json?tree=jobs[name,lastStableBuild[displayName,result,timestamp,duration,url,queueId,building]{0,1}]',
+            "url": availableJobsUrl,
             "type": 'GET',
-            "headers": {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
+            "data": function(request) {
+              request.environment = jobEnvironmentRequestValue();
+            },
             "dataSrc": function(json){ return jobsWithBuild(json, 'lastStableBuild'); }
           },
           "columns": [

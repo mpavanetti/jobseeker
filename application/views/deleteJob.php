@@ -117,6 +117,16 @@
           <select id="deleteEnvironmentFilter" class="form-control input-sm">
             <option value="all">All environments</option>
           </select>
+          <label for="deleteStatusFilter"><i class="fa fa-heartbeat"></i> Filter by status</label>
+          <select id="deleteStatusFilter" class="form-control input-sm">
+            <option value="all">All statuses</option>
+            <option value="healthy">Healthy / Success</option>
+            <option value="running">Running</option>
+            <option value="queued">Queued</option>
+            <option value="attention">Needs Attention</option>
+            <option value="disabled">Disabled</option>
+            <option value="never-built">Never Built</option>
+          </select>
           <span class="text-muted" id="deleteEnvironmentFilterStatus">Loading Jenkins jobs...</span>
         </div>
       </div>
@@ -203,9 +213,11 @@ $(document).ready(function(){
 
     var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
     var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
+    var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
     var jobsByName = {};
     var allDeleteJobs = [];
-    var deleteEnvironmentFilter = 'all';
+    var deleteEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
+    var deleteStatusFilter = 'all';
     var deleteEnvironmentRequests = {};
     var environmentHelper = window.JobSeekerEnvironment || {
       detectFromJob: function() { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
@@ -252,7 +264,8 @@ $(document).ready(function(){
     }
 
     function jobEnvironmentInfo(jobName) {
-      return environmentHelper.detectFromJob(jobsByName[jobName] || {name: jobName, fullName: jobName});
+      var job = jobsByName[jobName] || {name: jobName, fullName: jobName};
+      return job.environmentInfo || environmentHelper.detectFromJob(job);
     }
 
     function environmentTextForJobName(jobName) {
@@ -298,7 +311,110 @@ $(document).ready(function(){
       return $.inArray(normalizeDeleteEnvironment(environment), configuredDeleteEnvironments()) !== -1;
     }
 
+    function isAllDeleteEnvironmentFilter(value) {
+      return String(value || '').toLowerCase() === 'all';
+    }
+
+    function deleteEnvironmentRequestValue() {
+      return isAllDeleteEnvironmentFilter(deleteEnvironmentFilter) ? 'all' : normalizeDeleteEnvironment(deleteEnvironmentFilter);
+    }
+
+    function normalizedDeleteJobColor(jobName) {
+      var job = jobsByName[jobName] || {};
+      return String(job.color || '').replace('_anime', '');
+    }
+
+    function deleteJobLastResult(jobName) {
+      var job = jobsByName[jobName] || {};
+      return job.lastBuild && job.lastBuild.result ? String(job.lastBuild.result).toUpperCase() : '';
+    }
+
+    function isDeleteJobRunning(jobName) {
+      var job = jobsByName[jobName] || {};
+      return !!((job.lastBuild && job.lastBuild.building === true) || /_anime$/.test(String(job.color || '')));
+    }
+
+    function isDeleteJobHealthy(jobName) {
+      var job = jobsByName[jobName] || {};
+      return job.buildable !== false && job.inQueue !== true && ! isDeleteJobRunning(jobName) && (deleteJobLastResult(jobName) === 'SUCCESS' || normalizedDeleteJobColor(jobName) === 'blue');
+    }
+
+    function isDeleteJobAttention(jobName) {
+      var result = deleteJobLastResult(jobName);
+      var color = normalizedDeleteJobColor(jobName);
+      return $.inArray(result, ['FAILURE', 'ABORTED', 'UNSTABLE']) !== -1 || $.inArray(color, ['red', 'yellow', 'aborted']) !== -1;
+    }
+
+    function isDeleteJobNeverBuilt(jobName) {
+      var job = jobsByName[jobName] || {};
+      return ! job.lastBuild || normalizedDeleteJobColor(jobName) === 'notbuilt';
+    }
+
+    function deleteJobStatusText(jobName) {
+      var job = jobsByName[jobName] || {};
+
+      if (job.buildable === false) {
+        return 'Disabled';
+      }
+
+      if (job.inQueue === true) {
+        return 'Queued';
+      }
+
+      if (isDeleteJobRunning(jobName)) {
+        return 'Running';
+      }
+
+      if (isDeleteJobHealthy(jobName)) {
+        return 'Healthy';
+      }
+
+      if (isDeleteJobAttention(jobName)) {
+        return deleteJobLastResult(jobName) || 'Needs Attention';
+      }
+
+      if (isDeleteJobNeverBuilt(jobName)) {
+        return 'Never Built';
+      }
+
+      return 'Idle';
+    }
+
+    function jobNameMatchesDeleteStatus(jobName) {
+      var job = jobsByName[jobName] || {};
+
+      if (deleteStatusFilter === 'healthy') {
+        return isDeleteJobHealthy(jobName);
+      }
+
+      if (deleteStatusFilter === 'running') {
+        return isDeleteJobRunning(jobName);
+      }
+
+      if (deleteStatusFilter === 'queued') {
+        return job.inQueue === true;
+      }
+
+      if (deleteStatusFilter === 'attention') {
+        return isDeleteJobAttention(jobName);
+      }
+
+      if (deleteStatusFilter === 'disabled') {
+        return job.buildable === false;
+      }
+
+      if (deleteStatusFilter === 'never-built') {
+        return isDeleteJobNeverBuilt(jobName);
+      }
+
+      return true;
+    }
+
     function jobNameMatchesDeleteEnvironment(jobName) {
+      if (isAllDeleteEnvironmentFilter(deleteEnvironmentFilter)) {
+        return true;
+      }
+
       var environment = normalizeDeleteEnvironment(environmentTextForJobName(jobName));
 
       if (! isConfiguredDeleteEnvironment(environment)) {
@@ -344,14 +460,13 @@ $(document).ready(function(){
 
     function renderDeleteEnvironmentFilterOptions() {
       var counts = {};
-      var totalJobs = 0;
+      var totalJobs = allDeleteJobs.length;
 
       $.each(allDeleteJobs, function(index, job) {
         var name = job.fullName || job.name || '';
         var environment = normalizeDeleteEnvironment(environmentTextForJobName(name));
         if (isConfiguredDeleteEnvironment(environment)) {
           counts[environment] = (counts[environment] || 0) + 1;
-          totalJobs += 1;
         }
       });
 
@@ -362,7 +477,7 @@ $(document).ready(function(){
       });
 
       $('#deleteEnvironmentFilter').html(options);
-      $('#deleteEnvironmentFilter').val(currentValue === 'all' || isConfiguredDeleteEnvironment(currentValue) ? normalizeDeleteEnvironment(currentValue) : 'all');
+      $('#deleteEnvironmentFilter').val(isAllDeleteEnvironmentFilter(currentValue) ? 'all' : (isConfiguredDeleteEnvironment(currentValue) ? normalizeDeleteEnvironment(currentValue) : 'all'));
       deleteEnvironmentFilter = $('#deleteEnvironmentFilter').val() || 'all';
       $('#deleteEnvironmentFilterStatus').text(totalJobs + ' configured-environment Jenkins job(s) loaded.');
     }
@@ -375,7 +490,7 @@ $(document).ready(function(){
           return false;
         }
 
-        return jobNameMatchesDeleteEnvironment(name);
+        return jobNameMatchesDeleteEnvironment(name) && jobNameMatchesDeleteStatus(name);
       }).sort();
     }
 
@@ -388,14 +503,15 @@ $(document).ready(function(){
       $('.selector').empty();
       $.each(names, function(index, name) {
         var environment = environmentTextForJobName(name);
+        var status = deleteJobStatusText(name);
         $('#deleteJobSelect').append($('<option>', {
           value: name,
-          text: '[' + environment + '] ' + name,
+          text: '[' + environment + '] [' + status + '] ' + name,
           selected: selectedJobs.indexOf(name) !== -1
         }));
         $('#deleteRepoSelect').append($('<option>', {
           value: name,
-          text: '[' + environment + '] ' + name,
+          text: '[' + environment + '] [' + status + '] ' + name,
           selected: selectedRepos.indexOf(name) !== -1
         }));
       });
@@ -416,7 +532,8 @@ $(document).ready(function(){
           method: 'GET',
           dataType: 'text'
         }).done(function(xmlText) {
-          job.environmentInfo = environmentHelper.detectFromConfig(xmlText || '', name);
+            var info = environmentHelper.detectFromConfig(xmlText || '', name);
+            job.environmentInfo = info && ! info.unknown ? info : environmentHelper.detectFromJob(job);
           job.environmentHydrated = true;
           renderDeleteSelectors();
         }).fail(function() {
@@ -481,8 +598,9 @@ $(document).ready(function(){
       abortDeleteEnvironmentRequests();
       setDeleteBusy(true);
       $.ajax({
-        url: jenkins_url + 'api/json?tree=jobs[name,fullName]&pretty=true',
-        method: 'GET'
+        url: availableJobsUrl,
+        method: 'GET',
+        data: {environment: deleteEnvironmentRequestValue()}
       }).done(function(data) {
         populateSelectors(data && data.jobs ? data.jobs : []);
       }).fail(function() {
@@ -573,13 +691,19 @@ $(document).ready(function(){
     $('#deleteJobSelect, #deleteRepoSelect').change(updateSelectedCounts);
 
     $('#deleteEnvironmentFilter').change(function() {
-      deleteEnvironmentFilter = normalizeDeleteEnvironment($(this).val() || 'all');
+      var value = $(this).val() || 'all';
+      deleteEnvironmentFilter = isAllDeleteEnvironmentFilter(value) ? 'all' : normalizeDeleteEnvironment(value);
+      loadDeleteOptions();
+    });
+
+    $('#deleteStatusFilter').change(function() {
+      deleteStatusFilter = $(this).val() || 'all';
       renderDeleteSelectors();
     });
 
     $(document).on('jobseeker:environment-change', function(event, environment) {
-      deleteEnvironmentFilter = normalizeDeleteEnvironment(environment || 'all');
-      renderDeleteSelectors();
+      deleteEnvironmentFilter = isAllDeleteEnvironmentFilter(environment) ? 'all' : normalizeDeleteEnvironment(environment || 'all');
+      loadDeleteOptions();
     });
 
     $('#selectAllJobs').click(function() {

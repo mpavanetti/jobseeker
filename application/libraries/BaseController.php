@@ -122,6 +122,637 @@ class BaseController extends CI_Controller {
 		return array('status' => $statusCode, 'content_type' => $responseContentType, 'body' => $response, 'headers' => $responseHeaders);
 	}
 
+	protected function normalizeJobSeekerEnvironment($environment) {
+		$value = strtoupper(trim((string) $environment));
+		if ($value === '') {
+			return '';
+		}
+
+		$value = preg_replace('/\s+/', '_', $value);
+		$aliases = array(
+			'QAS' => 'QA',
+			'PRD' => 'PROD',
+			'PRODUCTION' => 'PROD',
+			'HOMOLOG' => 'HML',
+			'HOMOLOGATION' => 'HML'
+		);
+
+		return isset($aliases[$value]) ? $aliases[$value] : $value;
+	}
+
+	protected function checkJenkinsEnvironmentSlots($jobName, $environment) {
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+
+		if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN') {
+			return array('ok' => TRUE, 'environment' => $environment, 'limit' => 0, 'running' => 0, 'queued' => 0, 'active' => 0, 'message' => 'No concrete runtime environment was selected.');
+		}
+
+		$limit = $this->jenkinsEnvironmentSlotLimit($environment);
+		if ($limit < 1) {
+			return array('ok' => TRUE, 'environment' => $environment, 'limit' => $limit, 'running' => 0, 'queued' => 0, 'active' => 0, 'message' => 'Environment slot limit is disabled.');
+		}
+
+		$usage = $this->jenkinsEnvironmentSlotUsage();
+		if (! $usage['ok']) {
+			return array('ok' => FALSE, 'status' => 503, 'environment' => $environment, 'limit' => $limit, 'running' => 0, 'queued' => 0, 'active' => 0, 'message' => $usage['message']);
+		}
+
+		$environmentUsage = isset($usage['environments'][$environment]) ? $usage['environments'][$environment] : array('running' => 0, 'queued' => 0, 'active' => 0);
+		$active = (int) $environmentUsage['active'];
+
+		if ($active >= $limit) {
+			return array(
+				'ok' => FALSE,
+				'status' => 429,
+				'environment' => $environment,
+				'limit' => $limit,
+				'running' => (int) $environmentUsage['running'],
+				'queued' => (int) $environmentUsage['queued'],
+				'active' => $active,
+				'message' => $environment.' environment slots are full ('.$active.'/'.$limit.' active: '.(int) $environmentUsage['running'].' running, '.(int) $environmentUsage['queued'].' queued). Wait for a '.$environment.' job to finish before starting another one.'
+			);
+		}
+
+		return array(
+			'ok' => TRUE,
+			'status' => 200,
+			'environment' => $environment,
+			'limit' => $limit,
+			'running' => (int) $environmentUsage['running'],
+			'queued' => (int) $environmentUsage['queued'],
+			'active' => $active,
+			'message' => $environment.' environment slots available ('.$active.'/'.$limit.' active).'
+		);
+	}
+
+	protected function checkJenkinsEnvironmentSlotsForBuildRequest($path, $body = '') {
+		$jobName = $this->jenkinsJobNameFromBuildPath($path);
+		if ($jobName === FALSE) {
+			return array('ok' => TRUE, 'message' => 'Not a Jenkins build request.');
+		}
+
+		$environment = $this->jenkinsEnvironmentFromBuildRequest($jobName, $path, $body);
+
+		return $this->checkJenkinsEnvironmentSlots($jobName, $environment);
+	}
+
+	protected function jenkinsEnvironmentSlotStatus($environment = '') {
+		$usage = $this->jenkinsEnvironmentSlotUsage();
+		$limits = array();
+		$configuredLimits = $this->jenkinsEnvironmentSlotLimits();
+		$defaultLimit = isset($configuredLimits['DEFAULT']) ? (int) $configuredLimits['DEFAULT'] : 1;
+		$requestedEnvironment = $this->normalizeJobSeekerEnvironment($environment);
+
+		if (! $usage['ok']) {
+			return $usage;
+		}
+
+		foreach ($configuredLimits as $key => $limit) {
+			if ($key !== 'DEFAULT' && ! isset($usage['environments'][$key])) {
+				$usage['environments'][$key] = array('running' => 0, 'queued' => 0, 'active' => 0);
+			}
+		}
+
+		foreach ($usage['environments'] as $key => $row) {
+			$limits[$key] = isset($configuredLimits[$key]) ? (int) $configuredLimits[$key] : $defaultLimit;
+		}
+
+		if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL' && $requestedEnvironment !== 'UNKNOWN') {
+			if (! isset($usage['environments'][$requestedEnvironment])) {
+				$usage['environments'][$requestedEnvironment] = array('running' => 0, 'queued' => 0, 'active' => 0);
+			}
+			$limits[$requestedEnvironment] = isset($configuredLimits[$requestedEnvironment]) ? (int) $configuredLimits[$requestedEnvironment] : $defaultLimit;
+		}
+
+		foreach ($limits as $key => $limit) {
+			if (! isset($usage['environments'][$key])) {
+				$usage['environments'][$key] = array('running' => 0, 'queued' => 0, 'active' => 0);
+			}
+			$usage['environments'][$key]['limit'] = $limit;
+			$usage['environments'][$key]['available'] = $limit < 1 ? NULL : max(0, $limit - (int) $usage['environments'][$key]['active']);
+		}
+
+		ksort($usage['environments']);
+		$usage['defaultLimit'] = $defaultLimit;
+		$usage['ok'] = TRUE;
+		return $usage;
+	}
+
+	protected function jenkinsEnvironmentSlotLimit($environment) {
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		$limits = $this->jenkinsEnvironmentSlotLimits();
+
+		if (isset($limits[$environment])) {
+			return (int) $limits[$environment];
+		}
+
+		return isset($limits['DEFAULT']) ? (int) $limits['DEFAULT'] : 1;
+	}
+
+	private function jenkinsEnvironmentSlotLimits() {
+		$defaultLimit = 1;
+		$defaultOverride = getenv('JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS');
+
+		if ($defaultOverride !== FALSE && preg_match('/^\d+$/', (string) $defaultOverride)) {
+			$defaultLimit = (int) $defaultOverride;
+		}
+
+		$limits = array('DEFAULT' => $defaultLimit);
+		$config = $this->getRuntimeConfig();
+
+		if (isset($config->jenkins->environment_slots)) {
+			$this->mergeJenkinsEnvironmentSlotConfig($limits, $config->jenkins->environment_slots);
+		}
+
+		if (isset($config->jenkins->environmentSlots)) {
+			$this->mergeJenkinsEnvironmentSlotConfig($limits, $config->jenkins->environmentSlots);
+		}
+
+		$envConfig = getenv('JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS');
+		if ($envConfig !== FALSE && trim($envConfig) !== '') {
+			$this->mergeJenkinsEnvironmentSlotConfig($limits, $envConfig);
+		}
+
+		return $limits;
+	}
+
+	protected function jenkinsExecutorMonitorStatus($environment = '') {
+		$slotStatus = $this->jenkinsEnvironmentSlotStatus($environment);
+		if (! $slotStatus['ok']) {
+			return $slotStatus;
+		}
+
+		$computerResponse = $this->requestJenkins('GET', 'computer/api/json?tree=computer[displayName,offline,temporarilyOffline,numExecutors,executors[number,idle,currentExecutable[number,url,fullDisplayName,building,result,actions[parameters[name,value]]]]]');
+		if ((int) $computerResponse['status'] !== 200) {
+			$slotStatus['ok'] = FALSE;
+			$slotStatus['status'] = (int) $computerResponse['status'];
+			$slotStatus['message'] = 'Unable to inspect Jenkins executors. HTTP '.$computerResponse['status'].'.';
+			return $slotStatus;
+		}
+
+		$queueResponse = $this->requestJenkins('GET', 'queue/api/json?tree=items[id,why,cancelled,params,task[name,fullName],actions[parameters[name,value]]]');
+		if ((int) $queueResponse['status'] !== 200) {
+			$slotStatus['ok'] = FALSE;
+			$slotStatus['status'] = (int) $queueResponse['status'];
+			$slotStatus['message'] = 'Unable to inspect the Jenkins queue. HTTP '.$queueResponse['status'].'.';
+			return $slotStatus;
+		}
+
+		$computerPayload = json_decode($computerResponse['body']);
+		$queuePayload = json_decode($queueResponse['body']);
+		if (! is_object($computerPayload) || ! is_object($queuePayload)) {
+			$slotStatus['ok'] = FALSE;
+			$slotStatus['status'] = 502;
+			$slotStatus['message'] = 'Jenkins returned an invalid executor monitor payload.';
+			return $slotStatus;
+		}
+
+		$executors = array();
+		$queueItems = array();
+		$global = array('totalExecutors' => 0, 'busyExecutors' => 0, 'idleExecutors' => 0, 'offlineNodes' => 0);
+
+		foreach (isset($computerPayload->computer) && is_array($computerPayload->computer) ? $computerPayload->computer : array() as $node) {
+			$nodeName = isset($node->displayName) && $node->displayName !== '' ? (string) $node->displayName : 'Jenkins node';
+			$isOffline = isset($node->offline) && $node->offline === TRUE;
+			$nodeExecutors = isset($node->numExecutors) ? (int) $node->numExecutors : (isset($node->executors) && is_array($node->executors) ? count($node->executors) : 0);
+
+			$global['totalExecutors'] += $nodeExecutors;
+			if ($isOffline) {
+				$global['offlineNodes'] += 1;
+			}
+
+			foreach (isset($node->executors) && is_array($node->executors) ? $node->executors : array() as $executorIndex => $executor) {
+				$isIdle = ! isset($executor->idle) || $executor->idle === TRUE;
+				$executable = isset($executor->currentExecutable) && is_object($executor->currentExecutable) ? $executor->currentExecutable : NULL;
+				$jobName = $this->jenkinsJobNameFromExecutable($executable);
+				$executorEnvironment = $executable ? $this->jenkinsParameterValueFromActions($executable, 'ENVIRONMENT') : '';
+				if ($executorEnvironment === '' && $jobName !== '') {
+					$executorEnvironment = $this->jenkinsEnvironmentFromJobConfig($jobName);
+				}
+				if ($executorEnvironment === '') {
+					$executorEnvironment = $this->detectEnvironmentFromJenkinsJobName($jobName);
+				}
+
+				if ($isIdle) {
+					$global['idleExecutors'] += 1;
+				} else {
+					$global['busyExecutors'] += 1;
+				}
+
+				$executors[] = array(
+					'node' => $nodeName,
+					'executor' => isset($executor->number) ? (int) $executor->number : (int) $executorIndex,
+					'offline' => $isOffline,
+					'idle' => $isIdle,
+					'job' => $jobName,
+					'build' => $executable && isset($executable->fullDisplayName) ? (string) $executable->fullDisplayName : '',
+					'url' => $executable && isset($executable->url) ? (string) $executable->url : '',
+					'environment' => $this->normalizeJobSeekerEnvironment($executorEnvironment)
+				);
+			}
+		}
+
+		foreach (isset($queuePayload->items) && is_array($queuePayload->items) ? $queuePayload->items : array() as $item) {
+			if (isset($item->cancelled) && $item->cancelled) {
+				continue;
+			}
+
+			$taskName = '';
+			if (isset($item->task) && isset($item->task->fullName)) {
+				$taskName = (string) $item->task->fullName;
+			} else if (isset($item->task) && isset($item->task->name)) {
+				$taskName = (string) $item->task->name;
+			}
+
+			$queueItems[] = array(
+				'id' => isset($item->id) ? (int) $item->id : 0,
+				'job' => $taskName,
+				'environment' => $this->normalizeJobSeekerEnvironment($this->jenkinsEnvironmentFromQueueItem($item, array())),
+				'why' => isset($item->why) ? (string) $item->why : ''
+			);
+		}
+
+		$slotStatus['status'] = 200;
+		$slotStatus['message'] = 'Jenkins executor monitor loaded.';
+		$slotStatus['global'] = $global;
+		$slotStatus['executors'] = $executors;
+		$slotStatus['queue'] = $queueItems;
+
+		return $slotStatus;
+	}
+
+	private function jenkinsJobNameFromExecutable($executable) {
+		if (! is_object($executable)) {
+			return '';
+		}
+
+		if (isset($executable->url)) {
+			$path = parse_url((string) $executable->url, PHP_URL_PATH);
+			$segments = explode('/', trim((string) $path, '/'));
+			$jobSegments = array();
+
+			for ($index = 0; $index < count($segments); $index++) {
+				if ($segments[$index] === 'job' && isset($segments[$index + 1])) {
+					$jobSegments[] = rawurldecode($segments[$index + 1]);
+				}
+			}
+
+			if (! empty($jobSegments)) {
+				return implode('/', $jobSegments);
+			}
+		}
+
+		if (isset($executable->fullDisplayName) && preg_match('/^(.*?) #\d+$/', (string) $executable->fullDisplayName, $matches)) {
+			return str_replace(' » ', '/', $matches[1]);
+		}
+
+		return '';
+	}
+
+	private function mergeJenkinsEnvironmentSlotConfig(&$limits, $config) {
+		if (is_string($config)) {
+			$trimmed = trim($config);
+			if ($trimmed === '') {
+				return;
+			}
+
+			if ($trimmed[0] === '{') {
+				$decoded = json_decode($trimmed, TRUE);
+				if (is_array($decoded)) {
+					$this->mergeJenkinsEnvironmentSlotConfig($limits, $decoded);
+				}
+				return;
+			}
+
+			foreach (preg_split('/[,;]+/', $trimmed) as $pair) {
+				$parts = explode('=', $pair, 2);
+				if (count($parts) !== 2) {
+					continue;
+				}
+
+				$this->setJenkinsEnvironmentSlotLimit($limits, $parts[0], $parts[1]);
+			}
+			return;
+		}
+
+		if (is_object($config)) {
+			$config = get_object_vars($config);
+		}
+
+		if (! is_array($config)) {
+			return;
+		}
+
+		foreach ($config as $environment => $limit) {
+			$this->setJenkinsEnvironmentSlotLimit($limits, $environment, $limit);
+		}
+	}
+
+	private function setJenkinsEnvironmentSlotLimit(&$limits, $environment, $limit) {
+		$environment = strtoupper(trim((string) $environment));
+		$key = in_array($environment, array('*', 'ALL', 'DEFAULT'), TRUE) ? 'DEFAULT' : $this->normalizeJobSeekerEnvironment($environment);
+
+		if ($key === '' || ! preg_match('/^\d+$/', trim((string) $limit))) {
+			return;
+		}
+
+		$limits[$key] = (int) $limit;
+	}
+
+	private function jenkinsEnvironmentSlotUsage() {
+		$usage = array('ok' => FALSE, 'status' => 0, 'message' => '', 'environments' => array());
+		$jobDefaults = array();
+		$jobsResponse = $this->requestJenkins('GET', 'api/json?tree='.$this->jenkinsEnvironmentSlotJobTree(3));
+
+		if ((int) $jobsResponse['status'] !== 200) {
+			$usage['status'] = (int) $jobsResponse['status'];
+			$usage['message'] = 'Unable to inspect Jenkins executors before starting the build. HTTP '.$jobsResponse['status'].'.';
+			return $usage;
+		}
+
+		$jobsPayload = json_decode($jobsResponse['body']);
+		if (! is_object($jobsPayload)) {
+			$usage['status'] = 502;
+			$usage['message'] = 'Jenkins returned an invalid executor payload.';
+			return $usage;
+		}
+
+		$this->collectJenkinsEnvironmentSlotJobs(isset($jobsPayload->jobs) ? $jobsPayload->jobs : array(), $usage['environments'], $jobDefaults);
+
+		$queueResponse = $this->requestJenkins('GET', 'queue/api/json?tree=items[id,why,cancelled,params,task[name,fullName],actions[parameters[name,value]]]');
+		if ((int) $queueResponse['status'] !== 200) {
+			$usage['status'] = (int) $queueResponse['status'];
+			$usage['message'] = 'Unable to inspect the Jenkins queue before starting the build. HTTP '.$queueResponse['status'].'.';
+			return $usage;
+		}
+
+		$queuePayload = json_decode($queueResponse['body']);
+		if (! is_object($queuePayload)) {
+			$usage['status'] = 502;
+			$usage['message'] = 'Jenkins returned an invalid queue payload.';
+			return $usage;
+		}
+
+		foreach (isset($queuePayload->items) && is_array($queuePayload->items) ? $queuePayload->items : array() as $item) {
+			if (isset($item->cancelled) && $item->cancelled) {
+				continue;
+			}
+
+			$environment = $this->jenkinsEnvironmentFromQueueItem($item, $jobDefaults);
+			$this->recordJenkinsEnvironmentSlotUse($usage['environments'], $environment, 'queued');
+		}
+
+		$usage['ok'] = TRUE;
+		$usage['status'] = 200;
+		$usage['message'] = 'Jenkins environment slot usage loaded.';
+
+		return $usage;
+	}
+
+	private function jenkinsEnvironmentSlotJobTree($depth) {
+		$fields = '_class,name,fullName,color,property[parameterDefinitions[name,defaultParameterValue[value]]],builds[number,building,actions[parameters[name,value]]]{0,20}';
+
+		if ($depth <= 0) {
+			return 'jobs['.$fields.']';
+		}
+
+		return 'jobs['.$fields.','.$this->jenkinsEnvironmentSlotJobTree($depth - 1).']';
+	}
+
+	private function collectJenkinsEnvironmentSlotJobs($jobs, &$environments, &$jobDefaults) {
+		foreach (is_array($jobs) ? $jobs : array() as $job) {
+			$jobName = isset($job->fullName) && $job->fullName !== '' ? $job->fullName : (isset($job->name) ? $job->name : '');
+			$defaultEnvironment = $this->jenkinsEnvironmentFromJobData($job, $jobName);
+
+			if ($jobName !== '' && $defaultEnvironment !== '') {
+				$jobDefaults[$jobName] = $defaultEnvironment;
+			}
+
+			foreach (isset($job->builds) && is_array($job->builds) ? $job->builds : array() as $build) {
+				if (! isset($build->building) || $build->building !== TRUE) {
+					continue;
+				}
+
+				$environment = $this->jenkinsParameterValueFromActions($build, 'ENVIRONMENT');
+				if ($environment === '') {
+					$environment = $defaultEnvironment;
+				}
+
+				$this->recordJenkinsEnvironmentSlotUse($environments, $environment, 'running');
+			}
+
+			if (isset($job->jobs) && is_array($job->jobs)) {
+				$this->collectJenkinsEnvironmentSlotJobs($job->jobs, $environments, $jobDefaults);
+			}
+		}
+	}
+
+	protected function jenkinsEnvironmentFromJobData($job, $fallbackJobName = '') {
+		$environment = $this->jenkinsEnvironmentFromJobProperty($job);
+
+		if ($environment === '') {
+			$environment = $this->detectEnvironmentFromJenkinsJobName($fallbackJobName);
+		}
+
+		return $this->normalizeJobSeekerEnvironment($environment);
+	}
+
+	private function recordJenkinsEnvironmentSlotUse(&$environments, $environment, $kind) {
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN') {
+			return;
+		}
+
+		if (! isset($environments[$environment])) {
+			$environments[$environment] = array('running' => 0, 'queued' => 0, 'active' => 0);
+		}
+
+		if ($kind === 'running') {
+			$environments[$environment]['running'] += 1;
+		} else if ($kind === 'queued') {
+			$environments[$environment]['queued'] += 1;
+		}
+
+		$environments[$environment]['active'] = (int) $environments[$environment]['running'] + (int) $environments[$environment]['queued'];
+	}
+
+	protected function jenkinsParameterValueFromActions($holder, $parameterName) {
+		if (! isset($holder->actions) || ! is_array($holder->actions)) {
+			return '';
+		}
+
+		foreach ($holder->actions as $action) {
+			if (! isset($action->parameters) || ! is_array($action->parameters)) {
+				continue;
+			}
+
+			foreach ($action->parameters as $parameter) {
+				if (isset($parameter->name) && $parameter->name === $parameterName && isset($parameter->value)) {
+					return (string) $parameter->value;
+				}
+			}
+		}
+
+		return '';
+	}
+
+	protected function jenkinsEnvironmentFromJobProperty($job) {
+		if (! isset($job->property) || ! is_array($job->property)) {
+			return '';
+		}
+
+		foreach ($job->property as $property) {
+			if (! isset($property->parameterDefinitions) || ! is_array($property->parameterDefinitions)) {
+				continue;
+			}
+
+			foreach ($property->parameterDefinitions as $definition) {
+				if (! isset($definition->name) || $definition->name !== 'ENVIRONMENT') {
+					continue;
+				}
+
+				if (isset($definition->defaultParameterValue) && isset($definition->defaultParameterValue->value)) {
+					return (string) $definition->defaultParameterValue->value;
+				}
+			}
+		}
+
+		return '';
+	}
+
+	private function jenkinsEnvironmentFromQueueItem($item, $jobDefaults) {
+		$environment = $this->jenkinsParameterValueFromActions($item, 'ENVIRONMENT');
+
+		if ($environment === '' && isset($item->params) && preg_match('/(?:^|\s)ENVIRONMENT=([^\s]+)/', (string) $item->params, $matches)) {
+			$environment = $matches[1];
+		}
+
+		if ($environment !== '') {
+			return $environment;
+		}
+
+		$jobName = '';
+		if (isset($item->task) && isset($item->task->fullName)) {
+			$jobName = $item->task->fullName;
+		} else if (isset($item->task) && isset($item->task->name)) {
+			$jobName = $item->task->name;
+		}
+
+		if ($jobName !== '' && isset($jobDefaults[$jobName])) {
+			return $jobDefaults[$jobName];
+		}
+
+		return $this->detectEnvironmentFromJenkinsJobName($jobName);
+	}
+
+	protected function detectEnvironmentFromJenkinsJobName($jobName) {
+		if (preg_match('/(?:^|[\/_\-. ])(DEV|QA|QAS|UAT|PREPROD|HML|HOMOLOG|HOMOLOGATION|PROD|PRD|PRODUCTION)(?:$|[\/_\-. ])/i', (string) $jobName, $matches)) {
+			return $this->normalizeJobSeekerEnvironment($matches[1]);
+		}
+
+		return '';
+	}
+
+	private function jenkinsJobNameFromBuildPath($path) {
+		$path = trim((string) $path);
+		$pathOnly = explode('?', $path, 2);
+		$segments = explode('/', trim($pathOnly[0], '/'));
+
+		if (count($segments) < 3) {
+			return FALSE;
+		}
+
+		$action = array_pop($segments);
+		if ($action !== 'build' && $action !== 'buildWithParameters') {
+			return FALSE;
+		}
+
+		$jobSegments = array();
+		for ($index = 0; $index < count($segments); $index += 2) {
+			if ($segments[$index] !== 'job' || ! isset($segments[$index + 1])) {
+				return FALSE;
+			}
+
+			$jobSegments[] = rawurldecode($segments[$index + 1]);
+		}
+
+		return empty($jobSegments) ? FALSE : implode('/', $jobSegments);
+	}
+
+	private function jenkinsEnvironmentFromBuildRequest($jobName, $path, $body) {
+		$params = array();
+		$query = parse_url($path, PHP_URL_QUERY);
+
+		if ($query !== NULL && $query !== FALSE && $query !== '') {
+			parse_str($query, $params);
+		}
+
+		$bodyParams = array();
+		if (trim((string) $body) !== '') {
+			parse_str((string) $body, $bodyParams);
+		}
+
+		if (isset($bodyParams['ENVIRONMENT'])) {
+			return $bodyParams['ENVIRONMENT'];
+		}
+
+		if (isset($params['ENVIRONMENT'])) {
+			return $params['ENVIRONMENT'];
+		}
+
+		$environment = $this->jenkinsEnvironmentFromJobConfig($jobName);
+		return $environment !== '' ? $environment : $this->detectEnvironmentFromJenkinsJobName($jobName);
+	}
+
+	private function jenkinsEnvironmentFromJobConfig($jobName) {
+		$response = $this->requestJenkins('GET', $this->jenkinsEncodedJobPath($jobName).'/config.xml');
+		if ((int) $response['status'] !== 200) {
+			return '';
+		}
+
+		$dom = new DOMDocument();
+		$previousErrors = libxml_use_internal_errors(TRUE);
+		$loaded = $dom->loadXML($response['body']);
+		libxml_clear_errors();
+		libxml_use_internal_errors($previousErrors);
+
+		if (! $loaded) {
+			return '';
+		}
+
+		foreach ($dom->getElementsByTagName('hudson.model.StringParameterDefinition') as $definition) {
+			$name = $this->jenkinsDirectChildText($definition, 'name');
+			if ($name === 'ENVIRONMENT') {
+				return $this->jenkinsDirectChildText($definition, 'defaultValue');
+			}
+		}
+
+		return '';
+	}
+
+	private function jenkinsDirectChildText($parent, $tagName) {
+		foreach ($parent->childNodes as $child) {
+			if ($child->nodeType === XML_ELEMENT_NODE && $child->tagName === $tagName) {
+				return $child->textContent;
+			}
+		}
+
+		return '';
+	}
+
+	private function jenkinsEncodedJobPath($jobName) {
+		$segments = explode('/', trim((string) $jobName, '/'));
+		$path = array();
+
+		foreach ($segments as $segment) {
+			if ($segment !== '') {
+				$path[] = 'job/' . rawurlencode($segment);
+			}
+		}
+
+		return implode('/', $path);
+	}
+
 	protected function getUploadedFile($field, $allowedExtensions = array(), $maxBytes = 104857600) {
 		if (empty($_FILES[$field]) || ! is_array($_FILES[$field])) {
 			return array('ok' => FALSE, 'message' => 'No file was uploaded.');

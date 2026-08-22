@@ -5,7 +5,11 @@
         "username": "jobseeker",
         "token": "ADD Your Token Here",
         "authorization": "Basic",
-        "jenkins_home": "/php"
+        "jenkins_home": "\/php",
+        "environment_slots": {
+            "default": 1,
+            "DEV": 2
+        }
     },
     "setup": {
         "enabled": false,

@@ -1103,20 +1103,7 @@ $("#table6").on('click','.btnSelect',function(){
     var jenkins_token = '';
     var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
-      $.ajax({
-                url: jenkins_url + 'api/json?tree=jobs[name,builds[number,actions[parameters[name,value]]]]&pretty=true',
-                method: 'GET',
-                headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)},
-                beforeSend: function() {
-                  console.log("Loading Jenkins Jobs...")
-              }
-              }).done(function(data) {
-                console.log("Success to fetch Jenkins Jobs...")
-                 $.each(data["jobs"], function (key, item) {
-                      newJson = item.name;
-                      //Sucess Case to fech data from jenkins
-
-                      $("#table6").on('click','.reprocess',function(){
+      $("#table6").on('click','.reprocess',function(){
 
          // get the current row Id, job name and instance id
          var currentRow=$(this).closest("tr"); 
@@ -1147,15 +1134,6 @@ $("#table6").on('click','.btnSelect',function(){
 
          });
 
-    });
-});
-
   $('.spin').hide();
   $('.reprocess').fadeIn();
-   }).fail(function() {
-      //console.error(arguments);
-      console.log("Erro to fetch Jenkins Jobs...")
-     $('.spin').hide();
-     $('.reprocess-erro').fadeIn();
-     });
 </script>
