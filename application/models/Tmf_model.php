@@ -11,16 +11,36 @@ class Tmf_model extends CI_Model
             return '';
         }
 
-        $date = DateTime::createFromFormat('d-m-Y', $value);
+        $hasTime = preg_match('/\d{1,2}:\d{2}/', $value) === 1;
+        $hasSeconds = preg_match('/\d{1,2}:\d{2}:\d{2}/', $value) === 1;
+        $formats = $hasTime
+            ? array('Y-m-d\TH:i:s', 'Y-m-d\TH:i', 'Y-m-d H:i:s', 'Y-m-d H:i', 'd-m-Y H:i:s', 'd-m-Y H:i', 'd/m/Y H:i:s', 'd/m/Y H:i')
+            : array('Y-m-d', 'd-m-Y', 'd/m/Y');
+
+        $date = false;
+        foreach ($formats as $format) {
+            $parsedDate = DateTime::createFromFormat('!'.$format, $value);
+            $errors = DateTime::getLastErrors();
+            if ($parsedDate !== false && ($errors === false || ($errors['warning_count'] == 0 && $errors['error_count'] == 0))) {
+                $date = $parsedDate;
+                break;
+            }
+        }
+
         if ($date === false) {
             $timestamp = strtotime($value);
             if ($timestamp === false) {
                 return '';
             }
-            $date = new DateTime(date('Y-m-d', $timestamp));
+            $date = new DateTime(date('Y-m-d H:i:s', $timestamp));
         }
 
-        $date->setTime($endOfDay ? 23 : 0, $endOfDay ? 59 : 0, $endOfDay ? 59 : 0);
+        if (!$hasTime) {
+            $date->setTime($endOfDay ? 23 : 0, $endOfDay ? 59 : 0, $endOfDay ? 59 : 0);
+        } elseif ($endOfDay && !$hasSeconds) {
+            $date->setTime((int) $date->format('H'), (int) $date->format('i'), 59);
+        }
+
         return $date->format('Y-m-d H:i:s');
     }
 
@@ -127,8 +147,33 @@ class Tmf_model extends CI_Model
         $this->db->select('status');
         $this->db->distinct();
         $this->db->from('tmf');
+        $this->db->where('status IS NOT NULL', null, false);
         $query = $this->db->get();
-        return $query->result();
+
+        $statuses = array(
+            'ready' => 'Ready',
+            'running' => 'Running',
+            'error' => 'Failed Runs',
+            'warning' => 'Warnings',
+            'cancelled' => 'Cancelled'
+        );
+
+        foreach ($query->result() as $record) {
+            $status = trim((string) $record->status);
+            if ($status !== '' && !array_key_exists($status, $statuses)) {
+                $statuses[$status] = ucfirst($status);
+            }
+        }
+
+        $result = array();
+        foreach ($statuses as $status => $label) {
+            $row = new stdClass();
+            $row->status = $status;
+            $row->status_label = $label;
+            $result[] = $row;
+        }
+
+        return $result;
     }
 
     function listJobName() {
