@@ -62,6 +62,7 @@ $route['dashboard'] = 'Dashboard';
 $route['jenkins/proxy'] = 'JenkinsProxy/proxy';
 $route['jenkins/environmentSlots'] = 'JenkinsProxy/environmentSlots';
 $route['jenkins/executorMonitor'] = 'JenkinsProxy/executorMonitor';
+$route['jenkins/agentSetupHelper'] = 'JenkinsProxy/agentSetupHelper';
 $route['jobExecution/executors'] = 'JobExecution/executors';
 $route['logout'] = 'user/logout';
 $route['userListing'] = 'user/userListing';

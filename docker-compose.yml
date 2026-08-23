@@ -1,3 +1,25 @@
+x-jobseeker-jenkins-agent-base: &jobseeker-jenkins-agent-base
+  build:
+    context: .
+    dockerfile: docker/jenkins_agent_image
+  image: jobseeker-jenkins-agent:local
+  profiles:
+    - jenkins-agents
+  depends_on:
+    docker-runtime:
+      condition: service_healthy
+    jenkins:
+      condition: service_healthy
+  networks:
+    - internal
+
+volumes:
+  jobseeker-docker-cache: {}
+  jenkins-agent-dev-workdir: {}
+  jenkins-agent-qa-workdir: {}
+  jenkins-agent-uat-workdir: {}
+  jenkins-agent-prod-workdir: {}
+
 services:
 
   assets:
@@ -72,6 +94,8 @@ services:
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
       - JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS=${JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS:-1}
       - JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS=${JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS:-DEV=2}
+      - JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=${JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED:-false}
+      - JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS=${JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS:-DEV=jobseeker-env-dev,QA=jobseeker-env-qa,UAT=jobseeker-env-uat,PROD=jobseeker-env-prod}
     healthcheck:
       test: ["CMD-SHELL", "php-fpm -t || exit 1"]
       interval: 30s
@@ -154,6 +178,7 @@ services:
       - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-jobseeker}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-jobseeker}
       - JENKINS_NUM_EXECUTORS=${JENKINS_NUM_EXECUTORS:-5}
+      - JENKINS_AGENT_PORT=${JENKINS_AGENT_PORT:-50000}
       - JOBSEEKER_DB_HOST=mariadb
       - JOBSEEKER_DB_PORT=3306
       - JOBSEEKER_DB_USER=${JOBSEEKER_DB_USER:-mysql}
@@ -163,7 +188,7 @@ services:
       - JOBSEEKER_SMTP_PORT=${JOBSEEKER_SMTP_PORT:-1025}
       - JOBSEEKER_SMTP_SSL=${JOBSEEKER_SMTP_SSL:-false}
       - JOBSEEKER_SMTP_REPLY_TO=${JOBSEEKER_SMTP_REPLY_TO:-jobseeker@local.test}
-      - JOBSEEKER_JENKINS_PUBLIC_URL=${JOBSEEKER_JENKINS_PUBLIC_URL:-http://localhost:8080/}
+      - JOBSEEKER_JENKINS_ROOT_URL=${JOBSEEKER_JENKINS_ROOT_URL:-http://jenkins:8080/}
       - DOCKER_HOST=${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1"]
@@ -172,9 +197,74 @@ services:
       retries: 5
       start_period: 90s
 
+  jenkins-agent-dev:
+    <<: *jobseeker-jenkins-agent-base
+    environment:
+      JENKINS_URL: http://jenkins:8080/
+      JENKINS_USER: ${JENKINS_ADMIN_ID:-jobseeker}
+      JENKINS_TOKEN: ${JENKINS_ADMIN_PASSWORD:-jobseeker}
+      JENKINS_AGENT_NAME: ${JOBSEEKER_JENKINS_DEV_AGENT_NAME:-jobseeker-dev-agent}
+      JENKINS_AGENT_DESCRIPTION: JobSeeker DEV environment worker
+      JENKINS_AGENT_EXECUTORS: ${JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS:-2}
+      JENKINS_AGENT_LABELS: ${JOBSEEKER_JENKINS_DEV_AGENT_LABELS:-jobseeker jobseeker-env-dev env-dev DEV}
+      JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
+      JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
+      DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+    volumes:
+      - ./repository:/php/repository
+      - jenkins-agent-dev-workdir:/home/jenkins/agent
+
+  jenkins-agent-qa:
+    <<: *jobseeker-jenkins-agent-base
+    environment:
+      JENKINS_URL: http://jenkins:8080/
+      JENKINS_USER: ${JENKINS_ADMIN_ID:-jobseeker}
+      JENKINS_TOKEN: ${JENKINS_ADMIN_PASSWORD:-jobseeker}
+      JENKINS_AGENT_NAME: ${JOBSEEKER_JENKINS_QA_AGENT_NAME:-jobseeker-qa-agent}
+      JENKINS_AGENT_DESCRIPTION: JobSeeker QA environment worker
+      JENKINS_AGENT_EXECUTORS: ${JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS:-1}
+      JENKINS_AGENT_LABELS: ${JOBSEEKER_JENKINS_QA_AGENT_LABELS:-jobseeker jobseeker-env-qa env-qa QA QAS}
+      JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
+      JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
+      DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+    volumes:
+      - ./repository:/php/repository
+      - jenkins-agent-qa-workdir:/home/jenkins/agent
+
+  jenkins-agent-uat:
+    <<: *jobseeker-jenkins-agent-base
+    environment:
+      JENKINS_URL: http://jenkins:8080/
+      JENKINS_USER: ${JENKINS_ADMIN_ID:-jobseeker}
+      JENKINS_TOKEN: ${JENKINS_ADMIN_PASSWORD:-jobseeker}
+      JENKINS_AGENT_NAME: ${JOBSEEKER_JENKINS_UAT_AGENT_NAME:-jobseeker-uat-agent}
+      JENKINS_AGENT_DESCRIPTION: JobSeeker UAT environment worker
+      JENKINS_AGENT_EXECUTORS: ${JOBSEEKER_JENKINS_UAT_AGENT_EXECUTORS:-1}
+      JENKINS_AGENT_LABELS: ${JOBSEEKER_JENKINS_UAT_AGENT_LABELS:-jobseeker jobseeker-env-uat env-uat UAT}
+      JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
+      JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
+      DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+    volumes:
+      - ./repository:/php/repository
+      - jenkins-agent-uat-workdir:/home/jenkins/agent
+
+  jenkins-agent-prod:
+    <<: *jobseeker-jenkins-agent-base
+    environment:
+      JENKINS_URL: http://jenkins:8080/
+      JENKINS_USER: ${JENKINS_ADMIN_ID:-jobseeker}
+      JENKINS_TOKEN: ${JENKINS_ADMIN_PASSWORD:-jobseeker}
+      JENKINS_AGENT_NAME: ${JOBSEEKER_JENKINS_PROD_AGENT_NAME:-jobseeker-prod-agent}
+      JENKINS_AGENT_DESCRIPTION: JobSeeker PROD environment worker
+      JENKINS_AGENT_EXECUTORS: ${JOBSEEKER_JENKINS_PROD_AGENT_EXECUTORS:-1}
+      JENKINS_AGENT_LABELS: ${JOBSEEKER_JENKINS_PROD_AGENT_LABELS:-jobseeker jobseeker-env-prod env-prod PROD PRD PRODUCTION}
+      JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
+      JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
+      DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+    volumes:
+      - ./repository:/php/repository
+      - jenkins-agent-prod-workdir:/home/jenkins/agent
+
 networks:
   internal:
     driver: bridge
-
-volumes:
-  jobseeker-docker-cache:

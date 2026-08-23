@@ -426,6 +426,7 @@
                     <tr>
                       <th>Job</th>
                       <th>Environment</th>
+                      <th>Worker</th>
                       <th>Build</th>
                       <th>Status</th>
                       <th>Queue</th>
@@ -436,7 +437,7 @@
                     </tr>
                   </thead>
                   <tbody id="executionRows">
-                    <tr id="executionNoRows"><td colspan="9" class="text-muted text-center">No executions started from this page yet.</td></tr>
+                    <tr id="executionNoRows"><td colspan="10" class="text-muted text-center">No executions started from this page yet.</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1116,6 +1117,7 @@
           '<div class="execution-meta">' +
             '<div class="execution-meta-item"><span>Build</span><strong class="run-build"></strong></div>' +
             '<div class="execution-meta-item"><span>Environment</span><strong class="run-environment"></strong></div>' +
+            '<div class="execution-meta-item"><span>Worker</span><strong class="run-worker"></strong></div>' +
             '<div class="execution-meta-item"><span>Started</span><strong class="run-started"></strong></div>' +
             '<div class="execution-meta-item"><span>Duration</span><strong class="run-duration"></strong></div>' +
             '<div class="execution-meta-item"><span>Console</span><strong class="run-console-size"></strong></div>' +
@@ -1174,6 +1176,7 @@
       pane.find('.run-queue').text(run.queueWhy ? run.queueWhy : (run.queueId ? 'Queue #' + run.queueId : ''));
       pane.find('.run-build').text(buildLabel(run));
       pane.find('.run-environment').html(environmentHelper.label(run.environmentInfo));
+      pane.find('.run-worker').text(workerNodeLabel(run));
       pane.find('.run-started').text(formatTime(run.timestamp));
       pane.find('.run-duration').text(run.finished ? formatDuration(run.duration) : formatDuration(run.timestamp ? Date.now() - parseInt(run.timestamp, 10) : 0));
       pane.find('.run-console-size').text(run.consoleBytes + ' bytes');
@@ -1182,6 +1185,14 @@
       $('#tab-' + run.id + ' a').attr('title', run.jobName + ' - ' + run.environment + ' - ' + (run.status || 'Pending'));
       renderExecutionRows();
       updateExecutionSummary();
+    }
+
+    function workerNodeLabel(run) {
+      if (! run || ! run.buildNumber) {
+        return 'Waiting';
+      }
+
+      return run.builtOn ? run.builtOn : 'Controller';
     }
 
     function renderExecutionRows() {
@@ -1196,6 +1207,7 @@
         rows += '<tr>' +
           '<td><a href="#pane-' + run.id + '" class="execution-row-link" data-tab-id="' + run.id + '">' + escapeHtml(run.jobName) + '</a></td>' +
           '<td>' + environmentHelper.label(run.environmentInfo) + '</td>' +
+          '<td>' + escapeHtml(workerNodeLabel(run)) + '</td>' +
           '<td>' + escapeHtml(buildLabel(run)) + '</td>' +
           '<td>' + statusLabel(run) + '</td>' +
           '<td>' + escapeHtml(run.queueWhy || (run.queueId ? 'Queue #' + run.queueId : 'None')) + '</td>' +
@@ -1207,7 +1219,7 @@
       });
 
       if (rows === '') {
-        rows = '<tr id="executionNoRows"><td colspan="9" class="text-muted text-center">No executions started from this page yet.</td></tr>';
+        rows = '<tr id="executionNoRows"><td colspan="10" class="text-muted text-center">No executions started from this page yet.</td></tr>';
       }
 
       $('#executionRows').html(rows);

@@ -306,6 +306,7 @@ pre {
               <th>Last Build Time</th>
               <th>Last Build Duration</th>
               <th>Last Build Number</th>
+              <th>Last Worker</th>
               <th>Description</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
@@ -330,6 +331,7 @@ pre {
               <th>Last Build Time</th>
               <th>Last Build Duration</th>
               <th>Last Build Number</th>
+              <th>Last Worker</th>
               <th>Description</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
@@ -890,6 +892,11 @@ pre {
     return '<span class="text-muted">No</span>';
   }
 
+  function renderWorkerNode(value) {
+    value = $.trim(String(value == null ? '' : value));
+    return value ? escapeHtml(value) : '<span class="text-muted">Controller</span>';
+  }
+
   function scheduleCacheKey(row) {
     return row && (row.fullName || row.name) ? row.fullName || row.name : '';
   }
@@ -1431,6 +1438,7 @@ pre {
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderBuildTime(lastBuildField(row, 'timestamp'), '<b>Never Built</b>'); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderDuration(lastBuildField(row, 'duration'), '<b>Never Built</b>'); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return escapeHtml(lastBuildField(row, 'number')); }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderWorkerNode(lastBuildField(row, 'builtOn')); }},
           {"data": "description", "defaultContent": "", "render": function(data){ return escapeHtml(data); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';

@@ -196,6 +196,92 @@ class BaseController extends CI_Controller {
 		return $this->checkJenkinsEnvironmentSlots($jobName, $environment);
 	}
 
+	protected function ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $body = '') {
+		$jobName = $this->jenkinsJobNameFromBuildPath($path);
+		if ($jobName === FALSE) {
+			return array('ok' => TRUE, 'updated' => FALSE, 'message' => 'Not a Jenkins build request.');
+		}
+
+		$environment = $this->jenkinsEnvironmentFromBuildRequest($jobName, $path, $body);
+		return $this->ensureJenkinsJobEnvironmentAgentAssignment($jobName, $environment);
+	}
+
+	protected function ensureJenkinsJobEnvironmentAgentAssignment($jobName, $environment) {
+		$jobName = trim((string) $jobName);
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		$agentLabel = $this->jenkinsEnvironmentAgentLabel($environment);
+
+		if ($jobName === '' || $agentLabel === '') {
+			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => 'No environment agent routing is required.');
+		}
+
+		$jobPath = $this->jenkinsEncodedJobPath($jobName);
+		$response = $this->requestJenkins('GET', $jobPath.'/config.xml');
+
+		if ((int) $response['status'] !== 200) {
+			return array('ok' => FALSE, 'updated' => FALSE, 'status' => (int) $response['status'], 'message' => 'Unable to read Jenkins job configuration before routing. HTTP '.$response['status'].'.');
+		}
+
+		$dom = new DOMDocument();
+		$previousErrors = libxml_use_internal_errors(TRUE);
+		$loaded = $dom->loadXML($response['body']);
+		libxml_clear_errors();
+		libxml_use_internal_errors($previousErrors);
+
+		if (! $loaded || ! $dom->documentElement) {
+			return array('ok' => FALSE, 'updated' => FALSE, 'status' => 422, 'message' => 'Jenkins job configuration is not valid XML.');
+		}
+
+		$updates = 0;
+		$root = $dom->documentElement;
+		$assignedNode = $this->jenkinsDirectChildElement($root, 'assignedNode');
+		$canRoam = $this->jenkinsDirectChildElement($root, 'canRoam');
+
+		if (! $assignedNode) {
+			$assignedNode = $dom->createElement('assignedNode');
+			$root->appendChild($assignedNode);
+			$updates++;
+		}
+
+		if ($assignedNode->nodeValue !== $agentLabel) {
+			while ($assignedNode->firstChild) {
+				$assignedNode->removeChild($assignedNode->firstChild);
+			}
+			$assignedNode->appendChild($dom->createTextNode($agentLabel));
+			$updates++;
+		}
+
+		if (! $canRoam) {
+			$canRoam = $dom->createElement('canRoam');
+			$root->appendChild($canRoam);
+			$updates++;
+		}
+
+		if ($canRoam->nodeValue !== 'false') {
+			while ($canRoam->firstChild) {
+				$canRoam->removeChild($canRoam->firstChild);
+			}
+			$canRoam->appendChild($dom->createTextNode('false'));
+			$updates++;
+		}
+
+		if ($updates === 0) {
+			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => 'Jenkins job already targets the environment agent.');
+		}
+
+		$saveResponse = $this->requestJenkins('POST', $jobPath.'/config.xml', $dom->saveXML(), 'text/xml');
+		$ok = in_array((int) $saveResponse['status'], array(200, 201, 302, 303), TRUE);
+
+		return array(
+			'ok' => $ok,
+			'updated' => $ok,
+			'status' => (int) $saveResponse['status'],
+			'environment' => $environment,
+			'agentLabel' => $agentLabel,
+			'message' => $ok ? 'Jenkins job routed to '.$agentLabel.'.' : 'Unable to update Jenkins job routing before build. HTTP '.$saveResponse['status'].'.'
+		);
+	}
+
 	protected function jenkinsEnvironmentSlotStatus($environment = '') {
 		$usage = $this->jenkinsEnvironmentSlotUsage();
 		$limits = array();
@@ -234,6 +320,8 @@ class BaseController extends CI_Controller {
 
 		ksort($usage['environments']);
 		$usage['defaultLimit'] = $defaultLimit;
+		$usage['environmentAgentsEnabled'] = $this->jenkinsEnvironmentAgentsEnabled();
+		$usage['environmentAgentLabels'] = $this->jenkinsEnvironmentAgentLabels();
 		$usage['ok'] = TRUE;
 		return $usage;
 	}
@@ -276,13 +364,149 @@ class BaseController extends CI_Controller {
 		return $limits;
 	}
 
+	protected function jenkinsEnvironmentAgentLabel($environment) {
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN' || ! $this->jenkinsEnvironmentAgentsEnabled()) {
+			return '';
+		}
+
+		$labels = $this->jenkinsEnvironmentAgentLabels();
+		return isset($labels[$environment]) && trim((string) $labels[$environment]) !== '' ? trim((string) $labels[$environment]) : 'jobseeker-env-'.strtolower($environment);
+	}
+
+	private function jenkinsEnvironmentAgentsEnabled() {
+		$envValue = getenv('JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED');
+		if ($envValue !== FALSE) {
+			return $this->jenkinsBooleanValue($envValue);
+		}
+
+		$config = $this->getRuntimeConfig();
+		if (isset($config->jenkins->environment_agents_enabled)) {
+			return $this->jenkinsBooleanValue($config->jenkins->environment_agents_enabled);
+		}
+
+		if (isset($config->jenkins->environmentAgentsEnabled)) {
+			return $this->jenkinsBooleanValue($config->jenkins->environmentAgentsEnabled);
+		}
+
+		return FALSE;
+	}
+
+	private function jenkinsBooleanValue($value) {
+		if (is_bool($value)) {
+			return $value;
+		}
+
+		return in_array(strtolower(trim((string) $value)), array('1', 'true', 'yes', 'on', 'enabled'), TRUE);
+	}
+
+	private function jenkinsEnvironmentAgentLabels() {
+		$labels = array(
+			'DEV' => 'jobseeker-env-dev',
+			'QA' => 'jobseeker-env-qa',
+			'UAT' => 'jobseeker-env-uat',
+			'PROD' => 'jobseeker-env-prod'
+		);
+		$config = $this->getRuntimeConfig();
+
+		if (isset($config->jenkins->environment_agent_labels)) {
+			$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $config->jenkins->environment_agent_labels);
+		}
+
+		if (isset($config->jenkins->environmentAgentLabels)) {
+			$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $config->jenkins->environmentAgentLabels);
+		}
+
+		$envConfig = getenv('JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS');
+		if ($envConfig !== FALSE && trim($envConfig) !== '') {
+			$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $envConfig);
+		}
+
+		return $labels;
+	}
+
+	private function mergeJenkinsEnvironmentAgentLabelConfig(&$labels, $config) {
+		if (is_string($config)) {
+			$trimmed = trim($config);
+			if ($trimmed === '') {
+				return;
+			}
+
+			if ($trimmed[0] === '{') {
+				$decoded = json_decode($trimmed, TRUE);
+				if (is_array($decoded)) {
+					$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $decoded);
+				}
+				return;
+			}
+
+			foreach (preg_split('/[,;]+/', $trimmed) as $pair) {
+				$parts = explode('=', $pair, 2);
+				if (count($parts) === 2) {
+					$this->setJenkinsEnvironmentAgentLabel($labels, $parts[0], $parts[1]);
+				}
+			}
+			return;
+		}
+
+		if (is_object($config)) {
+			$config = get_object_vars($config);
+		}
+
+		if (! is_array($config)) {
+			return;
+		}
+
+		foreach ($config as $environment => $label) {
+			$this->setJenkinsEnvironmentAgentLabel($labels, $environment, $label);
+		}
+	}
+
+	private function setJenkinsEnvironmentAgentLabel(&$labels, $environment, $label) {
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		$label = trim((string) $label);
+
+		if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN' || $label === '') {
+			return;
+		}
+
+		$labels[$environment] = $label;
+	}
+
+	private function jenkinsNodeLabelNames($node) {
+		$labels = array();
+
+		foreach (isset($node->assignedLabels) && is_array($node->assignedLabels) ? $node->assignedLabels : array() as $label) {
+			if (isset($label->name) && trim((string) $label->name) !== '') {
+				$labels[] = trim((string) $label->name);
+			}
+		}
+
+		return array_values(array_unique($labels));
+	}
+
+	private function jenkinsEnvironmentFromNodeLabels($labels, $nodeName = '') {
+		$configuredLabels = $this->jenkinsEnvironmentAgentLabels();
+
+		foreach ($configuredLabels as $environment => $configuredLabel) {
+			foreach ($labels as $label) {
+				if ($label === $configuredLabel) {
+					return $environment;
+				}
+			}
+		}
+
+		$environment = $this->detectEnvironmentFromJenkinsJobName(implode(' ', $labels).' '.$nodeName);
+		return $environment !== '' ? $environment : '';
+	}
+
 	protected function jenkinsExecutorMonitorStatus($environment = '') {
 		$slotStatus = $this->jenkinsEnvironmentSlotStatus($environment);
 		if (! $slotStatus['ok']) {
 			return $slotStatus;
 		}
 
-		$computerResponse = $this->requestJenkins('GET', 'computer/api/json?tree=computer[displayName,offline,temporarilyOffline,numExecutors,executors[number,idle,currentExecutable[number,url,fullDisplayName,building,result,actions[parameters[name,value]]]]]');
+		$computerResponse = $this->requestJenkins('GET', 'computer/api/json?tree=computer[displayName,offline,temporarilyOffline,numExecutors,assignedLabels[name],executors[number,idle,currentExecutable[number,url,fullDisplayName,building,result,builtOn,actions[parameters[name,value]]]]]');
 		if ((int) $computerResponse['status'] !== 200) {
 			$slotStatus['ok'] = FALSE;
 			$slotStatus['status'] = (int) $computerResponse['status'];
@@ -308,17 +532,34 @@ class BaseController extends CI_Controller {
 		}
 
 		$executors = array();
+		$nodes = array();
+		$agentCapacity = array();
 		$queueItems = array();
-		$global = array('totalExecutors' => 0, 'busyExecutors' => 0, 'idleExecutors' => 0, 'offlineNodes' => 0);
+		$global = array('totalExecutors' => 0, 'busyExecutors' => 0, 'idleExecutors' => 0, 'offlineNodes' => 0, 'onlineNodes' => 0, 'agentNodes' => 0, 'onlineAgentNodes' => 0);
 
 		foreach (isset($computerPayload->computer) && is_array($computerPayload->computer) ? $computerPayload->computer : array() as $node) {
 			$nodeName = isset($node->displayName) && $node->displayName !== '' ? (string) $node->displayName : 'Jenkins node';
 			$isOffline = isset($node->offline) && $node->offline === TRUE;
+			$isTemporarilyOffline = isset($node->temporarilyOffline) && $node->temporarilyOffline === TRUE;
+			$nodeLabels = $this->jenkinsNodeLabelNames($node);
+			$nodeEnvironment = $this->jenkinsEnvironmentFromNodeLabels($nodeLabels, $nodeName);
 			$nodeExecutors = isset($node->numExecutors) ? (int) $node->numExecutors : (isset($node->executors) && is_array($node->executors) ? count($node->executors) : 0);
+			$nodeBusyExecutors = 0;
+			$nodeIdleExecutors = 0;
+			$isControllerNode = in_array($nodeName, array('Built-In Node', 'Jenkins node', 'master'), TRUE);
 
-			$global['totalExecutors'] += $nodeExecutors;
 			if ($isOffline) {
 				$global['offlineNodes'] += 1;
+			} else {
+				$global['onlineNodes'] += 1;
+				$global['totalExecutors'] += $nodeExecutors;
+			}
+
+			if (! $isControllerNode) {
+				$global['agentNodes'] += 1;
+				if (! $isOffline) {
+					$global['onlineAgentNodes'] += 1;
+				}
 			}
 
 			foreach (isset($node->executors) && is_array($node->executors) ? $node->executors : array() as $executorIndex => $executor) {
@@ -332,23 +573,75 @@ class BaseController extends CI_Controller {
 				if ($executorEnvironment === '') {
 					$executorEnvironment = $this->detectEnvironmentFromJenkinsJobName($jobName);
 				}
+				if ($executorEnvironment === '') {
+					$executorEnvironment = $nodeEnvironment;
+				}
 
 				if ($isIdle) {
 					$global['idleExecutors'] += 1;
+					$nodeIdleExecutors += 1;
 				} else {
 					$global['busyExecutors'] += 1;
+					$nodeBusyExecutors += 1;
 				}
 
 				$executors[] = array(
 					'node' => $nodeName,
 					'executor' => isset($executor->number) ? (int) $executor->number : (int) $executorIndex,
 					'offline' => $isOffline,
+					'temporarilyOffline' => $isTemporarilyOffline,
 					'idle' => $isIdle,
 					'job' => $jobName,
 					'build' => $executable && isset($executable->fullDisplayName) ? (string) $executable->fullDisplayName : '',
 					'url' => $executable && isset($executable->url) ? (string) $executable->url : '',
-					'environment' => $this->normalizeJobSeekerEnvironment($executorEnvironment)
+					'environment' => $this->normalizeJobSeekerEnvironment($executorEnvironment),
+					'labels' => $nodeLabels
 				);
+			}
+
+			if ($nodeEnvironment !== '') {
+				if (! isset($agentCapacity[$nodeEnvironment])) {
+					$agentCapacity[$nodeEnvironment] = array('agentNodes' => 0, 'onlineAgentNodes' => 0, 'agentExecutors' => 0, 'busyAgentExecutors' => 0, 'availableAgentExecutors' => 0, 'offlineAgentNodes' => 0);
+				}
+
+				$agentCapacity[$nodeEnvironment]['agentNodes'] += 1;
+				$agentCapacity[$nodeEnvironment]['agentExecutors'] += $nodeExecutors;
+				$agentCapacity[$nodeEnvironment]['busyAgentExecutors'] += $nodeBusyExecutors;
+
+				if ($isOffline) {
+					$agentCapacity[$nodeEnvironment]['offlineAgentNodes'] += 1;
+				} else {
+					$agentCapacity[$nodeEnvironment]['onlineAgentNodes'] += 1;
+					$agentCapacity[$nodeEnvironment]['availableAgentExecutors'] += $nodeIdleExecutors;
+				}
+			}
+
+			$nodes[] = array(
+				'node' => $nodeName,
+				'environment' => $nodeEnvironment,
+				'labels' => $nodeLabels,
+				'offline' => $isOffline,
+				'temporarilyOffline' => $isTemporarilyOffline,
+				'executors' => $nodeExecutors,
+				'busyExecutors' => $nodeBusyExecutors,
+				'idleExecutors' => $isOffline ? 0 : $nodeIdleExecutors,
+				'availableExecutors' => $isOffline ? 0 : $nodeIdleExecutors
+			);
+		}
+
+		foreach ($agentCapacity as $environmentName => $capacity) {
+			if (! isset($slotStatus['environments'][$environmentName])) {
+				$slotStatus['environments'][$environmentName] = array('running' => 0, 'queued' => 0, 'active' => 0, 'limit' => 0, 'available' => NULL);
+			}
+
+			$slotStatus['environments'][$environmentName] = array_merge($slotStatus['environments'][$environmentName], $capacity);
+		}
+
+		foreach ($slotStatus['environments'] as $environmentName => $row) {
+			foreach (array('agentNodes', 'onlineAgentNodes', 'agentExecutors', 'busyAgentExecutors', 'availableAgentExecutors', 'offlineAgentNodes') as $field) {
+				if (! isset($slotStatus['environments'][$environmentName][$field])) {
+					$slotStatus['environments'][$environmentName][$field] = 0;
+				}
 			}
 		}
 
@@ -375,6 +668,7 @@ class BaseController extends CI_Controller {
 		$slotStatus['status'] = 200;
 		$slotStatus['message'] = 'Jenkins executor monitor loaded.';
 		$slotStatus['global'] = $global;
+		$slotStatus['nodes'] = $nodes;
 		$slotStatus['executors'] = $executors;
 		$slotStatus['queue'] = $queueItems;
 
@@ -730,14 +1024,20 @@ class BaseController extends CI_Controller {
 		return '';
 	}
 
-	private function jenkinsDirectChildText($parent, $tagName) {
+	private function jenkinsDirectChildElement($parent, $tagName) {
 		foreach ($parent->childNodes as $child) {
 			if ($child->nodeType === XML_ELEMENT_NODE && $child->tagName === $tagName) {
-				return $child->textContent;
+				return $child;
 			}
 		}
 
-		return '';
+		return NULL;
+	}
+
+	private function jenkinsDirectChildText($parent, $tagName) {
+		$child = $this->jenkinsDirectChildElement($parent, $tagName);
+
+		return $child ? $child->textContent : '';
 	}
 
 	private function jenkinsEncodedJobPath($jobName) {

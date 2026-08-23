@@ -300,11 +300,11 @@
               <div class="dashboard-jenkins-stats">
                 <div class="dashboard-jenkins-stat">
                   <strong id="dashboardJenkinsCapacity">--</strong>
-                  <span>Env Executors Used</span>
+                  <span>JobSeeker Slots</span>
                 </div>
                 <div class="dashboard-jenkins-stat">
                   <strong id="dashboardJenkinsQueue">--</strong>
-                  <span>Executor Queue</span>
+                  <span>Slot Queue</span>
                 </div>
               </div>
             </div>

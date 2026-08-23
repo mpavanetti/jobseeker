@@ -280,6 +280,7 @@ pre {
             <tr>
               <th>Build</th>
               <th>Environment</th>
+              <th>Worker</th>
               <th>Result</th>
               <th>Started</th>
               <th>Duration</th>
@@ -509,6 +510,11 @@ pre {
       return '<span class="full-job-environment-cell">' + environmentHelper.label(info) + '</span>';
     }
 
+    function renderWorkerNode(build) {
+      var builtOn = $.trim(String(build && build.builtOn != null ? build.builtOn : ''));
+      return builtOn ? renderText(builtOn) : '<span class="text-muted">Controller</span>';
+    }
+
     function setSelectedJobEnvironment(info) {
       selectedJobEnvironmentInfo = info || {environment: 'Unknown', source: 'Not detected', unknown: true};
       $('#selectedJobEnvironmentLabel').html(environmentHelper.label(selectedJobEnvironmentInfo) + ' <small>' + escapeHtml(selectedJobEnvironmentInfo.source || 'Not detected') + '</small>');
@@ -577,7 +583,7 @@ pre {
         data: builds,
         lengthMenu: [5,10,20,50,100,200,500],
         pageLength: 10,
-        order: [[3, 'desc']],
+        order: [[4, 'desc']],
         scrollX: true,
         language: {
           emptyTable: 'Search builds to populate this report.'
@@ -585,6 +591,7 @@ pre {
         columns: [
           {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' ? parseInt(row.number, 10) || 0 : renderBuildIdentity(row); }},
           {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' || type === 'type' ? environmentHelper.text(row.environmentInfo) : renderEnvironment(row); }},
+          {data: null, defaultContent: '', render: function(data, type, row) { return type === 'sort' || type === 'type' ? String(row.builtOn || '') : renderWorkerNode(row); }},
           {data: null, defaultContent: '', render: function(data, type, row) { return renderResult(row); }},
           {data: 'timestamp', defaultContent: '', render: function(data, type) { return type === 'sort' || type === 'type' ? parseInt(data, 10) || 0 : renderBuildTime(data); }},
           {data: 'duration', defaultContent: '', render: function(data, type) { return type === 'sort' || type === 'type' ? parseInt(data, 10) || 0 : renderDuration(data); }},
@@ -699,7 +706,7 @@ pre {
 
     function fetchBuilds(filters) {
       return $.ajax({
-        url: jenkins_url + jenkinsJobPath(filters.jobName) + '/api/json?tree=builds[number,fullDisplayName,result,timestamp,duration,url,queueId,building]{0,' + filters.rowLimit + '}',
+        url: jenkins_url + jenkinsJobPath(filters.jobName) + '/api/json?tree=builds[number,fullDisplayName,result,timestamp,duration,builtOn,url,queueId,building]{0,' + filters.rowLimit + '}',
         method: 'GET',
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
       }).then(function(data) {

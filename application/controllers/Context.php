@@ -872,6 +872,7 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
 
   $parameterUpdates = $this->rewriteEnvironmentParameterDefaults($dom, $sourceEnvironment, $targetEnvironment);
   $downstreamUpdates = $this->rewritePromotionDownstreamJobs($dom, $sourceEnvironment, $targetEnvironment, $jobNameMap);
+  $agentAssignmentUpdates = $this->rewritePromotionAgentAssignment($dom, $targetEnvironment);
 
   return array(
     'ok' => TRUE,
@@ -880,6 +881,7 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
     'parameter_updates' => $parameterUpdates,
     'artifact_path_updates' => $artifactPathUpdates,
     'downstream_updates' => $downstreamUpdates,
+    'agent_assignment_updates' => $agentAssignmentUpdates,
     'command_previews' => $commandPreviews
   );
 }
@@ -1164,6 +1166,48 @@ private function rewritePromotionDownstreamJobs($dom, $sourceEnvironment, $targe
       }
       $childProjectsNode->appendChild($dom->createTextNode($promotedValue));
     }
+  }
+
+  return $updates;
+}
+
+private function rewritePromotionAgentAssignment($dom, $targetEnvironment) {
+  $agentLabel = $this->jenkinsEnvironmentAgentLabel($targetEnvironment);
+  if ($agentLabel === '' || ! $dom->documentElement) {
+    return 0;
+  }
+
+  $updates = 0;
+  $root = $dom->documentElement;
+  $assignedNode = $this->directChildElement($root, 'assignedNode');
+  $canRoam = $this->directChildElement($root, 'canRoam');
+
+  if (! $assignedNode) {
+    $assignedNode = $dom->createElement('assignedNode');
+    $root->appendChild($assignedNode);
+    $updates++;
+  }
+
+  if ($assignedNode->nodeValue !== $agentLabel) {
+    while ($assignedNode->firstChild) {
+      $assignedNode->removeChild($assignedNode->firstChild);
+    }
+    $assignedNode->appendChild($dom->createTextNode($agentLabel));
+    $updates++;
+  }
+
+  if (! $canRoam) {
+    $canRoam = $dom->createElement('canRoam');
+    $root->appendChild($canRoam);
+    $updates++;
+  }
+
+  if ($canRoam->nodeValue !== 'false') {
+    while ($canRoam->firstChild) {
+      $canRoam->removeChild($canRoam->firstChild);
+    }
+    $canRoam->appendChild($dom->createTextNode('false'));
+    $updates++;
   }
 
   return $updates;
