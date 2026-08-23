@@ -156,6 +156,16 @@ class JobCreation extends BaseController
       return $properties;
     }
 
+    private function appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment) {
+      $agentLabel = $this->jenkinsEnvironmentAgentLabel($environment);
+      if ($agentLabel === '') {
+        return;
+      }
+
+      $this->appendTextElement($dom, $root, 'assignedNode', $agentLabel);
+      $this->appendTextElement($dom, $root, 'canRoam', 'false');
+    }
+
     private function createShellCommandJobXml($description, $command, $environment) {
       $dom = new DOMDocument();
       $dom->encoding = 'UTF-8';
@@ -165,6 +175,7 @@ class JobCreation extends BaseController
       $root = $dom->createElement('project');
       $this->appendTextElement($dom, $root, 'description', $description);
       $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment));
+      $this->appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment);
 
       $builders = $dom->createElement('builders');
       $shell = $dom->createElement('hudson.tasks.Shell');
@@ -280,7 +291,7 @@ class JobCreation extends BaseController
     }
 
     private function availableJobsTree($depth) {
-      $fields = '_class,name,fullName,displayName,url,color,description,buildable,inQueue,nextBuildNumber,queueItem[id,why],healthReport[description,score],property[parameterDefinitions[name,defaultParameterValue[value]]],lastBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName,actions[parameters[name,value]]],lastCompletedBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName],lastFailedBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName],lastStableBuild[number,id,result,timestamp,duration,estimatedDuration,building,url,queueId,displayName]';
+      $fields = '_class,name,fullName,displayName,url,color,description,buildable,inQueue,nextBuildNumber,queueItem[id,why],healthReport[description,score],property[parameterDefinitions[name,defaultParameterValue[value]]],lastBuild[number,id,result,timestamp,duration,estimatedDuration,building,builtOn,url,queueId,displayName,actions[parameters[name,value]]],lastCompletedBuild[number,id,result,timestamp,duration,estimatedDuration,building,builtOn,url,queueId,displayName],lastFailedBuild[number,id,result,timestamp,duration,estimatedDuration,building,builtOn,url,queueId,displayName],lastStableBuild[number,id,result,timestamp,duration,estimatedDuration,building,builtOn,url,queueId,displayName]';
 
       if ($depth <= 0) {
         return 'jobs['.$fields.']';
@@ -2339,6 +2350,7 @@ class JobCreation extends BaseController
 
                 $root->appendChild($node_description);
                 $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment));
+                $this->appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment);
 
                 // Create Trigger Elements
                 if($checkBuild == 1){ // If Build Periodically Build is selected then
@@ -2721,6 +2733,12 @@ class JobCreation extends BaseController
                     $slotCheck = $this->checkJenkinsEnvironmentSlots($targetJobName, $environment);
                     if (! $slotCheck['ok']) {
                       $triggerFailures[] = $targetJobName.' ('.$slotCheck['message'].')';
+                      continue;
+                    }
+
+                    $routingCheck = $this->ensureJenkinsJobEnvironmentAgentAssignment($targetJobName, $environment);
+                    if (! $routingCheck['ok']) {
+                      $triggerFailures[] = $targetJobName.' ('.$routingCheck['message'].')';
                       continue;
                     }
 

@@ -54,6 +54,42 @@
     display: inline-block;
     min-width: 58px;
   }
+
+  .executor-monitor-label-list {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .executor-setup-helper .form-inline .form-group {
+    margin-bottom: 10px;
+    margin-right: 10px;
+  }
+
+  .executor-setup-summary {
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.45;
+    margin-top: 6px;
+  }
+
+  .executor-setup-code {
+    background: #0f172a;
+    border: 0;
+    border-radius: 6px;
+    color: #dbeafe;
+    font-size: 12px;
+    min-height: 96px;
+    white-space: pre-wrap;
+  }
+
+  .executor-setup-notes {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 8px;
+  }
 </style>
 
 <div class="content-wrapper">
@@ -90,7 +126,7 @@
         <div class="info-box">
           <span class="info-box-icon bg-aqua"><i class="fa fa-sliders"></i></span>
           <div class="info-box-content">
-            <span class="info-box-text">Environment Slots</span>
+            <span class="info-box-text">JobSeeker Slots</span>
             <span class="info-box-number" id="executorMonitorSlots">--</span>
           </div>
         </div>
@@ -117,8 +153,8 @@
         <div class="info-box">
           <span class="info-box-icon bg-red"><i class="fa fa-plug"></i></span>
           <div class="info-box-content">
-            <span class="info-box-text">Offline Nodes</span>
-            <span class="info-box-number" id="executorMonitorOffline">--</span>
+            <span class="info-box-text">Worker Agents</span>
+            <span class="info-box-number" id="executorMonitorAgents">--</span>
           </div>
         </div>
       </div>
@@ -126,7 +162,64 @@
 
     <div class="callout callout-info executor-monitor-note">
       <h4><i class="fa fa-info-circle"></i> Parallelism model</h4>
-      <p>Jenkins executors are the worker slots that run builds. JobSeeker applies environment slot limits before triggering builds, so DEV capacity and PROD capacity are tracked separately even when the current Jenkins controller still has one shared executor pool.</p>
+      <p>JobSeeker slots are trigger limits per environment. Jenkins executors are the actual Jenkins worker capacity across the controller and online agent nodes. Per-environment agent capacity is shown in the Environment Slot Usage and Worker Nodes tables.</p>
+      <p id="executorMonitorRoutingDetail">Loading environment-agent routing state...</p>
+    </div>
+
+    <div class="box box-primary executor-monitor-card executor-setup-helper">
+      <div class="box-header with-border">
+        <h3 class="box-title"><b>Agent Setup Helper</b></h3>
+        <div class="box-tools pull-right">
+          <button type="button" class="btn btn-box-tool" id="refreshAgentSetupHelper"><i class="fa fa-refresh"></i></button>
+        </div>
+      </div>
+      <div class="box-body">
+        <div class="form-inline">
+          <div class="form-group">
+            <label for="agentSetupMode">Deployment</label>
+            <select class="form-control input-sm" id="agentSetupMode">
+              <option value="docker">Local Docker / VM</option>
+              <option value="kubernetes">Kubernetes</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="agentSetupCpu">CPU cores</label>
+            <input type="number" min="1" class="form-control input-sm" id="agentSetupCpu" placeholder="Auto">
+          </div>
+          <div class="form-group">
+            <label for="agentSetupMemory">Memory MB</label>
+            <input type="number" min="256" class="form-control input-sm" id="agentSetupMemory" placeholder="Auto">
+          </div>
+          <button type="button" class="btn btn-default btn-sm" id="calculateAgentSetupHelper"><i class="fa fa-calculator"></i> Calculate</button>
+        </div>
+        <div class="executor-setup-summary" id="agentSetupSummary">Loading setup recommendation...</div>
+        <div class="row" style="margin-top: 12px;">
+          <div class="col-md-7 col-xs-12">
+            <div class="table-responsive no-padding">
+              <table class="table table-striped executor-monitor-table">
+                <thead>
+                  <tr>
+                    <th>Environment</th>
+                    <th>Label</th>
+                    <th>Current</th>
+                    <th>Recommended</th>
+                  </tr>
+                </thead>
+                <tbody id="agentSetupRows">
+                  <tr><td colspan="4" class="executor-monitor-empty">Loading setup helper...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col-md-5 col-xs-12">
+            <label>.env values</label>
+            <pre class="executor-setup-code" id="agentSetupEnv">Loading...</pre>
+            <label>Apply path</label>
+            <pre class="executor-setup-code" id="agentSetupCommands">Loading...</pre>
+            <div class="executor-setup-notes" id="agentSetupNotes"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="row">
@@ -145,10 +238,13 @@
                   <th>Used</th>
                   <th>Limit</th>
                   <th>Available</th>
+                  <th>Agent Nodes</th>
+                  <th>Agent Executors</th>
+                  <th>Agent Available</th>
                 </tr>
               </thead>
               <tbody id="executorMonitorSlotRows">
-                <tr><td colspan="6" class="executor-monitor-empty">Loading slot usage...</td></tr>
+                <tr><td colspan="9" class="executor-monitor-empty">Loading slot usage...</td></tr>
               </tbody>
             </table>
           </div>
@@ -182,7 +278,34 @@
       <div class="col-xs-12">
         <div class="box box-primary executor-monitor-card">
           <div class="box-header with-border">
-            <h3 class="box-title"><b>Jenkins Executor Details</b></h3>
+            <h3 class="box-title"><b>Worker Nodes</b></h3>
+          </div>
+          <div class="box-body table-responsive no-padding">
+            <table class="table table-striped executor-monitor-table">
+              <thead>
+                <tr>
+                  <th>Node</th>
+                  <th>Environment</th>
+                  <th>Status</th>
+                  <th>Executors</th>
+                  <th>Available</th>
+                  <th>Labels</th>
+                </tr>
+              </thead>
+              <tbody id="executorMonitorNodeRows">
+                <tr><td colspan="6" class="executor-monitor-empty">Loading worker nodes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-xs-12">
+        <div class="box box-primary executor-monitor-card">
+          <div class="box-header with-border">
+            <h3 class="box-title"><b>Live Executor Details</b></h3>
           </div>
           <div class="box-body table-responsive no-padding">
             <table class="table table-striped executor-monitor-table">
@@ -228,10 +351,11 @@
       var value = $('#globalEnvironmentSelector').val() || 'all';
 
       if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
-        return window.JobSeekerGlobalEnvironment.normalize(value);
+        value = window.JobSeekerGlobalEnvironment.normalize(value);
+        return String(value || '').toLowerCase() === 'all' ? 'all' : value;
       }
 
-      return String(value || 'all').toUpperCase();
+      return String(value || 'all').toLowerCase() === 'all' ? 'all' : String(value || 'all').toUpperCase();
     }
 
     function scopedUrl(path) {
@@ -250,6 +374,31 @@
       return '<span class="label label-primary executor-monitor-label">' + escapeHtml(environment) + '</span>';
     }
 
+    function labelList(labels) {
+      labels = $.map(labels || [], function(label) { return label ? escapeHtml(label) : null; });
+      return labels.length ? '<span class="executor-monitor-label-list">' + labels.join(', ') + '</span>' : '<span class="text-muted">None</span>';
+    }
+
+    function scopedRows(rows, selected) {
+      if (! selected || selected === 'all') {
+        return rows || [];
+      }
+
+      return $.grep(rows || [], function(row) {
+        return String(row.environment || '').toUpperCase() === selected;
+      });
+    }
+
+    function scopedEnvironments(environments, selected) {
+      if (! selected || selected === 'all') {
+        return environments || {};
+      }
+
+      var scoped = {};
+      scoped[selected] = environments && environments[selected] ? environments[selected] : {};
+      return scoped;
+    }
+
     function renderRows(selector, rows, emptyMessage, colspan) {
       $(selector).html(rows.length ? rows.join('') : '<tr><td colspan="' + colspan + '" class="executor-monitor-empty">' + escapeHtml(emptyMessage) + '</td></tr>');
     }
@@ -265,10 +414,28 @@
           '<td>' + number(row.active) + '</td>' +
           '<td>' + (number(row.limit) > 0 ? number(row.limit) : 'Unlimited') + '</td>' +
           '<td>' + (row.available === null ? 'Unlimited' : number(row.available)) + '</td>' +
+          '<td>' + number(row.onlineAgentNodes) + ' / ' + number(row.agentNodes) + '</td>' +
+          '<td>' + number(row.busyAgentExecutors) + ' / ' + number(row.agentExecutors) + '</td>' +
+          '<td>' + number(row.availableAgentExecutors) + '</td>' +
         '</tr>');
       });
 
       return rows;
+    }
+
+    function nodeRows(nodes) {
+      return $.map(nodes || [], function(node) {
+        var status = node.offline ? '<span class="label label-danger">Offline</span>' : (node.temporarilyOffline ? '<span class="label label-warning">Temporarily offline</span>' : '<span class="label label-success">Online</span>');
+
+        return '<tr>' +
+          '<td>' + escapeHtml(node.node || 'Jenkins node') + '</td>' +
+          '<td>' + (node.environment ? environmentLabel(node.environment) : '<span class="label label-default">Shared</span>') + '</td>' +
+          '<td>' + status + '</td>' +
+          '<td>' + number(node.busyExecutors) + ' / ' + number(node.executors) + '</td>' +
+          '<td>' + number(node.availableExecutors) + '</td>' +
+          '<td>' + labelList(node.labels) + '</td>' +
+        '</tr>';
+      });
     }
 
     function executorRows(executors) {
@@ -283,6 +450,81 @@
           '<td>' + (executor.environment ? environmentLabel(executor.environment) : '<span class="label label-default">Idle</span>') + '</td>' +
           '<td>' + build + '</td>' +
         '</tr>';
+      });
+    }
+
+    function routingDetail(payload, selected, slots) {
+      var enabled = payload && payload.environmentAgentsEnabled === true;
+      var labels = payload && payload.environmentAgentLabels ? payload.environmentAgentLabels : {};
+      var badge = enabled ? '<span class="label label-success">Agent routing enabled</span>' : '<span class="label label-default">Agent routing disabled</span>';
+
+      if (selected && selected !== 'all') {
+        var label = labels[selected] || ('jobseeker-env-' + String(selected).toLowerCase());
+        var agents = slots ? number(slots.onlineAgentNodes) + ' / ' + number(slots.agentNodes) : '0 / 0';
+        var executors = slots ? number(slots.availableAgentExecutors) + ' / ' + number(slots.agentExecutors) : '0 / 0';
+        return badge + ' ' + escapeHtml(selected) + ' routes to <code>' + escapeHtml(label) + '</code>. Online workers: ' + agents + '. Available worker executors: ' + executors + '.';
+      }
+
+      return badge + ' All environments are shown. The executor total includes controller executors plus any online agent executors.';
+    }
+
+    function setupHelperRows(rows) {
+      return $.map(rows || [], function(row) {
+        var current = 'slots ' + number(row.currentSlotLimit) + ', agents ' + number(row.onlineAgentNodes) + ' / ' + number(row.currentAgentNodes) + ', executors ' + number(row.currentAgentExecutors);
+        var recommended = number(row.recommendedAgents) + ' agent(s), ' + number(row.recommendedExecutorsPerAgent) + ' executor(s)/agent, slots ' + number(row.recommendedSlotLimit);
+        if (! row.service && number(row.recommendedSlotLimit) > 0) {
+          recommended += '<br><span class="text-muted">Custom worker template needed</span>';
+        }
+        if (! row.label) {
+          recommended += '<br><span class="text-muted">No routing label configured</span>';
+        }
+
+        return '<tr>' +
+          '<td>' + environmentLabel(row.environment) + '</td>' +
+          '<td>' + (row.label ? '<code>' + escapeHtml(row.label) + '</code>' : '<span class="text-muted">Not configured</span>') + '</td>' +
+          '<td>' + escapeHtml(current) + '</td>' +
+          '<td>' + recommended + '</td>' +
+        '</tr>';
+      });
+    }
+
+    function renderAgentSetupHelper(payload) {
+      var detected = payload.detected || {};
+      var recommendation = payload.recommendation || {};
+      var mode = payload.mode === 'kubernetes' ? 'Kubernetes' : 'Local Docker / VM';
+      var routing = recommendation.routingEnabled ? '<span class="label label-success">Routing enabled</span>' : '<span class="label label-default">Routing disabled</span>';
+      var summary = routing + ' ' + mode + ': detected ' + number(detected.cpuCores) + ' CPU core(s) from ' + escapeHtml(detected.cpuSource || 'unknown') + ', ' + number(detected.memoryMb) + ' MB memory from ' + escapeHtml(detected.memorySource || 'unknown') + '. Recommended build budget: ' + number(recommendation.buildBudget) + ', controller executors: ' + number(recommendation.controllerExecutors) + ', agent executors: ' + number(recommendation.agentExecutors) + '. Current online Jenkins executors: ' + number(recommendation.currentJenkinsExecutors) + '.';
+
+      $('#agentSetupSummary').html(summary);
+      renderRows('#agentSetupRows', setupHelperRows(payload.environments), 'No environment setup recommendation is available.', 4);
+      $('#agentSetupEnv').text((payload.env || []).join('\n') || 'No environment variables recommended.');
+      $('#agentSetupCommands').text((payload.commands || []).join('\n') || 'No commands recommended.');
+      $('#agentSetupNotes').html($.map(payload.notes || [], function(note) {
+        return '<div><i class="fa fa-circle-o"></i> ' + escapeHtml(note) + '</div>';
+      }).join(''));
+    }
+
+    function loadAgentSetupHelper() {
+      var params = {mode: $('#agentSetupMode').val() || 'docker'};
+      var cpu = parseInt($('#agentSetupCpu').val(), 10);
+      var memory = parseInt($('#agentSetupMemory').val(), 10);
+
+      if (! isNaN(cpu) && cpu > 0) {
+        params.cpu = cpu;
+      }
+      if (! isNaN(memory) && memory > 0) {
+        params.memoryMb = memory;
+      }
+
+      $('#agentSetupSummary').text('Calculating setup recommendation...');
+      $.getJSON(appUrl('jenkins/agentSetupHelper'), params).done(renderAgentSetupHelper).fail(function(xhr) {
+        var message = xhr && xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unable to calculate agent setup.';
+        $('#agentSetupSummary').text(message);
+        renderRows('#agentSetupRows', [], message, 4);
+        $('#agentSetupEnv').text('');
+        $('#agentSetupCommands').text('');
+        $('#agentSetupNotes').text('');
+        toastr.error(message, 'Agent Setup Helper');
       });
     }
 
@@ -301,21 +543,29 @@
       $('#refreshExecutorMonitor').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Refreshing');
 
       $.getJSON(scopedUrl('jenkins/executorMonitor')).done(function(payload) {
-        var environments = payload.environments || {};
         var selected = selectedEnvironment();
+        var environments = payload.environments || {};
+        var visibleEnvironments = scopedEnvironments(environments, selected);
         var slots = selected && selected !== 'all' ? environments[selected] || {running: 0, queued: 0, active: 0, limit: payload.defaultLimit || 1, available: payload.defaultLimit || 1} : null;
+        var visibleExecutors = scopedRows(payload.executors, selected);
         var slotActive = 0;
         var slotLimit = 0;
         var queued = 0;
+        var agentNodes = 0;
+        var onlineAgentNodes = 0;
 
         if (slots) {
           slotActive = number(slots.active);
           slotLimit = number(slots.limit);
           queued = number(slots.queued);
+          agentNodes = number(slots.agentNodes);
+          onlineAgentNodes = number(slots.onlineAgentNodes);
         } else {
           $.each(environments, function(environment, row) {
             slotActive += number(row.active);
             queued += number(row.queued);
+            agentNodes += number(row.agentNodes);
+            onlineAgentNodes += number(row.onlineAgentNodes);
             if (number(row.limit) > 0) {
               slotLimit += number(row.limit);
             }
@@ -327,11 +577,13 @@
         $('#executorMonitorSlots').text(slotLimit > 0 ? slotActive + ' / ' + slotLimit : slotActive + ' / unlimited');
         $('#executorMonitorExecutors').text(number(payload.global && payload.global.busyExecutors) + ' / ' + number(payload.global && payload.global.totalExecutors));
         $('#executorMonitorQueue').text(queued);
-        $('#executorMonitorOffline').text(number(payload.global && payload.global.offlineNodes));
+        $('#executorMonitorAgents').text(onlineAgentNodes + ' / ' + agentNodes);
+        $('#executorMonitorRoutingDetail').html(routingDetail(payload, selected, slots));
 
-        renderRows('#executorMonitorSlotRows', slotRows(environments), 'No environment slot data is available.', 6);
-        renderRows('#executorMonitorQueueRows', queueRows(payload.queue), 'The Jenkins queue is empty.', 4);
-        renderRows('#executorMonitorExecutorRows', executorRows(payload.executors), 'No Jenkins executors were returned.', 5);
+        renderRows('#executorMonitorSlotRows', slotRows(visibleEnvironments), 'No environment slot data is available.', 9);
+        renderRows('#executorMonitorQueueRows', queueRows(scopedRows(payload.queue, selected)), 'The Jenkins queue is empty.', 4);
+        renderRows('#executorMonitorNodeRows', nodeRows(scopedRows(payload.nodes, selected)), 'No worker nodes were returned for this scope.', 6);
+        renderRows('#executorMonitorExecutorRows', executorRows(visibleExecutors), 'No Jenkins executors were returned for this scope.', 5);
       }).fail(function(xhr) {
         var message = xhr && xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unable to load Jenkins executor monitor.';
         $('#executorMonitorUpdated').text(message);
@@ -354,8 +606,11 @@
 
     $(document).ready(function() {
       loadExecutorMonitor();
+      loadAgentSetupHelper();
       syncAutoRefresh();
       $('#refreshExecutorMonitor').on('click', loadExecutorMonitor);
+      $('#refreshAgentSetupHelper, #calculateAgentSetupHelper').on('click', loadAgentSetupHelper);
+      $('#agentSetupMode').on('change', loadAgentSetupHelper);
       $('#executorMonitorAutoRefresh').on('change', syncAutoRefresh);
       $(document).on('jobseeker:environment-change', loadExecutorMonitor);
     });

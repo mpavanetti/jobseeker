@@ -12,7 +12,7 @@ It gives data teams one place to create and trigger Jenkins jobs, schedule recur
 - Bind Jenkins jobs to runtime environments, then filter and inspect that environment across creation, listing, viewing, execution, deletion, TMF, and dashboards. A global environment selector in the top bar keeps those views aligned.
 - Schedule jobs with guided single-run, repetitive, tag-based, or custom Jenkins cron expressions.
 - Promote Jenkins jobs between environments with dependency discovery, context-variable promotion, artifact folder copy, dry-run previews, and rollback checkpoints.
-- Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history, console output, environment badges, and focused environment filters.
+- Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history, console output, environment badges, worker-node visibility, and focused environment filters.
 - Query TMF records by job, status, environment, date/time range, dimension, event text, and reprocess flag.
 - Run Python jobs with the bundled `jobseeker` SDK for TMF logging, context lookup, progress updates, and Jenkins-agent or Docker execution.
 - Track processed records, warnings, errors, messages, hostnames, users, and execution timing.
@@ -73,28 +73,120 @@ For local overrides, copy the environment template first:
 cp .env.example .env
 ```
 
-Open JobSeeker at http://localhost/ and Jenkins at http://localhost:8080/.
+Open JobSeeker at http://localhost/ and Jenkins at http://localhost:8080/login.
 
 The Docker stack configures the database connection, session encryption key, and internal Jenkins API endpoint through [docker-compose.yml](docker-compose.yml).
 
-For shared environments, set real values before starting the stack:
+For a conservative local VM profile, set real values before starting the stack:
 ```bash
 export JOBSEEKER_ENCRYPTION_KEY="replace-with-a-long-random-secret"
 export JOBSEEKER_DB_PASSWORD="replace-with-a-database-password"
 export JOBSEEKER_MYSQL_ROOT_PASSWORD="replace-with-a-root-password"
 export JENKINS_ADMIN_PASSWORD="replace-with-a-jenkins-password-or-token"
-export JENKINS_NUM_EXECUTORS="5"
+export JENKINS_NUM_EXECUTORS="1"
+export JOBSEEKER_JENKINS_PUBLIC_URL="http://localhost:8080/"
+export JOBSEEKER_JENKINS_ROOT_URL="http://jenkins:8080/"
 export JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS="1"
-export JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS="DEV=2,QA=1,PROD=1"
+export JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS="DEV=2,QA=1"
+export JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED="false"
 
 docker compose up -d --build
 ```
 
-Jenkins parallelism is controlled by `JENKINS_NUM_EXECUTORS`. The default Docker setup uses 5 executors, so independent jobs can run at the same time.
+Jenkins controller parallelism is controlled by `JENKINS_NUM_EXECUTORS`. The local `.env.example` template uses 1 controller executor so a 4-core development VM has CPU headroom for the application, database, Jenkins controller, and lightweight DEV/QA agents. Increase it for larger shared environments.
 
 JobSeeker also gates build triggers by runtime environment before they reach Jenkins. `JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS` sets the per-environment default, and `JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` can override individual environments with comma-separated values such as `DEV=2,QA=1,PROD=2`. This prevents JobSeeker-triggered DEV jobs from consuming the configured PROD capacity.
 
-Increasing `JENKINS_NUM_EXECUTORS` adds more parallel worker slots inside the current Jenkins container; it does not automatically start more worker containers. To scale like Airflow workers, add Jenkins agents with Docker, Kubernetes, or inbound agent containers, label them by environment or workload, and let JobSeeker assign generated jobs to those labels. The Executor Monitor page shows both the global Jenkins executor pool and the JobSeeker environment slot usage.
+Executors and slots are not CPU reservations. A Jenkins executor is permission for Jenkins to run one build concurrently on that node. A JobSeeker slot is an application-side trigger gate. If a VM has 4 CPU threads, setting 3 controller executors plus 5 agent executors means Jenkins may try to run 8 builds concurrently, but Docker/Linux will time-slice them unless you also set container CPU limits. For CPU-heavy ETL, keep online executors near the CPU capacity you actually want to spend.
+
+Increasing `JENKINS_NUM_EXECUTORS` adds more parallel worker capacity inside the current Jenkins container; it does not automatically start more worker containers.
+
+### Optional Jenkins Environment Agents
+
+For a lightweight Airflow-worker-style layout, JobSeeker includes optional Jenkins inbound agents per environment. The default stack does not start them. On a small local VM, start only the environments you plan to run, usually DEV and QA:
+
+Set routing in `.env` first:
+
+```bash
+JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true
+```
+
+Then start the local DEV/QA workers and recreate PHP so the routing flag is loaded:
+
+```bash
+docker compose --profile jenkins-agents up -d --build --force-recreate php jenkins-agent-dev jenkins-agent-qa
+```
+
+For a shared environment where DEV, QA, UAT, and PROD should all have active workers, start the full profile:
+
+```bash
+docker compose --profile jenkins-agents up -d --build
+```
+
+If UAT/PROD agents were previously started but you want the lighter local profile, stop them:
+
+```bash
+docker compose stop jenkins-agent-uat jenkins-agent-prod
+```
+
+The profile starts these worker services by default:
+
+Service | Environment | Default label | Executors
+--- | --- | --- | ---
+`jenkins-agent-dev` | DEV | `jobseeker-env-dev` | `JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS` or 2
+`jenkins-agent-qa` | QA | `jobseeker-env-qa` | `JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS` or 1
+`jenkins-agent-uat` | UAT | `jobseeker-env-uat` | `JOBSEEKER_JENKINS_UAT_AGENT_EXECUTORS` or 1
+`jenkins-agent-prod` | PROD | `jobseeker-env-prod` | `JOBSEEKER_JENKINS_PROD_AGENT_EXECUTORS` or 1
+
+When `JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true`, jobs created or promoted by JobSeeker are assigned to the configured environment label through Jenkins `assignedNode`. Existing unpinned jobs are also reconciled to the selected environment label before they are triggered through JobSeeker. Direct Jenkins UI/API triggers bypass that safety check and use the current Jenkins job configuration.
+
+To enable agent routing in a local `.env`, set:
+
+```bash
+JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true
+```
+
+Then recreate the PHP app container so the setting is loaded:
+
+```bash
+docker compose up -d --force-recreate php
+```
+
+For a 4-core local development VM, a practical starting point is:
+
+```bash
+JENKINS_NUM_EXECUTORS=1
+JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS=DEV=2,QA=1
+JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS=2
+JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS=1
+```
+
+To disable routing, set the same variable to `false` and recreate `php`. The agent containers can still be online, but JobSeeker will stop writing `assignedNode` labels for newly created or promoted jobs.
+
+`JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS` can override the routing map with comma-separated values such as `DEV=jobseeker-env-dev,QA=jobseeker-env-qa,PROD=jobseeker-env-prod`. The agent container labels can also include aliases, but the routing label must be present on the matching Jenkins node.
+
+Agents use the internal Jenkins TCP agent port by default through `JOBSEEKER_JENKINS_AGENT_TUNNEL=jenkins:50000`. Set `JOBSEEKER_JENKINS_AGENT_WEB_SOCKET=true` if you prefer WebSocket agents and your Jenkins root URL is reachable from the worker containers.
+
+Per-agent parallelism is configured with the agent executor variables, for example:
+
+```bash
+JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS=2
+JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS=1
+```
+
+After changing an agent executor count, recreate that agent service:
+
+```bash
+docker compose --profile jenkins-agents up -d --force-recreate jenkins-agent-dev
+```
+
+The Executor Monitor page shows environment trigger slots, online worker nodes, worker executor capacity, queue state, and live executor usage. It also includes an Agent Setup Helper that recommends controller executors, per-environment agent executors, JobSeeker slot limits, and the matching `.env` values for either local Docker/VM deployments or a Kubernetes worker-pod path. Completed build history shows the Jenkins `builtOn` node so you can see where a job ran; the exact executor/core number is only available while the build is live in the Executor Monitor.
+
+To tell where a job ran:
+
+- While it is running, open Executor Monitor and check Live Executor Details. The row shows the Jenkins node and executor number, such as `jobseeker-dev-agent #0`.
+- After it finishes, use Job List, Job View, or Full Job Build List. The Worker/Last Worker field comes from Jenkins `builtOn`.
+- In Jenkins itself, the build page also exposes `builtOn`; a blank value means it ran on the built-in controller node.
 
 Docker Compose is the recommended installation path because it starts the application, database, and Jenkins execution engine together.
 
@@ -103,7 +195,7 @@ Docker Compose is the recommended installation path because it starts the applic
 - PHP-FPM 8.3 with the required MySQL and ZIP extensions.
 - Nginx 1.29 Alpine serving the CodeIgniter application.
 - MariaDB 10.7 for JobSeeker and TMF data.
-- Jenkins 2.568.2 LTS with pinned plugins, Docker CLI access, and the JobSeeker Python SDK runtime.
+- Jenkins 2.568.2 LTS with pinned plugins, Docker CLI access, the JobSeeker Python SDK runtime, and optional inbound agent workers.
 
 Frontend assets are managed with npm in [package.json](package.json) and [package-lock.json](package-lock.json). The application still serves legacy AdminLTE 2, Bootstrap 3, and jQuery-era paths under `assets/bower_components`, but that directory is generated and is not committed.
 

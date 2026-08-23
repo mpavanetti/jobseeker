@@ -210,6 +210,7 @@ function loadDashboardJenkinsOverview() {
     var running = 0;
     var limited = 0;
     var scope = selectedEnvironment && selectedEnvironment !== 'all' ? selectedEnvironment : 'All environments';
+    var routingText = payload && payload.environmentAgentsEnabled === true ? ' Environment-agent routing is enabled.' : ' Environment-agent routing is disabled.';
 
     $.each(rows, function(index, row) {
       active += dashboardNumber(row.active);
@@ -222,7 +223,7 @@ function loadDashboardJenkinsOverview() {
 
     $('#dashboardJenkinsCapacity').text(limited > 0 ? active + ' / ' + limited : active + ' / unlimited');
     $('#dashboardJenkinsQueue').text(queued);
-    $('#dashboardJenkinsDetail').text(scope + ' executor allocation: ' + running + ' running, ' + queued + ' queued. Last updated ' + moment().format('h:mm:ss a') + '.');
+    $('#dashboardJenkinsDetail').text(scope + ' JobSeeker trigger slots: ' + running + ' running, ' + queued + ' queued.' + routingText + ' Last updated ' + moment().format('h:mm:ss a') + '.');
   }).fail(function() {
     $('#dashboardJenkinsCapacity').text('N/A');
     $('#dashboardJenkinsQueue').text('N/A');

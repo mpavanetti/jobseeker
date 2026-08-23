@@ -952,7 +952,16 @@
       }
 
       var result = build.building === true ? 'Running' : (build.result || 'No result');
-      return '<strong>#' + escapeHtml(build.number) + '</strong> ' + statusLabel(result) + '<br><small>' + escapeHtml(formatTime(build.timestamp)) + ' / ' + escapeHtml(formatDuration(build.duration)) + '</small>';
+      return '<strong>#' + escapeHtml(build.number) + '</strong> ' + statusLabel(result) + '<br><small>' + escapeHtml(formatTime(build.timestamp)) + ' / ' + escapeHtml(formatDuration(build.duration)) + '</small><br><small>Worker: ' + escapeHtml(workerNodeLabel(build)) + '</small>';
+    }
+
+    function workerNodeLabel(build) {
+      if (! build || ! build.number) {
+        return 'None';
+      }
+
+      build.builtOn = $.trim(String(build.builtOn == null ? '' : build.builtOn));
+      return build.builtOn ? build.builtOn : 'Controller';
     }
 
     function metric(label, value) {
@@ -1379,7 +1388,7 @@
     function fetchJobDetails(jobName) {
       var deferred = $.Deferred();
       var jobPath = jenkinsJobPath(jobName);
-      var tree = 'name,fullName,displayName,description,url,color,buildable,inQueue,disabled,nextBuildNumber,queueItem[id,why],healthReport[description,score],lastBuild[number,result,timestamp,duration,building,url],lastCompletedBuild[number,result,timestamp,duration,url],lastSuccessfulBuild[number,result,timestamp,duration,url],lastFailedBuild[number,result,timestamp,duration,url],lastStableBuild[number,result,timestamp,duration,url],lastUnstableBuild[number,result,timestamp,duration,url],lastUnsuccessfulBuild[number,result,timestamp,duration,url],builds[number,result,timestamp,duration,building,url,description]{0,5}';
+      var tree = 'name,fullName,displayName,description,url,color,buildable,inQueue,disabled,nextBuildNumber,queueItem[id,why],healthReport[description,score],lastBuild[number,result,timestamp,duration,building,builtOn,url],lastCompletedBuild[number,result,timestamp,duration,builtOn,url],lastSuccessfulBuild[number,result,timestamp,duration,builtOn,url],lastFailedBuild[number,result,timestamp,duration,builtOn,url],lastStableBuild[number,result,timestamp,duration,builtOn,url],lastUnstableBuild[number,result,timestamp,duration,builtOn,url],lastUnsuccessfulBuild[number,result,timestamp,duration,builtOn,url],builds[number,result,timestamp,duration,building,builtOn,url,description]{0,5}';
 
       jenkinsRequest(jobPath + '/api/json?tree=' + tree)
         .done(function(data) {
@@ -1584,11 +1593,12 @@
         return renderMuted('No builds yet');
       }
 
-      var html = '<div class="table-responsive"><table class="table table-condensed table-striped job-build-table"><thead><tr><th>Build</th><th>Result</th><th>Started</th><th>Duration</th></tr></thead><tbody>';
+      var html = '<div class="table-responsive"><table class="table table-condensed table-striped job-build-table"><thead><tr><th>Build</th><th>Result</th><th>Worker</th><th>Started</th><th>Duration</th></tr></thead><tbody>';
       $.each(builds, function(index, build) {
         html += '<tr>' +
           '<td><strong>#' + escapeHtml(build.number || '') + '</strong></td>' +
           '<td>' + statusLabel(build.building === true ? 'Running' : (build.result || 'No result')) + '</td>' +
+          '<td>' + escapeHtml(workerNodeLabel(build)) + '</td>' +
           '<td>' + escapeHtml(formatTime(build.timestamp)) + '</td>' +
           '<td>' + escapeHtml(formatDuration(build.duration)) + '</td>' +
         '</tr>';
