@@ -4,6 +4,10 @@
 class Tmf_model extends CI_Model
 {
 
+    private function selectTmfRows() {
+        $this->db->select('tmf.*, tmf.job_name AS jenkins_job_name', FALSE);
+    }
+
     private function normalizeEnvironmentFilter($environment) {
         $environment = trim((string) $environment);
 
@@ -108,7 +112,7 @@ class Tmf_model extends CI_Model
 
     function listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment) {
 
-        $this->db->select('*');
+        $this->selectTmfRows();
         $this->db->from('tmf');
 
         $status = (array) $status;
@@ -186,10 +190,11 @@ class Tmf_model extends CI_Model
         
     }
 
-    function list() {
+    function list($environment = '') {
 
-        $this->db->select('*');
+        $this->selectTmfRows();
         $this->db->from('tmf');
+        $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();
@@ -197,7 +202,7 @@ class Tmf_model extends CI_Model
 
     function listId($id) {
 
-        $this->db->select('*');
+        $this->selectTmfRows();
         $this->db->from('tmf');
         $this->db->where('id', $id);
         $query = $this->db->get();
@@ -244,7 +249,7 @@ class Tmf_model extends CI_Model
 
     function fetchDataStatus($status, $environment = '') {
 
-        $this->db->select('*');
+        $this->selectTmfRows();
         $this->db->from('tmf');
         $this->db->where('LOWER(status) =', strtolower((string) $status));
         $this->applyEnvironmentFilter($environment);
@@ -255,7 +260,7 @@ class Tmf_model extends CI_Model
 
     function fetchDataJobName($jobName, $environment = '') {
 
-        $this->db->select('*');
+        $this->selectTmfRows();
         $this->db->from('tmf');
         $this->db->where('job_name', $jobName);
         $this->applyEnvironmentFilter($environment);

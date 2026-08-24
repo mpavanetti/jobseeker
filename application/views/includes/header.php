@@ -293,6 +293,101 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       }
     }
 
+    function configuredBaseUrl() {
+      return window.baseURL || (typeof baseURL !== 'undefined' ? baseURL : '/');
+    }
+
+    function appUrl(path) {
+      var base = String(configuredBaseUrl()).replace(/\/+$/, '');
+      return base + '/' + String(path || '').replace(/^\/+/, '');
+    }
+
+    function normalizePathname(pathname) {
+      var path = String(pathname || '/');
+
+      try {
+        var basePath = new URL(configuredBaseUrl(), window.location.href).pathname.replace(/\/+$/, '');
+        var lowerPath = path.toLowerCase();
+        var lowerBasePath = basePath.toLowerCase();
+
+        if (basePath && basePath !== '/' && lowerPath === lowerBasePath) {
+          path = '/';
+        } else if (basePath && basePath !== '/' && lowerPath.indexOf(lowerBasePath + '/') === 0) {
+          path = path.substring(basePath.length);
+        }
+      } catch (error) {
+        path = String(pathname || '/');
+      }
+
+      path = path.replace(/\/index\.php/i, '').replace(/\/+$/, '').toLowerCase();
+      return path || '/';
+    }
+
+    function normalizedPath() {
+      return normalizePathname(window.location.pathname);
+    }
+
+    function isClientEnvironmentHandledPath() {
+      var path = normalizedPath();
+      return path === '/joblist'
+        || path === '/joblist/full'
+        || path === '/jobexecution'
+        || path === '/jobexecution/executors'
+        || path === '/jobview'
+        || path === '/deletejob'
+        || path === '/jobcreation'
+        || path === '/context/promotion';
+    }
+
+    function environmentReloadUrl() {
+      var path = normalizedPath();
+      if (path === '/tmf/fetchdata') {
+        return appUrl('Tmf/data');
+      }
+
+      return window.location.href;
+    }
+
+    function syncCurrentEnvironmentUrl(value) {
+      value = normalize(value);
+
+      if (isClientEnvironmentHandledPath()) {
+        return false;
+      }
+
+      try {
+        var url = new URL(environmentReloadUrl(), window.location.href);
+        var currentValue = url.searchParams.has('environment') ? normalize(url.searchParams.get('environment')) : 'all';
+        var targetPath = normalizePathname(url.pathname);
+        var currentPath = normalizedPath();
+
+        if (currentValue === value && targetPath === currentPath) {
+          return false;
+        }
+
+        if (value === 'all') {
+          url.searchParams.delete('environment');
+        } else {
+          url.searchParams.set('environment', value);
+        }
+
+        dashboardRedirecting = true;
+        window.jobseekerDashboardEnvironmentRedirecting = true;
+        window.location.replace(url.toString());
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function syncEnvironmentUrl(value, allowGenericReload) {
+      if (syncDashboardUrl(value)) {
+        return true;
+      }
+
+      return allowGenericReload === true && syncCurrentEnvironmentUrl(value);
+    }
+
     function initialEnvironment() {
       var urlEnvironment = currentUrlEnvironment();
       var serverEnvironment = normalize(window.jobseekerDashboardEnvironment || '');
@@ -389,17 +484,17 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       }
     }
 
-    function scheduleApply(value) {
+    function scheduleApply(value, allowGenericReload) {
       var attempts = 0;
       value = coerceToOption(value || readStored());
       clearInterval(retryTimer);
-      if (syncDashboardUrl(value)) {
+      if (syncEnvironmentUrl(value, allowGenericReload)) {
         return;
       }
       apply(value);
       retryTimer = setInterval(function() {
         attempts += 1;
-        if (syncDashboardUrl(value)) {
+        if (syncEnvironmentUrl(value, allowGenericReload)) {
           clearInterval(retryTimer);
           return;
         }
@@ -415,7 +510,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       var normalized = coerceToOption(value);
       store(normalized);
       $('#globalEnvironmentSelector').val(normalized);
-      scheduleApply(normalized);
+      scheduleApply(normalized, true);
     }
 
     $(document).on('change', '#globalEnvironmentSelector', function() {
@@ -436,7 +531,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       var selected = initialEnvironment();
       store(selected);
       $('#globalEnvironmentSelector').val(selected);
-      scheduleApply(selected);
+      scheduleApply(selected, false);
     });
 
     return {

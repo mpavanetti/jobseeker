@@ -77,6 +77,8 @@ class Tmf extends BaseController
           $data["listDimension"] = $this->model->listDimension();
           $data["listReprocess"] = $this->model->listReprocess();
           $data["listEnvironment"] = $this->model->listEnvironment();
+          $data["selectedEnvironment"] = $this->selectedEnvironmentFilter();
+          $this->global['selectedEnvironment'] = $data["selectedEnvironment"];
 
 
 
@@ -87,9 +89,11 @@ class Tmf extends BaseController
 
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
 
-        $data["jobs"] = $this->model->list();
+        $environment = $this->selectedEnvironmentFilter();
+        $data["jobs"] = $this->model->list($environment);
         $data["role"] = $this->role;
-        $data["selectedEnvironment"] = "all";
+        $data["selectedEnvironment"] = $environment;
+        $this->global['selectedEnvironment'] = $environment;
 
         $this->loadViews("tmf", $this->global, $data, NULL);
 
@@ -114,6 +118,7 @@ class Tmf extends BaseController
             $data["selectedEnvironment"] = $this->selectedEnvironmentFromSelection($environment);
 
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+            $this->global['selectedEnvironment'] = $data["selectedEnvironment"];
             $this->loadViews("tmf", $this->global, $data, NULL);
 
     }
@@ -125,6 +130,7 @@ class Tmf extends BaseController
             $data["role"] = $this->role;
             $data["selectedEnvironment"] = $environment;
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+            $this->global['selectedEnvironment'] = $environment;
             $this->loadViews("tmf", $this->global, $data, NULL);
 
     }
@@ -136,6 +142,7 @@ class Tmf extends BaseController
             $data["role"] = $this->role;
             $data["selectedEnvironment"] = $environment;
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+            $this->global['selectedEnvironment'] = $environment;
             $this->loadViews("tmf", $this->global, $data, NULL);
 
     }
