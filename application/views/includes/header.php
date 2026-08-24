@@ -92,6 +92,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   };
   window.jobseekerJenkinsUrl = <?php echo json_encode($jenkins_url); ?>;
   window.jobseekerJenkinsProxyUrl = <?php echo json_encode(base_url() . 'jenkins/proxy'); ?>;
+  window.jobseekerRunningBuildsUrl = <?php echo json_encode(base_url() . 'jenkins/runningBuilds'); ?>;
   window.jobseekerGlobalEnvironmentOptions = <?php echo json_encode($jobseekerGlobalEnvironmentOptions); ?>;
   window.jobseekerDashboardEnvironment = <?php echo json_encode($jobseekerSelectedEnvironment); ?>;
 
@@ -755,6 +756,114 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     top: 12px;
   }
 
+  .main-sidebar .sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 50px);
+  }
+
+  .main-sidebar .sidebar-menu {
+    flex: 0 0 auto;
+  }
+
+  .jobseeker-sidebar-running {
+    border-top: 1px solid rgba(255,255,255,.08);
+    color: #b8c7ce;
+    margin-top: auto;
+    padding: 12px 10px 14px;
+  }
+
+  .jobseeker-sidebar-running-title {
+    align-items: center;
+    color: #fff;
+    display: flex;
+    font-size: 12px;
+    font-weight: 700;
+    justify-content: space-between;
+    letter-spacing: 0;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .jobseeker-sidebar-running-title span {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .jobseeker-sidebar-running-refresh {
+    background: transparent;
+    border: 0;
+    color: #b8c7ce;
+    padding: 0 2px;
+  }
+
+  .jobseeker-sidebar-running-refresh:hover,
+  .jobseeker-sidebar-running-refresh:focus {
+    color: #fff;
+  }
+
+  .jobseeker-sidebar-running-empty,
+  .jobseeker-sidebar-running-error {
+    color: #8aa4af;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px 0;
+  }
+
+  .jobseeker-sidebar-running-env {
+    margin-bottom: 10px;
+  }
+
+  .jobseeker-sidebar-running-env-header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .jobseeker-sidebar-running-env-header small {
+    color: #8aa4af;
+  }
+
+  .jobseeker-sidebar-running-build {
+    border-radius: 4px;
+    color: #b8c7ce;
+    display: block;
+    padding: 6px 4px;
+  }
+
+  .jobseeker-sidebar-running-build:hover,
+  .jobseeker-sidebar-running-build:focus {
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .jobseeker-sidebar-running-build strong,
+  .jobseeker-sidebar-running-build small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jobseeker-sidebar-running-build strong {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .jobseeker-sidebar-running-build small {
+    color: #8aa4af;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .sidebar-collapse .jobseeker-sidebar-running {
+    display: none !important;
+  }
+
   .monitor-environment-filter,
   .execution-environment-filter,
   .job-view-environment-filter,
@@ -1081,6 +1190,15 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
           }
           ?>
         </ul>
+        <?php if ($jenkins_enabled == true) { ?>
+          <div class="jobseeker-sidebar-running" id="sidebarRunningJobs">
+            <div class="jobseeker-sidebar-running-title">
+              <span><i class="fa fa-play-circle"></i> Running Jobs</span>
+              <button type="button" class="jobseeker-sidebar-running-refresh" id="sidebarRunningJobsRefresh" title="Refresh running jobs"><i class="fa fa-refresh"></i></button>
+            </div>
+            <div id="sidebarRunningJobsList" class="jobseeker-sidebar-running-empty">Loading running jobs...</div>
+          </div>
+        <?php } ?>
       </section>
       <!-- /.sidebar -->
     </aside>

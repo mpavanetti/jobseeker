@@ -24,7 +24,17 @@ class JobExecution extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Job Execution';
 
      //   $data["GetJobs"] = $fetchObj;
-                $data = array('job_creation_dates' => $this->readJobCreationDates());
+                $resumeBuild = trim((string) $this->security->xss_clean($this->input->get('build')));
+                if (! preg_match('/^[1-9][0-9]*$/', $resumeBuild)) {
+                    $resumeBuild = '';
+                }
+
+                $data = array(
+                    'job_creation_dates' => $this->readJobCreationDates(),
+                    'resume_job' => trim((string) $this->security->xss_clean($this->input->get('job'))),
+                    'resume_build' => $resumeBuild,
+                    'resume_environment' => trim((string) $this->security->xss_clean($this->input->get('environment')))
+                );
         
                 $this->loadViews("jobExecution", $this->global, $data, NULL);
     }
