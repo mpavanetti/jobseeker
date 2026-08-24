@@ -1,3 +1,7 @@
+<?php
+  $tmfBuilderSelectedEnvironment = isset($selectedEnvironment) ? strtoupper(trim((string) $selectedEnvironment)) : 'all';
+  $tmfBuilderDataEnvironmentQuery = ($tmfBuilderSelectedEnvironment !== '' && strtolower($tmfBuilderSelectedEnvironment) !== 'all') ? '?environment='.rawurlencode($tmfBuilderSelectedEnvironment) : '';
+?>
  <script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse')
@@ -170,7 +174,7 @@
             <h2>Transaction Monitor</h2>
             <p>Build a precise TMF query across status, environment, job, dimensions, text, and run dates.</p>
           </div>
-          <a href="<?php echo base_url(); ?>Tmf/data" class="btn btn-default"><i class="fa fa-table"></i> Open All Results</a>
+          <a href="<?php echo base_url(); ?>Tmf/data<?php echo $tmfBuilderDataEnvironmentQuery; ?>" class="btn btn-default"><i class="fa fa-table"></i> Open Results</a>
         </div>
         <div class="row tmf-summary-row">
         <div class="col-md-3 col-sm-6 col-xs-12">

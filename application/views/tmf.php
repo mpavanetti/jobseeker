@@ -440,7 +440,7 @@ pre {
                 <tr>
                   <th>Id</th>
                   <th>Status</th>
-                  <th>Job Name</th>
+                  <th>Jenkins Job</th>
                   <th>Dimension</th>
                   <th>Reprocess</th>
                   <th>Event Text</th>
@@ -478,12 +478,13 @@ pre {
                           $rowAttention = in_array($recordStatus, array('error', 'warning'), TRUE) || $rowStale || $rowHasErrors || $rowHasWarnings;
                           $rowReprocess = isset($record->reprocess) && (int) $record->reprocess == 1;
                             $rowIncomplete = $rowTotal > 0 && $rowProcessed < $rowTotal;
+                            $rowJenkinsJobName = isset($record->jenkins_job_name) && trim((string) $record->jenkins_job_name) !== '' ? trim((string) $record->jenkins_job_name) : trim((string) $record->job_name);
                             $rowEnvironment = trim((string) $record->environment) !== '' ? trim((string) $record->environment) : 'Unknown';
                             $rowEnvironmentIsDev = strtoupper($rowEnvironment) === 'DEV';
                             $rowCanDelete = $rowEnvironmentIsDev || $rowStale;
                             $rowDeleteScope = $rowEnvironmentIsDev ? 'dev' : ($rowStale ? 'stale' : 'none');
                     ?>
-                          <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-tmf-id="<?php echo (int) $record->id; ?>" data-instance-id="<?php echo html_escape($record->instance_id); ?>" data-job-name="<?php echo html_escape($record->job_name); ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-environment="<?php echo html_escape($rowEnvironment); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-can-delete="<?php echo $rowCanDelete ? 1 : 0; ?>" data-delete-scope="<?php echo html_escape($rowDeleteScope); ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
+                          <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-tmf-id="<?php echo (int) $record->id; ?>" data-instance-id="<?php echo html_escape($record->instance_id); ?>" data-job-name="<?php echo html_escape($rowJenkinsJobName); ?>" data-jenkins-job-name="<?php echo html_escape($rowJenkinsJobName); ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-environment="<?php echo html_escape($rowEnvironment); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-can-delete="<?php echo $rowCanDelete ? 1 : 0; ?>" data-delete-scope="<?php echo html_escape($rowDeleteScope); ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
                       <td data-order="<?php echo (int) $record->id; ?>"><?php echo '<span style="color:#3c8dbc;">'.(int) $record->id.'</span>' ?></td>
                       <td data-order="<?php echo html_escape($recordStatus); ?>"><?php
                       switch ($recordStatus) {
@@ -511,7 +512,7 @@ pre {
                               break;
                         }
                       ?></td>
-                          <td><?php echo html_escape($record->job_name); ?></td>
+                          <td data-order="<?php echo html_escape($rowJenkinsJobName); ?>"><?php echo html_escape($rowJenkinsJobName); ?></td>
                           <td><?php echo html_escape($record->dimension); ?></td>
                       <?php  if ($jenkins_enabled == true) { 
                          if($canManageTmf) {  ?>
@@ -542,7 +543,7 @@ pre {
                  <tr>
                   <th>Id</th>
                   <th>Status</th>
-                  <th>Job Name</th>
+                  <th>Jenkins Job</th>
                   <th>Dimension</th>
                   <th>Reprocess</th>
                   <th>Event Text</th>
