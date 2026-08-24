@@ -452,7 +452,7 @@
               <h3 class="box-title"><b>Live Console Output</b></h3>
             </div>
             <div class="box-body">
-              <div id="executionEmpty" class="execution-empty">
+              <div id="executionEmpty" class="execution-empty" style="margin-bottom: 10px;">
                 <i class="fa fa-terminal fa-3x"></i>
                 <h4>No live executions yet</h4>
                 <p>Select one or more Jenkins jobs and trigger them to open live console tabs.</p>
@@ -467,6 +467,9 @@
                   <option value="2">2 columns</option>
                   <option value="3">3 columns</option>
                 </select>
+                <button type="button" class="btn btn-info btn-sm" id="viewRunningBuilds">
+                  <i class="fa fa-terminal"></i> View Running Jobs
+                </button>
                 <span class="execution-console-hint" id="consoleViewHint">Showing one live console at a time.</span>
               </div>
               <ul class="nav nav-tabs execution-tabs" id="executionTabs" role="tablist"></ul>
@@ -483,6 +486,7 @@
   $(document).ready(function() {
     var jenkinsUrl = window.jobseekerJenkinsUrl || <?php echo json_encode(isset($jenkins_url) ? $jenkins_url : ''); ?>;
     var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
+    var runningBuildsUrl = window.jobseekerRunningBuildsUrl || <?php echo json_encode(base_url() . 'jenkins/runningBuilds'); ?>;
     var jobsByName = {};
     var visibleJobs = [];
     var selectedJobNames = {};
@@ -495,6 +499,12 @@
     var queuePollDelay = 2000;
     var consolePollDelay = 1200;
     var consoleViewMode = 'tabs';
+    var triggerSelectedBusy = false;
+    var initialResumeBuild = {
+      jobName: <?php echo json_encode(isset($resume_job) ? $resume_job : ''); ?>,
+      buildNumber: <?php echo json_encode(isset($resume_build) ? $resume_build : ''); ?>,
+      environment: <?php echo json_encode(isset($resume_environment) ? $resume_environment : ''); ?>
+    };
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
     var jobEnvironmentRequests = {};
     var environmentHelper = window.JobSeekerEnvironment || {
@@ -956,6 +966,37 @@
 
     function updateSelectedJobCount() {
       $('#selectedJobCount').text(selectedJobList().length);
+      updateTriggerSelectedButton();
+    }
+
+    function setTriggerSelectedBusy(isBusy, label) {
+      triggerSelectedBusy = isBusy;
+      $('#triggerSelected')
+        .prop('disabled', isBusy)
+        .html(label || '<i class="fa fa-play"></i> Trigger Selected');
+    }
+
+    function updateTriggerSelectedButton() {
+      if (triggerSelectedBusy) {
+        return;
+      }
+
+      var selectedJobs = selectedJobList();
+      var runningSelected = 0;
+
+      $.each(selectedJobs, function(index, jobName) {
+        if (runningBuildFromJob(jobsByName[jobName])) {
+          runningSelected += 1;
+        }
+      });
+
+      if (selectedJobs.length > 0 && runningSelected === selectedJobs.length) {
+        $('#triggerSelected').html('<i class="fa fa-terminal"></i> View Live Console');
+      } else if (runningSelected > 0) {
+        $('#triggerSelected').html('<i class="fa fa-play"></i> Trigger / View Selected');
+      } else {
+        $('#triggerSelected').html('<i class="fa fa-play"></i> Trigger Selected');
+      }
     }
 
     function selectedJobList() {
@@ -1088,6 +1129,169 @@
       updateExecutionSummary();
 
       return run;
+    }
+
+    function environmentInfoFromText(environment, source, fallbackJob) {
+      if (fallbackJob && fallbackJob.environmentInfo) {
+        return fallbackJob.environmentInfo;
+      }
+
+      var normalized = normalizeEnvironmentFilterValue(environment || '');
+      var known = normalized && normalized !== 'all' && normalized !== 'UNKNOWN' && normalized !== '__UNKNOWN__';
+
+      return {
+        environment: known ? normalized : (environment || 'Unknown'),
+        source: source || 'Jenkins runtime metadata',
+        unknown: ! known
+      };
+    }
+
+    function activeExecutionForBuild(jobName, buildNumber) {
+      var normalizedBuild = String(buildNumber || '');
+      var found = null;
+
+      $.each(executionOrder, function(index, id) {
+        var run = executions[id];
+        if (! run || run.jobName !== jobName) {
+          return;
+        }
+
+        if (normalizedBuild === '' || String(run.buildNumber || '') === normalizedBuild) {
+          found = run;
+          return false;
+        }
+      });
+
+      return found;
+    }
+
+    function runningBuildFromJob(job) {
+      if (! job || ! isSelectableJobRunning(job) || ! job.lastBuild || ! job.lastBuild.number) {
+        return null;
+      }
+
+      var build = $.extend({}, job.lastBuild);
+      build.jobName = job.fullName || job.name || '';
+      build.job = build.jobName;
+      build.buildNumber = build.number;
+      build.environment = environmentTextForJob(job);
+      build.environmentInfo = environmentInfoForJob(job);
+      return build;
+    }
+
+    function createExecutionFromBuild(build, fallbackJob) {
+      build = build || {};
+      var jobName = build.jobName || build.job || (fallbackJob ? fallbackJob.fullName || fallbackJob.name : '');
+      var buildNumber = build.buildNumber || build.number || '';
+
+      if (! jobName || ! buildNumber) {
+        toastr.error('Unable to identify the running build.', 'Live Console');
+        return null;
+      }
+
+      var existing = activeExecutionForBuild(jobName, buildNumber);
+      if (existing) {
+        focusExecutionPane(existing.id);
+        return existing;
+      }
+
+      executionCounter += 1;
+
+      var environment = build.environment || (fallbackJob ? environmentTextForJob(fallbackJob) : 'Unknown');
+      var run = {
+        id: 'execution_' + Date.now() + '_' + executionCounter,
+        jobName: jobName,
+        jobPath: jenkinsJobPath(jobName),
+        expectedBuildNumber: buildNumber,
+        queueId: build.queueId || '',
+        queueWhy: '',
+        lastQueueMessage: '',
+        buildNumber: buildNumber,
+        displayName: build.fullDisplayName || build.displayName || shortJobName(jobName),
+        environment: environment,
+        environmentInfo: build.environmentInfo || environmentInfoFromText(environment, build.environmentSource || 'Jenkins runtime metadata', fallbackJob),
+        status: build.building === false ? (build.result || 'SUCCESS') : 'Running',
+        result: build.result || '',
+        building: build.building === false ? false : true,
+        timestamp: build.timestamp || '',
+        duration: build.duration || '',
+        estimatedDuration: build.estimatedDuration || '',
+        builtOn: build.builtOn || '',
+        url: build.url || '',
+        description: build.description || '',
+        consoleStart: 0,
+        consoleBytes: 0,
+        consoleComplete: false,
+        hasConsoleText: false,
+        finished: build.building === false,
+        timers: {},
+        infoRequestInFlight: false,
+        consoleRequestInFlight: false
+      };
+
+      executions[run.id] = run;
+      executionOrder.unshift(run.id);
+      createExecutionTab(run);
+      appendConsole(run, '[JobSeeker] Reattached to ' + run.jobName + ' build #' + run.buildNumber + '.\n');
+      updateExecutionUI(run);
+      pollBuildInfo(run);
+      pollConsole(run);
+
+      if (window.JobSeekerRunningJobs && window.JobSeekerRunningJobs.refresh) {
+        window.JobSeekerRunningJobs.refresh();
+      }
+
+      return run;
+    }
+
+    function loadRunningBuildsForCurrentEnvironment() {
+      $('#viewRunningBuilds').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Loading');
+      $.getJSON(runningBuildsUrl, {environment: jobEnvironmentRequestValue(), limit: 10})
+        .done(function(payload) {
+          if (! payload || payload.ok !== true) {
+            toastr.error(payload && payload.message ? payload.message : 'Unable to load running jobs.', 'Live Console');
+            return;
+          }
+
+          var builds = Array.isArray(payload.builds) ? payload.builds : [];
+          var opened = 0;
+
+          if (builds.length === 0) {
+            toastr.info('No running Jenkins jobs were found for this scope.', 'Live Console');
+            return;
+          }
+
+          $.each(builds, function(index, build) {
+            if (createExecutionFromBuild(build)) {
+              opened += 1;
+            }
+          });
+
+          toastr.info(opened + ' running build console(s) opened.', 'Live Console');
+        })
+        .fail(function(xhr) {
+          toastr.error(responseMessage(xhr, 'Unable to load running jobs.'), 'Live Console');
+        })
+        .always(function() {
+          $('#viewRunningBuilds').prop('disabled', false).html('<i class="fa fa-terminal"></i> View Running Jobs');
+        });
+    }
+
+    function resumeInitialExecution() {
+      if (! initialResumeBuild.jobName || ! initialResumeBuild.buildNumber) {
+        return;
+      }
+
+      createExecutionFromBuild({
+        jobName: initialResumeBuild.jobName,
+        job: initialResumeBuild.jobName,
+        buildNumber: initialResumeBuild.buildNumber,
+        number: initialResumeBuild.buildNumber,
+        environment: initialResumeBuild.environment || 'Unknown',
+        environmentSource: 'JobSeeker link',
+        building: true
+      });
+      initialResumeBuild = {};
     }
 
     function createExecutionTab(run) {
@@ -1441,6 +1645,10 @@
       updateExecutionUI(run);
       pollBuildInfo(run);
       pollConsole(run);
+
+      if (window.JobSeekerRunningJobs && window.JobSeekerRunningJobs.refresh) {
+        window.JobSeekerRunningJobs.refresh();
+      }
     }
 
     function pollBuildInfo(run) {
@@ -1471,6 +1679,10 @@
             clearRunTimer(run, 'buildInfo');
             pollConsole(run);
             loadJobs();
+
+            if (window.JobSeekerRunningJobs && window.JobSeekerRunningJobs.refresh) {
+              window.JobSeekerRunningJobs.refresh();
+            }
 
             if (run.result === 'SUCCESS') {
               toastr.success(run.jobName + ' finished successfully.', 'Build Finished');
@@ -1655,9 +1867,14 @@
       loadJobs();
     });
 
+    $('#viewRunningBuilds').on('click', function() {
+      loadRunningBuildsForCurrentEnvironment();
+    });
+
     $('#triggerSelected').on('click', function() {
       var selectedJobs = selectedJobList();
       var readyJobs = [];
+      var resumed = 0;
 
       if (selectedJobs.length === 0) {
         toastr.error('Select one or more jobs to execute.', 'Job Execution');
@@ -1677,6 +1894,20 @@
           return;
         }
 
+        var runningBuild = runningBuildFromJob(job);
+        if (runningBuild) {
+          if (createExecutionFromBuild(runningBuild, job)) {
+            resumed += 1;
+            delete selectedJobNames[jobName];
+          }
+          return;
+        }
+
+        if (isSelectableJobRunning(job)) {
+          toastr.warning(jobName + ' is running, but Jenkins did not return a build number yet. Reload jobs in a moment and try again.', 'Job Execution');
+          return;
+        }
+
         if (hasActiveExecutionForJob(jobName)) {
           toastr.warning(jobName + ' already has an active execution tab.', 'Job Execution');
           return;
@@ -1685,8 +1916,12 @@
         readyJobs.push(job);
       });
 
+      if (resumed > 0) {
+        toastr.info(resumed + ' running build console(s) opened.', 'Live Console');
+      }
+
       if (readyJobs.length > 0) {
-        $('#triggerSelected').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Preparing');
+        setTriggerSelectedBusy(true, '<i class="fa fa-spinner fa-spin"></i> Preparing');
         $.when.apply($, $.map(readyJobs, function(job) { return hydrateJobEnvironment(job); })).always(function() {
           var started = 0;
 
@@ -1700,8 +1935,12 @@
           toastr.info(started + ' execution request(s) sent to Jenkins.', 'Job Execution');
           renderJobOptions($('#jobFilter').val());
           loadJobs();
-          $('#triggerSelected').prop('disabled', false).html('<i class="fa fa-play"></i> Trigger Selected');
+          setTriggerSelectedBusy(false);
+          updateTriggerSelectedButton();
         });
+      } else {
+        renderJobOptions($('#jobFilter').val());
+        updateTriggerSelectedButton();
       }
     });
 
@@ -1746,6 +1985,8 @@
     });
 
     loadJobs();
+    resumeInitialExecution();
+    updateTriggerSelectedButton();
     updateConsoleViewLayout();
   });
 </script>

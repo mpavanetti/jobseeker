@@ -86,6 +86,18 @@ class JenkinsProxy extends BaseController
             ->set_output(json_encode($status));
     }
 
+    public function runningBuilds()
+    {
+        $limit = $this->runningBuildLimit($this->input->get('limit'));
+        $status = $this->jenkinsRunningBuildsStatus($this->input->get('environment'), $limit);
+        $this->includeConfiguredRunningBuildEnvironments($status);
+
+        $this->output
+            ->set_status_header(isset($status['status']) ? (int) $status['status'] : 200)
+            ->set_content_type('application/json')
+            ->set_output(json_encode($status));
+    }
+
     public function agentSetupHelper()
     {
         $status = $this->jenkinsExecutorMonitorStatus('');
@@ -120,6 +132,223 @@ class JenkinsProxy extends BaseController
             ->set_status_header(200)
             ->set_content_type('application/json')
             ->set_output(json_encode($guide));
+    }
+
+    private function runningBuildLimit($value)
+    {
+        $limit = preg_match('/^[1-9][0-9]*$/', (string) $value) ? (int) $value : 5;
+        return max(1, min(20, $limit));
+    }
+
+    private function jenkinsRunningBuildsStatus($environment = '', $limitPerEnvironment = 5)
+    {
+        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($environment);
+        $response = $this->requestJenkins('GET', 'api/json?tree='.$this->runningBuildJobTree(3));
+
+        if ((int) $response['status'] !== 200) {
+            return array(
+                'ok' => FALSE,
+                'status' => (int) $response['status'],
+                'message' => 'Unable to inspect Jenkins running builds. HTTP '.$response['status'].'.',
+                'builds' => array(),
+                'environments' => array()
+            );
+        }
+
+        $payload = json_decode($response['body']);
+        if (! is_object($payload) || ! isset($payload->jobs) || ! is_array($payload->jobs)) {
+            return array(
+                'ok' => FALSE,
+                'status' => 502,
+                'message' => 'Jenkins returned an invalid running builds payload.',
+                'builds' => array(),
+                'environments' => array()
+            );
+        }
+
+        $builds = array();
+        $seen = array();
+        $this->collectRunningBuilds($payload->jobs, $builds, $seen, $requestedEnvironment);
+        usort($builds, array($this, 'compareRunningBuilds'));
+
+        $grouped = $this->groupRunningBuilds($builds, $limitPerEnvironment);
+
+        return array(
+            'ok' => TRUE,
+            'status' => 200,
+            'message' => 'Jenkins running builds loaded.',
+            'generatedAt' => (int) round(microtime(TRUE) * 1000),
+            'limitPerEnvironment' => (int) $limitPerEnvironment,
+            'builds' => $grouped['builds'],
+            'environments' => $grouped['environments'],
+            'totalRunning' => count($builds)
+        );
+    }
+
+    private function runningBuildJobTree($depth)
+    {
+        $fields = '_class,name,fullName,displayName,url,color,buildable,inQueue,property[parameterDefinitions[name,defaultParameterValue[value]]],lastBuild[number,id,result,timestamp,duration,estimatedDuration,building,builtOn,url,queueId,displayName,fullDisplayName,actions[parameters[name,value]]],builds[number,id,result,timestamp,duration,estimatedDuration,building,builtOn,url,queueId,displayName,fullDisplayName,actions[parameters[name,value]]]{0,20}';
+
+        if ($depth <= 0) {
+            return 'jobs['.$fields.']';
+        }
+
+        return 'jobs['.$fields.','.$this->runningBuildJobTree($depth - 1).']';
+    }
+
+    private function collectRunningBuilds($jobs, &$builds, &$seen, $requestedEnvironment = '')
+    {
+        foreach (is_array($jobs) ? $jobs : array() as $job) {
+            $jobName = isset($job->fullName) && $job->fullName !== '' ? $job->fullName : (isset($job->name) ? $job->name : '');
+
+            if ($jobName !== '' && strpos((string) $jobName, '__jobseeker_') !== 0) {
+                $jobEnvironment = $this->jenkinsEnvironmentFromJobData($job, $jobName);
+                $candidateBuilds = isset($job->builds) && is_array($job->builds) ? $job->builds : array();
+
+                if (empty($candidateBuilds) && isset($job->lastBuild) && is_object($job->lastBuild)) {
+                    $candidateBuilds[] = $job->lastBuild;
+                }
+
+                foreach ($candidateBuilds as $build) {
+                    if (! is_object($build) || ! isset($build->building) || $build->building !== TRUE || ! isset($build->number)) {
+                        continue;
+                    }
+
+                    $record = $this->runningBuildRecord($job, $build, $jobName, $jobEnvironment);
+                    if ($record === NULL) {
+                        continue;
+                    }
+
+                    if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL' && $record['environment'] !== $requestedEnvironment) {
+                        continue;
+                    }
+
+                    $key = $record['jobName'].'#'.$record['buildNumber'];
+                    if (isset($seen[$key])) {
+                        continue;
+                    }
+
+                    $seen[$key] = TRUE;
+                    $builds[] = $record;
+                }
+            }
+
+            if (isset($job->jobs) && is_array($job->jobs)) {
+                $this->collectRunningBuilds($job->jobs, $builds, $seen, $requestedEnvironment);
+            }
+        }
+    }
+
+    private function runningBuildRecord($job, $build, $jobName, $jobEnvironment)
+    {
+        $buildNumber = isset($build->number) ? (int) $build->number : 0;
+        if ($jobName === '' || $buildNumber < 1) {
+            return NULL;
+        }
+
+        $environment = $this->jenkinsParameterValueFromActions($build, 'ENVIRONMENT');
+        if ($environment === '') {
+            $environment = $jobEnvironment;
+        }
+        if ($environment === '') {
+            $environment = $this->detectEnvironmentFromJenkinsJobName($jobName);
+        }
+
+        $environment = $this->normalizeJobSeekerEnvironment($environment);
+        if ($environment === '' || $environment === '0' || $environment === 'ALL') {
+            $environment = 'UNKNOWN';
+        }
+
+        $timestamp = isset($build->timestamp) ? (int) $build->timestamp : 0;
+        $duration = isset($build->duration) ? (int) $build->duration : 0;
+        $elapsedMs = $timestamp > 0 ? max(0, (int) round(microtime(TRUE) * 1000) - $timestamp) : max(0, $duration);
+        $displayName = isset($build->displayName) && $build->displayName !== '' ? (string) $build->displayName : '#'.$buildNumber;
+        $fullDisplayName = isset($build->fullDisplayName) && $build->fullDisplayName !== '' ? (string) $build->fullDisplayName : $jobName.' '.$displayName;
+
+        return array(
+            'job' => $jobName,
+            'jobName' => $jobName,
+            'buildNumber' => $buildNumber,
+            'number' => $buildNumber,
+            'displayName' => $displayName,
+            'fullDisplayName' => $fullDisplayName,
+            'environment' => $environment,
+            'environmentSource' => $this->jenkinsParameterValueFromActions($build, 'ENVIRONMENT') !== '' ? 'Jenkins build parameter' : 'Jenkins job metadata',
+            'timestamp' => $timestamp,
+            'duration' => $duration,
+            'estimatedDuration' => isset($build->estimatedDuration) ? (int) $build->estimatedDuration : 0,
+            'elapsedMs' => $elapsedMs,
+            'builtOn' => isset($build->builtOn) ? (string) $build->builtOn : '',
+            'url' => isset($build->url) ? (string) $build->url : '',
+            'queueId' => isset($build->queueId) ? (string) $build->queueId : '',
+            'result' => isset($build->result) ? (string) $build->result : '',
+            'building' => TRUE
+        );
+    }
+
+    private function compareRunningBuilds($left, $right)
+    {
+        $leftTimestamp = isset($left['timestamp']) ? (int) $left['timestamp'] : 0;
+        $rightTimestamp = isset($right['timestamp']) ? (int) $right['timestamp'] : 0;
+
+        if ($leftTimestamp !== $rightTimestamp) {
+            return $leftTimestamp < $rightTimestamp ? 1 : -1;
+        }
+
+        return strcmp(isset($left['jobName']) ? $left['jobName'] : '', isset($right['jobName']) ? $right['jobName'] : '');
+    }
+
+    private function groupRunningBuilds($builds, $limitPerEnvironment)
+    {
+        $environments = array();
+        $limitedBuilds = array();
+        $limitPerEnvironment = max(1, (int) $limitPerEnvironment);
+
+        foreach ($builds as $build) {
+            $environment = isset($build['environment']) ? $build['environment'] : 'UNKNOWN';
+
+            if (! isset($environments[$environment])) {
+                $environments[$environment] = array('running' => 0, 'builds' => array());
+            }
+
+            $environments[$environment]['running'] += 1;
+
+            if (count($environments[$environment]['builds']) < $limitPerEnvironment) {
+                $build['rank'] = count($environments[$environment]['builds']) + 1;
+                $environments[$environment]['builds'][] = $build;
+                $limitedBuilds[] = $build;
+            }
+        }
+
+        ksort($environments);
+        usort($limitedBuilds, array($this, 'compareRunningBuilds'));
+
+        return array('builds' => $limitedBuilds, 'environments' => $environments);
+    }
+
+    private function includeConfiguredRunningBuildEnvironments(&$status)
+    {
+        if (! isset($status['ok']) || ! $status['ok'] || ! isset($status['environments']) || ! is_array($status['environments'])) {
+            return;
+        }
+
+        $this->load->model('Context_model', 'contextModel');
+        $environments = $this->contextModel->listEnvironments();
+
+        foreach (is_array($environments) ? $environments : array() as $record) {
+            $environmentName = isset($record->Environment) ? $record->Environment : '';
+            $environment = $this->normalizeJobSeekerEnvironment($environmentName);
+
+            if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN') {
+                continue;
+            }
+
+            if (! isset($status['environments'][$environment])) {
+                $status['environments'][$environment] = array('running' => 0, 'builds' => array());
+            }
+        }
+
+        ksort($status['environments']);
     }
 
     private function includeConfiguredContextEnvironments(&$status)

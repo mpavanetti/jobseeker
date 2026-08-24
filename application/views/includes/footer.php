@@ -197,5 +197,178 @@
                 });
             })();
     </script>
+
+    <script type="text/javascript">
+        (function() {
+            var runningTimer = null;
+            var requestInFlight = null;
+            var refreshMs = 15000;
+            var preferredEnvironmentOrder = ['DEV', 'QA', 'UAT', 'PREPROD', 'HML', 'PROD', 'UNKNOWN'];
+
+            function endpoint() {
+                return window.jobseekerRunningBuildsUrl || ((window.baseURL || baseURL || '/') + 'jenkins/runningBuilds');
+            }
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
+                    return {
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        "'": '&#039;',
+                        '"': '&quot;'
+                    }[character];
+                });
+            }
+
+            function environmentBadgeClass(environment) {
+                if (window.JobSeekerEnvironment && window.JobSeekerEnvironment.badgeClass) {
+                    return window.JobSeekerEnvironment.badgeClass(environment);
+                }
+
+                return environment === 'PROD' ? 'danger' : (environment === 'DEV' ? 'info' : 'default');
+            }
+
+            function formatElapsed(milliseconds, timestamp) {
+                milliseconds = parseInt(milliseconds, 10);
+                timestamp = parseInt(timestamp, 10);
+
+                if ((! milliseconds || milliseconds < 0) && timestamp > 0) {
+                    milliseconds = Date.now() - timestamp;
+                }
+
+                if (! milliseconds || milliseconds < 0) {
+                    return 'Starting';
+                }
+
+                var totalSeconds = Math.floor(milliseconds / 1000);
+                var hours = Math.floor(totalSeconds / 3600);
+                var minutes = Math.floor((totalSeconds % 3600) / 60);
+                var seconds = totalSeconds % 60;
+
+                if (hours > 0) {
+                    return hours + 'h ' + minutes + 'm';
+                }
+
+                if (minutes > 0) {
+                    return minutes + 'm ' + seconds + 's';
+                }
+
+                return seconds + 's';
+            }
+
+            function jobExecutionUrl(build) {
+                var target;
+                try {
+                    target = new URL((window.baseURL || baseURL || '/') + 'jobExecution', window.location.href);
+                    target.searchParams.set('job', build.jobName || build.job || '');
+                    target.searchParams.set('build', build.buildNumber || build.number || '');
+                    target.searchParams.set('environment', build.environment || 'UNKNOWN');
+                    return target.toString();
+                } catch (error) {
+                    return (window.baseURL || baseURL || '/') + 'jobExecution?job=' + encodeURIComponent(build.jobName || build.job || '') + '&build=' + encodeURIComponent(build.buildNumber || build.number || '') + '&environment=' + encodeURIComponent(build.environment || 'UNKNOWN');
+                }
+            }
+
+            function environmentSort(left, right) {
+                var leftIndex = preferredEnvironmentOrder.indexOf(left);
+                var rightIndex = preferredEnvironmentOrder.indexOf(right);
+
+                if (leftIndex !== -1 || rightIndex !== -1) {
+                    leftIndex = leftIndex === -1 ? 999 : leftIndex;
+                    rightIndex = rightIndex === -1 ? 999 : rightIndex;
+                    return leftIndex - rightIndex;
+                }
+
+                return left.localeCompare(right);
+            }
+
+            function render(payload) {
+                var container = $('#sidebarRunningJobsList');
+                var environments = payload && payload.environments ? payload.environments : {};
+                var names = Object.keys(environments).filter(function(environment) {
+                    return environments[environment] && parseInt(environments[environment].running, 10) > 0;
+                }).sort(environmentSort);
+                var html = '';
+
+                if (! container.length) {
+                    return;
+                }
+
+                if (! payload || payload.ok !== true) {
+                    container.html('<div class="jobseeker-sidebar-running-error">Unable to load running jobs.</div>');
+                    return;
+                }
+
+                if (! names.length) {
+                    container.html('<div class="jobseeker-sidebar-running-empty">No running Jenkins jobs.</div>');
+                    return;
+                }
+
+                $.each(names, function(index, environment) {
+                    var group = environments[environment] || {};
+                    var builds = Array.isArray(group.builds) ? group.builds : [];
+                    html += '<div class="jobseeker-sidebar-running-env">' +
+                        '<div class="jobseeker-sidebar-running-env-header">' +
+                          '<span class="label label-' + environmentBadgeClass(environment) + '">' + escapeHtml(environment) + '</span>' +
+                          '<small>' + escapeHtml(group.running || builds.length) + ' running</small>' +
+                        '</div>';
+
+                    $.each(builds, function(buildIndex, build) {
+                        html += '<a class="jobseeker-sidebar-running-build" href="' + escapeHtml(jobExecutionUrl(build)) + '" title="Open live console for ' + escapeHtml(build.jobName || build.job || '') + '">' +
+                            '<strong>' + escapeHtml(build.rank || buildIndex + 1) + '. ' + escapeHtml(build.jobName || build.job || '') + '</strong>' +
+                            '<small>#' + escapeHtml(build.buildNumber || build.number || '?') + ' - ' + escapeHtml(formatElapsed(build.elapsedMs, build.timestamp)) + ' elapsed</small>' +
+                          '</a>';
+                    });
+
+                    html += '</div>';
+                });
+
+                container.html(html);
+            }
+
+            function refreshRunningJobs() {
+                if (! $('#sidebarRunningJobsList').length) {
+                    return;
+                }
+
+                if (requestInFlight && requestInFlight.readyState !== 4) {
+                    return;
+                }
+
+                $('#sidebarRunningJobsRefresh i').addClass('fa-spin');
+                requestInFlight = $.getJSON(endpoint(), {limit: 5})
+                    .done(render)
+                    .fail(function() {
+                        $('#sidebarRunningJobsList').html('<div class="jobseeker-sidebar-running-error">Unable to load running jobs.</div>');
+                    })
+                    .always(function() {
+                        $('#sidebarRunningJobsRefresh i').removeClass('fa-spin');
+                    });
+            }
+
+            window.JobSeekerRunningJobs = {
+                refresh: refreshRunningJobs
+            };
+
+            $(function() {
+                if (! $('#sidebarRunningJobsList').length) {
+                    return;
+                }
+
+                refreshRunningJobs();
+                runningTimer = window.setInterval(refreshRunningJobs, refreshMs);
+                $('#sidebarRunningJobsRefresh').on('click', function() {
+                    refreshRunningJobs();
+                });
+                $(document).on('jobseeker:environment-change', refreshRunningJobs);
+                $(window).on('beforeunload', function() {
+                    if (runningTimer) {
+                        window.clearInterval(runningTimer);
+                    }
+                });
+            });
+        })();
+    </script>
   </body>
 </html>

@@ -477,6 +477,7 @@ pre {
   var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
   var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
   var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
+  var jobExecutionUrl = <?php echo json_encode(base_url() . 'jobExecution'); ?>;
   var environmentHelper = window.JobSeekerEnvironment || {
     detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
     detectFromJob: function(job) { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
@@ -609,6 +610,18 @@ pre {
 
   function escapeAttribute(value) {
     return escapeHtml(value);
+  }
+
+  function liveConsoleUrl(jobName, buildNumber, environment) {
+    try {
+      var target = new URL(jobExecutionUrl, window.location.href);
+      target.searchParams.set('job', jobName || '');
+      target.searchParams.set('build', buildNumber || '');
+      target.searchParams.set('environment', environment || 'Unknown');
+      return target.toString();
+    } catch (error) {
+      return jobExecutionUrl + '?job=' + encodeURIComponent(jobName || '') + '&build=' + encodeURIComponent(buildNumber || '') + '&environment=' + encodeURIComponent(environment || 'Unknown');
+    }
   }
 
   function lastBuild(row) {
@@ -1442,7 +1455,14 @@ pre {
           {"data": "description", "defaultContent": "", "render": function(data){ return escapeHtml(data); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
-            return '<button class="btn btn-sm btn-primary run" href="#" value="'+ escapeAttribute(jobName) +'" data-environment="' + escapeAttribute(environmentTextForRow(row)) + '" title="Click to trigger this job build">Build</button>';
+            var buildNumber = lastBuildField(row, 'number');
+            var environment = environmentTextForRow(row);
+
+            if (isJobRunning(row) && buildNumber) {
+              return '<a class="btn btn-sm btn-info live-console" href="' + escapeAttribute(liveConsoleUrl(jobName, buildNumber, environment)) + '" title="View the live console for this running build"><i class="fa fa-terminal"></i> Live</a>';
+            }
+
+            return '<button class="btn btn-sm btn-primary run" href="#" value="'+ escapeAttribute(jobName) +'" data-environment="' + escapeAttribute(environment) + '" title="Click to trigger this job build">Build</button>';
           }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
