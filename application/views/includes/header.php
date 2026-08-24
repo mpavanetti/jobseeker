@@ -526,6 +526,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       var value = normalize($(this).val() || 'all');
       store(value);
       $('#globalEnvironmentSelector').val(value);
+      apply(value);
     });
 
     $(function() {
@@ -762,6 +763,16 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     min-height: calc(100vh - 50px);
   }
 
+  @media (min-width: 768px) {
+    .main-sidebar {
+      min-height: var(--jobseeker-sidebar-page-height, 100%);
+    }
+
+    .main-sidebar .sidebar {
+      min-height: var(--jobseeker-sidebar-content-height, calc(100vh - 50px));
+    }
+  }
+
   .main-sidebar .sidebar-menu {
     flex: 0 0 auto;
   }
@@ -790,6 +801,15 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     display: inline-flex;
     gap: 6px;
     min-width: 0;
+  }
+
+  .jobseeker-sidebar-running-title small {
+    color: #8aa4af;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    text-transform: none;
+    white-space: nowrap;
   }
 
   .jobseeker-sidebar-running-refresh {
@@ -1193,7 +1213,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
         <?php if ($jenkins_enabled == true) { ?>
           <div class="jobseeker-sidebar-running" id="sidebarRunningJobs">
             <div class="jobseeker-sidebar-running-title">
-              <span><i class="fa fa-play-circle"></i> Running Jobs</span>
+              <span><i class="fa fa-play-circle"></i> Running Jobs <small id="sidebarRunningJobsScope"></small></span>
               <button type="button" class="jobseeker-sidebar-running-refresh" id="sidebarRunningJobsRefresh" title="Refresh running jobs"><i class="fa fa-refresh"></i></button>
             </div>
             <div id="sidebarRunningJobsList" class="jobseeker-sidebar-running-empty">Loading running jobs...</div>

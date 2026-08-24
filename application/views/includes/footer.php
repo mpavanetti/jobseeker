@@ -200,8 +200,56 @@
 
     <script type="text/javascript">
         (function() {
+            var layoutTimer = null;
+
+            function syncSidebarLayout() {
+                var sidebar = $('.main-sidebar');
+                var sidebarSection = sidebar.children('.sidebar');
+
+                if (! sidebar.length || ! sidebarSection.length || $('body').hasClass('fixed')) {
+                    return;
+                }
+
+                var headerHeight = $('.main-header').outerHeight() || 50;
+                var footerHeight = $('.main-footer').outerHeight() || 0;
+                var contentHeight = $('.content-wrapper').outerHeight() || 0;
+                var viewportHeight = $(window).height() || 0;
+                var pageHeight = Math.max(viewportHeight, contentHeight + footerHeight);
+                var sidebarContentHeight = Math.max(0, pageHeight - headerHeight);
+
+                document.documentElement.style.setProperty('--jobseeker-sidebar-page-height', pageHeight + 'px');
+                document.documentElement.style.setProperty('--jobseeker-sidebar-content-height', sidebarContentHeight + 'px');
+            }
+
+            function scheduleSidebarLayoutSync() {
+                window.clearTimeout(layoutTimer);
+                layoutTimer = window.setTimeout(syncSidebarLayout, 0);
+            }
+
+            window.JobSeekerSidebarLayout = {
+                refresh: scheduleSidebarLayoutSync,
+                sync: syncSidebarLayout
+            };
+
+            $(function() {
+                syncSidebarLayout();
+                window.setTimeout(syncSidebarLayout, 250);
+                $(window).on('load resize', scheduleSidebarLayoutSync);
+                $(document).on('expanded.tree collapsed.tree expanded.pushMenu collapsed.pushMenu jobseeker:environment-change', scheduleSidebarLayoutSync);
+
+                var content = document.querySelector('.content-wrapper');
+                if (window.MutationObserver && content) {
+                    new MutationObserver(scheduleSidebarLayoutSync).observe(content, { childList: true, subtree: true, attributes: true });
+                }
+            });
+        })();
+    </script>
+
+    <script type="text/javascript">
+        (function() {
             var runningTimer = null;
             var requestInFlight = null;
+            var requestSerial = 0;
             var refreshMs = 15000;
             var preferredEnvironmentOrder = ['DEV', 'QA', 'UAT', 'PREPROD', 'HML', 'PROD', 'UNKNOWN'];
 
@@ -219,6 +267,64 @@
                         '"': '&quot;'
                     }[character];
                 });
+            }
+
+            function normalizeEnvironment(value) {
+                var raw = $.trim(String(value == null ? '' : value));
+
+                if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+                    return window.JobSeekerGlobalEnvironment.normalize(raw || 'all');
+                }
+
+                if (raw === '' || raw === '*' || raw.toLowerCase() === 'all') {
+                    return 'all';
+                }
+
+                raw = raw.toUpperCase();
+                if (raw === 'QAS') {
+                    return 'QA';
+                }
+                if (raw === 'PRD' || raw === 'PRODUCTION') {
+                    return 'PROD';
+                }
+                if (raw === 'HOMOLOG' || raw === 'HOMOLOGATION') {
+                    return 'HML';
+                }
+
+                return raw;
+            }
+
+            function selectedEnvironment(value) {
+                if (typeof value !== 'undefined' && value !== null) {
+                    return normalizeEnvironment(value);
+                }
+
+                if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected) {
+                    return normalizeEnvironment(window.JobSeekerGlobalEnvironment.selected());
+                }
+
+                var bodyEnvironment = $('body').attr('data-jobseeker-environment');
+                return normalizeEnvironment(bodyEnvironment || 'all');
+            }
+
+            function isAllEnvironment(environment) {
+                environment = normalizeEnvironment(environment);
+                return environment === '' || environment === 'all' || environment === 'ALL' || environment === '__UNKNOWN__';
+            }
+
+            function updateScope(environment) {
+                var scope = isAllEnvironment(environment) ? 'All' : normalizeEnvironment(environment);
+                $('#sidebarRunningJobsScope').text(scope ? '(' + scope + ')' : '');
+            }
+
+            function runningJobsRequestData(environment) {
+                var data = {limit: 5};
+
+                if (! isAllEnvironment(environment)) {
+                    data.environment = normalizeEnvironment(environment);
+                }
+
+                return data;
             }
 
             function environmentBadgeClass(environment) {
@@ -283,13 +389,22 @@
                 return left.localeCompare(right);
             }
 
-            function render(payload) {
+            function refreshSidebarLayout() {
+                if (window.JobSeekerSidebarLayout && window.JobSeekerSidebarLayout.refresh) {
+                    window.JobSeekerSidebarLayout.refresh();
+                }
+            }
+
+            function render(payload, environment) {
                 var container = $('#sidebarRunningJobsList');
                 var environments = payload && payload.environments ? payload.environments : {};
-                var names = Object.keys(environments).filter(function(environment) {
-                    return environments[environment] && parseInt(environments[environment].running, 10) > 0;
+                var names = Object.keys(environments).filter(function(environmentName) {
+                    return environments[environmentName] && parseInt(environments[environmentName].running, 10) > 0;
                 }).sort(environmentSort);
                 var html = '';
+
+                environment = selectedEnvironment(environment);
+                updateScope(environment);
 
                 if (! container.length) {
                     return;
@@ -297,20 +412,23 @@
 
                 if (! payload || payload.ok !== true) {
                     container.html('<div class="jobseeker-sidebar-running-error">Unable to load running jobs.</div>');
+                    refreshSidebarLayout();
                     return;
                 }
 
                 if (! names.length) {
-                    container.html('<div class="jobseeker-sidebar-running-empty">No running Jenkins jobs.</div>');
+                    var emptyText = isAllEnvironment(environment) ? 'No running Jenkins jobs.' : 'No running ' + normalizeEnvironment(environment) + ' Jenkins jobs.';
+                    container.html('<div class="jobseeker-sidebar-running-empty">' + escapeHtml(emptyText) + '</div>');
+                    refreshSidebarLayout();
                     return;
                 }
 
-                $.each(names, function(index, environment) {
-                    var group = environments[environment] || {};
+                $.each(names, function(index, environmentName) {
+                    var group = environments[environmentName] || {};
                     var builds = Array.isArray(group.builds) ? group.builds : [];
                     html += '<div class="jobseeker-sidebar-running-env">' +
                         '<div class="jobseeker-sidebar-running-env-header">' +
-                          '<span class="label label-' + environmentBadgeClass(environment) + '">' + escapeHtml(environment) + '</span>' +
+                          '<span class="label label-' + environmentBadgeClass(environmentName) + '">' + escapeHtml(environmentName) + '</span>' +
                           '<small>' + escapeHtml(group.running || builds.length) + ' running</small>' +
                         '</div>';
 
@@ -325,30 +443,56 @@
                 });
 
                 container.html(html);
+                refreshSidebarLayout();
             }
 
-            function refreshRunningJobs() {
+            function refreshRunningJobs(environment, force) {
+                var requestedEnvironment = selectedEnvironment(environment);
+                var currentSerial;
+
                 if (! $('#sidebarRunningJobsList').length) {
                     return;
                 }
 
+                updateScope(requestedEnvironment);
+
                 if (requestInFlight && requestInFlight.readyState !== 4) {
-                    return;
+                    if (! force) {
+                        return;
+                    }
+
+                    requestInFlight.abort();
                 }
 
+                currentSerial = ++requestSerial;
                 $('#sidebarRunningJobsRefresh i').addClass('fa-spin');
-                requestInFlight = $.getJSON(endpoint(), {limit: 5})
-                    .done(render)
-                    .fail(function() {
+                requestInFlight = $.getJSON(endpoint(), runningJobsRequestData(requestedEnvironment))
+                    .done(function(payload) {
+                        if (currentSerial !== requestSerial) {
+                            return;
+                        }
+
+                        render(payload, requestedEnvironment);
+                    })
+                    .fail(function(xhr, textStatus) {
+                        if (textStatus === 'abort' || currentSerial !== requestSerial) {
+                            return;
+                        }
+
                         $('#sidebarRunningJobsList').html('<div class="jobseeker-sidebar-running-error">Unable to load running jobs.</div>');
+                        refreshSidebarLayout();
                     })
                     .always(function() {
-                        $('#sidebarRunningJobsRefresh i').removeClass('fa-spin');
+                        if (currentSerial === requestSerial) {
+                            $('#sidebarRunningJobsRefresh i').removeClass('fa-spin');
+                        }
                     });
             }
 
             window.JobSeekerRunningJobs = {
-                refresh: refreshRunningJobs
+                refresh: function(environment) {
+                    refreshRunningJobs(environment, true);
+                }
             };
 
             $(function() {
@@ -357,11 +501,15 @@
                 }
 
                 refreshRunningJobs();
-                runningTimer = window.setInterval(refreshRunningJobs, refreshMs);
-                $('#sidebarRunningJobsRefresh').on('click', function() {
+                runningTimer = window.setInterval(function() {
                     refreshRunningJobs();
+                }, refreshMs);
+                $('#sidebarRunningJobsRefresh').on('click', function() {
+                    refreshRunningJobs(null, true);
                 });
-                $(document).on('jobseeker:environment-change', refreshRunningJobs);
+                $(document).on('jobseeker:environment-change', function(event, environment) {
+                    refreshRunningJobs(environment, true);
+                });
                 $(window).on('beforeunload', function() {
                     if (runningTimer) {
                         window.clearInterval(runningTimer);
