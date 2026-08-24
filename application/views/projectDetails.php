@@ -153,15 +153,15 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->Id ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->CreatedOn)) ?></td>
-                        <td><?php echo $record->ProjectName ?></td>
-                        <td><?php echo $record->GitPath ?></td>
-                        <td><?php echo $record->IsActive ?></td>
-                        <td><?php if($record->ModifiedOn == null){ echo ""; } else { echo date('Y-m-d H:i:s', strtotime($record->ModifiedOn)); }  ?></td>
+                      <td><?php echo (int) $record->Id ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->CreatedOn))) ?></td>
+                        <td><?php echo html_escape($record->ProjectName) ?></td>
+                        <td><?php echo html_escape($record->GitPath) ?></td>
+                        <td><?php echo html_escape($record->IsActive) ?></td>
+                        <td><?php if($record->ModifiedOn == null){ echo ""; } else { echo html_escape(date('Y-m-d H:i:s', strtotime($record->ModifiedOn))); }  ?></td>
                        <?php if($role != 1) {  ?> <td>
-                          <a class="btn btn-sm btn-warning" href="<?php echo base_url().'Context/editProject/'.$record->Id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->Id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                          <a class="btn btn-sm btn-warning" href="<?php echo base_url().'Context/editProject/'.(int) $record->Id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->Id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php

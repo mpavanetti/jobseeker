@@ -4,6 +4,68 @@
 class Tmf_model extends CI_Model
 {
 
+    private function normalizeEnvironmentFilter($environment) {
+        $environment = trim((string) $environment);
+
+        if ($environment === '' || $environment === '*' || strtolower($environment) === 'all') {
+            return '';
+        }
+
+        if ($environment === '__UNKNOWN__' || strtolower($environment) === 'unknown') {
+            return '__UNKNOWN__';
+        }
+
+        return strtoupper($environment);
+    }
+
+    private function environmentFilterValues($environment) {
+        $environment = $this->normalizeEnvironmentFilter($environment);
+
+        if ($environment === '' || $environment === '__UNKNOWN__') {
+            return array();
+        }
+
+        $aliases = array(
+            'QA' => array('QA', 'QAS'),
+            'QAS' => array('QA', 'QAS'),
+            'PROD' => array('PROD', 'PRD', 'PRODUCTION'),
+            'PRD' => array('PROD', 'PRD', 'PRODUCTION'),
+            'PRODUCTION' => array('PROD', 'PRD', 'PRODUCTION'),
+            'HML' => array('HML', 'HOMOLOG', 'HOMOLOGATION'),
+            'HOMOLOG' => array('HML', 'HOMOLOG', 'HOMOLOGATION'),
+            'HOMOLOGATION' => array('HML', 'HOMOLOG', 'HOMOLOGATION')
+        );
+
+        return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
+    }
+
+    private function applyEnvironmentFilter($environment) {
+        $environment = $this->normalizeEnvironmentFilter($environment);
+
+        if ($environment === '') {
+            return;
+        }
+
+        if ($environment === '__UNKNOWN__') {
+            $this->db->group_start();
+            $this->db->where('environment IS NULL', null, false);
+            $this->db->or_where('TRIM(environment) =', '');
+            $this->db->group_end();
+            return;
+        }
+
+        $values = $this->environmentFilterValues($environment);
+        $this->db->group_start();
+        foreach ($values as $index => $value) {
+            if ($index === 0) {
+                $this->db->where('UPPER(TRIM(environment)) =', $value);
+            } else {
+                $this->db->or_where('UPPER(TRIM(environment)) =', $value);
+            }
+        }
+        $this->db->group_end();
+    }
+
     private function parseFilterDate($value, $endOfDay)
     {
         $value = trim((string) $value);
@@ -142,21 +204,61 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
-    function fetchDataStatus($status) {
+    function deletePolicy($id, $staleThresholdSeconds = 900) {
+
+        $this->db->select('id,status,environment,last_activity');
+        $this->db->from('tmf');
+        $this->db->where('id', (int) $id);
+        $query = $this->db->get();
+        $row = $query->row();
+
+        if (empty($row)) {
+            return array(
+                'exists' => false,
+                'allowed' => false,
+                'isDev' => false,
+                'isStale' => false
+            );
+        }
+
+        $this->db->select_max('last_activity', 'latest_activity');
+        $latestQuery = $this->db->get('tmf');
+        $latestRow = $latestQuery->row();
+        $latestTimestamp = !empty($latestRow) ? strtotime((string) $latestRow->latest_activity) : false;
+        $activityReferenceTimestamp = $latestTimestamp !== false ? max(time(), $latestTimestamp) : time();
+
+        $environment = strtoupper(trim((string) $row->environment));
+        $lastTimestamp = strtotime((string) $row->last_activity);
+        $isDev = $environment === 'DEV';
+        $isStale = strtolower((string) $row->status) === 'running'
+            && $lastTimestamp !== false
+            && ($activityReferenceTimestamp - $lastTimestamp) > (int) $staleThresholdSeconds;
+
+        return array(
+            'exists' => true,
+            'allowed' => $isDev || $isStale,
+            'isDev' => $isDev,
+            'isStale' => $isStale
+        );
+    }
+
+    function fetchDataStatus($status, $environment = '') {
 
         $this->db->select('*');
         $this->db->from('tmf');
-        $this->db->where('status', $status);
+        $this->db->where('LOWER(status) =', strtolower((string) $status));
+        $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();
     }
 
-    function fetchDataJobName($jobName) {
+    function fetchDataJobName($jobName, $environment = '') {
 
         $this->db->select('*');
         $this->db->from('tmf');
         $this->db->where('job_name', $jobName);
+        $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
         return $query->result();

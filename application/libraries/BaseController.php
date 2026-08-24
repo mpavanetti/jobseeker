@@ -1228,6 +1228,15 @@ class BaseController extends CI_Controller {
 		$isLoggedIn = $this->session->userdata ( 'isLoggedIn' );
 		
 		if (! isset ( $isLoggedIn ) || $isLoggedIn != TRUE) {
+			if ($this->input->is_ajax_request()) {
+				$this->output
+					->set_status_header(401)
+					->set_content_type('application/json', 'utf-8')
+					->set_output(json_encode(array('status' => FALSE, 'error' => 'Session expired. Please log in again.')))
+					->_display();
+				exit;
+			}
+
 			redirect ( 'login' );
 		} else {
 			$this->role = $this->session->userdata ( 'role' );

@@ -43,17 +43,41 @@ class EmailSettings_model extends CI_Model
         return $query->result();
     }
 
+    private function smtpJoinColumns($includePassword = FALSE)
+    {
+        $columns = 'email_settings.*, smtp_settings.smtp_host, smtp_settings.smtp_port, smtp_settings.username, smtp_settings.ssl';
+
+        if ($includePassword) {
+            $columns .= ', smtp_settings.password';
+        }
+
+        $columns .= $this->db->field_exists('reply_to', 'smtp_settings') ? ', smtp_settings.reply_to' : ", 'jobseeker@local.test' AS reply_to";
+        $columns .= $this->db->field_exists('is_enabled', 'smtp_settings') ? ', smtp_settings.is_enabled' : ', 1 AS is_enabled';
+
+        return $columns;
+    }
+
     function fetchSMTP() {
 
         $this->db->select('*');
         $this->db->from('smtp_settings');
+
+        if ($this->db->field_exists('is_enabled', 'smtp_settings')) {
+            $this->db->where('is_enabled', 1);
+        }
+
+        if ($this->db->field_exists('is_default', 'smtp_settings')) {
+            $this->db->order_by('is_default', 'DESC');
+        }
+
+        $this->db->order_by('name', 'ASC');
         $query = $this->db->get();
         return $query->result();
     }
 
     function fetchXsmtp($id) {
 
-        $this->db->select('email_settings.*, smtp_settings.smtp_host, smtp_settings.smtp_port, smtp_settings.username, smtp_settings.ssl');
+        $this->db->select($this->smtpJoinColumns(FALSE), FALSE);
         $this->db->from('email_settings');
         $this->db->where('email_settings.id', $id);
         $this->db->join('smtp_settings', 'smtp_settings.name = email_settings.smtp');
@@ -63,7 +87,7 @@ class EmailSettings_model extends CI_Model
 
     function fetchXsmtpCredentials($id) {
 
-        $this->db->select('email_settings.*, smtp_settings.smtp_host, smtp_settings.smtp_port, smtp_settings.username, smtp_settings.password, smtp_settings.ssl');
+        $this->db->select($this->smtpJoinColumns(TRUE), FALSE);
         $this->db->from('email_settings');
         $this->db->where('email_settings.id', $id);
         $this->db->join('smtp_settings', 'smtp_settings.name = email_settings.smtp');

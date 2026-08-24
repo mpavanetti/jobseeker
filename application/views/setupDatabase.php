@@ -54,6 +54,20 @@
 <body>
     <div id="container" class="animated fadeIn">
         <h1><b>Job Seeker - Setup Wizard</b></h1>
+        <?php $success = $this->session->flashdata('success'); ?>
+        <?php if(!empty($success)) { ?>
+          <div class="alert alert-success alert-dismissable animated bounceIn" style="margin-left: 10px; margin-right: 10px;">
+            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+            <?php echo html_escape($success); ?>
+          </div>
+        <?php } ?>
+        <?php $error = $this->session->flashdata('error'); ?>
+        <?php if(!empty($error)) { ?>
+          <div class="alert alert-danger alert-dismissable animated bounceIn" style="margin-left: 10px; margin-right: 10px;">
+            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+            <?php echo html_escape($error); ?>
+          </div>
+        <?php } ?>
        
         <div class="row">
             <div class="col-lg-4 col-md-4 col-xs-12">
@@ -82,6 +96,7 @@
             <!-- /.box-header -->
             <!-- form start -->
             <form id="check" action="<?php echo base_url() ?>setup/databaseCheck" method="post" role="form">
+              <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
               <div class="box-body">
                 <div class="form-group">
                   <label for="engine">Database Engine</label>

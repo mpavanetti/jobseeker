@@ -88,16 +88,57 @@ if(!function_exists('setProtocol'))
                     
         $CI->load->library('email');
         
-        $config['protocol'] = PROTOCOL;
-        $config['mailpath'] = MAIL_PATH;
-        $config['smtp_host'] = SMTP_HOST;
-        $config['smtp_port'] = SMTP_PORT;
-        $config['smtp_user'] = SMTP_USER;
-        $config['smtp_pass'] = SMTP_PASS;
-        $config['charset'] = "utf-8";
-        $config['mailtype'] = "html";
-        $config['newline'] = "\r\n";
-        
+        $config = array(
+            'protocol' => PROTOCOL,
+            'mailpath' => MAIL_PATH,
+            'smtp_host' => SMTP_HOST,
+            'smtp_port' => SMTP_PORT,
+            'charset' => 'utf-8',
+            'mailtype' => 'html',
+            'newline' => "\r\n",
+            'crlf' => "\r\n"
+        );
+
+        if (trim((string) SMTP_USER) !== '' && trim((string) SMTP_PASS) !== '') {
+            $config['smtp_user'] = SMTP_USER;
+            $config['smtp_pass'] = SMTP_PASS;
+        }
+
+        $fromEmail = EMAIL_FROM;
+
+        if (isset($CI->db)) {
+            $CI->load->model('SmtpSettings_model', 'smtp_settings_model');
+            $setting = $CI->smtp_settings_model->defaultEnabledSetting();
+
+            if (! empty($setting)) {
+                $config['protocol'] = 'smtp';
+                $config['smtp_host'] = trim((string) $setting->smtp_host);
+                $config['smtp_port'] = (int) $setting->smtp_port;
+
+                if (trim((string) $setting->username) !== '' && trim((string) $setting->password) !== '') {
+                    $config['smtp_user'] = trim((string) $setting->username);
+                    $config['smtp_pass'] = (string) $setting->password;
+                } else {
+                    unset($config['smtp_user'], $config['smtp_pass']);
+                }
+
+                $crypto = strtolower(trim((string) $setting->ssl));
+                unset($config['smtp_crypto']);
+                if ($crypto === '1' || $crypto === 'ssl') {
+                    $config['smtp_crypto'] = 'ssl';
+                } else if ($crypto === '2' || $crypto === 'tls') {
+                    $config['smtp_crypto'] = 'tls';
+                }
+
+                if (isset($setting->reply_to) && filter_var($setting->reply_to, FILTER_VALIDATE_EMAIL)) {
+                    $fromEmail = trim($setting->reply_to);
+                } else if (filter_var($setting->username, FILTER_VALIDATE_EMAIL)) {
+                    $fromEmail = trim($setting->username);
+                }
+            }
+        }
+
+        $CI->jobseeker_mail_from = filter_var($fromEmail, FILTER_VALIDATE_EMAIL) ? $fromEmail : 'jobseeker@local.test';
         $CI->email->initialize($config);
         
         return $CI;
@@ -108,15 +149,7 @@ if(!function_exists('emailConfig'))
 {
     function emailConfig()
     {
-        $CI->load->library('email');
-        $config['protocol'] = PROTOCOL;
-        $config['smtp_host'] = SMTP_HOST;
-        $config['smtp_port'] = SMTP_PORT;
-        $config['mailpath'] = MAIL_PATH;
-        $config['charset'] = 'UTF-8';
-        $config['mailtype'] = "html";
-        $config['newline'] = "\r\n";
-        $config['wordwrap'] = TRUE;
+        return setProtocol();
     }
 }
 
@@ -130,7 +163,12 @@ if(!function_exists('resetPasswordEmail'))
         
         $CI = setProtocol();        
         
-        $CI->email->from(EMAIL_FROM, FROM_NAME);
+        $fromEmail = isset($CI->jobseeker_mail_from) ? $CI->jobseeker_mail_from : EMAIL_FROM;
+        $fromEmail = filter_var($fromEmail, FILTER_VALIDATE_EMAIL) ? $fromEmail : 'jobseeker@local.test';
+        $fromName = trim((string) FROM_NAME) !== '' ? FROM_NAME : 'JobSeeker';
+
+        $CI->email->from($fromEmail, $fromName);
+        $CI->email->reply_to($fromEmail, $fromName);
         $CI->email->subject("Reset Password");
         $CI->email->message($CI->load->view('email/resetPassword', $data, TRUE));
         $CI->email->to($detail["email"]);

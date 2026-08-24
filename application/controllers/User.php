@@ -323,6 +323,12 @@ class User extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
             $userId = $this->input->post('userId');
             $userInfo = array('isDeleted'=>1,'updatedBy'=>$this->vendorId, 'updatedDtm'=>date('Y-m-d H:i:s'));
             
@@ -345,6 +351,12 @@ class User extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
             $userId = $this->input->post('userId');
             
             $result = $this->user_model->deleteGroup($userId);

@@ -32,62 +32,135 @@ class EmailSettings extends BaseController
         $this->loadViews("emailSettings", $this->global, $data, NULL);
     }
 
+    private function sendEmailJson($status, $message = '', $httpStatus = 200)
+    {
+        $this->output->set_status_header($httpStatus);
+        echo json_encode(array('status' => $status, 'message' => $message));
+    }
+
+    private function emailDebuggerMessage()
+    {
+        $debug = strip_tags($this->email->print_debugger(array('headers', 'subject')));
+        $debug = preg_replace('/\s+/', ' ', trim($debug));
+
+        if ($debug === '') {
+            return 'Email sending failed. Check SMTP host, port, encryption, credentials and From/Reply-To settings.';
+        }
+
+        if (strlen($debug) > 1200) {
+            $debug = substr($debug, 0, 1200) . '...';
+        }
+
+        return $debug;
+    }
+
     public function mail() {
 
         $this->output->set_content_type('application/json');
 
         $id = $this->input->post('id');
         if ($id === NULL || ! ctype_digit((string) $id)) {
-            $this->output->set_status_header(400);
-            echo json_encode(array('status' => FALSE, 'message' => 'Invalid email template.'));
+            $this->sendEmailJson(FALSE, 'Invalid email template.', 400);
             return;
         }
 
         $records = $this->model->fetchXsmtpCredentials($id);
         if (empty($records)) {
-            $this->output->set_status_header(404);
-            echo json_encode(array('status' => FALSE, 'message' => 'Email template was not found.'));
+            $this->sendEmailJson(FALSE, 'Email template was not found.', 404);
             return;
         }
 
         $array = (array) $records[0];
         if ((int) $array['enabled'] === 0) {
-            $this->output->set_status_header(400);
-            echo json_encode(array('status' => FALSE, 'message' => 'Email template is disabled.'));
+            $this->sendEmailJson(FALSE, 'Email template is disabled.', 400);
             return;
         }
 
-        $config = array();
-        $config['protocol'] = 'smtp';
-        $config['smtp_host'] = $array["smtp_host"];
-        $config['smtp_user'] = $array["username"];
-        $config['smtp_pass'] = $array["password"];
-        $config['smtp_port'] = $array["smtp_port"]; 
-        $config['mailtype'] = 'html';
-
-        if($array["ssl"] == "1") {
-            $config['smtp_crypto'] = 'ssl';
-        } else {
-            $config['smtp_crypto'] = 'tls'; 
+        if (isset($array['is_enabled']) && (int) $array['is_enabled'] === 0) {
+            $this->sendEmailJson(FALSE, 'Selected SMTP provider is disabled.', 400);
+            return;
         }
 
-        $this->load->library('email', $config);
+        $smtpHost = trim((string) $array['smtp_host']);
+        $smtpPort = (int) $array['smtp_port'];
+        $recipients = trim((string) $array['to']);
+
+        if ($smtpHost === '' || $smtpPort <= 0) {
+            $this->sendEmailJson(FALSE, 'Selected SMTP provider is missing host or port.', 400);
+            return;
+        }
+
+        if ($recipients === '') {
+            $this->sendEmailJson(FALSE, 'Email template has no recipients.', 400);
+            return;
+        }
+
+        $smtpUsername = trim((string) $array['username']);
+        $smtpPassword = (string) $array['password'];
+        $replyTo = isset($array['reply_to']) ? trim((string) $array['reply_to']) : '';
+        $templateFrom = trim((string) $array['from']);
+
+        if (filter_var($replyTo, FILTER_VALIDATE_EMAIL)) {
+            $senderEmail = $replyTo;
+        } else if (filter_var($smtpUsername, FILTER_VALIDATE_EMAIL)) {
+            $senderEmail = $smtpUsername;
+        } else if (filter_var($templateFrom, FILTER_VALIDATE_EMAIL)) {
+            $senderEmail = $templateFrom;
+        } else {
+            $senderEmail = 'jobseeker@local.test';
+        }
+
+        $senderName = ($templateFrom !== '' && ! filter_var($templateFrom, FILTER_VALIDATE_EMAIL)) ? $templateFrom : 'JobSeeker';
+
+        $config = array(
+            'protocol' => 'smtp',
+            'smtp_host' => $smtpHost,
+            'smtp_port' => $smtpPort,
+            'smtp_timeout' => 10,
+            'mailtype' => 'html',
+            'charset' => 'utf-8',
+            'newline' => "\r\n",
+            'crlf' => "\r\n"
+        );
+
+        if ($smtpUsername !== '' && trim($smtpPassword) !== '') {
+            $config['smtp_user'] = $smtpUsername;
+            $config['smtp_pass'] = $smtpPassword;
+        }
+
+        $crypto = strtolower(trim((string) $array['ssl']));
+        if ($crypto === '1' || $crypto === 'ssl') {
+            $config['smtp_crypto'] = 'ssl';
+        } else if ($crypto === '2' || $crypto === 'tls') {
+            $config['smtp_crypto'] = 'tls';
+        }
+
+        $this->load->library('email');
+        $this->email->initialize($config);
+        $this->email->clear(TRUE);
         $this->email->set_newline("\r\n");
+        $this->email->set_crlf("\r\n");
 
-         $this->email->to($array["to"]);
-         $this->email->from($array["username"],$array["from"]);
-         $this->email->cc($array["cc"]);
-         $this->email->subject($array["subject"]);
-         $this->email->message($array["msg"]); 
+        $this->email->to($recipients);
+        $this->email->from($senderEmail, $senderName);
+        $this->email->reply_to($senderEmail, $senderName);
 
-         $sent = $this->email->send();
-         if (! $sent) {
-          log_message('error', 'Email template send failed for ID '.$id.': '.$this->email->print_debugger(array('headers')));
-      }
+        if (trim((string) $array['cc']) !== '') {
+            $this->email->cc($array['cc']);
+        }
 
-      echo json_encode(array('status' => $sent));
+        $this->email->subject($array['subject']);
+        $this->email->message($array['msg']);
 
+        $sent = $this->email->send();
+        if (! $sent) {
+            $message = $this->emailDebuggerMessage();
+            log_message('error', 'Email template send failed for ID '.$id.': '.$message);
+            $this->sendEmailJson(FALSE, $message);
+            return;
+        }
 
+        $this->sendEmailJson(TRUE, 'Email sent successfully.');
     }
 
     public function mail2() {
@@ -374,6 +447,12 @@ class EmailSettings extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
             $id = $this->input->post('userId');
             /*
             $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s')); Future Release Not working */

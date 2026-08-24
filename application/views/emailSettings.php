@@ -76,24 +76,24 @@
                     ?>
                     <tr>
                        <?php if($role != 1) {  ?> <td class="text-center">
-                            <a class="btn btn-sm btn-success sendEmail" href="#" title="Send Email"><i class="fa fa-send"></i></a>
+                            <a class="btn btn-sm btn-success sendEmail" href="#" data-settingid="<?php echo (int) $record->id; ?>" title="Send Email"><i class="fa fa-send"></i></a>
                         </td><?php } ?>
-                      <td><?php echo $record->id ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
-                        <td><?php echo $record->name ?></td>
-                        <td><?php echo $record->to ?></td>
-                        <td><?php echo $record->from ?></td>
-                        <td><?php echo $record->cc ?></td>
-                        <td><?php echo $record->subject ?></td>
-                        <td><a class="btn btn-sm btn-info showMail" href="#" title="View Email">Check Content</a></td>
-                        <td><?php echo $record->attachment ?></td>
-                        <td><?php echo $record->smtp ?></td>
+                      <td><?php echo (int) $record->id ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
+                        <td><?php echo html_escape($record->name) ?></td>
+                        <td><?php echo html_escape($record->to) ?></td>
+                        <td><?php echo html_escape($record->from) ?></td>
+                        <td><?php echo html_escape($record->cc) ?></td>
+                        <td><?php echo html_escape($record->subject) ?></td>
+                        <td><a class="btn btn-sm btn-info showMail" href="#" data-settingid="<?php echo (int) $record->id; ?>" title="View Email">Check Content</a></td>
+                        <td><?php echo html_escape($record->attachment) ?></td>
+                        <td><?php echo html_escape($record->smtp) ?></td>
                         <td><?php echo ($record->enabled === '1') ? 'Enabled' : 'Disabled' ?></td>
-                        <td><?php echo $record->description ?></td>
-                        <td><?php echo $record->owner ?></td>
+                        <td><?php echo html_escape($record->description) ?></td>
+                        <td><?php echo html_escape($record->owner) ?></td>
                         <?php if($role != 1) {  ?> <td class="text-center">
-                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'EmailSettings/EditSettingsFetchData/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'EmailSettings/EditSettingsFetchData/'.(int) $record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php
@@ -162,6 +162,9 @@
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script type="text/javascript">
   jQuery(document).ready(function(){
+  function escapeHtml(value) {
+    return $('<div>').text(value == null ? '' : String(value)).html();
+  }
   
   jQuery(document).on("click", ".deleteUser", function(){
     
@@ -202,12 +205,12 @@ $("#table4").on('click','.sendEmail',function(){
          var currentRow=$(this).closest("tr"); 
 
          // get id row value to select from table
-         var id=currentRow.find("td:eq(1)").text();
+         var id = $(this).data("settingid") || currentRow.find("td:eq(1)").text();
 
         // Get email info
          var showMail = $.parseJSON($.ajax({
             contentType: "application/json",
-          url:  '<?php echo base_url(); ?>EmailSettings/fetch/' + id,
+          url:  '<?php echo base_url(); ?>EmailSettings/fetch/' + encodeURIComponent(id),
             dataType: "json", 
             async: false,
             beforeSend: function() {
@@ -233,24 +236,25 @@ $("#table4").on('click','.sendEmail',function(){
          var enabled = showMail["data"][0].enabled;
 
          if (enabled != 0) {
-          alertify.confirm('Email Sending Confirmation', 'Are you sure you want to send the email  <b>'+ name + '</b> ?', 
+          alertify.confirm('Email Sending Confirmation', 'Are you sure you want to send the email  <b>'+ escapeHtml(name) + '</b> ?',
           function(){ 
 
             $.ajax({    //create an ajax request
               type: "POST",
-              url: "EmailSettings/mail/",
+              url: baseURL + "EmailSettings/mail/",
               data: {id: id},
               dataType: "json",
               beforeSend: function() {
                 toastr.info('Your email request has been sent to server queue.')
             },
-               error: function() {
-             alertify.error('Some Error has been occured')
+               error: function(xhr) {
+             var message = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Some Error has been occurred';
+             alertify.error(message)
                
               },             
               success: function(data){
                 if (data.status === true) {
-                  alertify.success('Your email has been succesfully send !')
+                  alertify.success(data.message || 'Your email has been successfully sent !')
                 } else {
                   alertify.error(data.message || 'Email sending failed')
                 }
@@ -265,7 +269,7 @@ $("#table4").on('click','.sendEmail',function(){
 
          });
         } else {
-          alertify.error('The Email Template <b>' + name + '</b> is <b style="color:red;"> Disabled !</b>')
+          alertify.error('The Email Template <b>' + escapeHtml(name) + '</b> is <b style="color:red;"> Disabled !</b>')
         }
 
          
@@ -279,11 +283,11 @@ $("#table4").on('click','.showMail',function(){
 
          var currentRow=$(this).closest("tr"); 
 
-         var id=currentRow.find("td:eq(1)").text();
+         var id = $(this).data("settingid") || currentRow.find("td:eq(1)").text();
 
          var showMail = $.parseJSON($.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>EmailSettings/fetch/' + id,
+            url:  '<?php echo base_url(); ?>EmailSettings/fetch/' + encodeURIComponent(id),
             dataType: "json", 
             async: false,
             beforeSend: function() {
@@ -302,10 +306,12 @@ $("#table4").on('click','.showMail',function(){
 
          }).responseText);
 
-         var status = showMail["data"][0].enabled;
+         var mail = showMail.data && showMail.data[0] ? showMail.data[0] : {};
+         var status = mail.enabled;
          if (status == 0) { var status = 'Disabled'} else {var status = 'Enabled'};
 
-         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th>Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ moment(showMail["data"][0].creation_date).format('dddd, MMMM Do YYYY, h:mm:ss')+'</td></tr><tr><td>Name</td><td>'+ showMail["data"][0].name +'</td></tr><tr><td>To</td><td>'+ showMail["data"][0].to +'</td></tr><tr><td>From</td><td>'+ showMail["data"][0].from +'</td></tr><tr><td>Cc</td><td>'+ showMail["data"][0].cc +'</td></tr><tr><td>Subject</td><td>'+ showMail["data"][0].subject +'</td></tr><tr><td>Smtp</td><td>'+ showMail["data"][0].smtp +'</td></tr><tr><td>Description</td><td>'+ showMail["data"][0].description +'</td></tr><tr><td>Status</td><td>'+ status +'</td></tr><tr><td>Email Content</td><td><pre>'+ showMail["data"][0].msg +'</pre></td></tr></tbody></table></div>')
+         var creationDate = moment(mail.creation_date);
+         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th>Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ escapeHtml(creationDate.isValid() ? creationDate.format('dddd, MMMM Do YYYY, h:mm:ss') : '') +'</td></tr><tr><td>Name</td><td>'+ escapeHtml(mail.name) +'</td></tr><tr><td>To</td><td>'+ escapeHtml(mail['to']) +'</td></tr><tr><td>From</td><td>'+ escapeHtml(mail['from']) +'</td></tr><tr><td>Cc</td><td>'+ escapeHtml(mail.cc) +'</td></tr><tr><td>Subject</td><td>'+ escapeHtml(mail.subject) +'</td></tr><tr><td>Smtp</td><td>'+ escapeHtml(mail.smtp) +'</td></tr><tr><td>Description</td><td>'+ escapeHtml(mail.description) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(status) +'</td></tr><tr><td>Email Content</td><td><pre>'+ escapeHtml(mail.msg) +'</pre></td></tr></tbody></table></div>')
 
          $('#modal-default').modal('show');
 

@@ -1675,6 +1675,12 @@ public function addContext() {
     }
     else
     {
+      if($this->input->method(TRUE) !== 'POST') {
+        $this->output->set_status_header(405);
+        echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+        return;
+      }
+
       $id = $this->input->post('userId');
 
       $result = $this->model->deleteProject($id);
@@ -1692,6 +1698,12 @@ public function addContext() {
     }
     else
     {
+      if($this->input->method(TRUE) !== 'POST') {
+        $this->output->set_status_header(405);
+        echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+        return;
+      }
+
       $id = $this->input->post('userId');
 
       $result = $this->model->deleteEnvironment($id);
@@ -1709,6 +1721,12 @@ public function addContext() {
     }
     else
     {
+      if($this->input->method(TRUE) !== 'POST') {
+        $this->output->set_status_header(405);
+        echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+        return;
+      }
+
       $id = $this->input->post('userId');
 
       $result = $this->model->deleteContext($id);

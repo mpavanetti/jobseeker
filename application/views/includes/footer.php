@@ -24,29 +24,48 @@
     <script type="text/javascript">
         $(document).ready(function(){
 
-         $('.dataTable').DataTable( {
-            "order": [[ 1, "desc" ]],
-            lengthMenu:  [ 10, 20, 50, 100, 200, 500],
+        function isDataTableInitialized(table) {
+            return $.fn.dataTable && $.fn.dataTable.isDataTable && $.fn.dataTable.isDataTable(table);
+        }
 
+        function initializeDataTable(selector, options) {
+            $(selector).each(function() {
+                if (! isDataTableInitialized(this)) {
+                    $(this).DataTable(options);
+                }
+            });
+        }
+
+         initializeDataTable('.dataTable', {
+            "order": [[ 1, "desc" ]],
+            lengthMenu:  [ 10, 20, 50, 100, 200, 500]
         });
 
-         $('.dataTable2').DataTable( {
+         $('.dataTable2').each(function() {
+            var dataTable2Options = {
+                "scrollX": true,
+                "order": [[ 1, "desc" ]],
+                lengthMenu:  [ 10, 20, 50, 100, 200, 500]
+            };
+
+            if ($(this).find('thead th').length > 12) {
+                dataTable2Options.columnDefs = [
+                    { width: 50, targets: 12 }
+                ];
+            }
+
+            if (! isDataTableInitialized(this)) {
+                $(this).DataTable(dataTable2Options);
+            }
+        });
+
+          initializeDataTable('.dataTableMobile', {
             "scrollX": true,
             "order": [[ 1, "desc" ]],
-            lengthMenu:  [ 10, 20, 50, 100, 200, 500],
-            columnDefs: [
-             { width: 50, targets: 12 }
-            ]
+            lengthMenu:  [ 10, 20, 50, 100, 200, 500]
         });
 
-          $('.dataTableMobile').DataTable( {
-            "scrollX": true,
-            "order": [[ 1, "desc" ]],
-            lengthMenu:  [ 10, 20, 50, 100, 200, 500],
-
-        });
-
-        $('#table3').DataTable( {
+        initializeDataTable('#table3', {
             "scrollX": true,
             columnDefs: [
             { width: 50, targets: 14 },
@@ -54,24 +73,24 @@
         ],
 
             "order": [[ 1, "desc" ]]
-        } );
+        });
 
-        $('#table4').DataTable( {
+        initializeDataTable('#table4', {
             "scrollX": true,
 
             "order": [[ 1, "desc" ]]
-        } );
+        });
 
-        $('#table5').DataTable( {
+        initializeDataTable('#table5', {
             "scrollX": true,
             columnDefs: [
             { width: 300, targets: 8 }
         ],
 
             "order": [[ 1, "desc" ]]
-        } );
+        });
 
-        $('#table6').DataTable( {
+        initializeDataTable('#table6', {
             "scrollX": true,
 
            columnDefs: [

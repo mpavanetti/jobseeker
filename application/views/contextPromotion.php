@@ -259,6 +259,16 @@ $rollbackId = $this->session->flashdata('rollback_id');
     border-bottom: 1px solid #edf1f5;
   }
 
+  #promotionInventoryTable,
+  #promotionInventoryTable_wrapper,
+  #promotionInventoryTable_wrapper .dataTables_scroll,
+  #promotionInventoryTable_wrapper .dataTables_scrollHead,
+  #promotionInventoryTable_wrapper .dataTables_scrollBody,
+  #promotionInventoryTable_wrapper .dataTables_scrollHeadInner,
+  #promotionInventoryTable_wrapper .dataTables_scrollHeadInner table {
+    width: 100% !important;
+  }
+
   .job-promotion-page table th {
     color: #243b53;
     font-size: 12px;
@@ -463,7 +473,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
           <h3 class="box-title"><b>Promotable Jenkins Jobs</b></h3>
         </div>
         <div class="box-body table-responsive">
-          <table class="table table-bordered table-striped dataTable2">
+          <table id="promotionInventoryTable" class="table table-bordered table-striped" style="width: 100%;">
             <thead>
               <tr>
                 <th>Job</th>
@@ -713,6 +723,12 @@ $rollbackId = $this->session->flashdata('rollback_id');
       return environmentHelper.label(info) + ' <small>' + htmlEscape(info.source || 'Not detected') + '</small>';
     }
 
+    function adjustPromotionInventoryTable() {
+      if ($.fn.dataTable && $.fn.dataTable.isDataTable('#promotionInventoryTable')) {
+        $('#promotionInventoryTable').DataTable().columns.adjust();
+      }
+    }
+
     function setDetectedSourceEnvironment(info, shouldSelectSource) {
       detectedSourceEnvironment = info || environmentHelper.detectFromJob({});
       $('#sourceJobEnvironmentHint').html('<i class="fa fa-globe"></i> Environment: ' + renderEnvironmentInfo(detectedSourceEnvironment));
@@ -761,6 +777,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
 
     function setInventoryEnvironment($row, info) {
       $row.find('.promotion-inventory-environment').html(renderEnvironmentInfo(info));
+      setTimeout(adjustPromotionInventoryTable, 0);
     }
 
     function hydrateInventoryEnvironments() {
@@ -1051,6 +1068,23 @@ $rollbackId = $this->session->flashdata('rollback_id');
     hydrateSourceJobEnvironments();
     syncContextControls();
     hydrateInventoryEnvironments();
+    if ($.fn.dataTable && ! $.fn.dataTable.isDataTable('#promotionInventoryTable')) {
+      var promotionInventoryTable = $('#promotionInventoryTable').DataTable({
+        scrollX: true,
+        autoWidth: false,
+        order: [[1, 'desc']],
+        lengthMenu: [10, 20, 50, 100, 200, 500],
+        columnDefs: [
+          { width: 220, targets: 0 }
+        ],
+        initComplete: function() {
+          this.api().columns.adjust();
+        }
+      });
+      setTimeout(function() {
+        promotionInventoryTable.columns.adjust();
+      }, 0);
+    }
     schedulePreview();
   });
 </script>

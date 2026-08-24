@@ -68,28 +68,28 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->id ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
-                        <td><?php echo $record->job_name ?></td>
-                        <td><?php echo $record->db_type ?></td>
-                        <td><?php echo $record->address ?></td>
-                        <td><?php echo $record->port ?></td>
-                        <td><?php echo $record->login ?></td>
+                      <td><?php echo (int) $record->id ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
+                        <td><?php echo html_escape($record->job_name) ?></td>
+                        <td><?php echo html_escape($record->db_type) ?></td>
+                        <td><?php echo html_escape($record->address) ?></td>
+                        <td><?php echo html_escape($record->port) ?></td>
+                        <td><?php echo html_escape($record->login) ?></td>
                         <?php 
                           if($role != 1) { 
-                          echo '<td>'.$record->password.'</td>';
+                          echo '<td>'.html_escape($record->password).'</td>';
                         } else {
                           echo "<td>  *******</td>";
                         } ?>
-                        <td><?php echo $record->schema ?></td>
-                        <td><?php echo $record->additional_parameters ?></td>
-                        <td><?php echo $record->oracle_ServiceName ?></td>
-                        <td><?php echo $record->oracle_sid ?></td>
-                        <td><?php echo $record->description ?></td>
-                        <td><?php echo $record->owner ?></td>
+                        <td><?php echo html_escape($record->schema) ?></td>
+                        <td><?php echo html_escape($record->additional_parameters) ?></td>
+                        <td><?php echo html_escape($record->oracle_ServiceName) ?></td>
+                        <td><?php echo html_escape($record->oracle_sid) ?></td>
+                        <td><?php echo html_escape($record->description) ?></td>
+                        <td><?php echo html_escape($record->owner) ?></td>
                        <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'dbSettings/EditSettingsFetchData/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'dbSettings/EditSettingsFetchData/'.(int) $record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php
