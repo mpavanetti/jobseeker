@@ -272,7 +272,7 @@
                               foreach($listJobName as $record)
                               {
                           ?>
-                           <option value="<?php echo $record->job_name ?>"><?php echo $record->job_name ?></option>
+                           <option value="<?php echo html_escape($record->job_name) ?>"><?php echo html_escape($record->job_name) ?></option>
                          <?php
                            }
                          }
@@ -317,7 +317,7 @@
                               foreach($listDimension as $record)
                               {
                           ?>
-                           <option value="<?php echo $record->dimension ?>"><?php echo $record->dimension ?></option>
+                           <option value="<?php echo html_escape($record->dimension) ?>"><?php echo html_escape($record->dimension) ?></option>
                          <?php
                            }
                          }

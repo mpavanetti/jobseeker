@@ -28,16 +28,37 @@
             <div class="col-xs-12 text-left">
                 <div class="form-group">
                     <a class="btn btn-primary" href="<?php echo base_url(); ?>SmtpSettings/addSetting"><i class="fa fa-plus"></i> Add New Setting</a>
-                    <a class="btn btn-default" href="<?php echo base_url(); ?>SmtpSettings/syncJenkinsMailer"><i class="fa fa-refresh"></i> Sync Jenkins Mailer</a>
+                    <form method="post" action="<?php echo base_url(); ?>SmtpSettings/syncJenkinsMailer" style="display:inline-block; margin:0;">
+                        <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
+                        <button type="submit" class="btn btn-default"><i class="fa fa-refresh"></i> Sync Jenkins Mailer</button>
+                    </form>
                     <a class="btn btn-info" href="<?php echo htmlspecialchars($mailpit_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"><i class="fa fa-inbox"></i> Open Mailpit Inbox</a>
                 </div>
             </div>
         </div> 
       <?php } ?>
+      <?php
+        $error = $this->session->flashdata('error');
+        if(!empty($error)) {
+      ?>
+        <div class="alert alert-danger alert-dismissable">
+          <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+          <?php echo html_escape($error); ?>
+        </div>
+      <?php } ?>
+      <?php
+        $success = $this->session->flashdata('success');
+        if(!empty($success)) {
+      ?>
+        <div class="alert alert-success alert-dismissable">
+          <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+          <?php echo html_escape($success); ?>
+        </div>
+      <?php } ?>
       <?php if(!empty($default_smtp)) { ?>
         <div class="alert alert-info">
           <i class="fa fa-envelope"></i>
-          Default enabled SMTP provider: <b><?php echo $default_smtp->name ?></b> at <b><?php echo $default_smtp->smtp_host ?>:<?php echo $default_smtp->smtp_port ?></b>.
+          Default enabled SMTP provider: <b><?php echo html_escape($default_smtp->name) ?></b> at <b><?php echo html_escape($default_smtp->smtp_host) ?>:<?php echo html_escape($default_smtp->smtp_port) ?></b>.
         </div>
         <?php if(strtolower($default_smtp->smtp_host) === 'mailpit') { ?>
         <div class="alert alert-warning">
@@ -54,7 +75,7 @@
       <?php if(!empty($jenkins_mailer_sync) && empty($jenkins_mailer_sync['ok'])) { ?>
         <div class="alert alert-warning">
           <i class="fa fa-warning"></i>
-          <?php echo $jenkins_mailer_sync['message']; ?>
+          <?php echo html_escape($jenkins_mailer_sync['message']); ?>
         </div>
       <?php } ?>
       <div class="row" style="margin-top: 5px;">
@@ -92,27 +113,27 @@
                         {
                     ?>
                     <tr>
-                      <td><?php echo $record->id ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
-                        <td><?php echo $record->name ?></td>
-                        <td><?php echo $record->smtp_host ?></td>
-                        <td><?php echo $record->smtp_port ?></td>
+                      <td><?php echo (int) $record->id ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
+                        <td><?php echo html_escape($record->name) ?></td>
+                        <td><?php echo html_escape($record->smtp_host) ?></td>
+                        <td><?php echo html_escape($record->smtp_port) ?></td>
                         <td><?php echo ((int) $record->is_enabled === 1) ? '<span class="label label-success">Enabled</span>' : '<span class="label label-default">Disabled</span>' ?></td>
                         <td><?php echo ((int) $record->is_default === 1) ? '<span class="label label-primary">Default</span>' : '' ?></td>
-                        <td><?php echo $record->reply_to ?></td>
-                        <td><?php echo $record->username ?></td>
+                        <td><?php echo html_escape($record->reply_to) ?></td>
+                        <td><?php echo html_escape($record->username) ?></td>
                         <?php 
                           if($role != 1) { 
-                          echo '<td>'.$record->password.'</td>';
+                          echo '<td>'.html_escape($record->password).'</td>';
                         } else {
                           echo "<td>  *******</td>";
                         } ?>
                         <td><?php echo ($record->ssl === '1') ? 'Yes' : 'No' ?></td>
-                        <td><?php echo $record->description ?></td>
-                        <td><?php echo $record->owner ?></td>
+                        <td><?php echo html_escape($record->description) ?></td>
+                        <td><?php echo html_escape($record->owner) ?></td>
                          <?php if($role != 1) {  ?> <td class="text-center">
-                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'SmtpSettings/EditSettingsFetchData/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'SmtpSettings/EditSettingsFetchData/'.(int) $record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php

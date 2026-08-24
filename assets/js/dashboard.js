@@ -979,22 +979,22 @@ var myChart = new Chart(ctx, {
  // Pie Chart 
   var ctx1 = document.getElementById('pieChart').getContext('2d');
 
-  labels = [];
-  values = [];
-  colors = [];
-  for (i = 0; i < statusAmount.length; i++) {
-    let label = statusAmount[i].labels
-    let value = statusAmount[i].values
-    let color = statusAmount[i].colors
-    for(j = 0; j < label.length; j++){
-        labels.push(label[j]);
+  var labels = [];
+  var values = [];
+  var colors = [];
+  for (var i = 0; i < statusAmount.length; i++) {
+    var label = statusAmount[i].labels;
+    var value = statusAmount[i].values;
+    var color = statusAmount[i].colors;
+    for (var j = 0; j < label.length; j++) {
+      labels.push(label[j]);
     }
-    for(k = 0; k < value.length; k++){
+    for (var k = 0; k < value.length; k++) {
       values.push(value[k]);
     }
-    for(l = 0; l < color.length; l++){
+    for (var l = 0; l < color.length; l++) {
       colors.push(color[l]);
-  }
+    }
   }
 
   var myChart = new Chart(ctx1, {

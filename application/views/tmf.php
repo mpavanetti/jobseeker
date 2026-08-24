@@ -13,6 +13,7 @@ $attentionCount = 0;
 $reprocessEligible = 0;
 $incompleteRuns = 0;
 $staleRunning = 0;
+$devRows = 0;
 $latestActivityTimestamp = null;
 $currentTimestamp = time();
 $staleThresholdSeconds = 900;
@@ -122,7 +123,13 @@ foreach($jobs as $tmfJob) {
   }
 
   $environmentLabel = trim((string) $tmfJob->environment) !== '' ? trim((string) $tmfJob->environment) : 'Unknown';
+  $environmentIsDev = strtoupper($environmentLabel) === 'DEV';
   $environments[$environmentLabel] = true;
+
+  if ($environmentIsDev) {
+    $devRows++;
+  }
+
 
   if ($hasAttention) {
     $attentionCount++;
@@ -144,6 +151,14 @@ foreach($jobs as $tmfJob) {
 $totalJobs = count($jobs);
 $throughputRate = $totalRecords > 0 ? min(100, round(($totalProcessed / $totalRecords) * 100)) : 0;
 $latestActivityLabel = $latestActivityTimestamp !== null ? date('m-d-Y H:i:s', $latestActivityTimestamp) : 'No activity';
+$canManageTmf = isset($role) && ((string) $role === (string) ROLE_ADMIN || (string) $role === (string) ROLE_MANAGER);
+$tmfSelectedEnvironment = isset($selectedEnvironment) ? strtoupper(trim((string) $selectedEnvironment)) : 'all';
+if ($tmfSelectedEnvironment === '' || $tmfSelectedEnvironment === '*' || strtolower($tmfSelectedEnvironment) === 'all') {
+  $tmfSelectedEnvironment = 'all';
+} elseif ($tmfSelectedEnvironment === '__UNKNOWN__' || strtolower($tmfSelectedEnvironment) === 'unknown') {
+  $tmfSelectedEnvironment = '__UNKNOWN__';
+}
+$showDeleteDevBulkAction = $canManageTmf && $tmfSelectedEnvironment === 'DEV';
 ?>
  <script>
   $(document).ready(function(){
@@ -398,6 +413,8 @@ pre {
               <button type="button" class="btn btn-default btn-sm tmf-table-filter" data-filter="reprocess"<?php echo $reprocessEligible == 0 ? ' disabled' : ''; ?>><i class="fa fa-repeat"></i> Reprocess <span class="badge"><?php echo number_format($reprocessEligible); ?></span></button>
             </div>
             <div class="tmf-table-actions">
+              <?php if($canManageTmf) { ?><button type="button" class="btn btn-danger btn-sm tmf-delete-dev" title="Delete all DEV rows in this result set" style="<?php echo $showDeleteDevBulkAction ? '' : 'display: none;'; ?>"<?php echo (! $showDeleteDevBulkAction || $devRows == 0) ? ' disabled' : ''; ?>><i class="fa fa-trash"></i> Delete DEV <span class="badge"><?php echo number_format($devRows); ?></span></button><?php } ?>
+              <?php if($canManageTmf) { ?><button type="button" class="btn btn-danger btn-sm tmf-delete-stale" title="Delete all stale running rows in this result set"<?php echo $staleRunning == 0 ? ' disabled' : ''; ?>><i class="fa fa-clock-o"></i> Delete Stale <span class="badge"><?php echo number_format($staleRunning); ?></span></button><?php } ?>
               <button type="button" class="btn btn-default btn-sm tmf-focus-selected" title="Show only the selected rows in the current result" disabled><i class="fa fa-eye"></i> Focus Selected</button>
               <button type="button" class="btn btn-default btn-sm tmf-export-csv" title="Export selected rows when any are selected; otherwise export the current filtered table"><i class="fa fa-download"></i> Export CSV</button>
               <button type="button" class="btn btn-default btn-sm tmf-clear-selection" title="Clear selected rows" disabled><i class="fa fa-eraser"></i> Clear</button>
@@ -439,7 +456,7 @@ pre {
                   <th>Hostname</th>
                   <th>Username</th>
                   <th>instance_id</th>
-                  <?php if($role == 1 || $role == 2) {  ?><th>Action</th><?php } ?>
+                  <?php if($canManageTmf) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </thead>
                 <tbody>
@@ -462,8 +479,11 @@ pre {
                           $rowReprocess = isset($record->reprocess) && (int) $record->reprocess == 1;
                             $rowIncomplete = $rowTotal > 0 && $rowProcessed < $rowTotal;
                             $rowEnvironment = trim((string) $record->environment) !== '' ? trim((string) $record->environment) : 'Unknown';
+                            $rowEnvironmentIsDev = strtoupper($rowEnvironment) === 'DEV';
+                            $rowCanDelete = $rowEnvironmentIsDev || $rowStale;
+                            $rowDeleteScope = $rowEnvironmentIsDev ? 'dev' : ($rowStale ? 'stale' : 'none');
                     ?>
-                          <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-environment="<?php echo html_escape($rowEnvironment); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
+                          <tr class="tmf-row-<?php echo html_escape($recordStatus); ?><?php echo $rowStale ? ' tmf-row-stale' : ''; ?><?php echo $rowAttention ? ' tmf-row-attention' : ''; ?>" data-tmf-id="<?php echo (int) $record->id; ?>" data-instance-id="<?php echo html_escape($record->instance_id); ?>" data-job-name="<?php echo html_escape($record->job_name); ?>" data-status="<?php echo html_escape($recordStatus); ?>" data-environment="<?php echo html_escape($rowEnvironment); ?>" data-stale="<?php echo $rowStale ? 1 : 0; ?>" data-can-delete="<?php echo $rowCanDelete ? 1 : 0; ?>" data-delete-scope="<?php echo html_escape($rowDeleteScope); ?>" data-attention="<?php echo $rowAttention ? 1 : 0; ?>" data-reprocess="<?php echo $rowReprocess ? 1 : 0; ?>" data-incomplete="<?php echo $rowIncomplete ? 1 : 0; ?>">
                       <td data-order="<?php echo (int) $record->id; ?>"><?php echo '<span style="color:#3c8dbc;">'.(int) $record->id.'</span>' ?></td>
                       <td data-order="<?php echo html_escape($recordStatus); ?>"><?php
                       switch ($recordStatus) {
@@ -494,23 +514,23 @@ pre {
                           <td><?php echo html_escape($record->job_name); ?></td>
                           <td><?php echo html_escape($record->dimension); ?></td>
                       <?php  if ($jenkins_enabled == true) { 
-                         if($role == 1 || $role == 2) {  ?>
+                         if($canManageTmf) {  ?>
                       <td class="text-center" data-order="<?php echo $rowReprocess ? 1 : 0; ?>"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '<span class="text-muted">-</span>' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo html_escape($record->event_text); ?></td>
                       <td data-order="<?php echo html_escape($rowEnvironment); ?>"><?php echo $rowEnvironment === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($rowEnvironment); ?></td>
-                      <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" title="Check Message">Check Message</a>'; } ?></td>
+                      <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" data-tmf-id="'.(int) $record->id.'" data-job-name="'.html_escape($record->job_name).'" title="Check Message">Check Message</a>'; } ?></td>
                       <td data-order="<?php echo $rowTotal; ?>"><?php echo number_format($rowTotal); ?></td>
                       <td data-order="<?php echo $rowProgress; ?>"><span class="tmf-progress-label"><?php echo number_format($rowProcessed); ?> / <?php echo number_format($rowTotal); ?> <span class="text-muted"><?php echo $rowProgress; ?>%</span></span><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-<?php echo $rowIncomplete ? 'warning' : 'success'; ?>" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
                       <td data-order="<?php echo $rowStartTimestamp !== false ? (int) $rowStartTimestamp : 0; ?>"><?php echo html_escape(formatTmfDateValue($record->start_time)); ?></td>
                       <td data-order="<?php echo $rowLastTimestamp !== false ? (int) $rowLastTimestamp : 0; ?>"><?php echo html_escape(formatTmfDateValue($record->last_activity)); ?><span class="tmf-age"><?php echo html_escape(formatTmfAge($rowLastTimestamp)); ?></span></td>
                        <td data-order="<?php echo (int) $rowDurationSeconds; ?>"><?php echo html_escape(formatTmfDuration($rowDurationSeconds)); ?></td>
-                       <td data-order="<?php echo $rowHasErrors ? 1 : 0; ?>"><?php echo ($record->distict_errors == 1) ? '<a type="button" id="showError" class="btn btn-danger btnSelect">View Errors</a>' : '<span class="text-muted">-</span>' ?></td>
+                       <td data-order="<?php echo $rowHasErrors ? 1 : 0; ?>"><?php echo ($record->distict_errors == 1) ? '<a type="button" href="#" class="btn btn-danger btnSelect" data-tmf-id="'.(int) $record->id.'" data-instance-id="'.html_escape($record->instance_id).'" data-job-name="'.html_escape($record->job_name).'">View Errors</a>' : '<span class="text-muted">-</span>' ?></td>
                        <td data-order="<?php echo $rowHasWarnings ? 1 : 0; ?>"><?php echo ($record->warnings == 1) ? '<span class="label label-warning">Warning</span>' : '<span class="text-muted">-</span>' ?></td>
                          <td><?php echo html_escape($record->hostname); ?></td>
                          <td><?php echo html_escape($record->username); ?></td>
                          <td class="tmf-instance-id" title="<?php echo html_escape($record->instance_id); ?>"><?php echo html_escape($record->instance_id); ?></td>
-                      <?php if($role == 1 || $role == 2) {  ?> <td class="text-center">
-                          <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                      <?php if($canManageTmf) {  ?> <td class="text-center">
+                          <?php if($rowCanDelete) { ?><a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete <?php echo $rowEnvironmentIsDev ? 'DEV' : 'stale'; ?> TMF row"><i class="fa fa-trash"></i></a><?php } else { ?><span class="text-muted" title="Only DEV rows or stale running rows can be deleted">-</span><?php } ?>
                         </td><?php } ?>
                     </tr>
                     <?php
@@ -538,7 +558,7 @@ pre {
                   <th>Hostname</th>
                   <th>Username</th>
                   <th>instance_id</th>
-                  <?php if($role == 1 || $role == 2) {  ?><th>Action</th><?php } ?>
+                  <?php if($canManageTmf) {  ?><th>Action</th><?php } ?>
                 </tr>
                 </tfoot>
               </table>
@@ -607,6 +627,7 @@ pre {
 <script type="text/javascript">
 var activeTmfFilter = 'all';
 var activeTmfSelectionOnly = false;
+var tmfSelectedEnvironment = <?php echo json_encode($tmfSelectedEnvironment); ?>;
 
     $(document).ready(function() {
 
@@ -741,6 +762,8 @@ var activeTmfSelectionOnly = false;
       });
 
       $('.tmf-export-csv').on('click', exportTmfCsv);
+      $(document).on('jobseeker:environment-change', syncTmfDeleteControls);
+      syncTmfDeleteControls();
       setTimeout(updateTmfVisibleRows, 250);
 
     //load 
@@ -748,6 +771,43 @@ var activeTmfSelectionOnly = false;
 //  $('#main').delay(500).fadeIn();
 
 });
+
+function normalizeTmfEnvironment(value) {
+  if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
+    return window.JobSeekerGlobalEnvironment.normalize(value);
+  }
+
+  var normalized = $.trim(String(value || '')).toUpperCase();
+  if (normalized === '' || normalized === '*' || normalized === 'ALL') {
+    return 'all';
+  }
+  if (normalized === 'UNKNOWN') {
+    return '__UNKNOWN__';
+  }
+  if (normalized === 'QAS') {
+    return 'QA';
+  }
+  if (normalized === 'PRD' || normalized === 'PRODUCTION') {
+    return 'PROD';
+  }
+  if (normalized === 'HOMOLOG' || normalized === 'HOMOLOGATION') {
+    return 'HML';
+  }
+
+  return normalized;
+}
+
+function currentTmfEnvironment() {
+  if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected) {
+    return normalizeTmfEnvironment(window.JobSeekerGlobalEnvironment.selected());
+  }
+
+  return normalizeTmfEnvironment($('#globalEnvironmentSelector').val() || tmfSelectedEnvironment || 'all');
+}
+
+function isTmfDevEnvironmentSelected() {
+  return currentTmfEnvironment() === 'DEV';
+}
 
 function getTmfTable() {
   if ($.fn.DataTable && $.fn.DataTable.isDataTable('#table6')) {
@@ -856,6 +916,34 @@ function escapeHtml(value) {
   return $('<div>').text(value == null ? '' : value).html();
 }
 
+function tmfRowValue(trigger, attrName, cellSelector, fallbackCellIndex) {
+  var $trigger = $(trigger);
+  var value = $trigger.attr(attrName);
+  var $row = $trigger.closest('tr');
+
+  if (value) {
+    return $.trim(value);
+  }
+
+  value = $row.attr(attrName);
+  if (value) {
+    return $.trim(value);
+  }
+
+  if (cellSelector) {
+    value = $row.find(cellSelector).first().text();
+    if ($.trim(value) !== '') {
+      return $.trim(value);
+    }
+  }
+
+  if (typeof fallbackCellIndex !== 'undefined') {
+    return $.trim($row.children('td').eq(fallbackCellIndex).text());
+  }
+
+  return '';
+}
+
 function renderJobMessage(value) {
   var raw = value == null ? '' : String(value);
   if (raw.indexOf('<') === -1) {
@@ -901,10 +989,32 @@ function jenkinsJobPath(jobName) {
 }
 
 function hasKnownEnvironment(environment) {
-  return environment && environment !== 'Unknown';
+  environment = normalizeTmfEnvironment(environment);
+  return environment && environment !== 'all' && environment !== '__UNKNOWN__';
+}
+
+function tmfReprocessErrorMessage(xhr, jobName) {
+  if (xhr && parseInt(xhr.status, 10) === 404) {
+    return 'Jenkins job "' + jobName + '" does not exist anymore. It may have been deleted or renamed in Jenkins.';
+  }
+
+  if (xhr && xhr.responseText) {
+    return xhr.responseText;
+  }
+
+  if (xhr && xhr.status) {
+    return xhr.status + ' ' + (xhr.statusText || '');
+  }
+
+  return 'Unable to trigger this job.';
 }
 
 function triggerJenkinsJob(jobName, environment) {
+  if (! jenkins_url) {
+    return $.Deferred().reject({responseText: 'Jenkins URL is not configured.'}).promise();
+  }
+
+  environment = normalizeTmfEnvironment(environment);
   if (hasKnownEnvironment(environment)) {
     return $.ajax({
       url: jenkins_url + jenkinsJobPath(jobName) + '/buildWithParameters',
@@ -941,36 +1051,162 @@ function triggerJenkinsJob(jobName, environment) {
   });
 }
 
-  jQuery(document).on("click", ".deleteUser", function(){
-    
-    var userId = $(this).data("userid"),
-      hitURL = baseURL + "tmf/delete" ,
-      currentRow = $(this);
-   
-    alertify.confirm('Record Delete Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this record permanently ?</b></p></div></div></div>', 
-      function(){ 
-        jQuery.ajax({
-      type : "POST",
-      dataType : "json",
-      url : hitURL,
-      data : { userId : userId } 
-      }).done(function(data){
-       // console.log(data);
-        if(data.status === true) {
-          currentRow.parents('tr').remove();
-          alertify.success('Your record has been successfully deleted !');
-        }
-        else if(data.status === false) { alertify.error("data deletion failed"); }
-        else { alert("Access denied..!"); }
-      });
+function tmfDeleteRequest(id) {
+  return jQuery.ajax({
+    type : "POST",
+    dataType : "json",
+    url : baseURL + "tmf/delete",
+    data : { userId : id }
+  });
+}
 
-    }, 
-      function(){ 
-        alertify.error('Operation Aborted')
+function tmfDeletePolicyMessage(data) {
+  return data && data.message ? data.message : 'Only DEV TMF rows or stale running TMF rows can be deleted.';
+}
+
+function removeTmfRowFromTable(row) {
+  var $row = $(row);
+  var table = getTmfTable();
+
+  if (table) {
+    table.row($row).remove().draw(false);
+  } else {
+    $row.remove();
+    updateTmfVisibleRows();
+  }
+
+  syncTmfDeleteControls();
+}
+
+function formatTmfCount(value) {
+  value = parseInt(value, 10) || 0;
+  return value.toLocaleString ? value.toLocaleString() : String(value);
+}
+
+function syncTmfDeleteControls() {
+  var allRows = getAllTmfRows();
+  var staleCount = allRows.filter('[data-stale="1"][data-can-delete="1"]').length;
+  var devCount = allRows.filter('[data-delete-scope="dev"]').length;
+  var staleFilter = $('.tmf-table-filter[data-filter="stale"]');
+
+  $('.tmf-delete-dev')
+    .toggle(isTmfDevEnvironmentSelected())
+    .prop('disabled', ! isTmfDevEnvironmentSelected() || devCount === 0)
+    .find('.badge').text(formatTmfCount(devCount));
+  $('.tmf-delete-stale').prop('disabled', staleCount === 0).find('.badge').text(formatTmfCount(staleCount));
+  staleFilter.prop('disabled', staleCount === 0);
+  staleFilter.find('.badge').text(formatTmfCount(staleCount));
+
+  if (activeTmfFilter === 'stale' && staleCount === 0) {
+    activeTmfFilter = 'all';
+    $('.tmf-table-filter').removeClass('active');
+    $('.tmf-table-filter[data-filter="all"]').addClass('active');
+  }
+
+  updateTmfVisibleRows();
+}
+
+function deleteTmfRows(rows, title, noun) {
+  var totalRows = rows.length;
+
+  if (! totalRows) {
+    toastr.info('No ' + noun + ' TMF rows are available in this result set.', title);
+    syncTmfDeleteControls();
+    return;
+  }
+
+  alertify.confirm(title, '<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Delete ' + formatTmfCount(totalRows) + ' ' + noun + ' TMF row(s) from this result set?</b></p></div></div></div>',
+    function(){
+      var deletedRows = 0;
+      var failedRows = 0;
+      var deniedRows = 0;
+      var index = 0;
+
+      function deleteNextRow() {
+        if (index >= totalRows) {
+          if (deletedRows > 0) {
+            alertify.success(formatTmfCount(deletedRows) + ' TMF row(s) deleted.');
+          }
+          if (deniedRows > 0) {
+            alertify.error(formatTmfCount(deniedRows) + ' TMF row(s) were protected by the DEV/stale delete rule.');
+          }
+          if (failedRows > 0) {
+            alertify.error(formatTmfCount(failedRows) + ' TMF row(s) could not be deleted.');
+          }
+          syncTmfDeleteControls();
+          return;
+        }
+
+        var row = rows[index++];
+        var $row = $(row);
+        var userId = $row.attr('data-tmf-id') || $row.find('.deleteUser').data('userid');
+
+        if (! userId) {
+          failedRows++;
+          deleteNextRow();
+          return;
+        }
+
+        tmfDeleteRequest(userId).done(function(data) {
+          if (data.status === true) {
+            deletedRows++;
+            removeTmfRowFromTable($row);
+          } else if (data.status === 'restricted') {
+            deniedRows++;
+          } else {
+            failedRows++;
+          }
+        }).fail(function() {
+          failedRows++;
+        }).always(deleteNextRow);
+      }
+
+      deleteNextRow();
+    },
+    function(){
+      alertify.error('Operation Aborted')
     }
   );
-    
-  });
+}
+
+jQuery(document).on("click", "#table6 .deleteUser", function(event){
+  event.preventDefault();
+  event.stopPropagation();
+
+  var userId = $(this).data("userid");
+  var currentRow = $(this).closest('tr');
+
+  alertify.confirm('Record Delete Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this TMF row permanently ?</b></p></div></div></div>',
+    function(){
+      tmfDeleteRequest(userId).done(function(data){
+        if(data.status === true) {
+          removeTmfRowFromTable(currentRow);
+          alertify.success('Your record has been successfully deleted !');
+        }
+        else if(data.status === 'restricted') { alertify.error(tmfDeletePolicyMessage(data)); }
+        else if(data.status === false) { alertify.error("data deletion failed"); }
+        else { alert("Access denied..!"); }
+      }).fail(function(){
+        alertify.error("data deletion request failed");
+      });
+
+    },
+    function(){
+      alertify.error('Operation Aborted')
+  }
+);
+
+});
+
+$(document).on('click', '.tmf-delete-dev', function(event) {
+  event.preventDefault();
+  deleteTmfRows(getAllTmfRows().filter('[data-delete-scope="dev"]'), 'DEV TMF Delete Confirmation', 'DEV');
+});
+
+$(document).on('click', '.tmf-delete-stale', function(event) {
+  event.preventDefault();
+  deleteTmfRows(getAllTmfRows().filter('[data-stale="1"][data-can-delete="1"]'), 'Stale TMF Delete Confirmation', 'stale running');
+});
 
 // Job Cancel request function
 $("#table6").on('click','.cancel',function(){  
@@ -1020,109 +1256,111 @@ $("#table6").on('click','.cancel',function(){
 
     }); 
 
-$("#table6").on('click','.msgSelect',function(){
+$(document).on('click', '#table6 .msgSelect', function(event){
 
-   var currentRow=$(this).closest("tr"); 
-   var id=currentRow.find("td:eq(0)").text();
+   event.preventDefault();
+   event.stopPropagation();
 
-   var listId = $.parseJSON($.ajax({
+   var id = tmfRowValue(this, 'data-tmf-id', null, 0);
+   if (! id) {
+     toastr.error('This TMF row is missing its message id.', 'Query Data Error');
+     return;
+   }
+
+   $.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>Tmf/listId/' + id,
+            url:  '<?php echo base_url(); ?>Tmf/listId/' + encodeURIComponent(id),
             dataType: "json", 
-            async: false,
             beforeSend: function() {
              //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
              $(".destroy-msg").remove();
-            },
-            error: function() {
-               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
-            },
-
-            success: function() {
-            },
-            complete: function(data) {
-                dateRequest = data;
             }
-
-         }).responseText);
-
-    $.each(listId["data"], function(index, value){
+         }).done(function(listId){
+            $.each((listId && listId.data) || [], function(index, value){
                 // $("#result").append(index + ": " + value.id + '<br>');
                   $("#modal-main-msg").append('<div class="destroy-msg"><h4>Job Name: <b>' + escapeHtml(value.job_name) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.instance_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name) +'</td></tr><tr><td>Message</td><td><div class="job-message-content">'+ renderJobMessage(value.msg) +'</div></td></tr></tbody></table><br></div>');
                 });
 
-  $('#modal-msg').modal('show');
+            $('#modal-msg').modal('show');
+         }).fail(function(){
+            toastr.error("Error During query message data <br>Id: " + escapeHtml(id), "Query Data Error");
+         });
 
 });  
 
-$("#table6").on('click','.btnSelect',function(){
+$(document).on('click', '#table6 .btnSelect', function(event){
 
+         event.preventDefault();
+         event.stopPropagation();
 
          // get the current row Id, job name and instance id
-         var currentRow=$(this).closest("tr"); 
-         var instanceId=currentRow.find("td:eq(17)").text(); 
-         var jobName=currentRow.find("td:eq(2)").text();
-         var id=currentRow.find("td:eq(0)").text();
+         var instanceId = tmfRowValue(this, 'data-instance-id', '.tmf-instance-id', 17);
+         var jobName = tmfRowValue(this, 'data-job-name', null, 2);
+         var id = tmfRowValue(this, 'data-tmf-id', null, 0);
 
+         if (! instanceId) {
+            toastr.error("This TMF row is missing its instance id. <br>Id: " + escapeHtml(id), "Query Data Error");
+            return;
+         }
 
-         var ErrorList = $.parseJSON($.ajax({
+         $.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>Tmf/getError/' + instanceId,
+            url:  '<?php echo base_url(); ?>Tmf/getError/' + encodeURIComponent(instanceId),
             dataType: "json", 
-            async: false,
             beforeSend: function() {
              //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
              $(".destroy").remove();
-            },
-            error: function() {
-               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
-            },
-
-            success: function() {
-            },
-            complete: function(data) {
-                dateRequest = data;
             }
-
-         }).responseText);
-
-         $.each(ErrorList["data"], function(index, value){
+         }).done(function(ErrorList){
+            $.each((ErrorList && ErrorList.data) || [], function(index, value){
                 // $("#result").append(index + ": " + value.id + '<br>');
-                  $("#modal-main").append('<div class="destroy"><h4>Error Id: <b>' + escapeHtml(value.id) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.tmf_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name) +'</td></tr><tr><td>Moment</td><td>'+ escapeHtml(moment(value.moment).format('dddd, MMMM Do YYYY, h:mm:ss')) +'</td></tr><tr><td>Type</td><td>'+ escapeHtml(value.type) +'</td></tr><tr><td>Origin</td><td>'+ escapeHtml(value.origin) +'</td></tr><tr><td>Message</td><td>'+ escapeHtml(value.message) +'</td></tr></tbody></table><br></div>');
+                  $("#modal-main").append('<div class="destroy"><h4>Error Id: <b>' + escapeHtml(value.id) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.tmf_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name || jobName) +'</td></tr><tr><td>Moment</td><td>'+ escapeHtml(moment(value.moment).format('dddd, MMMM Do YYYY, h:mm:ss')) +'</td></tr><tr><td>Type</td><td>'+ escapeHtml(value.type) +'</td></tr><tr><td>Origin</td><td>'+ escapeHtml(value.origin) +'</td></tr><tr><td>Message</td><td>'+ escapeHtml(value.message) +'</td></tr></tbody></table><br></div>');
                 });
 
-         $('#modal-danger').modal('show');
+            $('#modal-danger').modal('show');
+         }).fail(function(){
+            toastr.error("Error During query error list data <br>Id: " + escapeHtml(id), "Query Data Error");
+         });
 
     });
 
 
         // get Jenkins credentials
     var name = <?php echo json_encode($name); ?>;
-    var jenkins_url = '<?php echo $jenkins_url; ?>';
+    var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
     var jenkins_username = '';
     var jenkins_token = '';
-    var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+    var jenkins_authorization = <?php echo json_encode($jenkins_authorization); ?>;
+    jenkins_url = String(jenkins_url || '');
+    if (jenkins_url && jenkins_url.charAt(jenkins_url.length - 1) !== '/') {
+      jenkins_url += '/';
+    }
 
-      $("#table6").on('click','.reprocess',function(){
+      $(document).on('click', '#table6 .reprocess', function(event){
+         event.preventDefault();
+         event.stopPropagation();
 
-         // get the current row Id, job name and instance id
-         var currentRow=$(this).closest("tr"); 
-         var instanceId=currentRow.find("td:last-child").text(); 
-         var jobName=currentRow.find("td:eq(2)").text();
-         var environment=currentRow.attr('data-environment') || 'Unknown';
-         var id=currentRow.find("td:eq(0)").text();
+         var currentRow = $(this).closest('tr');
+         var jobName = currentRow.attr('data-job-name') || $.trim(currentRow.find('td:eq(2)').text());
+         var environment = currentRow.attr('data-environment') || 'Unknown';
+         var id = currentRow.attr('data-tmf-id') || $.trim(currentRow.find('td:eq(0)').text());
 
+         if (! jobName) {
+           toastr.error('This TMF row is missing its Jenkins job name.', 'Reprocess Error');
+           return;
+         }
 
-         alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + escapeHtml(jobName) + '</b> ID (' + escapeHtml(id) +') ? \n \n *Please choose your option with caution.',
+         alertify.confirm('Job Reprocess Confirmation', 'Are you sure you want to reprocess the job <b>' + escapeHtml(jobName) + '</b> ID (' + escapeHtml(id) + ')?<br><br>Environment: <b>' + escapeHtml(environment) + '</b><br><br>*Please choose your option with caution.',
           function(){ 
 
             $('.overlay').show();
-            triggerJenkinsJob(jobName, environment).done(function(data) {
-            toastr.success("Your Execution Request has been sent to server, Please wait some minutes and reload the page.", "Request Sent")
-            $('.overlay').hide();
+            triggerJenkinsJob(jobName, environment).done(function() {
+              toastr.success("Your Execution Request has been sent to server, Please wait some minutes and reload the page.", "Request Sent");
+              $('.overlay').hide();
 
-        }).fail(function() {
-          toastr.error("Erro during reprocessing: <b>" + jobName + "</b> <br><br> Result: " + arguments[0].status + "\n"+ arguments[0].statusText, "Erro During Reprocessing");
+        }).fail(function(xhr) {
+          var message = tmfReprocessErrorMessage(xhr, jobName);
+          toastr.error("Error during reprocessing: <b>" + escapeHtml(jobName) + "</b><br><br>" + escapeHtml(message), "Error During Reprocessing");
           $('.overlay').hide();
         });
 
@@ -1133,6 +1371,8 @@ $("#table6").on('click','.btnSelect',function(){
            alertify.error('Operation Aborted')
 
          });
+
+      });
 
   $('.spin').hide();
   $('.reprocess').fadeIn();

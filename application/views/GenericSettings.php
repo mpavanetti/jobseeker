@@ -66,7 +66,7 @@
                     ?>
                     <tr>
                       <td><?php echo (int) $record->id; ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
                         <td><?php echo html_escape($record->job_name); ?></td>
                         <td><?php echo html_escape($record->setting); ?></td>
                         <td><?php echo html_escape($record->value1); ?></td>
@@ -77,8 +77,8 @@
                         <td><?php echo html_escape($record->description); ?></td>
                         <td><?php echo html_escape($record->owner); ?></td>
                        <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'GenericSettings/EditSettingsFetchData/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'GenericSettings/EditSettingsFetchData/'.(int) $record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php

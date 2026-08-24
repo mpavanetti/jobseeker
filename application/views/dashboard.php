@@ -3,6 +3,10 @@
   $hasJobsStatusAmount = !empty($jobsStatusAmount);
   $hasEnvironmentSummary = !empty($environmentSummary);
   $dashboardEnvironmentLabel = (isset($selectedEnvironment) && $selectedEnvironment !== '' && strtolower((string) $selectedEnvironment) !== 'all') ? strtoupper((string) $selectedEnvironment) : 'All environments';
+  $dashboardTmfEnvironmentQuery = '';
+  if (isset($selectedEnvironment) && trim((string) $selectedEnvironment) !== '' && strtolower((string) $selectedEnvironment) !== 'all') {
+    $dashboardTmfEnvironmentQuery = '?environment='.rawurlencode((string) $selectedEnvironment);
+  }
  ?>
  <script>
   $(document).ready(function(){
@@ -324,7 +328,7 @@
                 <div class="icon">
                   <i class="fa fa-refresh"></i>
                 </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/running" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
+                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/running<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
               </div>
 
             </div><!-- ./col -->
@@ -339,7 +343,7 @@
                 <div class="icon">
                   <i class="fa fa-check-square-o"></i>
                 </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/ready" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
+                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/ready<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
               </div>
             </div><!-- ./col -->
             <div class="col-lg-3 col-xs-6">
@@ -352,7 +356,7 @@
                 <div class="icon">
                   <i class="fa fa-warning"></i>
                 </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/warning" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
+                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/warning<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
               </div>
             </div><!-- ./col -->
             <div class="col-lg-3 col-xs-6">
@@ -365,7 +369,7 @@
                 <div class="icon">
                   <i class="fa fa-thumbs-o-down"></i>
                 </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/error" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
+                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/error<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
               </div>
             </div><!-- ./col -->
           </div>
@@ -642,7 +646,7 @@
                     ?>
                   </div>
                   <div class="product-info">
-                    <a href="<?php echo base_url(); ?>tmf/fetchDataJobName/<?php echo rawurlencode($record->job_name); ?>" class="product-title"><?php echo html_escape($record->job_name); ?>
+                    <a href="<?php echo base_url(); ?>tmf/fetchDataJobName/<?php echo rawurlencode($record->job_name); ?><?php echo $dashboardTmfEnvironmentQuery; ?>" class="product-title"><?php echo html_escape($record->job_name); ?>
                     <?php 
                       switch ($record->status) {
                         case 'ready':

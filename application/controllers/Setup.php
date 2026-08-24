@@ -140,13 +140,24 @@ class Setup extends BaseController
 
     public function databaseCheck()
     {
-       $engine = $this->input->post('engine');
-       $host = $this->input->post('host');
-       $schema = $this->input->post('schema');
-       $username = $this->input->post('username');
-       $password = $this->input->post('password');
-       $charset = $this->input->post('charset');
-       $dbcol = $this->input->post('dbcol'); 
+        if($this->input->method(TRUE) !== 'POST') {
+            redirect('setup/database');
+            return;
+        }
+
+        $engine = trim((string) $this->input->post('engine'));
+        $host = trim((string) $this->input->post('host'));
+        $schema = trim((string) $this->input->post('schema'));
+        $username = trim((string) $this->input->post('username'));
+        $password = (string) $this->input->post('password');
+        $charset = trim((string) $this->input->post('charset'));
+        $dbcol = trim((string) $this->input->post('dbcol'));
+
+        if($engine === '' || $host === '' || $schema === '' || $username === '' || $charset === '' || $dbcol === '') {
+            $this->session->set_flashdata('error', 'Please fill all required database connection fields.');
+            redirect('setup/database');
+            return;
+        }
 
         $config['hostname'] = $host;
         $config['username'] = $username;
@@ -160,15 +171,21 @@ class Setup extends BaseController
         $config['cachedir'] = '';
         $config['char_set'] = $charset;
         $config['dbcollat'] = $dbcol;
-        $this->load->database($config);
 
-        if ( $this->load->database() === FALSE )
-        {
-           exit('THE END IS NIGH!');
+        $db = $this->load->database($config, TRUE);
+        $connected = is_object($db) && ! empty($db->conn_id);
+
+        if(is_object($db)) {
+            $db->close();
         }
 
-       // print_r($config);
+        if($connected) {
+            $this->session->set_flashdata('success', 'Database connection succeeded.');
+        } else {
+            $this->session->set_flashdata('error', 'Unable to connect to the database with the provided settings.');
+        }
 
+        redirect('setup/database');
     }
 
      

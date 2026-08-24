@@ -158,7 +158,7 @@
                               foreach($users as $record)
                               {
                           ?>
-                           <option value="<?php echo $record->name ?>"><?php echo $record->name ?></option>
+                           <option value="<?php echo html_escape($record->name) ?>"><?php echo html_escape($record->name) ?></option>
                          <?php
                            }
                          }
@@ -177,7 +177,7 @@
                               foreach($groups as $record)
                               {
                           ?>
-                           <option value="<?php echo $record->name ?>"><?php echo $record->name ?></option>
+                           <option value="<?php echo html_escape($record->name) ?>"><?php echo html_escape($record->name) ?></option>
                          <?php
                            }
                          }
@@ -228,15 +228,15 @@
                     ?>
                     <tr>
                       <td><?php echo (int) $record->id; ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
                         <td><?php echo html_escape($record->name); ?></td>
                         <td><?php echo html_escape($record->type); ?></td>
                         <td><?php echo html_escape($record->users); ?></td>
                         <td><?php echo html_escape($record->groups); ?></td>
-                        <td class="text-center show"><a href="#" class="btn btn-sm btn-info">Check</a></td>
+                        <td class="text-center show" data-reportid="<?php echo (int) $record->id; ?>"><a href="#" class="btn btn-sm btn-info">Check</a></td>
                         <td><?php echo html_escape($record->owner); ?></td>
                        <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php
@@ -306,6 +306,10 @@
 
 <script type="text/javascript">
   $(document).ready(function() {
+    function escapeHtml(value) {
+      return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
     $('.select2').select2({
        placeholder: " Click to Select a option to fetch",
        allowClear: true
@@ -348,11 +352,11 @@
 $("#tableReports").on('click','.show',function(){
 
          var currentRow=$(this).closest("tr"); 
-         var id=currentRow.find("td:eq(0)").text();
+         var id = $(this).data("reportid") || currentRow.find("td:eq(0)").text();
 
          var show = $.parseJSON($.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>Visualization/fetch/' + id,
+            url:  '<?php echo base_url(); ?>Visualization/fetch/' + encodeURIComponent(id),
             dataType: "json", 
             async: false,
             beforeSend: function() {
@@ -372,10 +376,11 @@ $("#tableReports").on('click','.show',function(){
          }).responseText);
 
 
-         fetch = show.data[0];
+         var report = show.data && show.data[0] ? show.data[0] : {};
+         var creationDate = moment(report.creation_date);
 
 
-         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th style="width: 20px;">Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ moment(fetch.creation_date).format('dddd, MMMM Do YYYY, h:mm:ss')+'</td></tr><tr><td>Report Name</td><td>'+ fetch.name +'</td></tr><tr><td>Report Type</td><td>'+ fetch.type +'</td></tr><tr><td>Allowed Users</td><td>'+ fetch.users +'</td></tr><tr><td>Allowed Groups</td><td>'+ fetch.groups +'</td></tr><tr><td>Owner</td><td>'+ fetch.owner +'</td></tr><tr><td>Embebed Report</td><td style="height: 600px;">'+ fetch.code +'</td></tr></tbody></table></div>')
+         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th style="width: 20px;">Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ escapeHtml(creationDate.isValid() ? creationDate.format('dddd, MMMM Do YYYY, h:mm:ss') : '') +'</td></tr><tr><td>Report Name</td><td>'+ escapeHtml(report.name) +'</td></tr><tr><td>Report Type</td><td>'+ escapeHtml(report.type) +'</td></tr><tr><td>Allowed Users</td><td>'+ escapeHtml(report.users) +'</td></tr><tr><td>Allowed Groups</td><td>'+ escapeHtml(report.groups) +'</td></tr><tr><td>Owner</td><td>'+ escapeHtml(report.owner) +'</td></tr><tr><td>Embebed Report</td><td style="height: 600px;">'+ (report.code || '') +'</td></tr></tbody></table></div>')
 
          $('#modal-default').modal('show');
 

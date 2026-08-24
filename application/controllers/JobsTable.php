@@ -79,6 +79,12 @@ class JobsTable extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
             $id = $this->input->post('userId');
             $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s'));
             
@@ -101,6 +107,12 @@ class JobsTable extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
             $id = $this->input->post('userId');
             $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s'));
             

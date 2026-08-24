@@ -65,7 +65,7 @@
                     ?>
                     <tr>
                       <td><?php echo (int) $record->id; ?></td>
-                      <td><?php echo date('Y-m-d H:i:s', strtotime($record->creation_date)) ?></td>
+                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
                         <td><?php echo html_escape($record->job_name); ?></td>
                         <td><?php echo html_escape($record->job_component); ?></td>
                         <td><?php echo html_escape($record->component_type); ?></td>
@@ -73,10 +73,10 @@
                         <td><?php echo ($record->file === '1') ? 'File' : 'Folder' ?></td>
                         <td><?php echo ($record->file_name == NULL) ? 'Not Available' : html_escape($record->file_name); ?></td>
                         <td><?php echo ($record->file_uploaded === '0') ? 'None yet' : (int) $record->file_uploaded; ?></td>
-                        <td><?php echo $record->owner ?></td>
+                        <td><?php echo html_escape($record->owner) ?></td>
                        <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'JobsTable/editOld/'.$record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
+                            <a class="btn btn-sm btn-warning" href="<?php echo base_url().'JobsTable/editOld/'.(int) $record->id; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
+                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td><?php } ?>
                     </tr>
                     <?php

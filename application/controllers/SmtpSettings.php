@@ -30,7 +30,7 @@ class SmtpSettings extends BaseController
         $data["settings"] = $this->model->listSettings();
         $data["role"] = $this->isManager();
         $data["default_smtp"] = $this->model->defaultEnabledSetting();
-        $data["jenkins_mailer_sync"] = $this->syncJenkinsMailerFromDefault(FALSE);
+        $data["jenkins_mailer_sync"] = NULL;
         $data["mailpit_url"] = $this->mailpitPublicUrl();
         
         $this->loadViews("smtpSettings", $this->global, $data, NULL);
@@ -150,8 +150,7 @@ class SmtpSettings extends BaseController
                 
                 if($result > 0)
                 {
-                    $this->syncJenkinsMailerFromDefault(FALSE);
-                    $this->session->set_flashdata('success', 'New Smtp Setting has successfully created and now is available to be used.');
+                    $this->session->set_flashdata('success', 'New Smtp Setting has successfully created and now is available to be used. Use Sync Jenkins Mailer if this should become Jenkins default mailer.');
                 }
                 else
                 {
@@ -237,8 +236,7 @@ class SmtpSettings extends BaseController
                 
                 if($result > 0)
                 {
-                    $this->syncJenkinsMailerFromDefault(FALSE);
-                    $this->session->set_flashdata('success', 'New Smtp Setting has successfully updated.');
+                    $this->session->set_flashdata('success', 'New Smtp Setting has successfully updated. Use Sync Jenkins Mailer if this should become Jenkins default mailer.');
                 }
                 else
                 {
@@ -265,6 +263,12 @@ class SmtpSettings extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->session->set_flashdata('error', 'Use the Sync Jenkins Mailer button to run this action.');
+                redirect('SmtpSettings');
+                return;
+            }
+
             $this->syncJenkinsMailerFromDefault(TRUE);
             redirect('SmtpSettings');
         }
@@ -311,23 +315,38 @@ class SmtpSettings extends BaseController
 
     private function jenkinsMailerMatchesSetting($setting)
     {
-        $script = "def instance = jenkins.model.Jenkins.get()\n" .
-            "def mailer = instance.getDescriptorByType(hudson.tasks.Mailer.DescriptorImpl.class)\n" .
-            "def ext = instance.getDescriptor('hudson.plugins.emailext.ExtendedEmailPublisher')\n" .
-            "def location = jenkins.model.JenkinsLocationConfiguration.get()\n" .
-            "println('smtpHost=' + mailer.smtpHost)\n" .
-            "println('smtpPort=' + mailer.smtpPort)\n" .
-            "println('useSsl=' + mailer.useSsl)\n" .
-            "println('replyTo=' + mailer.replyToAddress)\n" .
-            "println('emailExtPresent=' + (ext != null))\n" .
-            "if (ext != null) {\n" .
-            "  println('emailExtSmtpHost=' + ext.smtpServer)\n" .
-            "  println('emailExtSmtpPort=' + ext.smtpPort)\n" .
-            "  println('emailExtUseSsl=' + ext.useSsl)\n" .
-            "  println('emailExtReplyTo=' + ext.defaultReplyTo)\n" .
-            "}\n" .
-            "println('jenkinsUrl=' + location.url)\n" .
-            "println('adminAddress=' + location.adminAddress)\n";
+        $script = implode("\n", array(
+            "def instance = jenkins.model.Jenkins.get()",
+            "def mailer = instance.getDescriptorByType(hudson.tasks.Mailer.DescriptorImpl.class)",
+            "def ext = instance.getDescriptor('hudson.plugins.emailext.ExtendedEmailPublisher')",
+            "def location = jenkins.model.JenkinsLocationConfiguration.get()",
+            "def extAccount = null",
+            "if (ext != null && ext.metaClass.respondsTo(ext, 'getMailAccount')) {",
+            "  extAccount = ext.getMailAccount()",
+            "}",
+            "println('smtpHost=' + mailer.smtpHost)",
+            "println('smtpPort=' + mailer.smtpPort)",
+            "println('useSsl=' + mailer.useSsl)",
+            "println('useTls=' + mailer.useTls)",
+            "println('replyTo=' + mailer.replyToAddress)",
+            "println('emailExtPresent=' + (ext != null))",
+            "println('emailExtAccountPresent=' + (extAccount != null))",
+            "if (ext != null) {",
+            "  if (extAccount != null) {",
+            "    println('emailExtSmtpHost=' + extAccount.smtpHost)",
+            "    println('emailExtSmtpPort=' + extAccount.smtpPort)",
+            "    println('emailExtUseSsl=' + extAccount.useSsl)",
+            "    println('emailExtUseTls=' + extAccount.useTls)",
+            "  } else {",
+            "    println('emailExtSmtpHost=' + ext.smtpServer)",
+            "    println('emailExtSmtpPort=' + ext.smtpPort)",
+            "    println('emailExtUseSsl=' + ext.useSsl)",
+            "    try { println('emailExtUseTls=' + ext.useTls) } catch (Throwable ignored) { println('emailExtUseTls=false') }",
+            "  }",
+            "  println('emailExtReplyTo=' + ext.defaultReplyTo)",
+            "}",
+            "println('adminAddress=' + location.adminAddress)"
+        )) . "\n";
         $response = $this->requestJenkins('POST', 'scriptText', http_build_query(array('script' => $script)), 'application/x-www-form-urlencoded');
 
         if(!isset($response['status']) || (int) $response['status'] < 200 || (int) $response['status'] >= 300) {
@@ -335,24 +354,29 @@ class SmtpSettings extends BaseController
         }
 
         $actual = array();
-        foreach(preg_split('/\r\n|\r|\n/', trim($response['body'])) as $line) {
+        foreach(preg_split('/\\r\\n|\\r|\\n/', trim($response['body'])) as $line) {
             $parts = explode('=', $line, 2);
             if(count($parts) === 2) {
                 $actual[trim($parts[0])] = trim($parts[1]);
             }
         }
 
-        return isset($actual['smtpHost'], $actual['smtpPort'], $actual['useSsl'], $actual['replyTo'], $actual['emailExtPresent'], $actual['emailExtSmtpHost'], $actual['emailExtSmtpPort'], $actual['emailExtUseSsl'], $actual['emailExtReplyTo'], $actual['jenkinsUrl'], $actual['adminAddress'])
+        $crypto = strtolower(trim((string) $setting->ssl));
+        $expectedUseSsl = ($crypto === '1' || $crypto === 'ssl') ? 'true' : 'false';
+        $expectedUseTls = ($crypto === '2' || $crypto === 'tls') ? 'true' : 'false';
+
+        return isset($actual['smtpHost'], $actual['smtpPort'], $actual['useSsl'], $actual['useTls'], $actual['replyTo'], $actual['emailExtPresent'], $actual['emailExtSmtpHost'], $actual['emailExtSmtpPort'], $actual['emailExtUseSsl'], $actual['emailExtUseTls'], $actual['emailExtReplyTo'], $actual['adminAddress'])
             && $actual['smtpHost'] === (string) $setting->smtp_host
             && $actual['smtpPort'] === (string) $setting->smtp_port
-            && $actual['useSsl'] === (((int) $setting->ssl === 1) ? 'true' : 'false')
+            && $actual['useSsl'] === $expectedUseSsl
+            && $actual['useTls'] === $expectedUseTls
             && $actual['replyTo'] === $this->smtpReplyTo($setting)
             && $actual['emailExtPresent'] === 'true'
             && $actual['emailExtSmtpHost'] === (string) $setting->smtp_host
             && $actual['emailExtSmtpPort'] === (string) $setting->smtp_port
-            && $actual['emailExtUseSsl'] === (((int) $setting->ssl === 1) ? 'true' : 'false')
+            && $actual['emailExtUseSsl'] === $expectedUseSsl
+            && $actual['emailExtUseTls'] === $expectedUseTls
             && $actual['emailExtReplyTo'] === $this->smtpReplyTo($setting)
-            && $actual['jenkinsUrl'] === $this->jenkinsPublicUrl()
             && $actual['adminAddress'] === $this->smtpReplyTo($setting);
     }
 
@@ -363,44 +387,66 @@ class SmtpSettings extends BaseController
         $smtpUsername = $this->groovyString((string) $setting->username);
         $smtpPassword = $this->groovyString((string) $setting->password);
         $replyTo = $this->groovyString($this->smtpReplyTo($setting));
-        $jenkinsUrl = $this->groovyString($this->jenkinsPublicUrl());
-        $useSsl = ((int) $setting->ssl === 1) ? 'true' : 'false';
+        $crypto = strtolower(trim((string) $setting->ssl));
+        $useSsl = ($crypto === '1' || $crypto === 'ssl') ? 'true' : 'false';
+        $useTls = ($crypto === '2' || $crypto === 'tls') ? 'true' : 'false';
 
-        return "import jenkins.model.Jenkins\n" .
-            "import hudson.tasks.Mailer\n" .
-            "def instance = Jenkins.get()\n" .
-            "def smtpHost = " . $smtpHost . "\n" .
-            "def smtpPort = " . $smtpPort . "\n" .
-            "def smtpUsername = " . $smtpUsername . "\n" .
-            "def smtpPassword = " . $smtpPassword . "\n" .
-            "def replyTo = " . $replyTo . "\n" .
-            "def jenkinsUrl = " . $jenkinsUrl . "\n" .
-            "def useSsl = " . $useSsl . "\n" .
-            "def location = jenkins.model.JenkinsLocationConfiguration.get()\n" .
-            "location.setAdminAddress(replyTo)\n" .
-            "location.setUrl(jenkinsUrl)\n" .
-            "location.save()\n" .
-            "def mailer = instance.getDescriptorByType(Mailer.DescriptorImpl.class)\n" .
-            "mailer.smtpHost = smtpHost\n" .
-            "mailer.smtpPort = smtpPort\n" .
-            "mailer.useSsl = useSsl\n" .
-            "mailer.useTls = false\n" .
-            "mailer.charset = 'UTF-8'\n" .
-            "mailer.replyToAddress = replyTo\n" .
-            "mailer.setSmtpAuth(smtpUsername, smtpPassword)\n" .
-            "mailer.save()\n" .
-            "def ext = instance.getDescriptor('hudson.plugins.emailext.ExtendedEmailPublisher')\n" .
-            "if (ext != null) {\n" .
-            "  ext.smtpServer = smtpHost\n" .
-            "  ext.smtpPort = smtpPort\n" .
-            "  ext.useSsl = useSsl\n" .
-            "  ext.charset = 'UTF-8'\n" .
-            "  ext.defaultReplyTo = replyTo\n" .
-            "  ext.setSmtpAuth(smtpUsername, smtpPassword)\n" .
-            "  ext.save()\n" .
-            "}\n" .
-            "instance.save()\n" .
-            "println('OK SMTP configured: ' + smtpHost + ':' + smtpPort)\n";
+        return implode("\n", array(
+            "import jenkins.model.Jenkins",
+            "import hudson.tasks.Mailer",
+            "def instance = Jenkins.get()",
+            "def smtpHost = " . $smtpHost,
+            "def smtpPort = " . $smtpPort,
+            "def smtpUsername = " . $smtpUsername,
+            "def smtpPassword = " . $smtpPassword,
+            "def replyTo = " . $replyTo,
+            "def useSsl = " . $useSsl,
+            "def useTls = " . $useTls,
+            "def hasSmtpAuth = smtpUsername?.trim() && smtpPassword?.trim()",
+            "def location = jenkins.model.JenkinsLocationConfiguration.get()",
+            "location.setAdminAddress(replyTo)",
+            "location.save()",
+            "def mailer = instance.getDescriptorByType(Mailer.DescriptorImpl.class)",
+            "mailer.smtpHost = smtpHost",
+            "mailer.smtpPort = smtpPort",
+            "mailer.useSsl = useSsl",
+            "mailer.useTls = useTls",
+            "mailer.charset = 'UTF-8'",
+            "mailer.replyToAddress = replyTo",
+            "mailer.setSmtpAuth(hasSmtpAuth ? smtpUsername : '', hasSmtpAuth ? smtpPassword : '')",
+            "mailer.save()",
+            "def ext = instance.getDescriptor('hudson.plugins.emailext.ExtendedEmailPublisher')",
+            "if (ext != null) {",
+            "  def extAccount = null",
+            "  if (ext.metaClass.respondsTo(ext, 'getMailAccount')) {",
+            "    extAccount = ext.getMailAccount()",
+            "  }",
+            "  if (extAccount == null) {",
+            "    try {",
+            "      extAccount = Jenkins.instance.pluginManager.uberClassLoader.loadClass('hudson.plugins.emailext.MailAccount').getDeclaredConstructor().newInstance()",
+            "    } catch (Throwable ignored) {}",
+            "  }",
+            "  if (extAccount != null) {",
+            "    extAccount.smtpHost = smtpHost",
+            "    extAccount.smtpPort = smtpPort",
+            "    extAccount.useSsl = useSsl",
+            "    extAccount.useTls = useTls",
+            "    extAccount.defaultAccount = true",
+            "    if (extAccount.metaClass.respondsTo(extAccount, 'setSmtpUsername')) { extAccount.setSmtpUsername(hasSmtpAuth ? smtpUsername : '') }",
+            "    if (extAccount.metaClass.respondsTo(extAccount, 'setSmtpPassword')) { extAccount.setSmtpPassword(hasSmtpAuth ? smtpPassword : '') }",
+            "    if (ext.metaClass.respondsTo(ext, 'setMailAccount')) { ext.setMailAccount(extAccount) }",
+            "  }",
+            "  try { ext.smtpServer = smtpHost } catch (Throwable ignored) {}",
+            "  try { ext.smtpPort = smtpPort } catch (Throwable ignored) {}",
+            "  try { ext.useSsl = useSsl } catch (Throwable ignored) {}",
+            "  try { ext.useTls = useTls } catch (Throwable ignored) {}",
+            "  try { ext.setSmtpAuth(hasSmtpAuth ? smtpUsername : '', hasSmtpAuth ? smtpPassword : '') } catch (Throwable ignored) {}",
+            "  ext.defaultReplyTo = replyTo",
+            "  ext.save()",
+            "}",
+            "instance.save()",
+            "println('OK SMTP configured: ' + smtpHost + ':' + smtpPort)"
+        )) . "\n";
     }
 
     private function groovyString($value)
@@ -479,12 +525,17 @@ class SmtpSettings extends BaseController
         }
         else
         {
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
             $id = $this->input->post('userId');
             /*
             $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s')); Future Release Not working */
             
             $result = $this->model->deleteSetting($id);
-            $this->syncJenkinsMailerFromDefault(FALSE);
             
             if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
             else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }

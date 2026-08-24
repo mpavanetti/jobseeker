@@ -27,7 +27,7 @@ class Visualization extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Data Visualization';
         $name = urldecode($report);
         $user = $this->global['name'];
-        $data["view"] = $this->model->view($name);
+        $data["view"] = $this->sanitizeReportRows($this->model->view($name));
 
         $validate= $this->model->permission($name,$user);
 
@@ -55,7 +55,7 @@ class Visualization extends BaseController
 
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
-         $listJobsJson["data"] = $this->model->fetch($id);
+         $listJobsJson["data"] = $this->sanitizeReportRows($this->model->fetch((int) $id));
          echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
      }
 
@@ -110,32 +110,28 @@ class Visualization extends BaseController
                 $type = $this->security->xss_clean($this->input->post('type'));
                 $users = $this->security->xss_clean($this->input->post('users'));
                 $groups = $this->security->xss_clean($this->input->post('groups'));
-                $code = $this->input->post('code');
+                $code = $this->normalizeReportEmbed($this->input->post('code'));
 
-             
-
-                if($code[0] !== '<' && $code[strlen($code) - 1] !== '>') {
-                    if(filter_var($code, FILTER_VALIDATE_URL)){
-                        $code = '<iframe src="'.$code.'" style="border:none;width:100%;height:100%;"></iframe>';
-                    } else {
-                        $this->session->set_flashdata('error', 'Report creation failed ! This is not a valid URL');
-                   redirect('Visualization/config');
-                    }
-                    
+                if($code === FALSE) {
+                    $this->session->set_flashdata('error', 'Report creation failed ! Use a valid HTTP(S) report URL or iframe embed code.');
+                    redirect('Visualization/config');
                 }
 
-                if ($users == null && $groups == null) {
+                $users = is_array($users) ? $users : array();
+                $groups = is_array($groups) ? $groups : array();
+
+                if (empty($users) && empty($groups)) {
                    $this->session->set_flashdata('error', 'Report creation failed ! You must select at the least one user or group');
                    redirect('Visualization/config');
                 }
 
-                if($users == null) {
+                if(empty($users)) {
                     $stringUsers = 'All Users from group';
                 } else {
                   $stringUsers = implode(",", $users);
                 }
 
-                if($groups == null) {
+                if(empty($groups)) {
                     $stringGroups = 'None';
                 } else {
                   $stringGroups = implode(",", $groups);
@@ -189,7 +185,13 @@ class Visualization extends BaseController
         }
         else
         {
-            $id = $this->input->post('userId');
+            if($this->input->method(TRUE) !== 'POST') {
+                $this->output->set_status_header(405);
+                echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+                return;
+            }
+
+            $id = (int) $this->input->post('userId');
             /*
             $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s')); Future Release Not working */
             
@@ -201,7 +203,166 @@ class Visualization extends BaseController
     }
 
 
-     
+    private function sanitizeReportRows($rows)
+    {
+        if(empty($rows)) {
+            return $rows;
+        }
+
+        foreach($rows as $row) {
+            if(isset($row->code)) {
+                $safeCode = $this->normalizeReportEmbed($row->code);
+                $row->code = ($safeCode === FALSE) ? '' : $safeCode;
+            }
+        }
+
+        return $rows;
+    }
+
+    private function normalizeReportEmbed($code)
+    {
+        $code = trim((string) $code);
+
+        if($code === '') {
+            return FALSE;
+        }
+
+        if(strpos($code, '<') === FALSE && strpos($code, '>') === FALSE) {
+            return $this->buildReportIframe($code);
+        }
+
+        return $this->sanitizeIframeEmbed($code);
+    }
+
+    private function sanitizeIframeEmbed($html)
+    {
+        if(!class_exists('DOMDocument')) {
+            if(preg_match('/<iframe\b[^>]*\bsrc\s*=\s*(["\'])(.*?)\1[^>]*>\s*<\/iframe>/is', $html, $matches)) {
+                return $this->buildReportIframe($matches[2]);
+            }
+
+            return FALSE;
+        }
+
+        $previousErrors = libxml_use_internal_errors(TRUE);
+        $dom = new DOMDocument();
+        $options = 0;
+        if(defined('LIBXML_HTML_NODEFDTD')) {
+            $options |= LIBXML_HTML_NODEFDTD;
+        }
+        if(defined('LIBXML_HTML_NOIMPLIED')) {
+            $options |= LIBXML_HTML_NOIMPLIED;
+        }
+
+        $loaded = $dom->loadHTML('<!DOCTYPE html><html><body>'.$html.'</body></html>', $options);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousErrors);
+
+        if(!$loaded) {
+            return FALSE;
+        }
+
+        $iframes = $dom->getElementsByTagName('iframe');
+        if($iframes->length !== 1) {
+            return FALSE;
+        }
+
+        $iframe = $iframes->item(0);
+        $attributes = array();
+        foreach(array('title', 'width', 'height', 'frameborder', 'allow', 'sandbox', 'referrerpolicy', 'loading') as $attribute) {
+            if($iframe->hasAttribute($attribute)) {
+                $attributes[$attribute] = $iframe->getAttribute($attribute);
+            }
+        }
+        if($iframe->hasAttribute('allowfullscreen')) {
+            $attributes['allowfullscreen'] = TRUE;
+        }
+
+        return $this->buildReportIframe($iframe->getAttribute('src'), $attributes);
+    }
+
+    private function buildReportIframe($url, $sourceAttributes = array())
+    {
+        $url = trim((string) $url);
+        if(!$this->isSafeReportUrl($url)) {
+            return FALSE;
+        }
+
+        $attributes = array(
+            'src' => $url,
+            'style' => 'border:none;width:100%;height:100%;'
+        );
+        foreach($sourceAttributes as $name => $value) {
+            $cleanValue = $this->cleanIframeAttribute($name, $value);
+            if($cleanValue !== NULL) {
+                $attributes[$name] = $cleanValue;
+            }
+        }
+
+        $htmlAttributes = array();
+        foreach($attributes as $name => $value) {
+            if($name === 'allowfullscreen') {
+                continue;
+            }
+            $htmlAttributes[] = $name.'="'.$this->escapeAttribute($value).'"';
+        }
+        if(!empty($sourceAttributes['allowfullscreen'])) {
+            $htmlAttributes[] = 'allowfullscreen';
+        }
+
+        return '<iframe '.implode(' ', $htmlAttributes).'></iframe>';
+    }
+
+    private function cleanIframeAttribute($name, $value)
+    {
+        $value = trim((string) $value);
+
+        switch($name) {
+            case 'title':
+                return substr(strip_tags($value), 0, 200);
+            case 'width':
+            case 'height':
+                return preg_match('/^\d{1,4}(\.\d{1,2})?(%|px)?$/', $value) ? $value : NULL;
+            case 'frameborder':
+                return in_array($value, array('0', '1'), TRUE) ? $value : NULL;
+            case 'allow':
+                return (strlen($value) <= 500 && !preg_match('/[\x00-\x1F\x7F]/', $value)) ? $value : NULL;
+            case 'sandbox':
+                return preg_match('/^[a-zA-Z0-9\- ]{0,300}$/', $value) ? $value : NULL;
+            case 'referrerpolicy':
+                return in_array(strtolower($value), array('no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin', 'unsafe-url'), TRUE) ? strtolower($value) : NULL;
+            case 'loading':
+                return in_array(strtolower($value), array('lazy', 'eager'), TRUE) ? strtolower($value) : NULL;
+            case 'allowfullscreen':
+                return $value ? TRUE : NULL;
+            default:
+                return NULL;
+        }
+    }
+
+    private function isSafeReportUrl($url)
+    {
+        if(strlen($url) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $url)) {
+            return FALSE;
+        }
+
+        if(!filter_var($url, FILTER_VALIDATE_URL)) {
+            return FALSE;
+        }
+
+        $parts = parse_url($url);
+        if(empty($parts['scheme']) || !in_array(strtolower($parts['scheme']), array('http', 'https'), TRUE)) {
+            return FALSE;
+        }
+
+        return empty($parts['user']) && empty($parts['pass']);
+    }
+
+    private function escapeAttribute($value)
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    }
+
 }
 
 ?>

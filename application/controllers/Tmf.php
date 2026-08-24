@@ -14,8 +14,54 @@ class Tmf extends BaseController
         $this->load->helper('url','form');
         $this->load->model('Tmf_model','model');
         $this->load->library('session');
-        $this->isLoggedIn();   
+        $this->isLoggedIn();
         date_default_timezone_set('America/Sao_Paulo');
+    }
+
+
+    private function normalizeEnvironmentSelectionValue($environment)
+    {
+        $environment = trim((string) $this->security->xss_clean($environment));
+
+        if ($environment === '' || $environment === '*' || strtolower($environment) === 'all') {
+            return 'all';
+        }
+
+        if ($environment === '__UNKNOWN__' || strtolower($environment) === 'unknown') {
+            return '__UNKNOWN__';
+        }
+
+        return strtoupper($environment);
+    }
+
+    private function selectedEnvironmentFilter()
+    {
+        return $this->normalizeEnvironmentSelectionValue($this->input->get('environment'));
+    }
+
+    private function selectedEnvironmentFromSelection($environment)
+    {
+        if (! is_array($environment)) {
+            return $this->normalizeEnvironmentSelectionValue($environment);
+        }
+
+        $selected = array();
+        foreach ($environment as $value) {
+            $normalized = $this->normalizeEnvironmentSelectionValue($value);
+            if ($normalized === 'all') {
+                return 'all';
+            }
+            if (! in_array($normalized, $selected, TRUE)) {
+                $selected[] = $normalized;
+            }
+        }
+
+        return count($selected) === 1 ? $selected[0] : 'all';
+    }
+
+    private function canManageTmf()
+    {
+        return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
     }
 
     /**
@@ -32,8 +78,8 @@ class Tmf extends BaseController
           $data["listReprocess"] = $this->model->listReprocess();
           $data["listEnvironment"] = $this->model->listEnvironment();
 
-      
-        
+
+
         $this->loadViews("tmfBuilder", $this->global, $data, NULL);
     }
 
@@ -42,8 +88,9 @@ class Tmf extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
 
         $data["jobs"] = $this->model->list();
-        $data["role"] = $this->isManager();
-        
+        $data["role"] = $this->role;
+        $data["selectedEnvironment"] = "all";
+
         $this->loadViews("tmf", $this->global, $data, NULL);
 
     }
@@ -63,31 +110,34 @@ class Tmf extends BaseController
             $environment = $this->input->post('environment');
 
             $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment);
-            $data["role"] = $this->isManager();
+            $data["role"] = $this->role;
+            $data["selectedEnvironment"] = $this->selectedEnvironmentFromSelection($environment);
 
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
-               
+
     }
 
     function fetchDataStatus($status)
     {
-       
-            $data["jobs"] = $this->model->fetchDataStatus($status);
-            $data["role"] = $this->isManager();
+            $environment = $this->selectedEnvironmentFilter();
+            $data["jobs"] = $this->model->fetchDataStatus($status, $environment);
+            $data["role"] = $this->role;
+            $data["selectedEnvironment"] = $environment;
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
-               
+
     }
 
      function fetchDataJobName($jobName)
     {
-       
-            $data["jobs"] = $this->model->fetchDataJobName($jobName);
-            $data["role"] = $this->isManager();
+            $environment = $this->selectedEnvironmentFilter();
+            $data["jobs"] = $this->model->fetchDataJobName($jobName, $environment);
+            $data["role"] = $this->role;
+            $data["selectedEnvironment"] = $environment;
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->loadViews("tmf", $this->global, $data, NULL);
-               
+
     }
 
      function getError($instanceId)
@@ -95,7 +145,7 @@ class Tmf extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
         $errorList["data"] = $this->model->getError($instanceId);
 
-        
+
           echo json_encode($errorList, JSON_PRETTY_PRINT);
     }
 
@@ -104,7 +154,7 @@ class Tmf extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
         $list["data"] = $this->model->listId($id);
 
-        
+
           echo json_encode($list, JSON_PRETTY_PRINT);
     }
 
@@ -131,25 +181,48 @@ class Tmf extends BaseController
      */
     function delete()
     {
-        if($this->isManager() == TRUE)
+        if(! $this->canManageTmf())
         {
             echo(json_encode(array('status'=>'access')));
+            return;
         }
-        else
-        {
-            $id = $this->input->post('userId');
-            $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s'));
-            
-            $result = $this->model->delete($id);
-            
-            if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
-            else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
+
+        if($this->input->method(TRUE) !== 'POST') {
+            $this->output->set_status_header(405);
+            echo(json_encode(array('status'=>FALSE, 'message'=>'Delete requests must use POST.')));
+            return;
         }
+
+        $id = (int) $this->input->post('userId');
+        if ($id <= 0) {
+            echo(json_encode(array('status'=>FALSE, 'id' => $id)));
+            return;
+        }
+
+        $deletePolicy = $this->model->deletePolicy($id);
+        if (empty($deletePolicy['exists'])) {
+            echo(json_encode(array('status'=>FALSE, 'id' => $id)));
+            return;
+        }
+
+        if (empty($deletePolicy['allowed'])) {
+            echo(json_encode(array(
+                'status'=>'restricted',
+                'id' => $id,
+                'message' => 'Only DEV TMF rows or stale running TMF rows can be deleted.'
+            )));
+            return;
+        }
+
+        $result = $this->model->delete($id);
+
+        if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
+        else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
     }
 
 
-   
-    
+
+
 }
 
 ?>
