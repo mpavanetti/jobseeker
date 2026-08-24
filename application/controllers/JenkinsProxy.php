@@ -31,15 +31,6 @@ class JenkinsProxy extends BaseController
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : NULL;
 
         if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE)) {
-            $slotCheck = $this->checkJenkinsEnvironmentSlotsForBuildRequest($path, $this->input->raw_input_stream);
-            if (! $slotCheck['ok']) {
-                $this->output
-                    ->set_status_header(isset($slotCheck['status']) ? (int) $slotCheck['status'] : 429)
-                    ->set_content_type('text/plain')
-                    ->set_output($slotCheck['message']);
-                return;
-            }
-
             $routingCheck = $this->ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $this->input->raw_input_stream);
             if (! $routingCheck['ok']) {
                 $this->output

@@ -211,15 +211,15 @@ class BaseController extends CI_Controller {
 		$environment = $this->normalizeJobSeekerEnvironment($environment);
 		$agentLabel = $this->jenkinsEnvironmentAgentLabel($environment);
 
-		if ($jobName === '' || $agentLabel === '') {
-			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => 'No environment agent routing is required.');
+		if ($jobName === '') {
+			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => 'No Jenkins job was selected.');
 		}
 
 		$jobPath = $this->jenkinsEncodedJobPath($jobName);
 		$response = $this->requestJenkins('GET', $jobPath.'/config.xml');
 
 		if ((int) $response['status'] !== 200) {
-			return array('ok' => FALSE, 'updated' => FALSE, 'status' => (int) $response['status'], 'message' => 'Unable to read Jenkins job configuration before routing. HTTP '.$response['status'].'.');
+			return array('ok' => FALSE, 'updated' => FALSE, 'status' => (int) $response['status'], 'message' => 'Unable to read Jenkins job configuration before build. HTTP '.$response['status'].'.');
 		}
 
 		$dom = new DOMDocument();
@@ -233,44 +233,70 @@ class BaseController extends CI_Controller {
 		}
 
 		$updates = 0;
+		$routingUpdated = FALSE;
+		$commandUpdates = 0;
 		$root = $dom->documentElement;
-		$assignedNode = $this->jenkinsDirectChildElement($root, 'assignedNode');
-		$canRoam = $this->jenkinsDirectChildElement($root, 'canRoam');
 
-		if (! $assignedNode) {
-			$assignedNode = $dom->createElement('assignedNode');
-			$root->appendChild($assignedNode);
-			$updates++;
-		}
+		if ($agentLabel !== '') {
+			$assignedNode = $this->jenkinsDirectChildElement($root, 'assignedNode');
+			$canRoam = $this->jenkinsDirectChildElement($root, 'canRoam');
 
-		if ($assignedNode->nodeValue !== $agentLabel) {
-			while ($assignedNode->firstChild) {
-				$assignedNode->removeChild($assignedNode->firstChild);
+			if (! $assignedNode) {
+				$assignedNode = $dom->createElement('assignedNode');
+				$root->appendChild($assignedNode);
+				$updates++;
+				$routingUpdated = TRUE;
 			}
-			$assignedNode->appendChild($dom->createTextNode($agentLabel));
-			$updates++;
-		}
 
-		if (! $canRoam) {
-			$canRoam = $dom->createElement('canRoam');
-			$root->appendChild($canRoam);
-			$updates++;
-		}
-
-		if ($canRoam->nodeValue !== 'false') {
-			while ($canRoam->firstChild) {
-				$canRoam->removeChild($canRoam->firstChild);
+			if ($assignedNode->nodeValue !== $agentLabel) {
+				while ($assignedNode->firstChild) {
+					$assignedNode->removeChild($assignedNode->firstChild);
+				}
+				$assignedNode->appendChild($dom->createTextNode($agentLabel));
+				$updates++;
+				$routingUpdated = TRUE;
 			}
-			$canRoam->appendChild($dom->createTextNode('false'));
-			$updates++;
+
+			if (! $canRoam) {
+				$canRoam = $dom->createElement('canRoam');
+				$root->appendChild($canRoam);
+				$updates++;
+				$routingUpdated = TRUE;
+			}
+
+			if ($canRoam->nodeValue !== 'false') {
+				while ($canRoam->firstChild) {
+					$canRoam->removeChild($canRoam->firstChild);
+				}
+				$canRoam->appendChild($dom->createTextNode('false'));
+				$updates++;
+				$routingUpdated = TRUE;
+			}
 		}
+
+		$commandUpdates = $this->ensureJenkinsPythonShellCommandsAreUnbuffered($dom);
+		$updates += $commandUpdates;
 
 		if ($updates === 0) {
-			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => 'Jenkins job already targets the environment agent.');
+			$message = $agentLabel !== '' ? 'Jenkins job already targets the environment agent.' : 'Jenkins job configuration did not need pre-build updates.';
+			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => $message);
 		}
 
 		$saveResponse = $this->requestJenkins('POST', $jobPath.'/config.xml', $dom->saveXML(), 'text/xml');
 		$ok = in_array((int) $saveResponse['status'], array(200, 201, 302, 303), TRUE);
+		$messageParts = array();
+
+		if ($routingUpdated) {
+			$messageParts[] = 'Jenkins job routed to '.$agentLabel.'.';
+		}
+
+		if ($commandUpdates > 0) {
+			$messageParts[] = 'Jenkins Python command updated for live output.';
+		}
+
+		if (empty($messageParts)) {
+			$messageParts[] = 'Jenkins job configuration updated before build.';
+		}
 
 		return array(
 			'ok' => $ok,
@@ -278,8 +304,91 @@ class BaseController extends CI_Controller {
 			'status' => (int) $saveResponse['status'],
 			'environment' => $environment,
 			'agentLabel' => $agentLabel,
-			'message' => $ok ? 'Jenkins job routed to '.$agentLabel.'.' : 'Unable to update Jenkins job routing before build. HTTP '.$saveResponse['status'].'.'
+			'message' => $ok ? implode(' ', $messageParts) : 'Unable to update Jenkins job configuration before build. HTTP '.$saveResponse['status'].'.'
 		);
+	}
+
+	private function ensureJenkinsPythonShellCommandsAreUnbuffered($dom) {
+		$updates = 0;
+
+		foreach ($dom->getElementsByTagName('command') as $commandNode) {
+			$command = $commandNode->textContent;
+			$updatedCommand = $this->unbufferJenkinsPythonShellCommand($command);
+
+			if ($updatedCommand === $command) {
+				continue;
+			}
+
+			while ($commandNode->firstChild) {
+				$commandNode->removeChild($commandNode->firstChild);
+			}
+			$commandNode->appendChild($dom->createTextNode($updatedCommand));
+			$updates++;
+		}
+
+		return $updates;
+	}
+
+	private function unbufferJenkinsPythonShellCommand($command) {
+		$command = (string) $command;
+
+		if (strpos($command, 'JOBSEEKER_SCRIPT_PATH') === FALSE && strpos($command, 'JOBSEEKER_ENTRYPOINT') === FALSE) {
+			return $command;
+		}
+
+		$updated = $command;
+
+		if (strpos($updated, 'PYTHONUNBUFFERED') === FALSE) {
+			$updated = $this->addPythonUnbufferedExport($updated);
+		}
+
+		$updated = str_replace('python3 "$JOBSEEKER_SCRIPT_PATH"', 'python3 -u "$JOBSEEKER_SCRIPT_PATH"', $updated);
+		$updated = str_replace('"$JOBSEEKER_PYTHON" "$JOBSEEKER_SCRIPT_PATH"', '"$JOBSEEKER_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"', $updated);
+		$updated = str_replace('python "$JOBSEEKER_ENTRYPOINT" "$@"', 'python -u "$JOBSEEKER_ENTRYPOINT" "$@"', $updated);
+		$updated = $this->addPythonUnbufferedDockerEnv($updated);
+
+		return $updated;
+	}
+
+	private function addPythonUnbufferedExport($command) {
+		$count = 0;
+		$updated = preg_replace('/(^export JOBSEEKER_PYTHON=.*$)/m', "$1\nexport PYTHONUNBUFFERED=1", $command, 1, $count);
+
+		if ($count > 0) {
+			return $updated;
+		}
+
+		$updated = preg_replace('/(^set -e$)/m', "$1\nexport PYTHONUNBUFFERED=1", $command, 1, $count);
+
+		if ($count > 0) {
+			return $updated;
+		}
+
+		return "export PYTHONUNBUFFERED=1\n".$command;
+	}
+
+	private function addPythonUnbufferedDockerEnv($command) {
+		if (strpos($command, '-e PYTHONUNBUFFERED') !== FALSE || strpos($command, 'JOBSEEKER_DOCKER_ENTRYPOINT') === FALSE) {
+			return $command;
+		}
+
+		$lines = preg_split('/\r\n|\r|\n/', $command);
+		$updated = array();
+		$inserted = FALSE;
+
+		foreach ($lines as $line) {
+			$updated[] = $line;
+
+			if (! $inserted && strpos($line, '-e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT"') !== FALSE) {
+				preg_match('/^(\s*)/', $line, $matches);
+				$indent = isset($matches[1]) ? $matches[1] : '';
+				$continuation = substr(rtrim($line), -1) === '\\' ? ' \\' : '';
+				$updated[] = $indent.'-e PYTHONUNBUFFERED'.$continuation;
+				$inserted = TRUE;
+			}
+		}
+
+		return $inserted ? implode("\n", $updated) : $command;
 	}
 
 	protected function jenkinsEnvironmentSlotStatus($environment = '') {
