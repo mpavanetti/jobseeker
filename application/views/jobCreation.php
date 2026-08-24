@@ -6231,13 +6231,16 @@
 
       $.each(lines, function(index, line) {
         var trimmedLine = $.trim(line);
-        if (trimmedLine.indexOf('python3 "$JOBSEEKER_SCRIPT_PATH"') === 0 || trimmedLine.indexOf('"$JOBSEEKER_PYTHON" "$JOBSEEKER_SCRIPT_PATH"') === 0) {
+        if (trimmedLine.indexOf('python3 "$JOBSEEKER_SCRIPT_PATH"') === 0 ||
+          trimmedLine.indexOf('python3 -u "$JOBSEEKER_SCRIPT_PATH"') === 0 ||
+          trimmedLine.indexOf('"$JOBSEEKER_PYTHON" "$JOBSEEKER_SCRIPT_PATH"') === 0 ||
+          trimmedLine.indexOf('"$JOBSEEKER_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"') === 0) {
           runLine = trimmedLine;
         }
       });
 
-      var match = runLine.match(/^(?:python3|"\$JOBSEEKER_PYTHON") "\$JOBSEEKER_SCRIPT_PATH"\s+(.+)$/);
-      if (!match) {
+      var match = runLine.match(/^(?:python3|"\$JOBSEEKER_PYTHON")(?:\s+-u)? "\$JOBSEEKER_SCRIPT_PATH"(?:\s+(.+))?$/);
+      if (!match || typeof match[1] === 'undefined') {
         return;
       }
 

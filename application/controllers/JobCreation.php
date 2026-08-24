@@ -414,12 +414,6 @@ class JobCreation extends BaseController
           return;
         }
 
-        $slotCheck = $this->checkJenkinsEnvironmentSlots($previewJobName, $environment);
-        if (! $slotCheck['ok']) {
-          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $slotCheck['message']), isset($slotCheck['status']) ? (int) $slotCheck['status'] : 429);
-          return;
-        }
-
         $command = "export JOBSEEKER_PREVIEW=1\nexport JOBSEEKER_PREVIEW_MAX_ROWS=5\n" . $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, 1), array(
           'mode' => 'local',
           'pythonExecutable' => $pythonExecutable,
@@ -1766,6 +1760,7 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"';
         $lines[] = 'export JOBSEEKER_PYTHON_RUNTIME='.escapeshellarg($runtimeMode);
         $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
+        $lines[] = 'export PYTHONUNBUFFERED=1';
         $lines[] = 'export JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_SCRIPT_PATH")"';
         $lines[] = 'cd "$JOBSEEKER_SOURCE_DIR"';
         $lines[] = 'rm -rf "$JOBSEEKER_RUNTIME_LIBS"';
@@ -1790,7 +1785,7 @@ class JobCreation extends BaseController
             '  JOBSEEKER_USER_LIBS="/tmp/jobseeker-python-libs"',
             'fi',
             'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="/tmp/jobseeker-runtime-libs:$JOBSEEKER_USER_LIBS:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="/tmp/jobseeker-runtime-libs:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi',
-            'python "$JOBSEEKER_ENTRYPOINT" "$@"'
+            'python -u "$JOBSEEKER_ENTRYPOINT" "$@"'
           ));
 
           $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
@@ -1818,6 +1813,7 @@ class JobCreation extends BaseController
           $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
           $lines[] = '  --network host \\';
           $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
+          $lines[] = '  -e PYTHONUNBUFFERED \\';
           $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
           $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
@@ -1833,7 +1829,7 @@ class JobCreation extends BaseController
           $lines[] = '  JOBSEEKER_USER_LIBS="$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
           $lines[] = 'fi';
           $lines[] = 'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_USER_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi';
-          $lines[] = '"$JOBSEEKER_PYTHON" "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+          $lines[] = '"$JOBSEEKER_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
         }
 
         return implode("\n", $lines);
@@ -2730,12 +2726,6 @@ class JobCreation extends BaseController
                   }
 
                   if ($triggerAfterSave === '1') {
-                    $slotCheck = $this->checkJenkinsEnvironmentSlots($targetJobName, $environment);
-                    if (! $slotCheck['ok']) {
-                      $triggerFailures[] = $targetJobName.' ('.$slotCheck['message'].')';
-                      continue;
-                    }
-
                     $routingCheck = $this->ensureJenkinsJobEnvironmentAgentAssignment($targetJobName, $environment);
                     if (! $routingCheck['ok']) {
                       $triggerFailures[] = $targetJobName.' ('.$routingCheck['message'].')';
