@@ -9,7 +9,7 @@ RUN mkdir /var/jenkins_files/ && chown -R jenkins /var/jenkins_files
 
 # Install Python dependencies used by demo and ETL jobs.
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3-pip curl \
+	&& apt-get install -y --no-install-recommends python3-pip python3-venv curl \
 	&& rm -rf /var/lib/apt/lists/*
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY application/third_party/python/jobseeker_sdk /var/jenkins_files/jobseeker_sdk/
@@ -28,6 +28,5 @@ COPY docker/jenkins/plugins.txt /var/jenkins_files/
 RUN jenkins-plugin-cli --plugin-file /var/jenkins_files/plugins.txt
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 CMD curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1
-
 
 

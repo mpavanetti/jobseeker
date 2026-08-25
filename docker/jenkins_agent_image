@@ -5,7 +5,7 @@ FROM jenkins/inbound-agent:latest-jdk21
 USER root
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3-pip curl ca-certificates \
+	&& apt-get install -y --no-install-recommends python3-pip python3-venv curl ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
