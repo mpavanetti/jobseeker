@@ -160,7 +160,7 @@ class MariaDbTransport(TmfTransport):
         except ImportError as error:
             raise JobSeekerDependencyError(
                 "mysql-connector-python is required for direct JobSeeker TMF access. "
-                "Add it to requirements.txt or configure JOBSEEKER_API_URL when an API transport is available."
+                "Add it to pyproject.toml or requirements.txt, or configure JOBSEEKER_API_URL when an API transport is available."
             ) from error
 
         return mysql.connector
