@@ -868,6 +868,30 @@
     white-space: pre-wrap;
   }
 
+  .python-external-sync-status {
+    background: #252526;
+    border-top: 1px solid #333;
+    color: #858585;
+    display: none;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 18px;
+    padding: 7px 12px;
+    word-break: break-word;
+  }
+
+  .python-external-sync-status.active {
+    display: block;
+  }
+
+  .python-external-sync-status.is-error {
+    color: #f48771;
+  }
+
+  .python-external-sync-status.is-ready {
+    color: #89d185;
+  }
+
   .job-batch-tools {
     align-items: center;
     display: flex;
@@ -1298,6 +1322,32 @@
   .job-config-canvas #runlinuxCommand.python-inline-expanded .linux-code-editor textarea.form-control,
   .job-config-canvas #runlinuxCommand.python-inline-expanded .python-syntax-highlight {
     height: 100%;
+  }
+
+  body.python-inline-expanded-active {
+    overflow: hidden;
+  }
+
+  body.python-inline-expanded-active .job-config-canvas #runlinuxCommand.python-inline-expanded {
+    background: #ecf0f5;
+    bottom: 0;
+    left: 0;
+    margin: 0;
+    overflow: auto;
+    padding: 12px;
+    position: fixed;
+    right: 0;
+    top: 50px;
+    z-index: 1050;
+  }
+
+  body.python-inline-expanded-active .job-config-canvas #runlinuxCommand.python-inline-expanded .box {
+    margin-bottom: 0;
+    min-height: calc(100vh - 76px);
+  }
+
+  body.python-inline-expanded-active .job-config-canvas #runlinuxCommand.python-inline-expanded .python-inline-workspace {
+    min-height: calc(100vh - 240px);
   }
 
   @media (max-width: 600px) {
@@ -2221,6 +2271,7 @@
                               <div class="python-inline-tabs" role="tablist">
                                 <button type="button" class="python-inline-tab active" data-python-inline-pane="code"><i class="fa fa-code"></i> <span id="pythonInlineEditorFile">main.py</span><span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
                                 <button type="button" class="python-inline-tab" data-python-inline-pane="requirements"><i class="fa fa-list-alt"></i> requirements.txt<span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
+                                <button type="button" class="python-inline-tab" data-python-inline-pane="pyproject"><i class="fa fa-cogs"></i> pyproject.toml<span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
                                 <button type="button" class="python-inline-tab" data-python-inline-pane="dockerfile"><i class="fa fa-cube"></i> Dockerfile<span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
                                 <button type="button" class="python-inline-tab" data-python-inline-pane="extra" style="display: none;"><i class="fa fa-file-code-o"></i> <span id="pythonInlineExtraTabFile">lib.py</span><span class="python-inline-tab-close" title="Close tab"><i class="fa fa-times"></i></span></button>
                               </div>
@@ -2231,6 +2282,8 @@
                                   <span class="linux-code-editor-tab"><i class="fa fa-code"></i> <span id="pythonInlineEditorActiveFile">main.py</span></span>
                                   <span class="linux-code-editor-actions">
                                     <button type="button" class="btn btn-xs" id="runPythonInlinePreview" title="Run with Jenkins Python"><i class="fa fa-play"></i></button>
+                                    <button type="button" class="btn btn-xs" id="openPythonInlineInVscodeWeb" title="Open in VS Code Web"><i class="fa fa-code"></i></button>
+                                    <button type="button" class="btn btn-xs" id="expandPythonInlineEditor" title="Expand editor"><i class="fa fa-expand"></i></button>
                                     <button type="button" class="btn btn-xs" id="applyPythonInlineTemplate" title="Insert JobSeeker template"><i class="fa fa-magic"></i></button>
                                     <span class="linux-code-editor-meta">python</span>
                                   </span>
@@ -2244,6 +2297,7 @@
                                 </div>
                                 <div class="python-lint-panel" id="pythonInlineLintPanel" aria-live="polite"></div>
                                 <div class="python-preview-panel" id="pythonInlinePreviewPanel" aria-live="polite"></div>
+                                <div class="python-external-sync-status" id="pythonExternalSyncStatus" aria-live="polite"></div>
                                 <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
                               </div>
                               </div>
@@ -2258,6 +2312,19 @@
                                   <textarea class="form-control" id="pythonRequirementsText" name="pythonRequirementsText" maxlength="20000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="requests==2.32.3&#10;pandas==2.2.2"></textarea>
                                 </div>
                                 <div class="linux-code-editor-status"><span>Requirements</span><span>UTF-8</span><span>LF</span></div>
+                              </div>
+                              </div>
+                              <div class="python-inline-editor-panel" data-python-inline-pane="pyproject">
+                              <div class="linux-code-editor python-pyproject-editor">
+                                <div class="linux-code-editor-bar">
+                                  <span class="linux-code-editor-tab"><i class="fa fa-cogs"></i> pyproject.toml</span>
+                                  <span class="linux-code-editor-meta">poetry</span>
+                                </div>
+                                <div class="linux-code-editor-body">
+                                  <div class="linux-code-editor-lines" id="pythonPyprojectTextNumbers" aria-hidden="true">1</div>
+                                  <textarea class="form-control" id="pythonPyprojectText" name="pythonPyprojectText" maxlength="50000" autocomplete="off" rows="12" spellcheck="false" wrap="off" placeholder="[project]&#10;dependencies = [&#10;    &quot;requests==2.32.5&quot;,&#10;]"></textarea>
+                                </div>
+                                <div class="linux-code-editor-status"><span>pyproject.toml</span><span>UTF-8</span><span>LF</span></div>
                               </div>
                               </div>
                               <div class="python-inline-editor-panel" data-python-inline-pane="dockerfile">
@@ -2975,6 +3042,10 @@
         updatePythonRequirementsEditor();
       });
 
+      $('#pythonPyprojectText').on('input change scroll', function() {
+        updatePythonPyprojectEditor();
+      });
+
       $('#pythonDockerfileText').on('input change scroll', function() {
         updatePythonDockerfileEditor();
       });
@@ -2996,6 +3067,20 @@
 
       $('#runPythonInlinePreview').on('click', function() {
         runPythonInlinePreview();
+      });
+
+      $('#openPythonInlineInVscodeWeb').on('click', function() {
+        openPythonInlineInVscode();
+      });
+
+      $('#expandPythonInlineEditor').on('click', function() {
+        setPythonInlineExpanded(! pythonInlineExpanded);
+      });
+
+      $(document).on('keydown', function(event) {
+        if (event.which === 27 && pythonInlineExpanded) {
+          setPythonInlineExpanded(false);
+        }
       });
 
       $('.python-inline-tabs').on('click', '.python-inline-tab', function(event) {
@@ -3027,6 +3112,11 @@
       });
 
       $('#pythonRuntimeMode').on('change', function() {
+        if ($('#pythonRuntimeMode').val() == 'docker') {
+          ensurePythonPyprojectText();
+        } else {
+          stopPythonExternalSync(true);
+        }
         updatePythonSourceControls();
         updateJobCreationReview();
       });
@@ -3055,11 +3145,17 @@
       var availableJobsLoading = false;
       var availableJobEnvironmentRequests = {};
       var jobFlowSelectedNode = null;
-      var pythonInlineOpenPanes = { code: true, requirements: false, dockerfile: false, extra: false };
+      var pythonInlineOpenPanes = { code: true, requirements: false, pyproject: false, dockerfile: false, extra: false };
       var pythonInlineActivePane = 'code';
       var pythonInlineActiveExtraPath = '';
       var pythonInlineExtraFiles = [];
       var pythonInlineDirectories = [];
+      var pythonInlineExpanded = false;
+      var pythonExternalSyncTimer = null;
+      var pythonExternalSyncRequest = null;
+      var pythonExternalSyncSignature = '';
+      var pythonExternalSyncJobName = '';
+      var pythonExternalSyncEntryPoint = '';
       var environmentHelper = window.JobSeekerEnvironment || {
         detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName, fullName: jobName}); },
         detectFromJob: function(job) { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
@@ -3067,7 +3163,7 @@
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -4052,6 +4148,27 @@
         lineNumbers.scrollTop(editor.scrollTop());
       }
 
+      function updatePythonPyprojectEditor() {
+        var editor = $('#pythonPyprojectText');
+        var lineNumbers = $('#pythonPyprojectTextNumbers');
+
+        if (! editor.length || ! lineNumbers.length) {
+          return;
+        }
+
+        var value = editor.val() || '';
+        var minimumLines = parseInt(editor.attr('rows'), 10) || 1;
+        var lineCount = Math.max(value.split('\n').length, minimumLines);
+        var lines = [];
+
+        for (var index = 1; index <= lineCount; index++) {
+          lines.push(index);
+        }
+
+        lineNumbers.html(lines.join('<br>'));
+        lineNumbers.scrollTop(editor.scrollTop());
+      }
+
       function updatePythonDockerfileEditor() {
         var editor = $('#pythonDockerfileText');
         var lineNumbers = $('#pythonDockerfileTextNumbers');
@@ -4105,6 +4222,330 @@
         return pythonWorkspaceAllowsInlineCode() && $('#pythonRuntimeMode').val() == 'docker';
       }
 
+      function pythonInlineVscodeAvailable() {
+        return pythonInlineDockerfileAvailable();
+      }
+
+      function currentPythonInlineJobName() {
+        return $.trim($('#job_name').val() || '');
+      }
+
+      function tomlString(value) {
+        return '"' + String(value || '')
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/\t/g, '\\t') + '"';
+      }
+
+      function pythonInlineProjectName() {
+        var name = currentPythonInlineJobName().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        return name === '' ? 'jobseeker-inline-job' : 'jobseeker-inline-' + name;
+      }
+
+      function pythonRequirementsToPyprojectDependencies(requirementsText) {
+        var dependencies = [];
+        var seen = {};
+
+        $.each(String(requirementsText || '').split(/\r?\n/), function(index, line) {
+          var dependency = $.trim(line);
+          if (dependency === '' || dependency.charAt(0) === '#' || dependency.charAt(0) === '-') {
+            return;
+          }
+
+          if (! seen[dependency]) {
+            seen[dependency] = true;
+            dependencies.push(dependency);
+          }
+        });
+
+        return dependencies;
+      }
+
+      function defaultPythonPyprojectText(requirementsText) {
+        var lines = [
+          '[project]',
+          'name = ' + tomlString(pythonInlineProjectName()),
+          'version = "0.1.0"',
+          'description = "JobSeeker inline Python job"',
+          'requires-python = ">=3.10,<4.0"',
+          'dependencies = ['
+        ];
+
+        $.each(pythonRequirementsToPyprojectDependencies(requirementsText), function(index, dependency) {
+          lines.push('    ' + tomlString(dependency) + ',');
+        });
+
+        lines = lines.concat([
+          ']',
+          '',
+          '[tool.poetry]',
+          'package-mode = false',
+          '',
+          '[tool.ruff]',
+          'line-length = 100',
+          'target-version = "py310"',
+          '',
+          '[tool.ruff.lint]',
+          'select = ["E", "F", "I", "UP", "B"]',
+          '',
+          '[tool.mypy]',
+          'python_version = "3.10"',
+          'warn_unused_configs = true',
+          'check_untyped_defs = true',
+          'ignore_missing_imports = true',
+          ''
+        ]);
+
+        return lines.join('\n');
+      }
+
+      function ensurePythonPyprojectText() {
+        if ($.trim($('#pythonPyprojectText').val() || '') === '') {
+          $('#pythonPyprojectText').val(defaultPythonPyprojectText($('#pythonRequirementsText').val() || ''));
+          updatePythonPyprojectEditor();
+        }
+      }
+
+      function syncPythonInlineExpandedControls() {
+        var expanded = pythonInlineExpanded && $('#linuxCommand').is(':checked') && pythonWorkspaceAllowsInlineCode();
+        $('#runlinuxCommand').toggleClass('python-inline-expanded', expanded);
+        $('body').toggleClass('python-inline-expanded-active', expanded);
+        $('#expandPythonInlineEditor').attr('title', expanded ? 'Collapse editor' : 'Expand editor');
+        $('#expandPythonInlineEditor i')
+          .toggleClass('fa-expand', ! expanded)
+          .toggleClass('fa-compress', expanded);
+        setTimeout(function() {
+          updatePythonInlineEditor();
+          updatePythonRequirementsEditor();
+          updatePythonPyprojectEditor();
+          updatePythonDockerfileEditor();
+          updatePythonInlineExtraEditor();
+        }, 0);
+      }
+
+      function setPythonInlineExpanded(expanded) {
+        pythonInlineExpanded = !! expanded;
+        syncPythonInlineExpandedControls();
+      }
+
+      function pythonExternalSyncTime() {
+        if (typeof moment === 'function') {
+          return moment().format('h:mm:ss a');
+        }
+
+        return new Date().toLocaleTimeString();
+      }
+
+      function setPythonExternalSyncStatus(message, state) {
+        var status = $('#pythonExternalSyncStatus');
+        if (! status.length) {
+          return;
+        }
+
+        status
+          .toggleClass('active', !! message)
+          .toggleClass('is-error', state === 'error')
+          .toggleClass('is-ready', state === 'ready')
+          .text(message || '');
+      }
+
+      function stopPythonExternalSync(clearStatus) {
+        if (pythonExternalSyncTimer) {
+          clearInterval(pythonExternalSyncTimer);
+        }
+
+        if (pythonExternalSyncRequest && pythonExternalSyncRequest.abort) {
+          pythonExternalSyncRequest.abort();
+        }
+
+        pythonExternalSyncTimer = null;
+        pythonExternalSyncRequest = null;
+        pythonExternalSyncSignature = '';
+        pythonExternalSyncJobName = '';
+        pythonExternalSyncEntryPoint = '';
+
+        if (clearStatus) {
+          setPythonExternalSyncStatus('', '');
+        }
+      }
+
+      function currentPythonExternalPayload() {
+        syncPythonInlineFilesInput();
+        return {
+          job_name: currentPythonInlineJobName(),
+          entry_point: pythonInlineEntryPath(),
+          pythonInlineCode: $('#pythonInlineCode').val() || '',
+          pythonRequirementsText: $('#pythonRequirementsText').val() || '',
+          pythonPyprojectText: $('#pythonPyprojectText').val() || '',
+          pythonDockerfileText: $('#pythonDockerfileText').val() || '',
+          pythonInlineFilesJson: $('#pythonInlineFilesJson').val() || '{"files":[],"directories":[]}',
+          pythonRuntimeMode: $('#pythonRuntimeMode').val() || 'local',
+          pythonVersion: $('#pythonVersion').val() || 'python3',
+          pythonDockerImage: $('#pythonDockerImage').val() || ''
+        };
+      }
+
+      function applyPythonExternalSnapshot(response) {
+        if (! response || ! response.ok) {
+          return;
+        }
+
+        if (typeof response.sourceCode === 'string') {
+          $('#pythonInlineCode').val(response.sourceCode);
+        }
+        if (typeof response.requirementsText === 'string') {
+          $('#pythonRequirementsText').val(response.requirementsText);
+        }
+        if (typeof response.pyprojectText === 'string') {
+          $('#pythonPyprojectText').val(response.pyprojectText);
+        }
+        if (typeof response.dockerfileText === 'string') {
+          $('#pythonDockerfileText').val(response.dockerfileText);
+        }
+        if (response.files) {
+          loadPythonInlineFilesPayload(response.files);
+        }
+
+        updatePythonInlineEditor();
+        updatePythonRequirementsEditor();
+        updatePythonPyprojectEditor();
+        updatePythonDockerfileEditor();
+        updatePythonInlineExtraEditor();
+        updateJobCreationReview();
+      }
+
+      function pollPythonExternalSync(force) {
+        if (! pythonExternalSyncJobName || pythonExternalSyncRequest) {
+          return;
+        }
+
+        if (currentPythonInlineJobName() !== pythonExternalSyncJobName || pythonInlineEntryPath() !== pythonExternalSyncEntryPoint || ! pythonInlineVscodeAvailable()) {
+          stopPythonExternalSync(true);
+          return;
+        }
+
+        pythonExternalSyncRequest = $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalSnapshot',
+          dataType: 'json',
+          cache: false,
+          data: {
+            job_name: pythonExternalSyncJobName,
+            entry_point: pythonExternalSyncEntryPoint
+          }
+        }).done(function(response) {
+          if (! response || ! response.ok) {
+            return;
+          }
+
+          if (force || (response.signature && response.signature !== pythonExternalSyncSignature)) {
+            applyPythonExternalSnapshot(response);
+            pythonExternalSyncSignature = response.signature || '';
+            setPythonExternalSyncStatus('VS Code sync active. Last synced ' + pythonExternalSyncTime() + '.', 'ready');
+          }
+        }).fail(function(xhr, textStatus) {
+          if (textStatus === 'abort') {
+            return;
+          }
+
+          setPythonExternalSyncStatus(pythonInlinePreviewError(xhr, 'Unable to sync inline Python workspace from disk.'), 'error');
+        }).always(function() {
+          pythonExternalSyncRequest = null;
+        });
+      }
+
+      function startPythonExternalSync(response) {
+        stopPythonExternalSync(false);
+        pythonExternalSyncJobName = currentPythonInlineJobName();
+        pythonExternalSyncEntryPoint = pythonInlineEntryPath();
+        pythonExternalSyncSignature = response && response.signature ? response.signature : '';
+        pythonExternalSyncTimer = setInterval(function() {
+          pollPythonExternalSync(false);
+        }, 2500);
+        setPythonExternalSyncStatus('External editor sync active for ' + ((response && response.externalEditorPath) ? response.externalEditorPath : pythonExternalSyncJobName) + '.', 'ready');
+      }
+
+      function pythonExternalLaunchUrl(response) {
+        if (! response) {
+          return '';
+        }
+
+        if (response.openVsCodeUrl) {
+          return response.openVsCodeUrl;
+        }
+
+        if (response.launchUrls && response.launchUrls.web) {
+          return response.launchUrls.web;
+        }
+
+        return response.vscodeUrl || '';
+      }
+
+      function openPythonInlineInVscode() {
+
+        if (! pythonInlineVscodeAvailable()) {
+          toastr.warning('Select Inline Workspace with Docker Container runtime before opening Python in VS Code.', 'Inline Python');
+          return;
+        }
+
+        if (currentPythonInlineJobName() === '') {
+          toastr.warning('Enter a job name before opening the workspace in VS Code.', 'Inline Python');
+          return;
+        }
+
+        var button = $('#openPythonInlineInVscodeWeb');
+        var originalHtml = button.html();
+        ensurePythonPyprojectText();
+        var payload = currentPythonExternalPayload();
+        var webWindow = window.open('about:blank', '_blank');
+        payload.editor_mode = 'web';
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+        setPythonExternalSyncStatus('Preparing inline Python workspace...', '');
+
+        $.ajax({
+          type: 'POST',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalOpen',
+          dataType: 'json',
+          data: payload
+        }).done(function(response) {
+          if (! response || ! response.ok) {
+            var message = response && response.message ? response.message : 'Unable to prepare inline Python workspace.';
+            setPythonExternalSyncStatus(message, 'error');
+            toastr.error(message, 'Inline Python');
+            return;
+          }
+
+          applyPythonExternalSnapshot(response);
+          startPythonExternalSync(response);
+          var launchUrl = pythonExternalLaunchUrl(response);
+          if (launchUrl) {
+            if (webWindow) {
+              webWindow.location.href = launchUrl;
+            } else {
+              window.open(launchUrl, '_blank');
+            }
+            setPythonExternalSyncStatus('OpenVSCode Server opened for ' + (response.openVsCodePath || response.externalEditorPath || pythonExternalSyncJobName) + '.', 'ready');
+            toastr.info('Opening VS Code Web.', 'Inline Python');
+          } else {
+            if (webWindow) {
+              webWindow.close();
+            }
+            setPythonExternalSyncStatus('OpenVSCode Server URL was not returned.', 'error');
+            toastr.error('OpenVSCode Server URL was not returned.', 'Inline Python');
+          }
+        }).fail(function(xhr) {
+          if (webWindow) {
+            webWindow.close();
+          }
+
+          var message = pythonInlinePreviewError(xhr, 'Unable to prepare inline Python workspace.');
+          setPythonExternalSyncStatus(message, 'error');
+          toastr.error(message, 'Inline Python');
+        }).always(function() {
+          button.prop('disabled', false).html(originalHtml);
+        });
+      }
+
       function normalizePythonInlineWorkspacePath(path, requirePythonFile) {
         path = $.trim(String(path || '')).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         if (path === '') {
@@ -4121,7 +4562,7 @@
 
         var normalizedPath = segments.join('/');
         var lowerPath = normalizedPath.toLowerCase();
-        if (lowerPath === 'requirements.txt' || lowerPath === 'dockerfile' || lowerPath.indexOf('__pycache__/') !== -1 || lowerPath.indexOf('.jobseeker-python-libs/') !== -1) {
+        if (lowerPath === 'requirements.txt' || lowerPath === 'pyproject.toml' || lowerPath === 'poetry.lock' || lowerPath === 'dockerfile' || lowerPath.indexOf('__pycache__/') !== -1 || lowerPath.indexOf('.jobseeker-python-libs/') !== -1 || lowerPath.indexOf('.jobseeker-wheels/') !== -1) {
           return '';
         }
 
@@ -4225,7 +4666,9 @@
       }
 
       function resetPythonInlineWorkspaceState() {
-        pythonInlineOpenPanes = { code: true, requirements: false, dockerfile: false, extra: false };
+        stopPythonExternalSync(true);
+        setPythonInlineExpanded(false);
+        pythonInlineOpenPanes = { code: true, requirements: false, pyproject: false, dockerfile: false, extra: false };
         pythonInlineActivePane = 'code';
         pythonInlineActiveExtraPath = '';
         pythonInlineExtraFiles = [];
@@ -4236,8 +4679,16 @@
       }
 
       function pythonInlinePaneAvailable(pane) {
-        if (pane == 'code' || pane == 'requirements') {
+        if (pane == 'code') {
           return pythonWorkspaceAllowsInlineCode();
+        }
+
+        if (pane == 'requirements') {
+          return pythonWorkspaceAllowsInlineCode() && ! pythonInlineDockerfileAvailable();
+        }
+
+        if (pane == 'pyproject') {
+          return pythonInlineDockerfileAvailable();
         }
 
         if (pane == 'dockerfile') {
@@ -4260,6 +4711,10 @@
           return { pane: 'requirements', path: '' };
         }
 
+        if (pythonInlineOpenPanes.pyproject && pythonInlinePaneAvailable('pyproject')) {
+          return { pane: 'pyproject', path: '' };
+        }
+
         if (pythonInlineOpenPanes.dockerfile && pythonInlinePaneAvailable('dockerfile')) {
           return { pane: 'dockerfile', path: '' };
         }
@@ -4277,7 +4732,16 @@
 
         if (! isDocker) {
           pythonInlineOpenPanes.dockerfile = false;
+          pythonInlineOpenPanes.pyproject = false;
           if (pythonInlineActivePane == 'dockerfile') {
+            pythonInlineActivePane = '';
+          }
+          if (pythonInlineActivePane == 'pyproject') {
+            pythonInlineActivePane = '';
+          }
+        } else {
+          pythonInlineOpenPanes.requirements = false;
+          if (pythonInlineActivePane == 'requirements') {
             pythonInlineActivePane = '';
           }
         }
@@ -4285,6 +4749,7 @@
         if (! isInline) {
           pythonInlineOpenPanes.code = false;
           pythonInlineOpenPanes.requirements = false;
+          pythonInlineOpenPanes.pyproject = false;
           pythonInlineOpenPanes.extra = false;
           pythonInlineActivePane = '';
         }
@@ -4296,23 +4761,30 @@
         }
 
         $('.python-inline-sidebar-actions').toggle(isInline);
+        $('#runPythonInlinePreview').toggle(isInline && ! isDocker);
+        $('#expandPythonInlineEditor').toggle(isInline);
+        $('#openPythonInlineInVscodeWeb').toggle(isDocker);
+        syncPythonInlineExpandedControls();
         $('.python-inline-tab[data-python-inline-pane="code"]').toggle(isInline && pythonInlineOpenPanes.code);
-        $('.python-inline-tab[data-python-inline-pane="requirements"]').toggle(isInline && pythonInlineOpenPanes.requirements);
+        $('.python-inline-tab[data-python-inline-pane="requirements"]').toggle(isInline && ! isDocker && pythonInlineOpenPanes.requirements);
+        $('.python-inline-tab[data-python-inline-pane="pyproject"]').toggle(isDocker && pythonInlineOpenPanes.pyproject);
         $('.python-inline-tab[data-python-inline-pane="dockerfile"]').toggle(isDocker && pythonInlineOpenPanes.dockerfile);
         $('.python-inline-tab[data-python-inline-pane="extra"]').toggle(isInline && pythonInlineOpenPanes.extra && pythonInlineActiveExtraPath !== '');
 
         $('.python-inline-tab').removeClass('active').filter('[data-python-inline-pane="' + pythonInlineActivePane + '"]').addClass('active');
         $('.python-inline-editor-panel').removeClass('active').filter('[data-python-inline-pane="' + pythonInlineActivePane + '"]').addClass('active');
         $('#pythonInlineEmptyState').toggleClass('active', pythonInlineActivePane === '');
-        $('#runPythonInlinePreview').toggle(isInline);
+        $('#runPythonInlinePreview').toggle(isInline && ! isDocker);
 
         var rows = [];
         if (isInline) {
           rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'code' ? ' active' : '') + '" data-python-inline-pane="code"><i class="fa fa-code"></i><span>' + escapeHtml(pythonInlineEntryPath()) + '</span></button></div>');
-          rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'requirements' ? ' active' : '') + '" data-python-inline-pane="requirements"><i class="fa fa-list-alt"></i><span>requirements.txt</span></button></div>');
 
           if (isDocker) {
+            rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'pyproject' ? ' active' : '') + '" data-python-inline-pane="pyproject"><i class="fa fa-cogs"></i><span>pyproject.toml</span></button></div>');
             rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'dockerfile' ? ' active' : '') + '" data-python-inline-pane="dockerfile"><i class="fa fa-cube"></i><span>Dockerfile</span></button></div>');
+          } else {
+            rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'requirements' ? ' active' : '') + '" data-python-inline-pane="requirements"><i class="fa fa-list-alt"></i><span>requirements.txt</span></button></div>');
           }
 
           $.each(pythonInlineDirectories, function(index, directory) {
@@ -4327,6 +4799,7 @@
         $('#pythonInlineFileList').html(rows.join(''));
         updatePythonInlineEditor();
         updatePythonRequirementsEditor();
+        updatePythonPyprojectEditor();
         updatePythonDockerfileEditor();
         updatePythonInlineExtraEditor();
       }
@@ -4334,7 +4807,7 @@
       function setPythonInlinePane(pane) {
         var extraPath = arguments.length > 1 ? arguments[1] : '';
         captureActivePythonInlineExtraFile();
-        pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'requirements' ? 'requirements' : 'code'));
+        pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'pyproject' ? 'pyproject' : (pane == 'requirements' ? 'requirements' : 'code')));
 
         if (pane == 'extra') {
           extraPath = normalizePythonInlineWorkspacePath(extraPath, true);
@@ -4356,7 +4829,10 @@
 
         renderPythonInlineWorkspace();
 
-        if (pane == 'requirements') {
+        if (pane == 'pyproject') {
+          ensurePythonPyprojectText();
+          $('#pythonPyprojectText').trigger('focus');
+        } else if (pane == 'requirements') {
           $('#pythonRequirementsText').trigger('focus');
         } else if (pane == 'dockerfile') {
           $('#pythonDockerfileText').trigger('focus');
@@ -4369,7 +4845,7 @@
 
       function closePythonInlinePane(pane) {
         captureActivePythonInlineExtraFile();
-        pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'requirements' ? 'requirements' : 'code'));
+        pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'pyproject' ? 'pyproject' : (pane == 'requirements' ? 'requirements' : 'code')));
         pythonInlineOpenPanes[pane] = false;
 
         if (pythonInlineActivePane == pane) {
@@ -4523,6 +4999,11 @@
 
         if (isDockerRuntime) {
           updatePythonDockerImageFromVersion();
+          if (pythonWorkspaceAllowsInlineCode()) {
+            ensurePythonPyprojectText();
+          }
+        } else {
+          stopPythonExternalSync(true);
         }
       }
 
@@ -4535,12 +5016,15 @@
       }
 
       function loadInlinePythonSource(jobName, entryPoint) {
+        stopPythonExternalSync(true);
         $('#pythonInlineCode').val('');
         $('#pythonRequirementsText').val('');
+        $('#pythonPyprojectText').val('');
         $('#pythonDockerfileText').val('');
         loadPythonInlineFilesPayload({ files: [], directories: [] });
         updatePythonInlineEditor();
         updatePythonRequirementsEditor();
+        updatePythonPyprojectEditor();
         updatePythonDockerfileEditor();
 
         var requestData = {
@@ -4573,6 +5057,20 @@
         }).fail(function() {
           $('#pythonRequirementsText').val('');
           updatePythonRequirementsEditor();
+        });
+
+        $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonPyproject',
+          data: requestData,
+          dataType: 'text'
+        }).done(function(pyprojectText) {
+          $('#pythonPyprojectText').val(pyprojectText);
+          updatePythonPyprojectEditor();
+          updateJobCreationReview();
+        }).fail(function() {
+          $('#pythonPyprojectText').val('');
+          updatePythonPyprojectEditor();
         });
 
         $.ajax({
@@ -4629,6 +5127,11 @@
       function runPythonInlinePreview() {
         if (! pythonWorkspaceAllowsInlineCode()) {
           toastr.warning('Select Inline Workspace before running the Python preview.', 'Inline Python');
+          return;
+        }
+
+        if (pythonInlineDockerfileAvailable()) {
+          toastr.warning('The Jenkins Python preview uses requirements.txt. Use VS Code Web or trigger the Docker job to run pyproject.toml dependencies.', 'Inline Python');
           return;
         }
 
@@ -4787,6 +5290,7 @@
           pythonRepositoryBranch: '',
           pythonInlineCode: '',
           pythonRequirementsText: '',
+          pythonPyprojectText: '',
           pythonDockerfileText: '',
           pythonInlineFilesJson: '{"files":[],"directories":[]}',
           pythonRuntimeMode: 'local',
@@ -5172,15 +5676,16 @@
           $('#' + field).val(normalizeArray(normalizedDraft[field])).trigger('change.select2');
         });
 
-          updateLinuxCommandEditor();
-          updatePythonInlineEditor();
-          updatePythonRequirementsEditor();
-          loadPythonInlineFilesFromHidden();
-          updatePythonRuntimeControls();
-          renderPythonInlineWorkspace();
-          if (pythonWorkspaceAllowsInlineCode()) {
-            setPythonInlinePane('code');
-          }
+        updateLinuxCommandEditor();
+        updatePythonInlineEditor();
+        updatePythonRequirementsEditor();
+        updatePythonPyprojectEditor();
+        loadPythonInlineFilesFromHidden();
+        updatePythonRuntimeControls();
+        renderPythonInlineWorkspace();
+        if (pythonWorkspaceAllowsInlineCode()) {
+          setPythonInlinePane('code');
+        }
         updateDraftNamesTextarea();
         $('input[name="optionsRadios"][value="' + (normalizedDraft.optionsRadios || '1') + '"]').prop('checked', true);
         refreshJobOptionPanels();
@@ -5506,7 +6011,12 @@
         $('.pythonPathSourceForm').toggle(isPythonScript && sourceMode == 'path');
         $('.pythonGitSourceForm').toggle(isPythonScript && sourceMode == 'git');
         $('.pythonInlineSourceForm').toggle(isInlinePythonExecution);
-        $('#runlinuxCommand').toggleClass('python-inline-expanded', $('#linuxCommand').is(':checked') && isInlinePythonExecution);
+        if (! $('#linuxCommand').is(':checked') || ! isInlinePythonExecution) {
+          stopPythonExternalSync(true);
+          setPythonInlineExpanded(false);
+        } else {
+          syncPythonInlineExpandedControls();
+        }
         $('#pythonWorkspaceLabel').text('Inline Python Workspace');
 
         if (isInlinePythonExecution && $.trim($('#pythonEntryPoint').val()) === '') {
@@ -5515,6 +6025,7 @@
 
         updatePythonInlineEditor();
         updatePythonRequirementsEditor();
+        updatePythonPyprojectEditor();
         updatePythonDockerfileEditor();
         updatePythonRuntimeControls();
         renderPythonInlineWorkspace();
@@ -6056,6 +6567,7 @@
       $('#pythonRuntimeMode').val('local');
       $('#pythonVersion').val('python3');
       $('#pythonDockerImage').val('');
+      $('#pythonPyprojectText').val('');
       $('#pythonDockerfileText').val('');
       $('#pythonInlineFilesJson').val('{"files":[],"directories":[]}');
       $('.singleForm, .repetitive, .tags, .customCronForm, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm, #enableEmail, #abortIfStuck, #runJob, #editableEmail').hide();
@@ -6066,6 +6578,7 @@
       resetPythonInlineWorkspaceState();
       updatePythonInlineEditor();
       updatePythonRequirementsEditor();
+      updatePythonPyprojectEditor();
       updatePythonDockerfileEditor();
       updatePythonRuntimeControls();
       refreshJobOptionPanels();
@@ -6255,6 +6768,7 @@
       var pythonExecutable = shellExportValue(command, 'JOBSEEKER_PYTHON');
       var dockerImage = shellExportValue(command, 'JOBSEEKER_DOCKER_IMAGE');
       var requirementsText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_REQUIREMENTS_B64');
+      var pyprojectText = shellExportBase64Value(command, 'JOBSEEKER_PYPROJECT_B64');
       var dockerfileText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_DOCKERFILE_B64');
       var isDockerRuntime = runtimeMode == 'docker';
 
@@ -6268,7 +6782,15 @@
         $('#pythonDockerImage').val(dockerImage);
       }
 
-      if (requirementsText !== '') {
+      if (pyprojectText !== '') {
+        $('#pythonPyprojectText').val(pyprojectText);
+        updatePythonPyprojectEditor();
+      } else if (isDockerRuntime && requirementsText !== '') {
+        $('#pythonPyprojectText').val(defaultPythonPyprojectText(requirementsText));
+        updatePythonPyprojectEditor();
+      }
+
+      if (! isDockerRuntime && requirementsText !== '') {
         $('#pythonRequirementsText').val(requirementsText);
         updatePythonRequirementsEditor();
       }
@@ -7110,4 +7632,3 @@ $(document).on('click', '.inspectJenkinsJob', function() {
 });
 
 </script>
-

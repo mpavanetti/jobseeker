@@ -944,6 +944,16 @@ class JobCreation extends BaseController
         return $requirementsText;
       }
 
+      private function cleanPythonPyprojectText($pyprojectText) {
+        $pyprojectText = str_replace(array("\r\n", "\r"), "\n", (string) $pyprojectText);
+
+        if (strlen($pyprojectText) > 50000 || strpos($pyprojectText, "\0") !== FALSE) {
+          return FALSE;
+        }
+
+        return $pyprojectText;
+      }
+
       private function cleanPythonDockerfileText($dockerfileText) {
         $dockerfileText = str_replace(array("\r\n", "\r"), "\n", (string) $dockerfileText);
 
@@ -963,11 +973,11 @@ class JobCreation extends BaseController
         $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', $safePath);
         $lowerPath = strtolower($relativePath);
 
-        if ($lowerPath === 'requirements.txt' || $lowerPath === 'dockerfile') {
+        if ($lowerPath === 'requirements.txt' || $lowerPath === 'pyproject.toml' || $lowerPath === 'poetry.lock' || $lowerPath === 'dockerfile') {
           return FALSE;
         }
 
-        if (strpos($lowerPath, '__pycache__/') !== FALSE || strpos($lowerPath, '.jobseeker-python-libs/') !== FALSE) {
+        if (strpos($lowerPath, '__pycache__/') !== FALSE || strpos($lowerPath, '.jobseeker-python-libs/') !== FALSE || strpos($lowerPath, '.jobseeker-wheels/') !== FALSE) {
           return FALSE;
         }
 
@@ -1328,7 +1338,7 @@ class JobCreation extends BaseController
         return TRUE;
       }
 
-      private function resolveInlinePythonExecution($repositoryRoot, $jobName, $entryPoint, $sourceCode, $requirementsText = NULL, $dockerfileText = NULL, $inlineFiles = NULL) {
+      private function resolveInlinePythonExecution($repositoryRoot, $jobName, $entryPoint, $sourceCode, $requirementsText = NULL, $dockerfileText = NULL, $inlineFiles = NULL, $pyprojectText = NULL) {
         $entryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPoint, TRUE);
         if ($entryPoint === FALSE) {
           return FALSE;
@@ -1350,6 +1360,13 @@ class JobCreation extends BaseController
         if ($requirementsText !== NULL) {
           $requirementsText = $this->cleanPythonRequirementsText($requirementsText);
           if ($requirementsText === FALSE) {
+            return FALSE;
+          }
+        }
+
+        if ($pyprojectText !== NULL) {
+          $pyprojectText = $this->cleanPythonPyprojectText($pyprojectText);
+          if ($pyprojectText === FALSE) {
             return FALSE;
           }
         }
@@ -1389,6 +1406,14 @@ class JobCreation extends BaseController
           }
         }
 
+        $pyprojectPath = $jobDirectory.DIRECTORY_SEPARATOR.'pyproject.toml';
+        if ($pyprojectText !== NULL) {
+          $pyprojectText = trim($pyprojectText) === '' ? $this->defaultInlinePythonPyproject($jobName, $requirementsText) : $pyprojectText;
+          if (! $this->ensureDirectory($jobDirectory) || file_put_contents($pyprojectPath, $pyprojectText, LOCK_EX) === FALSE) {
+            return FALSE;
+          }
+        }
+
         if ($inlineFiles !== NULL && ! $this->syncInlinePythonFiles($jobDirectory, $entryPoint, $inlineFiles)) {
           return FALSE;
         }
@@ -1398,8 +1423,406 @@ class JobCreation extends BaseController
           'sourceDirectory' => $jobDirectory,
           'scriptPath' => $scriptPath,
           'requirementsPath' => $requirementsPath,
+          'pyprojectPath' => $pyprojectPath,
           'dockerfilePath' => $dockerfilePath
         );
+      }
+
+      private function inlinePythonRepositoryRoot() {
+        $jenkinsHome = $this->global['jenkins_home'];
+        return ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+      }
+
+      private function inlinePythonWorkspaceSnapshot($pythonExecution, $entryPoint) {
+        $sourceCode = is_readable($pythonExecution['scriptPath']) ? file_get_contents($pythonExecution['scriptPath']) : '';
+        $requirementsText = is_readable($pythonExecution['requirementsPath']) ? file_get_contents($pythonExecution['requirementsPath']) : '';
+        $pyprojectPath = isset($pythonExecution['pyprojectPath']) ? $pythonExecution['pyprojectPath'] : rtrim($pythonExecution['sourceDirectory'], '/\\').DIRECTORY_SEPARATOR.'pyproject.toml';
+        $pyprojectText = is_readable($pyprojectPath) ? file_get_contents($pyprojectPath) : '';
+        $dockerfileText = is_readable($pythonExecution['dockerfilePath']) ? file_get_contents($pythonExecution['dockerfilePath']) : '';
+        $files = array();
+        $directories = array();
+
+        $this->collectInlinePythonWorkspaceFiles($pythonExecution['sourceDirectory'], $pythonExecution['sourceDirectory'], $entryPoint, $files, $directories, TRUE);
+
+        sort($directories);
+        usort($files, function($left, $right) {
+          return strcmp($left['path'], $right['path']);
+        });
+
+        $signaturePayload = array(
+          'sourceCode' => $sourceCode,
+          'requirementsText' => $requirementsText,
+          'pyprojectText' => $pyprojectText,
+          'dockerfileText' => $dockerfileText,
+          'files' => $files,
+          'directories' => $directories
+        );
+
+        return array(
+          'sourceCode' => $sourceCode,
+          'requirementsText' => $requirementsText,
+          'pyprojectText' => $pyprojectText,
+          'dockerfileText' => $dockerfileText,
+          'files' => array('files' => $files, 'directories' => $directories),
+          'signature' => hash('sha256', json_encode($signaturePayload)),
+          'workspacePath' => $pythonExecution['sourceDirectory'],
+          'entryPath' => $pythonExecution['scriptPath'],
+          'requirementsPath' => $pythonExecution['requirementsPath'],
+          'pyprojectPath' => $pyprojectPath,
+          'dockerfilePath' => $pythonExecution['dockerfilePath']
+        );
+      }
+
+      private function openVsCodeWorkspaceRoot() {
+        $workspaceRoot = trim((string) getenv('JOBSEEKER_OPENVSCODE_WORKSPACE'));
+        if ($workspaceRoot === '') {
+          $workspaceRoot = '/home/workspace';
+        }
+
+        return rtrim(str_replace('\\', '/', $workspaceRoot), '/');
+      }
+
+      private function openVsCodeWorkspacePath($path) {
+        $repositoryRoot = rtrim(str_replace('\\', '/', $this->inlinePythonRepositoryRoot()), '/').'/';
+        $normalizedPath = str_replace('\\', '/', $path);
+        if (strpos($normalizedPath, $repositoryRoot) !== 0) {
+          return '';
+        }
+
+        $relativePath = ltrim(substr($normalizedPath, strlen($repositoryRoot)), '/');
+        return $this->openVsCodeWorkspaceRoot().'/repository/'.$relativePath;
+      }
+
+      private function openVsCodePublicUrl() {
+        $publicUrl = trim((string) getenv('JOBSEEKER_OPENVSCODE_PUBLIC_URL'));
+        if ($publicUrl !== '') {
+          return rtrim($publicUrl, '/');
+        }
+
+        $port = trim((string) getenv('JOBSEEKER_OPENVSCODE_PORT'));
+        if ($port === '') {
+          $port = '3000';
+        }
+
+        $protocol = 'http';
+        if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+          $protocol = 'https';
+        }
+
+        if (! empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+          $forwardedProtocols = explode(',', $_SERVER['HTTP_X_FORWARDED_PROTO']);
+          $forwardedProtocol = strtolower(trim($forwardedProtocols[0]));
+          if (in_array($forwardedProtocol, array('http', 'https'), TRUE)) {
+            $protocol = $forwardedProtocol;
+          }
+        }
+
+        $host = isset($_SERVER['HTTP_HOST']) ? trim((string) $_SERVER['HTTP_HOST']) : 'localhost';
+        if (! empty($_SERVER['HTTP_X_FORWARDED_HOST'])) {
+          $forwardedHosts = explode(',', $_SERVER['HTTP_X_FORWARDED_HOST']);
+          $host = trim($forwardedHosts[0]);
+        }
+
+        if (strpos($host, '[') === 0 && strpos($host, ']') !== FALSE) {
+          $hostName = substr($host, 0, strpos($host, ']') + 1);
+        } else {
+          $hostName = explode(':', $host, 2)[0];
+        }
+
+        if ($hostName === '') {
+          $hostName = 'localhost';
+        }
+
+        $defaultPort = $protocol === 'https' ? '443' : '80';
+        $portSuffix = $port === $defaultPort ? '' : ':'.$port;
+        return $protocol.'://'.$hostName.$portSuffix;
+      }
+
+      private function openVsCodeLaunchUrl($folderPath) {
+        $folderPath = trim((string) $folderPath);
+        if ($folderPath === '') {
+          return '';
+        }
+
+        $params = array();
+        $token = trim((string) getenv('JOBSEEKER_OPENVSCODE_TOKEN'));
+        if ($token !== '') {
+          $params['tkn'] = $token;
+        }
+        $params['folder'] = $folderPath;
+
+        return $this->openVsCodePublicUrl().'/?'.http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+      }
+
+      private function writeInlinePythonProjectFile($baseDirectory, $relativePath, $content, &$projectFiles, $overwrite = FALSE) {
+        $targetPath = rtrim($baseDirectory, '/\\').DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        if (! $this->pathWithinBase($targetPath, $baseDirectory) || ! $this->ensureDirectory(dirname($targetPath))) {
+          return FALSE;
+        }
+
+        if (! $overwrite && is_file($targetPath)) {
+          $projectFiles[] = $relativePath;
+          return TRUE;
+        }
+
+        if (file_put_contents($targetPath, $content, LOCK_EX) === FALSE) {
+          return FALSE;
+        }
+
+        $projectFiles[] = $relativePath;
+        return TRUE;
+      }
+
+      private function inlinePythonMergedGitignore($baseDirectory, $requiredEntries) {
+        $gitignorePath = rtrim($baseDirectory, '/\\').DIRECTORY_SEPARATOR.'.gitignore';
+        $existing = is_readable($gitignorePath) ? str_replace(array("\r\n", "\r"), "\n", file_get_contents($gitignorePath)) : '';
+        $seen = array();
+
+        foreach (explode("\n", $existing) as $line) {
+          $line = trim($line);
+          if ($line !== '') {
+            $seen[$line] = TRUE;
+          }
+        }
+
+        $merged = rtrim($existing, "\n");
+        foreach ($requiredEntries as $entry) {
+          if (! isset($seen[$entry])) {
+            $merged .= ($merged === '' ? '' : "\n").$entry;
+          }
+        }
+
+        return rtrim($merged, "\n")."\n";
+      }
+
+      private function tomlBasicString($value) {
+        $value = str_replace(
+          array('\\', '"', chr(8), "\t", "\n", chr(12), "\r"),
+          array('\\\\', '\\"', '\\b', '\\t', '\\n', '\\f', '\\r'),
+          (string) $value
+        );
+
+        return '"'.$value.'"';
+      }
+
+      private function inlinePythonProjectName($jobName) {
+        $projectName = strtolower(trim((string) $jobName));
+        $projectName = preg_replace('/[^a-z0-9]+/', '-', $projectName);
+        $projectName = trim($projectName, '-');
+
+        return $projectName === '' ? 'jobseeker-inline-job' : 'jobseeker-inline-'.$projectName;
+      }
+
+      private function pythonRequirementsToPyprojectDependencies($requirementsText) {
+        $dependencies = array();
+        $seen = array();
+        $lines = preg_split('/\n/', str_replace(array("\r\n", "\r"), "\n", (string) $requirementsText));
+
+        foreach ($lines as $line) {
+          $dependency = trim($line);
+          if ($dependency === '' || strpos($dependency, '#') === 0 || strpos($dependency, '-') === 0) {
+            continue;
+          }
+
+          if (isset($seen[$dependency])) {
+            continue;
+          }
+
+          $seen[$dependency] = TRUE;
+          $dependencies[] = $dependency;
+        }
+
+        return $dependencies;
+      }
+
+      private function defaultInlinePythonPyproject($jobName, $requirementsText = '') {
+        $dependencies = $this->pythonRequirementsToPyprojectDependencies($requirementsText);
+        $dependencyLines = array();
+
+        foreach ($dependencies as $dependency) {
+          $dependencyLines[] = '    '.$this->tomlBasicString($dependency).',';
+        }
+
+        return implode("\n", array_merge(array(
+          '[project]',
+          'name = '.$this->tomlBasicString($this->inlinePythonProjectName($jobName)),
+          'version = "0.1.0"',
+          'description = "JobSeeker inline Python job"',
+          'requires-python = ">=3.10,<4.0"',
+          'dependencies = ['
+        ), $dependencyLines, array(
+          ']',
+          '',
+          '[tool.poetry]',
+          'package-mode = false',
+          '',
+          '[tool.ruff]',
+          'line-length = 100',
+          'target-version = "py310"',
+          '',
+          '[tool.ruff.lint]',
+          'select = ["E", "F", "I", "UP", "B"]',
+          '',
+          '[tool.mypy]',
+          'python_version = "3.10"',
+          'warn_unused_configs = true',
+          'check_untyped_defs = true',
+          'ignore_missing_imports = true',
+          ''
+        )));
+      }
+
+      private function defaultInlinePythonDockerfile($dockerImage) {
+        $dockerImage = trim((string) $dockerImage) === '' ? 'python:3-slim' : trim((string) $dockerImage);
+        return implode("\n", array(
+          'FROM '.$dockerImage,
+          'WORKDIR /app',
+          'ENV POETRY_VIRTUALENVS_CREATE=false',
+          'COPY pyproject.toml ./',
+          'RUN python -m pip install --no-cache-dir --upgrade pip poetry && if [ -s pyproject.toml ]; then poetry install --only main --no-root --no-interaction --no-ansi; fi',
+          'COPY . .',
+          ''
+        ));
+      }
+
+      private function ensureInlinePythonProjectFiles($pythonExecution, $runtimeOptions) {
+        $projectFiles = array();
+        $baseDirectory = $pythonExecution['sourceDirectory'];
+        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'python:3-slim';
+        $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
+        if (trim($pyprojectText) === '' && ! empty($pythonExecution['pyprojectPath']) && is_readable($pythonExecution['pyprojectPath'])) {
+          $pyprojectText = file_get_contents($pythonExecution['pyprojectPath']);
+        }
+        if (trim($pyprojectText) === '') {
+          $existingRequirementsText = is_readable($pythonExecution['requirementsPath']) ? file_get_contents($pythonExecution['requirementsPath']) : '';
+          $pyprojectText = $this->defaultInlinePythonPyproject(basename($baseDirectory), $existingRequirementsText);
+        }
+        $settings = array(
+          'python.defaultInterpreterPath' => '${workspaceFolder}/.venv/bin/python',
+          'python.languageServer' => 'Jedi',
+          'python.terminal.activateEnvironment' => TRUE,
+          'python-envs.defaultEnvManager' => 'ms-python.python:venv',
+          'python-envs.defaultPackageManager' => 'ms-python.python:pip',
+          'python-envs.workspaceSearchPaths' => array('./.venv'),
+          'python.analysis.extraPaths' => array('.', '../../lib/jobseeker-sdk/src'),
+          'python.analysis.typeCheckingMode' => 'basic',
+          'ruff.lint.run' => 'onType',
+          'ruff.nativeServer' => 'on',
+          'editor.formatOnSave' => TRUE,
+          '[python]' => array(
+            'editor.defaultFormatter' => 'charliermarsh.ruff',
+            'editor.codeActionsOnSave' => array(
+              'source.fixAll.ruff' => 'explicit',
+              'source.organizeImports.ruff' => 'explicit'
+            )
+          )
+        );
+        $extensions = array(
+          'recommendations' => array(
+            'ms-python.python',
+            'ms-python.vscode-python-envs',
+            'charliermarsh.ruff',
+            'ms-python.mypy-type-checker'
+          )
+        );
+        $bootstrapScript = implode("\n", array(
+          '#!/bin/sh',
+          'set -eu',
+          'export POETRY_VIRTUALENVS_CREATE=false',
+          'if ! command -v python3 >/dev/null 2>&1; then',
+          '  echo "python3 is not installed in the OpenVSCode container." >&2',
+          '  exit 127',
+          'fi',
+          'if [ ! -x ".venv/bin/python" ]; then',
+          '  python3 -m venv .venv',
+          '  . .venv/bin/activate',
+          '  python -m pip install --upgrade pip setuptools wheel',
+          'else',
+          '  . .venv/bin/activate',
+          'fi',
+          'if [ -d "../../lib/jobseeker-sdk" ]; then',
+          '  rm -rf .jobseeker-wheels',
+          '  mkdir -p .jobseeker-wheels',
+          '  python -m pip wheel --quiet --wheel-dir .jobseeker-wheels "../../lib/jobseeker-sdk"',
+          '  python -m pip install --quiet --force-reinstall .jobseeker-wheels/*.whl',
+          'fi',
+          'if [ -s "pyproject.toml" ]; then',
+          '  poetry install --only main --no-root --no-interaction --no-ansi',
+          'fi',
+          'python -c "import sys; print(sys.executable)"',
+          'python -c "import jobseeker; print(jobseeker.__file__)"',
+          ''
+        ));
+        $tasks = array(
+          'version' => '2.0.0',
+          'tasks' => array(
+            array(
+              'label' => 'JobSeeker: setup Python environment',
+              'type' => 'shell',
+              'command' => 'sh .vscode/bootstrap-python.sh',
+              'runOptions' => array('runOn' => 'folderOpen'),
+              'presentation' => array(
+                'reveal' => 'silent',
+                'panel' => 'dedicated',
+                'showReuseMessage' => FALSE
+              ),
+              'problemMatcher' => array()
+            ),
+            array(
+              'label' => 'JobSeeker: ruff check',
+              'type' => 'shell',
+              'command' => '. .venv/bin/activate && ruff check .',
+              'problemMatcher' => array()
+            ),
+            array(
+              'label' => 'JobSeeker: mypy',
+              'type' => 'shell',
+              'command' => '. .venv/bin/activate && mypy .',
+              'problemMatcher' => array()
+            )
+          )
+        );
+        $gitignore = $this->inlinePythonMergedGitignore($baseDirectory, array(
+          '.venv/',
+          '.jobseeker-wheels/',
+          '__pycache__/',
+          '*.py[cod]',
+          '.mypy_cache/',
+          '.ruff_cache/',
+          '.pytest_cache/',
+          'poetry.lock'
+        ));
+        $workspace = array(
+          'folders' => array(array('path' => '.')),
+          'settings' => new stdClass()
+        );
+        $legacyRequirementsPath = $baseDirectory.DIRECTORY_SEPARATOR.'requirements.txt';
+        $legacyDevRequirementsPath = $baseDirectory.DIRECTORY_SEPARATOR.'requirements-dev.txt';
+        if (is_file($legacyRequirementsPath)) {
+          @unlink($legacyRequirementsPath);
+        }
+        if (is_file($legacyDevRequirementsPath) && trim((string) file_get_contents($legacyDevRequirementsPath)) === "ruff\nmypy") {
+          @unlink($legacyDevRequirementsPath);
+        }
+
+        $writes = array(
+          array('Dockerfile', $this->defaultInlinePythonDockerfile($dockerImage), FALSE),
+          array('pyproject.toml', $pyprojectText, TRUE),
+          array('jobseeker-inline.code-workspace', json_encode($workspace, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", TRUE),
+          array('.gitignore', $gitignore, TRUE),
+          array('.vscode/bootstrap-python.sh', $bootstrapScript, TRUE),
+          array('.vscode/settings.json', json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", TRUE),
+          array('.vscode/extensions.json', json_encode($extensions, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", TRUE),
+          array('.vscode/tasks.json', json_encode($tasks, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", TRUE)
+        );
+
+        foreach ($writes as $write) {
+          if (! $this->writeInlinePythonProjectFile($baseDirectory, $write[0], $write[1], $projectFiles, $write[2])) {
+            return FALSE;
+          }
+        }
+
+        return array_values(array_unique($projectFiles));
       }
 
       private function resolvePathPythonExecution($repositoryRoot, $sourcePath, $entryPoint) {
@@ -1544,6 +1967,42 @@ class JobCreation extends BaseController
         echo is_readable($pythonExecution['requirementsPath']) ? file_get_contents($pythonExecution['requirementsPath']) : '';
       }
 
+      public function inlinePythonPyproject() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          echo 'Access denied.';
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->get('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->output->set_status_header(400);
+          echo $cleanJobName['message'];
+          return;
+        }
+
+        $entryPoint = $this->input->get('entry_point');
+        $cleanEntryPoint = trim((string) $entryPoint) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPoint, TRUE);
+        if ($cleanEntryPoint === FALSE) {
+          $this->output->set_status_header(400);
+          echo 'Invalid inline Python entry file.';
+          return;
+        }
+
+        $jenkinsHome = $this->global['jenkins_home'];
+        $repositoryRoot = ($jenkinsHome === '' || $jenkinsHome === NULL) ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+        $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $cleanJobName['name'], $cleanEntryPoint, '');
+
+        if ($pythonExecution === FALSE) {
+          $this->output->set_status_header(404);
+          echo 'Inline Python source was not found.';
+          return;
+        }
+
+        $this->output->set_content_type('text/plain', 'utf-8');
+        echo is_readable($pythonExecution['pyprojectPath']) ? file_get_contents($pythonExecution['pyprojectPath']) : '';
+      }
+
       public function inlinePythonDockerfile() {
         if (! $this->canManageJobs()) {
           $this->output->set_status_header(403);
@@ -1616,6 +2075,155 @@ class JobCreation extends BaseController
 
         $this->output->set_content_type('application/json', 'utf-8');
         echo json_encode(array('files' => $files, 'directories' => $directories));
+      }
+
+      public function inlinePythonExternalOpen() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+
+        if (strtoupper((string) $this->input->method(TRUE)) !== 'POST') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Use POST to open an inline Python workspace externally.'), 405);
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->post('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $cleanJobName['message']), 400);
+          return;
+        }
+
+        $entryPointRaw = $this->input->post('entry_point');
+        $entryPoint = trim((string) $entryPointRaw) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPointRaw, TRUE);
+        if ($entryPoint === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Invalid inline Python entry file.'), 400);
+          return;
+        }
+
+        $sourceCode = str_replace(array("\r\n", "\r"), "\n", (string) $this->input->post('pythonInlineCode'));
+        if (strlen($sourceCode) > 50000 || strpos($sourceCode, "\0") !== FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your inline Python source is too large or contains invalid characters.'), 400);
+          return;
+        }
+
+        if ($sourceCode === '') {
+          $sourceCode = "\n";
+        }
+
+        $requirementsText = $this->cleanPythonRequirementsText($this->input->post('pythonRequirementsText'));
+        if ($requirementsText === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your Python requirements.txt content is too large or contains invalid characters.'), 400);
+          return;
+        }
+
+        $pyprojectText = $this->cleanPythonPyprojectText($this->input->post('pythonPyprojectText'));
+        if ($pyprojectText === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your pyproject.toml content is too large or contains invalid characters.'), 400);
+          return;
+        }
+
+        $dockerfileText = $this->cleanPythonDockerfileText($this->input->post('pythonDockerfileText'));
+        if ($dockerfileText === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your Dockerfile content is too large or contains invalid characters.'), 400);
+          return;
+        }
+
+        $pythonRuntimeMode = $this->selectedPythonRuntimeMode($this->input->post('pythonRuntimeMode'));
+        if ($pythonRuntimeMode !== 'docker') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'OpenVSCode workspaces are available for Docker Container inline Python jobs only.'), 400);
+          return;
+        }
+
+        $pythonExecutable = $this->cleanPythonExecutable($this->input->post('pythonVersion'));
+        if ($pythonExecutable === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Please select a valid Python version.'), 400);
+          return;
+        }
+
+        $pythonDockerImage = $this->cleanPythonDockerImage($this->input->post('pythonDockerImage'), $pythonExecutable);
+        if ($pythonDockerImage === FALSE) {
+          $pythonDockerImage = $this->cleanPythonDockerImage('', $pythonExecutable);
+        }
+
+        $inlineFiles = $this->cleanPythonInlineFilesJson($this->input->post('pythonInlineFilesJson'), $entryPoint);
+        if ($inlineFiles === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your inline Python workspace contains invalid file paths or too much content.'), 400);
+          return;
+        }
+
+        if (trim($pyprojectText) === '') {
+          $pyprojectText = $this->defaultInlinePythonPyproject($cleanJobName['name'], $requirementsText);
+        }
+
+        $pythonExecution = $this->resolveInlinePythonExecution($this->inlinePythonRepositoryRoot(), $cleanJobName['name'], $entryPoint, $sourceCode, '', $dockerfileText, $inlineFiles, $pyprojectText);
+        if ($pythonExecution === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'JobSeeker could not prepare the inline Python workspace.'), 400);
+          return;
+        }
+
+        $runtimeOptions = array(
+          'mode' => $pythonRuntimeMode,
+          'pythonExecutable' => $pythonExecutable,
+          'dockerImage' => $pythonDockerImage,
+          'pyprojectText' => $pyprojectText
+        );
+        $projectFiles = $this->ensureInlinePythonProjectFiles($pythonExecution, $runtimeOptions);
+        if ($projectFiles === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'JobSeeker could not prepare VS Code project files for this workspace.'), 500);
+          return;
+        }
+
+        $openVsCodePath = $this->openVsCodeWorkspacePath($pythonExecution['sourceDirectory']);
+        $openVsCodeEntryPath = $this->openVsCodeWorkspacePath($pythonExecution['scriptPath']);
+        $openVsCodeUrl = $this->openVsCodeLaunchUrl($openVsCodePath);
+        if ($openVsCodeUrl === '') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'OpenVSCode Server workspace path could not be resolved.'), 500);
+          return;
+        }
+
+        $snapshot = $this->inlinePythonWorkspaceSnapshot($pythonExecution, $entryPoint);
+        $snapshot['ok'] = TRUE;
+        $snapshot['editorMode'] = 'web';
+        $snapshot['externalEditorPath'] = $openVsCodePath;
+        $snapshot['externalEntryPath'] = $openVsCodeEntryPath;
+        $snapshot['openVsCodePath'] = $openVsCodePath;
+        $snapshot['openVsCodeUrl'] = $openVsCodeUrl;
+        $snapshot['launchUrls'] = array('web' => $openVsCodeUrl);
+        $snapshot['vscodeUrl'] = $openVsCodeUrl;
+        $snapshot['projectFiles'] = $projectFiles;
+        $snapshot['message'] = 'Inline Python workspace is ready in OpenVSCode Server.';
+        $this->jsonJobCreationResponse($snapshot);
+      }
+
+      public function inlinePythonExternalSnapshot() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+
+        $cleanJobName = $this->cleanSubmittedJobName($this->input->get('job_name'));
+        if (! $cleanJobName['ok']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $cleanJobName['message']), 400);
+          return;
+        }
+
+        $entryPointRaw = $this->input->get('entry_point');
+        $entryPoint = trim((string) $entryPointRaw) === '' ? 'main.py' : $this->cleanPythonEntryPoint($entryPointRaw, TRUE);
+        if ($entryPoint === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Invalid inline Python entry file.'), 400);
+          return;
+        }
+
+        $pythonExecution = $this->resolveInlinePythonExecution($this->inlinePythonRepositoryRoot(), $cleanJobName['name'], $entryPoint, '');
+        if ($pythonExecution === FALSE || ! is_readable($pythonExecution['scriptPath'])) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Inline Python workspace was not found.'), 404);
+          return;
+        }
+
+        $snapshot = $this->inlinePythonWorkspaceSnapshot($pythonExecution, $entryPoint);
+        $snapshot['ok'] = TRUE;
+        $this->jsonJobCreationResponse($snapshot);
       }
 
       public function availableJobs() {
@@ -1735,6 +2343,7 @@ class JobCreation extends BaseController
         $pythonExecutable = isset($runtimeOptions['pythonExecutable']) ? $runtimeOptions['pythonExecutable'] : 'python3';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'python:3-slim';
         $requirementsText = isset($runtimeOptions['requirementsText']) ? (string) $runtimeOptions['requirementsText'] : '';
+        $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
         $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $lines = array('set -e');
 
@@ -1758,6 +2367,7 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_PYTHON_LIB='.escapeshellarg($pythonLibraryPath);
         $lines[] = 'export JOBSEEKER_PYTHON_SDK="$JOBSEEKER_PYTHON_LIB/jobseeker-sdk"';
         $lines[] = 'export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"';
+        $lines[] = 'export JOBSEEKER_VENV="$WORKSPACE/.jobseeker-python-venv"';
         $lines[] = 'export JOBSEEKER_PYTHON_RUNTIME='.escapeshellarg($runtimeMode);
         $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
         $lines[] = 'export PYTHONUNBUFFERED=1';
@@ -1775,11 +2385,17 @@ class JobCreation extends BaseController
             'JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_ENTRYPOINT")"',
             'rm -rf /tmp/jobseeker-runtime-libs',
             'PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-runtime-libs /tmp/jobseeker-context/jobseeker-sdk',
+            'JOBSEEKER_PROJECT_DIR=""',
             'JOBSEEKER_REQUIREMENTS=""',
             'JOBSEEKER_USER_LIBS=""',
+            'if [ -f "/tmp/jobseeker-context/source/pyproject.toml" ]; then JOBSEEKER_PROJECT_DIR="/tmp/jobseeker-context/source"; fi',
+            'if [ -f "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/pyproject.toml" ]; then JOBSEEKER_PROJECT_DIR="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR"; fi',
             'if [ -f "/tmp/jobseeker-context/source/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/requirements.txt"; fi',
             'if [ -f "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi',
-            'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then',
+            'if [ -n "$JOBSEEKER_PROJECT_DIR" ]; then',
+            '  PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check poetry',
+            '  (cd "$JOBSEEKER_PROJECT_DIR" && POETRY_VIRTUALENVS_CREATE=false poetry install --only main --no-root --no-interaction --no-ansi)',
+            'elif [ -n "$JOBSEEKER_REQUIREMENTS" ]; then',
             '  rm -rf /tmp/jobseeker-python-libs',
             '  PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-python-libs -r "$JOBSEEKER_REQUIREMENTS"',
             '  JOBSEEKER_USER_LIBS="/tmp/jobseeker-python-libs"',
@@ -1791,6 +2407,9 @@ class JobCreation extends BaseController
           $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
           if (trim($requirementsText) !== '') {
             $lines[] = 'export JOBSEEKER_PYTHON_REQUIREMENTS_B64='.escapeshellarg(base64_encode($requirementsText));
+          }
+          if (trim($pyprojectText) !== '') {
+            $lines[] = 'export JOBSEEKER_PYPROJECT_B64='.escapeshellarg(base64_encode($pyprojectText));
           }
           if (trim($dockerfileText) !== '') {
             $lines[] = 'export JOBSEEKER_PYTHON_DOCKERFILE_B64='.escapeshellarg(base64_encode($dockerfileText));
@@ -1804,6 +2423,7 @@ class JobCreation extends BaseController
           $lines[] = 'cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"';
           $lines[] = 'JOBSEEKER_DOCKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_DOCKER_ENTRYPOINT")"';
           $lines[] = 'if [ -n "${JOBSEEKER_PYTHON_REQUIREMENTS_B64:-}" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR"; printf "%s" "$JOBSEEKER_PYTHON_REQUIREMENTS_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt"; fi';
+          $lines[] = 'if [ -n "${JOBSEEKER_PYPROJECT_B64:-}" ]; then printf "%s" "$JOBSEEKER_PYPROJECT_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml"; rm -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt" "$JOBSEEKER_DOCKER_CONTEXT/source/poetry.lock" "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/poetry.lock"; fi';
           $lines[] = 'if [ -n "${JOBSEEKER_PYTHON_DOCKERFILE_B64:-}" ]; then printf "%s" "$JOBSEEKER_PYTHON_DOCKERFILE_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
           $lines[] = 'JOBSEEKER_DOCKERFILE=""';
           $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
@@ -1820,16 +2440,21 @@ class JobCreation extends BaseController
           $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
         } else {
           $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
-          $lines[] = 'JOBSEEKER_USER_LIBS=""';
           $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
           $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
           $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
-          $lines[] = '  rm -rf "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
-          $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs" -r "$JOBSEEKER_REQUIREMENTS"';
-          $lines[] = '  JOBSEEKER_USER_LIBS="$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
+          $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
+          $lines[] = '  "$JOBSEEKER_PYTHON" -m venv "$JOBSEEKER_VENV" || { echo "Unable to create Python virtual environment. Install python3-venv on this Jenkins agent or switch this job to Docker runtime."; exit 127; }';
+          $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_VENV/bin/python"';
+          $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check "$JOBSEEKER_PYTHON_SDK"';
+          $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check -r "$JOBSEEKER_REQUIREMENTS"';
+          $lines[] = '  export PYTHONPATH="$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
+          $lines[] = 'else';
+          $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_PYTHON"';
+          $lines[] = '  rm -rf "$JOBSEEKER_VENV"';
+          $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'fi';
-          $lines[] = 'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_USER_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi';
-          $lines[] = '"$JOBSEEKER_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+          $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
         }
 
         return implode("\n", $lines);
@@ -2027,6 +2652,7 @@ class JobCreation extends BaseController
                 $pythonEntryPointRaw = $this->input->post('pythonEntryPoint');
                 $pythonInlineCode = $this->input->post('pythonInlineCode');
                 $pythonRequirementsText = $this->cleanPythonRequirementsText($this->input->post('pythonRequirementsText'));
+                $pythonPyprojectText = $this->cleanPythonPyprojectText($this->input->post('pythonPyprojectText'));
                 $pythonDockerfileText = $this->cleanPythonDockerfileText($this->input->post('pythonDockerfileText'));
                 $pythonInlineFiles = NULL;
                 $pythonRuntimeMode = $this->selectedPythonRuntimeMode($this->input->post('pythonRuntimeMode'));
@@ -2046,6 +2672,11 @@ class JobCreation extends BaseController
 
                 if ($pythonRequirementsText === FALSE) {
                   $this->session->set_flashdata('error', 'Your Python requirements.txt content is too large or contains invalid characters.');
+                  redirect('JobCreation');
+                }
+
+                if ($pythonPyprojectText === FALSE) {
+                  $this->session->set_flashdata('error', 'Your pyproject.toml content is too large or contains invalid characters.');
                   redirect('JobCreation');
                 }
 
@@ -2073,7 +2704,8 @@ class JobCreation extends BaseController
                   'mode' => $pythonRuntimeMode,
                   'pythonExecutable' => $pythonExecutable,
                   'dockerImage' => $pythonDockerImage,
-                  'requirementsText' => $usesInlinePythonSource ? $pythonRequirementsText : '',
+                  'requirementsText' => ($usesInlinePythonSource && $pythonRuntimeMode !== 'docker') ? $pythonRequirementsText : '',
+                  'pyprojectText' => ($usesInlinePythonSource && $pythonRuntimeMode === 'docker') ? $pythonPyprojectText : '',
                   'dockerfileText' => ($usesInlinePythonSource && $pythonRuntimeMode === 'docker') ? $pythonDockerfileText : ''
                 );
 
@@ -2093,6 +2725,13 @@ class JobCreation extends BaseController
                   redirect('JobCreation');
                 }
 
+                if ($usesInlinePythonSource && $pythonRuntimeMode === 'docker' && trim((string) $pythonPyprojectText) === '') {
+                  $pythonPyprojectText = $this->defaultInlinePythonPyproject($job_name, $pythonRequirementsText);
+                  $pythonRuntimeOptions['pyprojectText'] = $pythonPyprojectText;
+                }
+
+                $pythonRequirementsTextForInlineSave = $pythonRuntimeMode === 'docker' ? '' : $pythonRequirementsText;
+                $pythonPyprojectTextForInlineSave = $pythonRuntimeMode === 'docker' ? $pythonPyprojectText : NULL;
                 $pythonDockerfileTextForInlineSave = $pythonRuntimeMode === 'docker' ? $pythonDockerfileText : NULL;
 
                 if ($usesInlinePythonSource) {
@@ -2205,7 +2844,7 @@ class JobCreation extends BaseController
                           } else if ($pythonSourceMode === 'git') {
                             $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw);
                           } else if ($pythonSourceMode === 'inline') {
-                            $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsText, $pythonDockerfileTextForInlineSave, $pythonInlineFiles);
+                            $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsTextForInlineSave, $pythonDockerfileTextForInlineSave, $pythonInlineFiles, $pythonPyprojectTextForInlineSave);
                           } else {
                             $pythonExecution = $this->resolveUploadedPythonExecution($repositoryRoot, $job_name, $pythonEntryPoint);
                           }
@@ -2218,7 +2857,7 @@ class JobCreation extends BaseController
                 } else if ($linuxExecutionStrategy == 'python_inline'){
 
                   $repositoryRoot = rtrim($storeFolder, '/\\');
-                  $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsText, $pythonDockerfileTextForInlineSave, $pythonInlineFiles);
+                  $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsTextForInlineSave, $pythonDockerfileTextForInlineSave, $pythonInlineFiles, $pythonPyprojectTextForInlineSave);
 
                   if ($pythonExecution === FALSE) {
                    $this->session->set_flashdata('error', 'JobSeeker could not resolve the inline Python source. Check the entry file and code.');
