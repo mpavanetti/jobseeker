@@ -140,6 +140,16 @@ services:
     networks:
       - internal
 
+  openvscode-data-init:
+    image: alpine:3.20
+    profiles:
+      - openvscode
+    command: sh -lc "mkdir -p /openvscode/data /openvscode/python && chown -R 1000:1000 /openvscode/data /openvscode/python"
+    volumes:
+      - openvscode-server-data:/openvscode
+    networks:
+      - internal
+
   openvscode:
     profiles:
       - openvscode
@@ -148,6 +158,9 @@ services:
       dockerfile: docker/openvscode_image
     image: jobseeker-openvscode:local
     init: true
+    depends_on:
+      openvscode-data-init:
+        condition: service_completed_successfully
     entrypoint:
       - /bin/sh
       - -lc
@@ -157,13 +170,29 @@ services:
       - /home/workspace/repository
     environment:
       - JOBSEEKER_OPENVSCODE_TOKEN=${JOBSEEKER_OPENVSCODE_TOKEN:-jobseeker-local-vscode}
+      - UV_PYTHON_INSTALL_DIR=/home/workspace/.openvscode-server/python
     ports:
       - "${JOBSEEKER_OPENVSCODE_HOST:-127.0.0.1}:${JOBSEEKER_OPENVSCODE_PORT:-3000}:3000"
     volumes:
       - ./repository:/home/workspace/repository
-      - openvscode-server-data:/home/workspace/.openvscode-server
+      - type: volume
+        source: openvscode-server-data
+        target: /home/workspace/.openvscode-server/data
+        volume:
+          subpath: data
+      - type: volume
+        source: openvscode-server-data
+        target: /home/workspace/.openvscode-server/python
+        volume:
+          subpath: python
     networks:
       - internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null \"http://127.0.0.1:3000/?tkn=$${JOBSEEKER_OPENVSCODE_TOKEN}\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   docker-runtime:
     image: docker:27-dind

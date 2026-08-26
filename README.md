@@ -207,6 +207,22 @@ docker compose run --rm assets
 
 Generated runtime cache files under `application/cache`, including job creation timestamps and promotion rollback checkpoints, are local artifacts and are ignored by Git.
 
+### Inline Python workspace
+
+Docker inline Python jobs can be opened as full projects in the bundled OpenVSCode Server. The workspace includes pinned Python, Poetry, uv, Ruff, mypy, BasedPyright, pytest/coverage, and debugpy tooling, plus Git/SSH and native build tools for packages that compile extensions. The selected stable Python minor is installed on demand and reused, while project dependencies are isolated in `.venv`.
+
+Generated workspaces include `pyproject.toml`, `poetry.lock`, `.dockerignore`, pytest configuration and a smoke test, Ruff/mypy configuration, launch profiles, and VS Code tasks for setup, checks, tests, and coverage. The bootstrap task recreates an incompatible or prerelease virtual environment and installs the complete development dependency group. The lock file and editor/Docker project files are durable and participate in environment promotion; virtual environments and caches do not.
+
+The generated Dockerfile installs locked runtime dependencies at image-build time, runs the job as an unprivileged user, and marks the image so Jenkins does not resolve the same dependencies again when the container starts. Custom Dockerfiles retain the runtime fallback; a custom image that already installs its project dependencies can opt out of that fallback with `JOBSEEKER_DEPENDENCIES_PREINSTALLED=1`.
+
+Start or rebuild the editor with:
+
+```bash
+docker compose --profile openvscode up -d --build openvscode
+```
+
+The default Compose configuration binds the editor to localhost and protects it with `OPENVSCODE_SERVER_TOKEN`. Use a strong token and an HTTPS reverse proxy before exposing it beyond the local machine.
+
 ## Environment Promotion
 
 The Context Settings menu contains projects, environments, context variables, and the Environment Promotion workbench.
