@@ -692,7 +692,7 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
       if ($artifactSnapshot['existed']) {
         $backupRelativePath = 'artifacts/'.count($bundle['artifacts']);
         $backupPath = $rollbackDirectory.DIRECTORY_SEPARATOR.$backupRelativePath;
-        if (! $this->copyDirectoryTree($targetPath, $backupPath)) {
+        if (! $this->copyDirectoryTree($targetPath, $backupPath, TRUE)) {
           return array('ok' => FALSE, 'message' => 'Promotion failed. Artifact folder '.$artifact['target'].' could not be backed up for rollback.');
         }
         $artifactSnapshot['backup_path'] = $backupRelativePath;
@@ -1287,7 +1287,7 @@ private function copyPromotionArtifacts($sourceJobName, $targetJobName, $overwri
       continue;
     }
 
-    if (! $this->copyDirectoryTree($sourcePath, $targetPath)) {
+    if (! $this->copyDirectoryTree($sourcePath, $targetPath, TRUE)) {
       $result['errors'][] = $location['label'].' could not be copied.';
       continue;
     }
@@ -1308,7 +1308,33 @@ private function promotionRepositoryRoot() {
   return FCPATH.'repository';
 }
 
-private function copyDirectoryTree($sourcePath, $targetPath) {
+private function isTransientPromotionArtifactPath($relativePath) {
+  $relativePath = trim(str_replace('\\', '/', (string) $relativePath), '/');
+  if ($relativePath === '') {
+    return FALSE;
+  }
+
+  $transientDirectories = array(
+    '.venv',
+    '.uv-cache',
+    '.jobseeker-wheels',
+    '.jobseeker-python-libs',
+    '__pycache__',
+    '.mypy_cache',
+    '.ruff_cache',
+    '.pytest_cache'
+  );
+
+  foreach (explode('/', strtolower($relativePath)) as $segment) {
+    if (in_array($segment, $transientDirectories, TRUE)) {
+      return TRUE;
+    }
+  }
+
+  return preg_match('/\\.py[co]$/i', $relativePath) === 1;
+}
+
+private function copyDirectoryTree($sourcePath, $targetPath, $excludeTransientPythonFiles = FALSE) {
   if (! $this->ensureDirectory($targetPath)) {
     return FALSE;
   }
@@ -1317,11 +1343,15 @@ private function copyDirectoryTree($sourcePath, $targetPath) {
   $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
 
   foreach ($iterator as $item) {
+    $relativePath = substr($item->getPathname(), strlen($sourcePath) + 1);
+    if ($excludeTransientPythonFiles && $this->isTransientPromotionArtifactPath($relativePath)) {
+      continue;
+    }
+
     if ($item->isLink()) {
       return FALSE;
     }
 
-    $relativePath = substr($item->getPathname(), strlen($sourcePath) + 1);
     $targetItemPath = $targetPath.DIRECTORY_SEPARATOR.$relativePath;
 
     if ($item->isDir()) {

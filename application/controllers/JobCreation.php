@@ -2460,7 +2460,7 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_PYTHON_LIB='.escapeshellarg($pythonLibraryPath);
         $lines[] = 'export JOBSEEKER_PYTHON_SDK="$JOBSEEKER_PYTHON_LIB/jobseeker-sdk"';
         $lines[] = 'export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"';
-        $lines[] = 'export JOBSEEKER_VENV="$WORKSPACE/.jobseeker-python-venv"';
+        $lines[] = 'export JOBSEEKER_VENV="$WORKSPACE/.venv"';
         $lines[] = 'export JOBSEEKER_PYTHON_RUNTIME='.escapeshellarg($runtimeMode);
         $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
         $lines[] = 'export PYTHONUNBUFFERED=1';
@@ -2538,6 +2538,7 @@ class JobCreation extends BaseController
           $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
           $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
           $lines[] = '  "$JOBSEEKER_PYTHON" -m venv "$JOBSEEKER_VENV" || { echo "Unable to create Python virtual environment. Install python3-venv on this Jenkins agent or switch this job to Docker runtime."; exit 127; }';
+          $lines[] = '  trap \'rm -rf "$JOBSEEKER_VENV"\' EXIT';
           $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_VENV/bin/python"';
           $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check "$JOBSEEKER_PYTHON_SDK"';
           $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check -r "$JOBSEEKER_REQUIREMENTS"';
