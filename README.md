@@ -213,6 +213,10 @@ The Context Settings menu contains projects, environments, context variables, an
 
 Environment promotion is Jenkins-job based: JobSeeker reads the source job configuration, detects its current environment, rewrites environment-bound parameters and downstream links for the target environment, optionally promotes dependencies and context variables, and can copy matching artifact folders. Preview mode shows the planned job, context, artifact, and rollback impact before writing changes.
 
+Inline Python promotion copies durable workspace content, including Docker and `.vscode` project files, while leaving behind disposable local environments and tool caches such as `.venv`, `.uv-cache`, and Python cache directories. The promoted workspace recreates those files when it is opened or run.
+
+The Jenkins-agent inline Python preview creates `$WORKSPACE/.venv` only when `requirements.txt` contains dependencies, installs the job requirements there, runs with that interpreter, and removes the virtual environment when the run exits.
+
 Jobs created through JobSeeker now require a runtime environment. Existing Jenkins jobs without a detectable environment remain visible as `Unknown` so older jobs can still be listed, inspected, filtered, and cleaned up safely. Use the top-bar environment selector to keep job lists, run/view/delete filters, TMF queries, and new job creation focused on the same environment.
 
 ## Demo Data
