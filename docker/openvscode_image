@@ -52,10 +52,6 @@ RUN set -eux; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \
-		--install-extension ms-python.vscode-python-envs@1.10.0; \
-	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
-		--extensions-dir /home/workspace/.openvscode-server/extensions \
-		--user-data-dir /home/workspace/.openvscode-server/data \
 		--install-extension ms-python.debugpy@2026.6.0; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
@@ -68,4 +64,8 @@ RUN set -eux; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \
-		--install-extension detachhead.basedpyright@1.39.10
+		--install-extension detachhead.basedpyright@1.39.10; \
+	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
+		--extensions-dir /home/workspace/.openvscode-server/extensions \
+		--user-data-dir /home/workspace/.openvscode-server/data \
+		--uninstall-extension ms-python.vscode-python-envs

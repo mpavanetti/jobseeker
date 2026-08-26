@@ -908,7 +908,15 @@ pre {
     }
 
     function showLog(jobName, buildNumber, result, date, environment, output) {
-      $('#addLog').html('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="120px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr><tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[#' + escapeHtml(buildNumber) + ']</b></td></tr><tr><td>Environment</td><td>' + escapeHtml(environment || 'Unknown') + '</td></tr><tr><td>Status</td><td>' + escapeHtml(result || 'No result') + '</td></tr><tr><td>Console Log</td><td><pre>' + escapeHtml(output || 'Console output is empty for this build.') + '</pre></td></tr></tbody></table></div>');
+      var consoleOutput = output || 'Console output is empty for this build.';
+      $('#addLog').html('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="120px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr><tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[#' + escapeHtml(buildNumber) + ']</b></td></tr><tr><td>Environment</td><td>' + escapeHtml(environment || 'Unknown') + '</td></tr><tr><td>Status</td><td>' + escapeHtml(result || 'No result') + '</td></tr><tr><td>Console Log</td><td><div id="fullJobConsoleLog"></div></td></tr></tbody></table></div>');
+
+      if (window.JobSeekerConsole) {
+        window.JobSeekerConsole.setText('#fullJobConsoleLog', consoleOutput, {live: String(result).toUpperCase() === 'RUNNING'});
+      } else {
+        $('#fullJobConsoleLog').text(consoleOutput);
+      }
+
       $('#modal-default').modal('show');
     }
 

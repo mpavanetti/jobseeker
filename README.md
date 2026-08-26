@@ -213,7 +213,9 @@ Docker inline Python jobs can be opened as full projects in the bundled OpenVSCo
 
 Generated workspaces include `pyproject.toml`, `poetry.lock`, `.dockerignore`, pytest configuration and a smoke test, Ruff/mypy configuration, launch profiles, and VS Code tasks for setup, checks, tests, and coverage. The bootstrap task recreates an incompatible or prerelease virtual environment and installs the complete development dependency group. The lock file and editor/Docker project files are durable and participate in environment promotion; virtual environments and caches do not.
 
-The generated Dockerfile installs locked runtime dependencies at image-build time, runs the job as an unprivileged user, and marks the image so Jenkins does not resolve the same dependencies again when the container starts. Custom Dockerfiles retain the runtime fallback; a custom image that already installs its project dependencies can opt out of that fallback with `JOBSEEKER_DEPENDENCIES_PREINSTALLED=1`.
+The generated Dockerfile installs locked project and test dependencies at image-build time, runs the job as an unprivileged user, and marks the image so Jenkins does not resolve the same dependencies again when the container starts. Custom Dockerfiles retain the runtime fallback; a custom image that already installs its project dependencies can opt out of that fallback with `JOBSEEKER_DEPENDENCIES_PREINSTALLED=1`.
+
+Docker Python jobs enable **Run pytest before Python execution** by default. Jenkins discovers `test_*.py` and `*_test.py`, runs pytest as a blocking gate, and presents **Python tests** and **Python execution** as separate console sections. A failed test prevents the entry point from starting. The setting is stored per job and can be disabled when a deployment should run without tests; projects with no discovered tests continue normally.
 
 Start or rebuild the editor with:
 
@@ -229,7 +231,7 @@ The Context Settings menu contains projects, environments, context variables, an
 
 Environment promotion is Jenkins-job based: JobSeeker reads the source job configuration, detects its current environment, rewrites environment-bound parameters and downstream links for the target environment, optionally promotes dependencies and context variables, and can copy matching artifact folders. Preview mode shows the planned job, context, artifact, and rollback impact before writing changes.
 
-Inline Python promotion copies durable workspace content, including Docker and `.vscode` project files, while leaving behind disposable local environments and tool caches such as `.venv`, `.uv-cache`, and Python cache directories. The promoted workspace recreates those files when it is opened or run.
+Inline Python promotion copies durable workspace content, including `poetry.lock`, Docker files, `.env.example`, tests, and `.vscode` project files. It leaves behind disposable local environments, tool caches, `.env` secrets, coverage reports, and build output. The promoted workspace recreates the required environments and caches when it is opened or run.
 
 The Jenkins-agent inline Python preview creates `$WORKSPACE/.venv` only when `requirements.txt` contains dependencies, installs the job requirements there, runs with that interpreter, and removes the virtual environment when the run exits.
 

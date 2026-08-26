@@ -15,6 +15,14 @@ class JenkinsProxy extends BaseController
         $method = $this->input->method(TRUE);
 
         if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE)) {
+            if ($this->role != ROLE_ADMIN && $this->role != ROLE_MANAGER) {
+                $this->output
+                    ->set_status_header(403)
+                    ->set_content_type('text/plain')
+                    ->set_output('Access denied. Jenkins mutations require a job-management role.');
+                return;
+            }
+
             $tokenName = $this->security->get_csrf_token_name();
             $token = $this->input->get($tokenName);
 

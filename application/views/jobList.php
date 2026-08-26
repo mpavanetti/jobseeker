@@ -156,6 +156,42 @@ pre {
 .monitor-environment-filter .input-group-addon {
   width: auto;
 }
+
+.job-bulk-toolbar {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce4ec;
+  border-radius: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 9px 10px;
+}
+
+.job-bulk-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.job-bulk-hint {
+  color: #777;
+  font-size: 12px;
+}
+
+.job-select-cell {
+  min-width: 42px;
+  text-align: center;
+  width: 42px;
+}
+
+.job-select-cell input {
+  cursor: pointer;
+  margin: 0;
+}
 </style>
 
 <!-- Content Wrapper. Contains page content -->
@@ -290,10 +326,22 @@ pre {
       </div>
       <!-- /.box-header -->
       <div class="box-body">
+        <div class="job-bulk-toolbar">
+          <div class="job-bulk-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="triggerSelectedJobs" disabled>
+              <i class="fa fa-play"></i> Trigger Selected <span class="badge" id="selectedJobBuildCount">0</span>
+            </button>
+            <button type="button" class="btn btn-default btn-sm" id="clearSelectedJobs" disabled>
+              <i class="fa fa-eraser"></i> Clear Selection
+            </button>
+          </div>
+          <span class="job-bulk-hint">Use the first column to select jobs. Selections persist while paging and filtering.</span>
+        </div>
         <div class="table-responsive">
         <table id="listTable" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
             <tr>
+              <th class="job-select-cell"><input type="checkbox" class="job-select-visible" aria-label="Select all triggerable jobs on this page" title="Select all triggerable jobs on this page"></th>
               <th>Health</th>
               <th>State</th>
               <th>Job Name</th>
@@ -319,6 +367,7 @@ pre {
           </tbody>
           <tfoot>
            <tr>
+              <th class="job-select-cell">Select</th>
               <th>Health</th>
               <th>State</th>
               <th>Job Name</th>
@@ -473,6 +522,8 @@ pre {
   var jobListLoadInProgress = false;
   var jobScheduleCache = {};
   var jobScheduleRequests = {};
+  var selectedJobBuilds = {};
+  var bulkTriggerInProgress = false;
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
   var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
   var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
@@ -546,6 +597,191 @@ pre {
 
       return $.Deferred().rejectWith(this, arguments).promise();
     });
+  }
+
+  function jobNameForRow(row) {
+    return row && (row.fullName || row.name) ? row.fullName || row.name : '';
+  }
+
+  function isJobTriggerable(row) {
+    return !! row && row.buildable !== false && row.inQueue !== true && ! isJobRunning(row);
+  }
+
+  function selectedJobItems() {
+    return Object.keys(selectedJobBuilds).sort().map(function(jobName) {
+      return selectedJobBuilds[jobName];
+    });
+  }
+
+  function pruneSelectedJobBuilds(jobs) {
+    var available = {};
+
+    $.each(jobs || [], function(index, row) {
+      var jobName = jobNameForRow(row);
+      if (! jobName) {
+        return;
+      }
+
+      available[jobName] = row;
+      if (selectedJobBuilds[jobName]) {
+        if (! isJobTriggerable(row)) {
+          delete selectedJobBuilds[jobName];
+        } else {
+          selectedJobBuilds[jobName].environment = environmentTextForRow(row);
+        }
+      }
+    });
+
+    Object.keys(selectedJobBuilds).forEach(function(jobName) {
+      if (! available[jobName]) {
+        delete selectedJobBuilds[jobName];
+      }
+    });
+  }
+
+  function syncBulkJobSelectionUi(table) {
+    if (table && table.rows) {
+      table.rows().data().each(function(row) {
+        var jobName = jobNameForRow(row);
+        if (! jobName || ! selectedJobBuilds[jobName]) {
+          return;
+        }
+
+        if (! isJobTriggerable(row)) {
+          delete selectedJobBuilds[jobName];
+        } else {
+          selectedJobBuilds[jobName].environment = environmentTextForRow(row);
+        }
+      });
+    }
+
+    var selectedCount = selectedJobItems().length;
+    var rowCheckboxes = $('#listTable_wrapper .job-select-row');
+    var eligibleCheckboxes = rowCheckboxes.filter('[data-triggerable="1"]');
+
+    rowCheckboxes.each(function() {
+      var checkbox = $(this);
+      var jobName = checkbox.data('job') || '';
+      checkbox
+        .prop('checked', !! selectedJobBuilds[jobName])
+        .prop('disabled', bulkTriggerInProgress || checkbox.attr('data-triggerable') !== '1');
+    });
+
+    var checkedEligible = eligibleCheckboxes.filter(':checked').length;
+    $('.job-select-visible')
+      .prop('checked', eligibleCheckboxes.length > 0 && checkedEligible === eligibleCheckboxes.length)
+      .prop('indeterminate', checkedEligible > 0 && checkedEligible < eligibleCheckboxes.length)
+      .prop('disabled', bulkTriggerInProgress || eligibleCheckboxes.length === 0);
+
+    $('#selectedJobBuildCount').text(selectedCount);
+    $('#triggerSelectedJobs').prop('disabled', bulkTriggerInProgress || selectedCount === 0);
+    $('#clearSelectedJobs').prop('disabled', bulkTriggerInProgress || selectedCount === 0);
+  }
+
+  function clearSelectedJobBuilds() {
+    selectedJobBuilds = {};
+    syncBulkJobSelectionUi();
+  }
+
+  function bulkTriggerFailureMessage(xhr) {
+    if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+      return xhr.responseJSON.message;
+    }
+    if (xhr && xhr.responseText) {
+      return xhr.responseText;
+    }
+    return 'Unable to trigger this job.';
+  }
+
+  function executeBulkJobTrigger(items) {
+    var jenkinsUrl = '<?php echo $jenkins_url; ?>';
+    var headers = {'Authorization': 'Basic ' + btoa('' + ':' + '')};
+    var nextIndex = 0;
+    var active = 0;
+    var completed = 0;
+    var successes = [];
+    var failures = [];
+    var concurrency = 3;
+
+    bulkTriggerInProgress = true;
+    $('.overlay').show();
+    syncBulkJobSelectionUi();
+
+    function finish() {
+      bulkTriggerInProgress = false;
+      $('.overlay').hide();
+      syncBulkJobSelectionUi();
+
+      if (successes.length) {
+        toastr.success(successes.length + ' job trigger request(s) sent successfully.', 'Bulk Trigger Complete');
+      }
+      if (failures.length) {
+        toastr.error(failures.length + ' job(s) failed to trigger: ' + failures.map(function(item) { return item.jobName; }).join(', '), 'Bulk Trigger Problems');
+      }
+
+      window.setTimeout(reloadJobTables, 1000);
+      if (window.JobSeekerRunningJobs && window.JobSeekerRunningJobs.refresh) {
+        window.JobSeekerRunningJobs.refresh();
+      }
+    }
+
+    function updateProgress() {
+      $('#triggerSelectedJobs').html('<i class="fa fa-spinner fa-spin"></i> Triggering ' + completed + '/' + items.length);
+    }
+
+    function pump() {
+      while (active < concurrency && nextIndex < items.length) {
+        (function(item) {
+          active += 1;
+          triggerJenkinsJob(item.jobName, item.environment, jenkinsUrl, headers)
+            .done(function() {
+              successes.push(item);
+              delete selectedJobBuilds[item.jobName];
+            })
+            .fail(function(xhr) {
+              failures.push({jobName: item.jobName, message: bulkTriggerFailureMessage(xhr)});
+            })
+            .always(function() {
+              active -= 1;
+              completed += 1;
+              updateProgress();
+
+              if (completed === items.length) {
+                $('#triggerSelectedJobs').html('<i class="fa fa-play"></i> Trigger Selected <span class="badge" id="selectedJobBuildCount">' + selectedJobItems().length + '</span>');
+                finish();
+              } else {
+                pump();
+              }
+            });
+        })(items[nextIndex]);
+        nextIndex += 1;
+      }
+    }
+
+    updateProgress();
+    pump();
+  }
+
+  function confirmBulkJobTrigger() {
+    var items = selectedJobItems();
+    if (! items.length || bulkTriggerInProgress) {
+      return;
+    }
+
+    var previewLimit = 12;
+    var preview = items.slice(0, previewLimit).map(function(item) {
+      return '<li><b>' + escapeHtml(item.jobName) + '</b> <span class="text-muted">(' + escapeHtml(item.environment || 'Unknown') + ')</span></li>';
+    }).join('');
+    if (items.length > previewLimit) {
+      preview += '<li>...and ' + (items.length - previewLimit) + ' more</li>';
+    }
+
+    alertify.confirm(
+      'Trigger ' + items.length + ' Jenkins Jobs',
+      '<p>Send build requests for the following jobs?</p><ul style="max-height:260px; overflow:auto; text-align:left;">' + preview + '</ul><p><b>Each job will use its detected environment.</b></p>',
+      function() { executeBulkJobTrigger(items); },
+      function() { alertify.message('Bulk trigger cancelled.'); }
+    );
   }
 
   function reportRepositoryDeleteResults(data) {
@@ -1369,6 +1605,7 @@ pre {
   });
 
   $(document).on('jobseeker:environment-change', function(event, environment) {
+    clearSelectedJobBuilds();
     jobEnvironmentFilter = isAllEnvironmentFilter(environment) ? 'all' : normalizeEnvironmentFilterValue(environment || 'all');
     ensureMonitorFilterRegistered();
     abortScheduleRequests();
@@ -1376,6 +1613,57 @@ pre {
       reloadJobTables();
     }
   });
+
+  $('#listTable').on('change', '.job-select-row', function() {
+    var checkbox = $(this);
+    var jobName = checkbox.data('job') || '';
+
+    if (! jobName || checkbox.attr('data-triggerable') !== '1') {
+      checkbox.prop('checked', false);
+      return;
+    }
+
+    if (checkbox.is(':checked')) {
+      selectedJobBuilds[jobName] = {
+        jobName: jobName,
+        environment: checkbox.data('environment') || 'Unknown'
+      };
+    } else {
+      delete selectedJobBuilds[jobName];
+    }
+
+    syncBulkJobSelectionUi();
+  });
+
+  $(document).on('change', '.job-select-visible', function() {
+    if (! $.fn.DataTable.isDataTable('#listTable') || bulkTriggerInProgress) {
+      return;
+    }
+
+    var shouldSelect = $(this).is(':checked');
+    var table = $('#listTable').DataTable();
+
+    table.rows({page: 'current', search: 'applied'}).data().each(function(row) {
+      var jobName = jobNameForRow(row);
+      if (! jobName || ! isJobTriggerable(row)) {
+        return;
+      }
+
+      if (shouldSelect) {
+        selectedJobBuilds[jobName] = {
+          jobName: jobName,
+          environment: environmentTextForRow(row)
+        };
+      } else {
+        delete selectedJobBuilds[jobName];
+      }
+    });
+
+    syncBulkJobSelectionUi(table);
+  });
+
+  $('#triggerSelectedJobs').on('click', confirmBulkJobTrigger);
+  $('#clearSelectedJobs').on('click', clearSelectedJobBuilds);
 
   function loadJobListData(options) {
     options = options || {};
@@ -1418,7 +1706,7 @@ pre {
         var listTable = $('#listTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
-          "order": [[ 2, "asc" ]],
+          "order": [[ 3, "asc" ]],
           "scrollX": true,
           "ajax": {
             "url": availableJobsUrl,
@@ -1428,12 +1716,25 @@ pre {
             },
             "dataSrc": function(json) {
               var jobs = jobsFromJenkinsResponse(json);
+              pruneSelectedJobBuilds(jobs);
               updateMonitorSummary(jobs);
               hydrateJobEnvironmentCache(jobs, jenkins_url, jobListHeaders, currentGeneration);
               return jobs;
             }
           },
           "columns": [
+          {"data": null, "defaultContent": "", "orderable": false, "searchable": false, "className": "job-select-cell", "render": function(data, type, row){
+            if (type !== 'display') {
+              return '';
+            }
+
+            var jobName = jobNameForRow(row);
+            var environment = environmentTextForRow(row);
+            var triggerable = isJobTriggerable(row);
+            var checked = !! selectedJobBuilds[jobName];
+            var title = triggerable ? 'Select ' + jobName + ' for bulk triggering' : 'This job is already running, queued, or disabled';
+            return '<input type="checkbox" class="job-select-row" data-job="' + escapeAttribute(jobName) + '" data-environment="' + escapeAttribute(environment) + '" data-triggerable="' + (triggerable ? '1' : '0') + '" aria-label="' + escapeAttribute(title) + '" title="' + escapeAttribute(title) + '"' + (checked ? ' checked' : '') + (triggerable ? '' : ' disabled') + '>';
+          }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderHealth(row); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderState(row); }},
           {"data": "name", "defaultContent": "", "render": function(data, type, row){ return escapeHtml(row.fullName || data || ''); }},
@@ -1494,7 +1795,9 @@ pre {
           }}
           ],
           "drawCallback": function() {
-            hydrateJobSchedules(this.api(), jenkins_url, jobListHeaders, currentGeneration);
+            var table = this.api();
+            hydrateJobSchedules(table, jenkins_url, jobListHeaders, currentGeneration);
+            syncBulkJobSelectionUi(table);
           }
        });
       $('#box2').boxWidget('expand');
@@ -1733,6 +2036,19 @@ pre {
 });
 
 
+function renderJobListConsoleLog(name, buildNumber, result, date, environment, output) {
+  var consoleOutput = output || 'Console output is empty for this build.';
+  $("#addLog").html('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Environment</td><td>'+ escapeHtml(environment) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><div id="jobListConsoleLog"></div></td></tr></tbody></table></div>');
+
+  if (window.JobSeekerConsole) {
+    window.JobSeekerConsole.setText('#jobListConsoleLog', consoleOutput, {live: String(result).toUpperCase() === 'RUNNING'});
+  } else {
+    $('#jobListConsoleLog').text(consoleOutput);
+  }
+
+  $('#modal-default').modal('show');
+}
+
 $("#listTable").on('click','.log',function(){
 
         // get Jenkins credentials
@@ -1752,8 +2068,7 @@ $("#listTable").on('click','.log',function(){
 
         if(buildNumber == '' || buildNumber == null){
           var output = 'Your requested job ' + name + ' has not been executed yet. Please, try again later.';
-          $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Environment</td><td>'+ escapeHtml(environment) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
-          $('#modal-default').modal('show');
+          renderJobListConsoleLog(name, buildNumber, result, date, environment, output);
           return;
         }
 
@@ -1771,8 +2086,7 @@ $("#listTable").on('click','.log',function(){
             toastr.error("Error during console log query.", "Query Data Error");
             },
           success: function(output) {
-              $("#addLog").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th width="10px">Header</th><th>Task</th></tr><tr><td>Execution Date</td><td>'+ escapeHtml(date) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(name) +' <b>['+ escapeHtml(buildNumber) +']</b> </td></tr><tr><td>Environment</td><td>'+ escapeHtml(environment) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(result) +'</td></tr><tr><td>Console Log</td><td><pre>'+ escapeHtml(output) +'</pre></td></tr></tbody></table></div>');
-              $('#modal-default').modal('show');
+              renderJobListConsoleLog(name, buildNumber, result, date, environment, output);
             },
             complete: function(data) {
                 dateRequest = data;
