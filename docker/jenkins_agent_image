@@ -9,6 +9,7 @@ RUN apt-get update \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY application/third_party/python/jobseeker_sdk /opt/jobseeker/jobseeker_sdk/
 COPY docker/jenkins/requirements.txt /opt/jobseeker/
 RUN python3 -m pip install --no-cache-dir --break-system-packages /opt/jobseeker/jobseeker_sdk \
