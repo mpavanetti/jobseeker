@@ -1647,6 +1647,7 @@
 
     function renderDetails(details) {
       var html = '';
+      var consoleMounts = [];
 
       $.each(details, function(index, detail) {
         if (detail.error) {
@@ -1656,6 +1657,8 @@
 
         var config = detail.config || parseJobConfig('', detail.name);
         var consoleText = detail.consoleText || '';
+        var consoleId = 'jobViewConsoleLog-' + index;
+        consoleMounts.push({id: consoleId, text: consoleText || 'No console output available.', live: detail.status === 'RUNNING'});
         var boxClass = detail.status === 'FAILURE' || detail.status === 'ABORTED' || detail.status === 'UNSTABLE' ? 'box-danger' : (detail.status === 'SUCCESS' ? 'box-success' : 'box-primary');
         var description = detail.description || 'No description.';
         var downstream = config.downstream.slice();
@@ -1700,7 +1703,7 @@
               '<div class="col-md-6"><div class="job-detail-section"><h4>Downstream Jobs</h4>' + renderList(downstream) + '</div></div>' +
               '<div class="col-md-6"><div class="job-detail-section"><h4>Email Notifications</h4>' + renderEmailConfig(config) + '</div></div>' +
             '</div>' +
-            '<div class="job-detail-section"><h4>Latest Console Output</h4>' + (detail.consoleError ? '<p class="text-warning">' + escapeHtml(detail.consoleError) + '</p>' : '') + renderPre(consoleText || 'No console output available.', 'job-console-pre') + '</div>' +
+            '<div class="job-detail-section"><h4>Latest Console Output</h4>' + (detail.consoleError ? '<p class="text-warning">' + escapeHtml(detail.consoleError) + '</p>' : '') + '<div id="' + consoleId + '"></div></div>' +
             '<div class="job-detail-section">' +
               '<details class="job-xml-details"><summary>config.xml</summary>' + (detail.configError ? '<p class="text-warning">' + escapeHtml(detail.configError) + '</p>' : '') + renderPre(detail.configXml || 'No config.xml available.', 'job-xml-pre') + '</details>' +
             '</div>' +
@@ -1709,6 +1712,14 @@
       });
 
       $('#jobDetailsGrid').html(html);
+
+      $.each(consoleMounts, function(index, mount) {
+        if (window.JobSeekerConsole) {
+          window.JobSeekerConsole.setText('#' + mount.id, mount.text, {live: mount.live});
+        } else {
+          $('#' + mount.id).text(mount.text);
+        }
+      });
     }
 
     $('#jobFilter').on('keyup', function() {

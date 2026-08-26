@@ -2253,6 +2253,10 @@
                           <div class="checkbox pythonDockerfileModeControl" style="display: none;">
                             <label><input type="checkbox" id="pythonUseDockerfile" name="pythonUseDockerfile" value="1" checked> Build inline jobs from Dockerfile</label>
                           </div>
+                          <input type="hidden" name="pythonRunTests" value="0">
+                          <div class="checkbox pythonDockerTestControl" style="display: none;">
+                            <label><input type="checkbox" id="pythonRunTests" name="pythonRunTests" value="1" checked> Run pytest before Python execution</label>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2261,6 +2265,7 @@
                         <div class="form-group">
                           <label id="pythonWorkspaceLabel" for="pythonInlineCode">Python Workspace</label>
                           <input type="hidden" id="pythonInlineFilesJson" name="pythonInlineFilesJson" value="{&quot;files&quot;:[],&quot;directories&quot;:[]}">
+                          <input type="hidden" id="pythonWorkspaceSignature" name="pythonWorkspaceSignature" value="">
                           <div class="python-inline-workspace">
                             <div class="python-inline-sidebar">
                               <div class="python-inline-sidebar-header">
@@ -3068,8 +3073,19 @@
       });
 
       $('#pythonEntryPoint').on('input change', function() {
+        if (! applyingJobDraft) {
+          $('#pythonWorkspaceSignature').val('');
+          stopPythonExternalSync(true);
+        }
         updatePythonInlineEditor();
         renderPythonInlineWorkspace();
+      });
+
+      $('#job_name').on('input change', function() {
+        if (! applyingJobDraft) {
+          $('#pythonWorkspaceSignature').val('');
+          stopPythonExternalSync(true);
+        }
       });
 
       $('#applyPythonInlineTemplate').on('click', function() {
@@ -3157,6 +3173,10 @@
         updateJobCreationReview();
       });
 
+      $('#pythonRunTests').on('change', function() {
+        updateJobCreationReview();
+      });
+
 
       var petNamePrefixes = ['milo', 'luna', 'piper', 'nova', 'ruby', 'jasper', 'olive', 'cosmo'];
       var petNameSuffixes = ['sunny', 'maple', 'pixel', 'river', 'coco', 'sage', 'mango', 'ember'];
@@ -3192,8 +3212,8 @@
         normalize: function(value) { return $.trim(String(value || '')).toUpperCase(); },
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
-      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -4375,7 +4395,9 @@
       }
 
       function ensurePythonPyprojectText() {
-        if (! pythonPyprojectUserEdited && isGeneratedPythonPyprojectText($('#pythonPyprojectText').val() || '')) {
+        // A Poetry edit intentionally retains JobSeeker's generated header.
+        // Presence, not that marker, determines whether generation is safe.
+        if ($.trim($('#pythonPyprojectText').val() || '') === '') {
           $('#pythonPyprojectText').val(defaultPythonPyprojectText($('#pythonRequirementsText').val() || ''));
           pythonPyprojectUserEdited = false;
           updatePythonPyprojectEditor();
@@ -4398,7 +4420,7 @@
           '    && groupadd --system jobseeker \\',
           '    && useradd --system --gid jobseeker --create-home jobseeker',
           'COPY . .',
-          'RUN if [ -s pyproject.toml ]; then poetry install --only main --no-root --no-interaction --no-ansi; fi \\',
+          'RUN if [ -s pyproject.toml ]; then poetry install --no-root --no-interaction --no-ansi; fi \\',
           '    && chown -R jobseeker:jobseeker /app',
           'USER jobseeker',
           ''
@@ -4409,11 +4431,11 @@
         text = $.trim(String(text || ''));
         return text === '' || text.indexOf('# Generated by JobSeeker inline Python') === 0 ||
           (text.indexOf('COPY requirements.txt ./') !== -1 && text.indexOf('python -m pip install --no-cache-dir -r requirements.txt') !== -1) ||
-          (text.indexOf('COPY pyproject.toml ./') !== -1 && text.indexOf('poetry install --only main --no-root') !== -1);
+          (text.indexOf('COPY pyproject.toml ./') !== -1 && (text.indexOf('poetry install --only main --no-root') !== -1 || text.indexOf('poetry install --no-root') !== -1));
       }
 
       function ensurePythonDockerfileText() {
-        if (pythonInlineUsesDockerfile() && ! pythonDockerfileUserEdited && isGeneratedPythonDockerfileText($('#pythonDockerfileText').val() || '')) {
+        if (pythonInlineUsesDockerfile() && $.trim($('#pythonDockerfileText').val() || '') === '') {
           $('#pythonDockerfileText').val(defaultPythonDockerfileText());
           pythonDockerfileUserEdited = false;
           updatePythonDockerfileEditor();
@@ -4493,6 +4515,7 @@
           pythonPyprojectText: $('#pythonPyprojectText').val() || '',
           pythonDockerfileText: $('#pythonDockerfileText').val() || '',
           pythonInlineFilesJson: $('#pythonInlineFilesJson').val() || '{"files":[],"directories":[]}',
+          pythonWorkspaceSignature: $('#pythonWorkspaceSignature').val() || '',
           pythonRuntimeMode: $('#pythonRuntimeMode').val() || 'local',
           pythonUseDockerfile: $('#pythonUseDockerfile').is(':checked') ? '1' : '0',
           pythonVersion: $('#pythonVersion').val() || 'python3',
@@ -4505,8 +4528,6 @@
           return;
         }
 
-        var fromActiveExternalSync = !! pythonExternalSyncTimer;
-
         if (typeof response.sourceCode === 'string') {
           $('#pythonInlineCode').val(response.sourceCode);
         }
@@ -4515,14 +4536,18 @@
         }
         if (typeof response.pyprojectText === 'string') {
           $('#pythonPyprojectText').val(response.pyprojectText);
-          pythonPyprojectUserEdited = fromActiveExternalSync || ! isGeneratedPythonPyprojectText(response.pyprojectText);
+          pythonPyprojectUserEdited = $.trim(response.pyprojectText) !== '';
         }
         if (typeof response.dockerfileText === 'string') {
           $('#pythonDockerfileText').val(response.dockerfileText);
-          pythonDockerfileUserEdited = fromActiveExternalSync || ! isGeneratedPythonDockerfileText(response.dockerfileText);
+          pythonDockerfileUserEdited = $.trim(response.dockerfileText) !== '';
         }
         if (response.files) {
           loadPythonInlineFilesPayload(response.files);
+        }
+        if (typeof response.signature === 'string') {
+          $('#pythonWorkspaceSignature').val(response.signature);
+          pythonExternalSyncSignature = response.signature;
         }
 
         updatePythonInlineEditor();
@@ -4578,6 +4603,7 @@
         pythonExternalSyncJobName = currentPythonInlineJobName();
         pythonExternalSyncEntryPoint = pythonInlineEntryPath();
         pythonExternalSyncSignature = response && response.signature ? response.signature : '';
+        $('#pythonWorkspaceSignature').val(pythonExternalSyncSignature);
         pythonExternalSyncTimer = setInterval(function() {
           pollPythonExternalSync(false);
         }, 2500);
@@ -4655,6 +4681,21 @@
         }).fail(function(xhr) {
           if (webWindow) {
             webWindow.close();
+          }
+
+          var conflictSnapshot = xhr && xhr.responseJSON && xhr.responseJSON.conflict ? xhr.responseJSON.currentSnapshot : null;
+          if (conflictSnapshot) {
+            var conflictMessage = xhr.responseJSON.message || 'The workspace changed on disk. Reload it before opening VS Code.';
+            if (window.confirm(conflictMessage + '\n\nReload the current files from disk now? Unsaved browser edits will be replaced.')) {
+              conflictSnapshot.ok = true;
+              applyPythonExternalSnapshot(conflictSnapshot);
+              conflictMessage = 'The latest workspace was loaded from disk. Review it and click Open in VS Code again.';
+            } else {
+              conflictMessage = 'Open was cancelled and your browser edits were kept. Copy them somewhere safe, then reload the job to reconcile the workspace.';
+            }
+            setPythonExternalSyncStatus(conflictMessage, 'error');
+            toastr.warning(conflictMessage, 'Inline Python');
+            return;
           }
 
           var message = pythonInlinePreviewError(xhr, 'Unable to prepare inline Python workspace.');
@@ -4786,6 +4827,7 @@
 
       function resetPythonInlineWorkspaceState() {
         stopPythonExternalSync(true);
+        $('#pythonWorkspaceSignature').val('');
         setPythonInlineExpanded(false);
         pythonPyprojectUserEdited = false;
         pythonDockerfileUserEdited = false;
@@ -5133,6 +5175,7 @@
         $('.pythonAgentPythonColumn').toggle(! isDockerRuntime && linuxExecutionUsesPython());
         $('.pythonDockerImageColumn').toggle(isDockerRuntime);
         $('.pythonDockerfileModeControl').toggle(isDockerRuntime && pythonWorkspaceAllowsInlineCode());
+        $('.pythonDockerTestControl').toggle(isDockerRuntime && linuxExecutionUsesPython());
         $('#pythonDockerImageLabel').text(isDockerRuntime && pythonWorkspaceAllowsInlineCode() && $('#pythonUseDockerfile').is(':checked') ? 'Base Image' : 'Docker Image');
 
         if (isDockerRuntime) {
@@ -5149,11 +5192,12 @@
       function pythonRuntimeSummary() {
         if ($('#pythonRuntimeMode').val() == 'docker') {
           var image = $.trim($('#pythonDockerImage').val()) || dockerImageForLinuxExecution();
+          var testSummary = $('#pythonRunTests').is(':checked') ? ' + pytest' : '';
           if (pythonInlineUsesDockerfile()) {
-            return 'Dockerfile from ' + image;
+            return 'Dockerfile from ' + image + testSummary;
           }
 
-          return 'Docker image ' + image;
+          return 'Docker image ' + image + testSummary;
         }
 
         return linuxExecutionUsesPython() ? 'Jenkins Agent python3' : 'Jenkins Agent shell';
@@ -5161,95 +5205,25 @@
 
       function loadInlinePythonSource(jobName, entryPoint) {
         stopPythonExternalSync(true);
+        $('#pythonWorkspaceSignature').val('');
         pythonPyprojectUserEdited = false;
         pythonDockerfileUserEdited = false;
-        $('#pythonInlineCode').val('');
-        $('#pythonRequirementsText').val('');
-        $('#pythonPyprojectText').val('');
-        $('#pythonDockerfileText').val('');
-        loadPythonInlineFilesPayload({ files: [], directories: [] });
-        updatePythonInlineEditor();
-        updatePythonRequirementsEditor();
-        updatePythonPyprojectEditor();
-        updatePythonDockerfileEditor();
 
         var requestData = {
           job_name: jobName,
           entry_point: entryPoint || 'main.py'
         };
 
-        var sourceRequest = $.ajax({
+        return $.ajax({
           type: 'GET',
-          url: '<?php echo base_url(); ?>jobCreation/inlinePythonSource',
-          data: requestData,
-          dataType: 'text'
-        }).done(function(sourceCode) {
-          $('#pythonInlineCode').val(sourceCode);
-          updatePythonInlineEditor();
-          updateJobCreationReview();
-        }).fail(function() {
-          toastr.warning('The inline Python source file could not be loaded from the repository.', 'Edit Job');
-        });
-
-        $.ajax({
-          type: 'GET',
-          url: '<?php echo base_url(); ?>jobCreation/inlinePythonRequirements',
-          data: requestData,
-          dataType: 'text'
-        }).done(function(requirementsText) {
-          $('#pythonRequirementsText').val(requirementsText);
-          updatePythonRequirementsEditor();
-          updateJobCreationReview();
-        }).fail(function() {
-          $('#pythonRequirementsText').val('');
-          updatePythonRequirementsEditor();
-        });
-
-        $.ajax({
-          type: 'GET',
-          url: '<?php echo base_url(); ?>jobCreation/inlinePythonPyproject',
-          data: requestData,
-          dataType: 'text'
-        }).done(function(pyprojectText) {
-          $('#pythonPyprojectText').val(pyprojectText);
-          pythonPyprojectUserEdited = ! isGeneratedPythonPyprojectText(pyprojectText);
-          updatePythonPyprojectEditor();
-          updateJobCreationReview();
-        }).fail(function() {
-          $('#pythonPyprojectText').val('');
-          pythonPyprojectUserEdited = false;
-          updatePythonPyprojectEditor();
-        });
-
-        $.ajax({
-          type: 'GET',
-          url: '<?php echo base_url(); ?>jobCreation/inlinePythonDockerfile',
-          data: requestData,
-          dataType: 'text'
-        }).done(function(dockerfileText) {
-          $('#pythonDockerfileText').val(dockerfileText);
-          pythonDockerfileUserEdited = ! isGeneratedPythonDockerfileText(dockerfileText);
-          updatePythonDockerfileEditor();
-          updateJobCreationReview();
-        }).fail(function() {
-          $('#pythonDockerfileText').val('');
-          pythonDockerfileUserEdited = false;
-          updatePythonDockerfileEditor();
-        });
-
-        $.ajax({
-          type: 'GET',
-          url: '<?php echo base_url(); ?>jobCreation/inlinePythonFiles',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalSnapshot',
           data: requestData,
           dataType: 'json'
-        }).done(function(payload) {
-          loadPythonInlineFilesPayload(payload);
-          updateJobCreationReview();
+        }).done(function(response) {
+          applyPythonExternalSnapshot(response);
         }).fail(function() {
-          loadPythonInlineFilesPayload({ files: [], directories: [] });
+          toastr.warning('The inline Python workspace could not be loaded from the repository.', 'Edit Job');
         });
-
-        return sourceRequest;
       }
 
       function renderPythonInlinePreview(state, title, output) {
@@ -5429,6 +5403,7 @@
           emailCheck: '0',
           editableEmailCheck: '0',
           pythonUseDockerfile: '1',
+          pythonRunTests: '1',
           executionStrategy: '0',
           scriptType: '0',
           windowsCommandLine: '',
@@ -5444,6 +5419,7 @@
           pythonPyprojectText: '',
           pythonDockerfileText: '',
           pythonInlineFilesJson: '{"files":[],"directories":[]}',
+          pythonWorkspaceSignature: '',
           pythonRuntimeMode: 'local',
           pythonVersion: 'python3',
           pythonDockerImage: '',
@@ -5554,11 +5530,12 @@
       function draftPythonRuntimeSummary(draft) {
         if (draft && draft.pythonRuntimeMode === 'docker') {
           var image = draft.pythonDockerImage || draftDockerImageDefault(draft);
+          var testSummary = draftChecked(draft, 'pythonRunTests') ? ' + pytest' : '';
           if (draft.linuxExecutionStrategy === 'python_inline' && draftChecked(draft, 'pythonUseDockerfile')) {
-            return 'Dockerfile from ' + image;
+            return 'Dockerfile from ' + image + testSummary;
           }
 
-          return 'Docker image ' + image;
+          return 'Docker image ' + image + testSummary;
         }
 
         return draftUsesPythonRuntime(draft) ? 'Jenkins Agent python3' : 'Jenkins Agent shell';
@@ -5889,6 +5866,9 @@
         $.each(names, function(index, name) {
           var draft = existingByName[name] ? $.extend(true, {}, existingByName[name]) : $.extend(true, {}, sourceDraft);
           draft.job_name = name;
+          if (! existingByName[name] && name !== sourceDraft.job_name) {
+            draft.pythonWorkspaceSignature = '';
+          }
           nextDrafts.push(draft);
         });
 
@@ -5913,6 +5893,7 @@
         saveActiveJobDraft(false);
         var draft = $.extend(true, {}, jobDrafts[activeDraftIndex] || draftFromForm());
         draft.job_name = generateJobName();
+        draft.pythonWorkspaceSignature = '';
         jobDrafts.push(draft);
         activeDraftIndex = jobDrafts.length - 1;
         updateDraftNamesTextarea();
@@ -6724,9 +6705,11 @@
       $('#pythonVersion').val('python3');
       $('#pythonDockerImage').val('');
       $('#pythonUseDockerfile').prop('checked', true);
+      $('#pythonRunTests').prop('checked', true);
       $('#pythonPyprojectText').val('');
       $('#pythonDockerfileText').val('');
       $('#pythonInlineFilesJson').val('{"files":[],"directories":[]}');
+      $('#pythonWorkspaceSignature').val('');
       $('.singleForm, .repetitive, .tags, .customCronForm, #build, #runWinCommand, #runlinuxCommand, .scriptTypeForm, .windowsCommandForm, .uploadScript, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm, #enableEmail, #abortIfStuck, #runJob, #editableEmail').hide();
       $('#environmentBox').hide();
       $('#timeoutMinutes, #timeoutSeconds').prop('required', false);
@@ -6927,10 +6910,12 @@
       var requirementsText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_REQUIREMENTS_B64');
       var pyprojectText = shellExportBase64Value(command, 'JOBSEEKER_PYPROJECT_B64');
       var dockerfileText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_DOCKERFILE_B64');
+      var runTests = shellExportValue(command, 'JOBSEEKER_RUN_PYTEST');
       var isDockerRuntime = runtimeMode == 'docker';
 
       setSelectValue('#pythonRuntimeMode', isDockerRuntime ? 'docker' : 'local');
       $('#pythonUseDockerfile').prop('checked', isDockerRuntime && dockerfileText !== '');
+      $('#pythonRunTests').prop('checked', ! isDockerRuntime || runTests === '1' || (runTests === '' && command.indexOf('[JobSeeker] Python tests') !== -1));
       if (isDockerRuntime && dockerImage === '' && pythonExecutable !== '' && pythonExecutable !== 'python3') {
         dockerImage = dockerImageForPythonVersion(pythonExecutable);
       }
@@ -7007,6 +6992,7 @@
     }
 
     function hydratePythonCommand(jobName, command) {
+      var workspaceRequest = $.Deferred().resolve().promise();
       $('#linuxCommand').prop('checked', true);
       $('#runlinuxCommand').show();
       setSelectValue('#linuxExecutionStrategy', 'script');
@@ -7035,7 +7021,7 @@
         $('.pythonPathSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
         updatePythonSourceControls();
         hydrateEnvironmentFromPythonCommand(command);
-        return;
+        return workspaceRequest;
       }
 
       var sourceDirectory = shellExportValue(command, 'JOBSEEKER_SOURCE_DIR');
@@ -7056,7 +7042,7 @@
         setSelectValue('#pythonSourceMode', 'upload');
         $('#pythonEntryPoint').val(entryPoint || 'main.py');
         updatePythonSourceControls();
-        loadInlinePythonSource(jobName, entryPoint || 'main.py');
+        workspaceRequest = loadInlinePythonSource(jobName, entryPoint || 'main.py');
       } else {
         setSelectValue('#linuxScriptType', 'python');
         setSelectValue('#pythonSourceMode', 'path');
@@ -7068,16 +7054,18 @@
       }
 
       hydrateEnvironmentFromPythonCommand(command);
+      return workspaceRequest;
     }
 
     function hydrateBuilders(xmlDoc, jobName) {
       var shell = firstXmlElement(xmlDoc, 'hudson.tasks.Shell');
       var batch = firstXmlElement(xmlDoc, 'hudson.tasks.BatchFile');
+      var workspaceRequest = $.Deferred().resolve().promise();
 
       if (shell) {
         var shellCommand = firstXmlText(xmlDoc, 'command', shell);
         if (shellCommand.indexOf('JOBSEEKER_PYTHON_RUNTIME') !== -1 || shellCommand.indexOf('JOBSEEKER_PYTHON_LIB') !== -1) {
-          hydratePythonCommand(jobName, shellCommand);
+          workspaceRequest = hydratePythonCommand(jobName, shellCommand);
         } else if (shellCommand.indexOf('JOBSEEKER_LINUX_RUNTIME') !== -1) {
           hydrateLinuxDockerCommand(shellCommand);
         } else if ($.trim(shellCommand).indexOf('sh ') === 0) {
@@ -7107,6 +7095,8 @@
         $('.scriptTypeForm, .uploadScript').hide();
         $('#windowsCommandLine').val(batchCommand);
       }
+
+      return workspaceRequest;
     }
 
     function hydratePublishers(xmlDoc) {
@@ -7179,25 +7169,37 @@
     function hydrateJobFormFromXml(jobName, xmlText) {
       var xmlDoc = $.parseXML(xmlText);
 
+      applyingJobDraft = true;
       resetJobCreationForm();
       $('#job_name').val(jobName);
       $('#description').val(firstXmlText(xmlDoc, 'description'));
       hydrateSchedule(xmlDoc);
-      hydrateBuilders(xmlDoc, jobName);
+      var workspaceRequest = hydrateBuilders(xmlDoc, jobName);
       hydratePublishers(xmlDoc);
       hydrateBuildWrappers(xmlDoc);
-      refreshJobOptionPanels();
-      showEditBanner(jobName);
-      replaceDraftsWithCurrentForm();
-      updateJobCreationReview();
 
-      toastr.info('Loaded ' + jobName + ' for editing.', 'Edit Job');
-      $('html, body').animate({ scrollTop: $('#InsertDbSettings').offset().top - 70 }, 300);
+      function finishHydration() {
+        applyingJobDraft = false;
+        refreshJobOptionPanels();
+        showEditBanner(jobName);
+        replaceDraftsWithCurrentForm();
+        updateJobCreationReview();
+
+        toastr.info('Loaded ' + jobName + ' for editing.', 'Edit Job');
+        $('html, body').animate({ scrollTop: $('#InsertDbSettings').offset().top - 70 }, 300);
+      }
+
+      return $.when(workspaceRequest).then(finishHydration, finishHydration);
     }
 
     function loadJobForEdit(jobName) {
       setSaveJobState(true, 'Loading job...');
       $('.overlay').fadeIn();
+
+      function finishJobLoad() {
+        $('.overlay').fadeOut();
+        setSaveJobState(false, '');
+      }
 
       $.ajax({
         url: jenkins_url + jenkinsJobPath(jobName) + '/config.xml',
@@ -7206,17 +7208,17 @@
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
       }).done(function(xmlText) {
         try {
-          hydrateJobFormFromXml(jobName, xmlText);
+          $.when(hydrateJobFormFromXml(jobName, xmlText)).always(finishJobLoad);
         } catch (error) {
+          applyingJobDraft = false;
           console.error(error);
           toastr.error('Unable to read this job configuration.', 'Edit Job');
+          finishJobLoad();
         }
       }).fail(function() {
         console.error(arguments);
         toastr.error('Unable to load this job from Jenkins.', 'Edit Job');
-      }).always(function() {
-        $('.overlay').fadeOut();
-        setSaveJobState(false, '');
+        finishJobLoad();
       });
     }
 
@@ -7633,15 +7635,23 @@ $('#abort').click(function(){
   }
 
   function renderAvailableJobLog(jobName, buildNumber, result, date, output) {
+    var consoleOutput = output || 'Console output is empty for this build.';
     $('#jobCreationLogContent').html(
       '<table class="table table-bordered"><tbody>' +
         '<tr><th width="120px">Header</th><th>Task</th></tr>' +
         '<tr><td>Execution Date</td><td>' + escapeHtml(date || 'Not available') + '</td></tr>' +
         '<tr><td>Job Name</td><td>' + escapeHtml(jobName) + ' <b>[' + escapeHtml(buildNumber || 'No build') + ']</b></td></tr>' +
         '<tr><td>Status</td><td>' + escapeHtml(result || 'Not available') + '</td></tr>' +
-        '<tr><td>Console Log</td><td><pre>' + escapeHtml(output) + '</pre></td></tr>' +
+        '<tr><td>Console Log</td><td><div id="jobCreationConsoleLog"></div></td></tr>' +
       '</tbody></table>'
     );
+
+    if (window.JobSeekerConsole) {
+      window.JobSeekerConsole.setText('#jobCreationConsoleLog', consoleOutput, {live: String(result).toUpperCase() === 'RUNNING'});
+    } else {
+      $('#jobCreationConsoleLog').text(consoleOutput);
+    }
+
     $('#jobCreationLogModal').modal('show');
   }
 

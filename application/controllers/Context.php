@@ -390,7 +390,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
   foreach ($preparedJobs as $prepared) {
     $artifactCopy = $this->copyPromotionArtifacts($prepared['source_job'], $prepared['target_job'], $input['overwrite'], FALSE);
     if (! empty($artifactCopy['errors'])) {
-      return array('ok' => FALSE, 'message' => 'Promotion failed while copying artifacts for '.$prepared['source_job'].': '.implode(' ', $artifactCopy['errors']).'.', 'rollback_id' => $rollbackId);
+      return $this->promotionFailureWithAutomaticRollback('Promotion failed while copying artifacts for '.$prepared['source_job'].': '.implode(' ', $artifactCopy['errors']).'.', $rollbackId);
     }
 
     $allArtifacts['copied'] = array_merge($allArtifacts['copied'], $artifactCopy['copied']);
@@ -398,7 +398,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
 
     $save = $this->savePreparedPromotionJob($prepared);
     if (! $save['ok']) {
-      return array('ok' => FALSE, 'message' => 'Promotion failed. Jenkins refused to save '.$prepared['target_job'].'. HTTP '.$save['status'].'.'.($rollbackId !== '' ? ' Rollback checkpoint: '.$rollbackId.'.' : ''), 'rollback_id' => $rollbackId);
+      return $this->promotionFailureWithAutomaticRollback('Promotion failed. Jenkins refused to save '.$prepared['target_job'].'. HTTP '.$save['status'].'.', $rollbackId);
     }
   }
 
@@ -407,6 +407,19 @@ private function buildJobPromotionResult($input, $previewOnly) {
   }
 
   return $this->promotionResultPayload(TRUE, 'Promotion completed.', $input, $preparedJobs, $totals, $allArtifacts, $commandPreviews, $contextPlan, $rollbackId);
+}
+
+private function promotionFailureWithAutomaticRollback($message, $rollbackId) {
+  if ($rollbackId === '') {
+    return array('ok' => FALSE, 'message' => $message, 'rollback_id' => '');
+  }
+
+  $rollback = $this->performPromotionRollback($rollbackId);
+  if (! empty($rollback['ok'])) {
+    return array('ok' => FALSE, 'message' => $message.' The promotion checkpoint was rolled back automatically.', 'rollback_id' => $rollbackId, 'rolled_back' => TRUE);
+  }
+
+  return array('ok' => FALSE, 'message' => $message.' Automatic rollback also reported an error: '.$rollback['message'].' Checkpoint: '.$rollbackId.'.', 'rollback_id' => $rollbackId, 'rolled_back' => FALSE);
 }
 
 private function prepareSingleJobPromotion($input, $requireEnvironmentBinding) {
@@ -785,6 +798,10 @@ private function performPromotionRollback($rollbackId) {
     return array('ok' => FALSE, 'message' => 'Rollback completed with errors: '.implode(' ', $errors));
   }
 
+  $rollbackDirectory = dirname($filePath).DIRECTORY_SEPARATOR.$bundle['id'];
+  if (is_dir($rollbackDirectory)) {
+    $this->removeDirectoryTree($rollbackDirectory);
+  }
   @rename($filePath, $filePath.'.rolledback.'.date('YmdHis'));
   return array('ok' => TRUE, 'message' => 'Rollback completed. Jobs restored: '.$restoredJobs.', jobs deleted: '.$deletedJobs.', artifact folders restored: '.$restoredArtifacts.', artifact folders deleted: '.$deletedArtifacts.', contexts restored: '.$contextResult['restored'].', contexts deleted: '.$contextResult['deleted'].'.');
 }
@@ -1022,8 +1039,29 @@ private function rewritePromotionCommand($commandText, $sourceEnvironment, $targ
   $updated = $this->rewriteEnvironmentAssignments($updated, $sourceEnvironment, $targetEnvironment, $environmentUpdates);
   $updated = $this->rewritePythonEnvironmentArguments($updated, $sourceEnvironment, $targetEnvironment, $environmentUpdates);
   $updated = $this->rewritePromotedArtifactPaths($updated, $sourceJobName, $targetJobName, $artifactPathUpdates);
+  $updated = $this->normalizePromotedInlinePythonDockerCommand($updated);
 
   return array('text' => $updated, 'environment_updates' => $environmentUpdates, 'artifact_path_updates' => $artifactPathUpdates);
+}
+
+private function normalizePromotedInlinePythonDockerCommand($commandText) {
+  if (strpos($commandText, 'JOBSEEKER_DOCKER_CONTEXT/source') === FALSE) {
+    return $commandText;
+  }
+
+  $legacyRequirements = 'if [ -n "${JOBSEEKER_PYTHON_REQUIREMENTS_B64:-}" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR"; printf "%s" "$JOBSEEKER_PYTHON_REQUIREMENTS_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt"; fi';
+  $fallbackRequirements = 'if [ -n "${JOBSEEKER_PYTHON_REQUIREMENTS_B64:-}" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/pyproject.toml" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR"; printf "%s" "$JOBSEEKER_PYTHON_REQUIREMENTS_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt"; fi';
+  $legacyPyproject = array(
+    'if [ -n "${JOBSEEKER_PYPROJECT_B64:-}" ]; then printf "%s" "$JOBSEEKER_PYPROJECT_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml"; rm -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt"; fi',
+    'if [ -n "${JOBSEEKER_PYPROJECT_B64:-}" ]; then printf "%s" "$JOBSEEKER_PYPROJECT_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml"; rm -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt" "$JOBSEEKER_DOCKER_CONTEXT/source/poetry.lock" "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/poetry.lock"; fi'
+  );
+  $fallbackPyproject = 'if [ -n "${JOBSEEKER_PYPROJECT_B64:-}" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/pyproject.toml" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt" ]; then printf "%s" "$JOBSEEKER_PYPROJECT_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml"; fi';
+  $legacyDockerfile = 'if [ -n "${JOBSEEKER_PYTHON_DOCKERFILE_B64:-}" ]; then printf "%s" "$JOBSEEKER_PYTHON_DOCKERFILE_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
+  $fallbackDockerfile = 'if [ -n "${JOBSEEKER_PYTHON_DOCKERFILE_B64:-}" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then printf "%s" "$JOBSEEKER_PYTHON_DOCKERFILE_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
+
+  $updated = str_replace($legacyRequirements, $fallbackRequirements, $commandText);
+  $updated = str_replace($legacyPyproject, $fallbackPyproject, $updated);
+  return str_replace($legacyDockerfile, $fallbackDockerfile, $updated);
 }
 
 private function rewriteContextArguments($text, $sourceEnvironment, $targetEnvironment, &$updateCount) {
@@ -1249,6 +1287,8 @@ private function copyPromotionArtifacts($sourceJobName, $targetJobName, $overwri
     array('label' => 'Inline Python workspace', 'relative' => 'python/inline/'.$sourceJobName, 'target' => 'python/inline/'.$targetJobName)
   );
 
+  $candidates = array();
+
   foreach ($locations as $location) {
     $sourceRelative = $this->safeRelativePath($location['relative']);
     $targetRelative = $this->safeRelativePath($location['target']);
@@ -1270,6 +1310,53 @@ private function copyPromotionArtifacts($sourceJobName, $targetJobName, $overwri
       continue;
     }
 
+    if (is_link($sourcePath)) {
+      $result['errors'][] = $location['label'].' source folder cannot be a symbolic link.';
+      continue;
+    }
+
+    $realSourcePath = realpath($sourcePath);
+    if ($realSourcePath === FALSE || ! $this->pathWithinBase($realSourcePath, $realRepositoryRoot)) {
+      $result['errors'][] = $location['label'].' source folder resolved outside the repository folder.';
+      continue;
+    }
+
+    $resolvedTargetPath = $this->promotionPathWithResolvedAncestor($targetPath);
+    if ($resolvedTargetPath === FALSE || ! $this->pathWithinBase($resolvedTargetPath, $realRepositoryRoot)) {
+      $result['errors'][] = $location['label'].' target folder resolved outside the repository folder.';
+      continue;
+    }
+
+    if ($this->promotionPathsOverlap($sourcePath, $targetPath) || $this->promotionPathsOverlap($realSourcePath, $resolvedTargetPath)) {
+      $result['errors'][] = $location['label'].' source and target folders cannot contain one another.';
+      continue;
+    }
+
+    if (is_link($targetPath)) {
+      $result['errors'][] = $location['label'].' target folder cannot be a symbolic link.';
+      continue;
+    }
+
+    if (file_exists($targetPath) && ! is_dir($targetPath)) {
+      $result['errors'][] = $location['label'].' target path exists and is not a folder.';
+      continue;
+    }
+
+    if (is_dir($targetPath)) {
+      $realTargetPath = realpath($targetPath);
+      if ($realTargetPath === FALSE || ! $this->pathWithinBase($realTargetPath, $realRepositoryRoot)) {
+        $result['errors'][] = $location['label'].' target folder resolved outside the repository folder.';
+        continue;
+      }
+
+      if ($this->promotionPathsOverlap($realSourcePath, $realTargetPath)) {
+        $result['errors'][] = $location['label'].' source and target folders cannot contain one another.';
+        continue;
+      }
+    }
+
+    $targetPath = $resolvedTargetPath;
+
     $entry = array('label' => $location['label'], 'source' => $location['relative'], 'target' => $location['target']);
 
     if (is_dir($targetPath) && ! $overwrite) {
@@ -1282,20 +1369,198 @@ private function copyPromotionArtifacts($sourceJobName, $targetJobName, $overwri
       continue;
     }
 
-    if (is_dir($targetPath) && ! $this->removeDirectoryTree($targetPath)) {
-      $result['errors'][] = $location['label'].' target folder could not be cleared.';
-      continue;
+    $candidates[] = array(
+      'entry' => $entry,
+      'source_path' => $realSourcePath,
+      'target_path' => $targetPath,
+      'target_existed' => is_dir($targetPath)
+    );
+  }
+
+  if ($previewOnly || ! empty($result['errors']) || empty($candidates)) {
+    return $result;
+  }
+
+  $transactionToken = date('YmdHis').'-'.substr(sha1(uniqid('', TRUE)), 0, 12);
+  $prepared = array();
+
+  foreach ($candidates as $index => $candidate) {
+    $targetParent = dirname($candidate['target_path']);
+    $targetBaseName = basename($candidate['target_path']);
+    $stagePath = $targetParent.DIRECTORY_SEPARATOR.'.'.$targetBaseName.'.promotion-stage-'.$transactionToken.'-'.$index;
+    $backupPath = $targetParent.DIRECTORY_SEPARATOR.'.'.$targetBaseName.'.promotion-backup-'.$transactionToken.'-'.$index;
+
+    $preparedItem = $candidate;
+    $preparedItem['stage_path'] = $stagePath;
+    $preparedItem['backup_path'] = $backupPath;
+    $preparedItem['target_moved'] = FALSE;
+    $preparedItem['promoted'] = FALSE;
+    $prepared[] = $preparedItem;
+    $preparedIndex = count($prepared) - 1;
+
+    if (! $this->pathWithinBase($stagePath, $realRepositoryRoot) || ! $this->pathWithinBase($backupPath, $realRepositoryRoot) || file_exists($stagePath) || is_link($stagePath) || file_exists($backupPath) || is_link($backupPath)) {
+      $result['errors'][] = $candidate['entry']['label'].' could not reserve safe temporary promotion folders.';
+      break;
     }
 
-    if (! $this->copyDirectoryTree($sourcePath, $targetPath, TRUE)) {
-      $result['errors'][] = $location['label'].' could not be copied.';
-      continue;
+    if (! $this->copyDirectoryTree($candidate['source_path'], $stagePath, TRUE, TRUE)) {
+      $result['errors'][] = $candidate['entry']['label'].' could not be staged for promotion.';
+      break;
     }
 
-    $result['copied'][] = $entry;
+    if ($candidate['target_existed'] && ! $this->copyPromotionEnvironmentFiles($candidate['target_path'], $stagePath)) {
+      $result['errors'][] = $candidate['entry']['label'].' target environment files could not be preserved.';
+      break;
+    }
+
+    $prepared[$preparedIndex]['staged'] = TRUE;
+  }
+
+  if (! empty($result['errors'])) {
+    $cleanupErrors = $this->restorePromotionArtifactTransaction($prepared);
+    if (! empty($cleanupErrors)) {
+      $result['errors'] = array_merge($result['errors'], $cleanupErrors);
+    }
+    return $result;
+  }
+
+  foreach ($prepared as $index => $preparedItem) {
+    clearstatcache(TRUE, $preparedItem['target_path']);
+    $targetExistsNow = is_dir($preparedItem['target_path']);
+
+    if (is_link($preparedItem['target_path']) || (file_exists($preparedItem['target_path']) && ! $targetExistsNow) || $targetExistsNow !== $preparedItem['target_existed']) {
+      $result['errors'][] = $preparedItem['entry']['label'].' target folder changed while the promotion was being prepared.';
+      break;
+    }
+
+    if ($targetExistsNow) {
+      if (! rename($preparedItem['target_path'], $preparedItem['backup_path'])) {
+        $result['errors'][] = $preparedItem['entry']['label'].' existing target folder could not be moved to a promotion backup.';
+        break;
+      }
+      $prepared[$index]['target_moved'] = TRUE;
+    }
+
+    if (! rename($preparedItem['stage_path'], $preparedItem['target_path'])) {
+      $result['errors'][] = $preparedItem['entry']['label'].' staged folder could not replace the target folder.';
+      break;
+    }
+
+    $prepared[$index]['promoted'] = TRUE;
+  }
+
+  if (! empty($result['errors'])) {
+    $restoreErrors = $this->restorePromotionArtifactTransaction($prepared);
+    if (! empty($restoreErrors)) {
+      $result['errors'] = array_merge($result['errors'], $restoreErrors);
+    }
+    return $result;
+  }
+
+  foreach ($prepared as $preparedItem) {
+    $result['copied'][] = $preparedItem['entry'];
+
+    if (is_dir($preparedItem['backup_path']) && ! $this->removeDirectoryTree($preparedItem['backup_path'])) {
+      $result['skipped'][] = $preparedItem['entry']['label'].' promotion backup could not be removed automatically.';
+    }
   }
 
   return $result;
+}
+
+private function promotionPathsOverlap($firstPath, $secondPath) {
+  $firstPath = rtrim(str_replace('\\', '/', (string) $firstPath), '/');
+  $secondPath = rtrim(str_replace('\\', '/', (string) $secondPath), '/');
+
+  if ($firstPath === '' || $secondPath === '') {
+    return FALSE;
+  }
+
+  return $firstPath === $secondPath || strpos($firstPath.'/', $secondPath.'/') === 0 || strpos($secondPath.'/', $firstPath.'/') === 0;
+}
+
+private function promotionPathWithResolvedAncestor($path) {
+  $candidate = rtrim((string) $path, '/\\');
+  $suffix = array();
+
+  while ($candidate !== '' && ! file_exists($candidate) && ! is_link($candidate)) {
+    $parent = dirname($candidate);
+    if ($parent === $candidate) {
+      return FALSE;
+    }
+    array_unshift($suffix, basename($candidate));
+    $candidate = $parent;
+  }
+
+  $realCandidate = realpath($candidate);
+  if ($realCandidate === FALSE) {
+    return FALSE;
+  }
+
+  foreach ($suffix as $segment) {
+    $realCandidate .= DIRECTORY_SEPARATOR.$segment;
+  }
+
+  return $realCandidate;
+}
+
+private function isPromotionEnvironmentFilePath($relativePath) {
+  $baseName = strtolower(basename(str_replace('\\', '/', (string) $relativePath)));
+  return ($baseName === '.env' || strpos($baseName, '.env.') === 0) && $baseName !== '.env.example';
+}
+
+private function copyPromotionEnvironmentFiles($sourcePath, $targetPath) {
+  if (! is_dir($sourcePath) || is_link($sourcePath) || ! is_dir($targetPath) || is_link($targetPath)) {
+    return FALSE;
+  }
+
+  $sourcePath = rtrim($sourcePath, DIRECTORY_SEPARATOR);
+  $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+
+  foreach ($iterator as $item) {
+    $relativePath = substr($item->getPathname(), strlen($sourcePath) + 1);
+    if (! $this->isPromotionEnvironmentFilePath($relativePath)) {
+      continue;
+    }
+
+    if ($item->isLink() || ! $item->isFile()) {
+      return FALSE;
+    }
+
+    $targetItemPath = $targetPath.DIRECTORY_SEPARATOR.$relativePath;
+    if (! $this->ensureDirectory(dirname($targetItemPath)) || ! copy($item->getPathname(), $targetItemPath)) {
+      return FALSE;
+    }
+
+    $permissions = fileperms($item->getPathname());
+    if ($permissions !== FALSE && ! chmod($targetItemPath, $permissions & 0777)) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+private function restorePromotionArtifactTransaction($prepared) {
+  $errors = array();
+
+  foreach (array_reverse($prepared, TRUE) as $preparedItem) {
+    if (! empty($preparedItem['promoted']) && is_dir($preparedItem['target_path']) && ! $this->removeDirectoryTree($preparedItem['target_path'])) {
+      $errors[] = $preparedItem['entry']['label'].' promoted target could not be cleared while restoring the previous state.';
+    }
+
+    if (! empty($preparedItem['target_moved']) && is_dir($preparedItem['backup_path'])) {
+      if (file_exists($preparedItem['target_path']) || is_link($preparedItem['target_path']) || ! rename($preparedItem['backup_path'], $preparedItem['target_path'])) {
+        $errors[] = $preparedItem['entry']['label'].' promotion backup remains at '.$preparedItem['backup_path'].' because it could not be restored automatically.';
+      }
+    }
+
+    if (is_dir($preparedItem['stage_path']) && ! $this->removeDirectoryTree($preparedItem['stage_path'])) {
+      $errors[] = $preparedItem['entry']['label'].' staging folder could not be removed automatically.';
+    }
+  }
+
+  return $errors;
 }
 
 private function promotionRepositoryRoot() {
@@ -1315,26 +1580,42 @@ private function isTransientPromotionArtifactPath($relativePath) {
   }
 
   $transientDirectories = array(
+    '.git',
     '.venv',
+    'venv',
+    '.tox',
+    '.nox',
     '.uv-cache',
     '.jobseeker-wheels',
     '.jobseeker-python-libs',
     '__pycache__',
     '.mypy_cache',
     '.ruff_cache',
-    '.pytest_cache'
+    '.pytest_cache',
+    'htmlcov',
+    'build',
+    'dist'
   );
 
   foreach (explode('/', strtolower($relativePath)) as $segment) {
-    if (in_array($segment, $transientDirectories, TRUE)) {
+    if (in_array($segment, $transientDirectories, TRUE) || preg_match('/\\.egg-info$/i', $segment) === 1) {
       return TRUE;
     }
   }
 
-  return preg_match('/\\.py[co]$/i', $relativePath) === 1;
+  $baseName = strtolower(basename($relativePath));
+  if ($baseName === '.coverage' || strpos($baseName, '.coverage.') === 0 || $baseName === 'coverage.xml') {
+    return TRUE;
+  }
+
+  return preg_match('/\\.py[co]$/i', $baseName) === 1;
 }
 
-private function copyDirectoryTree($sourcePath, $targetPath, $excludeTransientPythonFiles = FALSE) {
+private function copyDirectoryTree($sourcePath, $targetPath, $excludeTransientPythonFiles = FALSE, $excludeEnvironmentFiles = FALSE) {
+  if (! is_dir($sourcePath) || is_link($sourcePath) || is_link($targetPath) || (file_exists($targetPath) && ! is_dir($targetPath)) || $this->promotionPathsOverlap($sourcePath, $targetPath)) {
+    return FALSE;
+  }
+
   if (! $this->ensureDirectory($targetPath)) {
     return FALSE;
   }
@@ -1348,6 +1629,10 @@ private function copyDirectoryTree($sourcePath, $targetPath, $excludeTransientPy
       continue;
     }
 
+    if ($excludeEnvironmentFiles && $this->isPromotionEnvironmentFilePath($relativePath)) {
+      continue;
+    }
+
     if ($item->isLink()) {
       return FALSE;
     }
@@ -1358,10 +1643,16 @@ private function copyDirectoryTree($sourcePath, $targetPath, $excludeTransientPy
       if (! $this->ensureDirectory($targetItemPath)) {
         return FALSE;
       }
-    } else {
+    } elseif ($item->isFile()) {
       if (! $this->ensureDirectory(dirname($targetItemPath)) || ! copy($item->getPathname(), $targetItemPath)) {
         return FALSE;
       }
+      $permissions = $item->getPerms();
+      if ($permissions !== FALSE && ! chmod($targetItemPath, $permissions & 0777)) {
+        return FALSE;
+      }
+    } else {
+      return FALSE;
     }
   }
 

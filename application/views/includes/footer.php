@@ -92,6 +92,7 @@
 
         initializeDataTable('#table6', {
             "scrollX": true,
+            "scrollCollapse": true,
 
            columnDefs: [
             { width: 100, targets: 5 },
@@ -99,7 +100,13 @@
             { width: 100, targets: 10 },
             { width: 100, targets: 11 }
         ],
-        "order": [[ 0, "desc" ]]
+        "order": [[ 0, "desc" ]],
+        "initComplete": function() {
+            var table = this.api();
+            window.setTimeout(function() {
+                table.columns.adjust();
+            }, 350);
+        }
         });
 
            
@@ -196,53 +203,6 @@
                     $(window).on('resize', applySidebarPreference);
                 });
             })();
-    </script>
-
-    <script type="text/javascript">
-        (function() {
-            var layoutTimer = null;
-
-            function syncSidebarLayout() {
-                var sidebar = $('.main-sidebar');
-                var sidebarSection = sidebar.children('.sidebar');
-
-                if (! sidebar.length || ! sidebarSection.length || $('body').hasClass('fixed')) {
-                    return;
-                }
-
-                var headerHeight = $('.main-header').outerHeight() || 50;
-                var footerHeight = $('.main-footer').outerHeight() || 0;
-                var contentHeight = $('.content-wrapper').outerHeight() || 0;
-                var viewportHeight = $(window).height() || 0;
-                var pageHeight = Math.max(viewportHeight, contentHeight + footerHeight);
-                var sidebarContentHeight = Math.max(0, pageHeight - headerHeight);
-
-                document.documentElement.style.setProperty('--jobseeker-sidebar-page-height', pageHeight + 'px');
-                document.documentElement.style.setProperty('--jobseeker-sidebar-content-height', sidebarContentHeight + 'px');
-            }
-
-            function scheduleSidebarLayoutSync() {
-                window.clearTimeout(layoutTimer);
-                layoutTimer = window.setTimeout(syncSidebarLayout, 0);
-            }
-
-            window.JobSeekerSidebarLayout = {
-                refresh: scheduleSidebarLayoutSync,
-                sync: syncSidebarLayout
-            };
-
-            $(function() {
-                syncSidebarLayout();
-                window.setTimeout(syncSidebarLayout, 250);
-                $(window).on('load resize', scheduleSidebarLayoutSync);
-                $(document).on('expanded.tree collapsed.tree expanded.pushMenu collapsed.pushMenu jobseeker:environment-change', scheduleSidebarLayoutSync);
-
-                var content = document.querySelector('.content-wrapper');
-                if (window.MutationObserver && content) {
-                    new MutationObserver(scheduleSidebarLayoutSync).observe(content, { childList: true, subtree: true, attributes: true });
-                }
-            });
-        })();
     </script>
 
     <script type="text/javascript">
@@ -389,12 +349,6 @@
                 return left.localeCompare(right);
             }
 
-            function refreshSidebarLayout() {
-                if (window.JobSeekerSidebarLayout && window.JobSeekerSidebarLayout.refresh) {
-                    window.JobSeekerSidebarLayout.refresh();
-                }
-            }
-
             function render(payload, environment) {
                 var container = $('#sidebarRunningJobsList');
                 var environments = payload && payload.environments ? payload.environments : {};
@@ -412,14 +366,12 @@
 
                 if (! payload || payload.ok !== true) {
                     container.html('<div class="jobseeker-sidebar-running-error">Unable to load running jobs.</div>');
-                    refreshSidebarLayout();
                     return;
                 }
 
                 if (! names.length) {
                     var emptyText = isAllEnvironment(environment) ? 'No running Jenkins jobs.' : 'No running ' + normalizeEnvironment(environment) + ' Jenkins jobs.';
                     container.html('<div class="jobseeker-sidebar-running-empty">' + escapeHtml(emptyText) + '</div>');
-                    refreshSidebarLayout();
                     return;
                 }
 
@@ -443,7 +395,6 @@
                 });
 
                 container.html(html);
-                refreshSidebarLayout();
             }
 
             function refreshRunningJobs(environment, force) {
@@ -480,7 +431,6 @@
                         }
 
                         $('#sidebarRunningJobsList').html('<div class="jobseeker-sidebar-running-error">Unable to load running jobs.</div>');
-                        refreshSidebarLayout();
                     })
                     .always(function() {
                         if (currentSerial === requestSerial) {

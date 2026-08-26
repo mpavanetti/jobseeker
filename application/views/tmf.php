@@ -318,8 +318,25 @@ pre {
 }
 
 .tmf-table-wrap {
-  overflow-x: auto;
+  overflow: hidden;
   width: 100%;
+}
+
+.tmf-table-wrap .dataTables_wrapper,
+.tmf-table-wrap .dataTables_scroll,
+.tmf-table-wrap .dataTables_scrollHead,
+.tmf-table-wrap .dataTables_scrollBody {
+  width: 100%;
+}
+
+.tmf-table-wrap .dataTables_scrollHeadInner,
+.tmf-table-wrap .dataTables_scrollHeadInner > table {
+  min-width: 1500px;
+}
+
+.tmf-table-wrap .dataTables_scrollHeadInner > table,
+.tmf-table-wrap .dataTables_scrollBody > table {
+  margin: 0 !important;
 }
 
 .tmf-row-error > td { background: #fff5f5 !important; }
@@ -434,8 +451,8 @@ pre {
             </div>
             <!-- /.box-header -->
             <div class="box-body tmf-table-wrap">
-              <div class="table-responsive">
-              <table id="table6" class="table table-bordered table-striped">
+              <div class="tmf-datatable-container">
+              <table id="table6" class="table table-bordered table-striped" style="width: 100%;">
                 <thead>
                 <tr>
                   <th>Id</th>
@@ -629,6 +646,19 @@ pre {
 var activeTmfFilter = 'all';
 var activeTmfSelectionOnly = false;
 var tmfSelectedEnvironment = <?php echo json_encode($tmfSelectedEnvironment); ?>;
+var tmfColumnAdjustTimer = null;
+
+function scheduleTmfColumnAlignment(delay) {
+  window.clearTimeout(tmfColumnAdjustTimer);
+  tmfColumnAdjustTimer = window.setTimeout(function() {
+    var table = getTmfTable();
+    if (! table) {
+      return;
+    }
+
+    table.columns.adjust();
+  }, typeof delay === 'number' ? delay : 0);
+}
 
     $(document).ready(function() {
 
@@ -717,7 +747,18 @@ var tmfSelectedEnvironment = <?php echo json_encode($tmfSelectedEnvironment); ?>
         }
       });
 
-      $('#table6').on('draw.dt search.dt', updateTmfVisibleRows);
+      $('#table6').on('init.dt draw.dt search.dt', function() {
+        updateTmfVisibleRows();
+        scheduleTmfColumnAlignment();
+      });
+
+      $(window).on('load resize', function() {
+        scheduleTmfColumnAlignment(50);
+      });
+
+      $(document).on('expanded.pushMenu collapsed.pushMenu', function() {
+        scheduleTmfColumnAlignment(350);
+      });
 
       $('#table6 tbody').on('click', 'tr', function(event) {
         if ($(event.target).closest('a, button, input, label').length) {
@@ -766,6 +807,7 @@ var tmfSelectedEnvironment = <?php echo json_encode($tmfSelectedEnvironment); ?>
       $(document).on('jobseeker:environment-change', syncTmfDeleteControls);
       syncTmfDeleteControls();
       setTimeout(updateTmfVisibleRows, 250);
+      setTimeout(function() { scheduleTmfColumnAlignment(); }, 400);
 
     //load 
  // $('#loading').fadeOut();

@@ -123,15 +123,24 @@ class DeleteJob extends BaseController
             return FALSE;
         }
 
-        return $this->safePathSegment(rawurldecode((string) $jobName));
+        $safePath = $this->safeRelativePath(rawurldecode((string) $jobName));
+        return $safePath === FALSE ? FALSE : str_replace(DIRECTORY_SEPARATOR, '/', $safePath);
     }
 
     private function deleteRepositoryForJob($jobName)
     {
         $deletedSystems = array();
-        foreach (array('batch', 'bash', 'talend', 'python') as $system) {
-            if ($this->deleteRepositoryPath($system, $jobName)) {
-                $deletedSystems[] = $system;
+        $locations = array(
+            array('system' => 'batch', 'relative_root' => 'batch/jobs'),
+            array('system' => 'bash', 'relative_root' => 'bash/jobs'),
+            array('system' => 'talend', 'relative_root' => 'talend/jobs'),
+            array('system' => 'python', 'relative_root' => 'python/jobs'),
+            array('system' => 'python-inline', 'relative_root' => 'python/inline')
+        );
+
+        foreach ($locations as $location) {
+            if ($this->deleteRepositoryPath($location['relative_root'], $jobName)) {
+                $deletedSystems[] = $location['system'];
             }
         }
 
@@ -146,11 +155,11 @@ class DeleteJob extends BaseController
             ->set_output(json_encode($payload, JSON_PRETTY_PRINT));
     }
 
-    private function deleteRepositoryPath($system, $jobName)
+    private function deleteRepositoryPath($relativeRoot, $jobName)
     {
         $jenkinsHome = $this->global['jenkins_home'];
         $repositoryRoot = $jenkinsHome != '' ? rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository' : FCPATH.'repository';
-        $jobsRoot = $repositoryRoot.DIRECTORY_SEPARATOR.$system.DIRECTORY_SEPARATOR.'jobs';
+        $jobsRoot = $repositoryRoot.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $relativeRoot);
         $targetPath = $jobsRoot.DIRECTORY_SEPARATOR.$jobName;
 
         if (! $this->pathWithinBase($targetPath, $jobsRoot) || ! is_dir($targetPath)) {

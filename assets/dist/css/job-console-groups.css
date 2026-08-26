@@ -1,0 +1,163 @@
+.job-console-host {
+  background: #111827;
+  border-radius: 4px;
+  color: #d1d5db;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  max-height: 560px;
+  min-height: 90px;
+  overflow: auto;
+  padding: 10px;
+  white-space: normal !important;
+  word-break: normal;
+}
+
+.job-console-toolbar {
+  align-items: center;
+  background: #111827;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 9px;
+  padding: 2px 0 7px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.job-console-toolbar .btn {
+  font-family: Arial, sans-serif;
+}
+
+.job-console-total {
+  color: #9ca3af;
+  font-family: Arial, sans-serif;
+  margin-left: auto;
+}
+
+.job-console-section {
+  background: #0b1220;
+  border: 1px solid #273244;
+  border-left: 3px solid #64748b;
+  border-radius: 4px;
+  margin-bottom: 7px;
+  overflow: hidden;
+}
+
+.job-console-section-jobseeker { border-left-color: #a78bfa; }
+.job-console-section-jenkins { border-left-color: #94a3b8; }
+.job-console-section-docker-build,
+.job-console-section-docker-runtime { border-left-color: #38bdf8; }
+.job-console-section-python-environment { border-left-color: #fbbf24; }
+.job-console-section-python { border-left-color: #4ade80; }
+.job-console-section-cleanup { border-left-color: #c084fc; }
+.job-console-section-result { border-left-color: #22c55e; }
+.job-console-section.has-error { border-left-color: #f87171; }
+
+.job-console-summary {
+  align-items: center;
+  background: #172033;
+  cursor: pointer;
+  display: flex;
+  font-family: Arial, sans-serif;
+  gap: 8px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 36px;
+  padding: 8px 10px;
+  user-select: none;
+}
+
+.job-console-summary::-webkit-details-marker {
+  display: none;
+}
+
+.job-console-summary::before {
+  color: #94a3b8;
+  content: "\f054";
+  flex: 0 0 auto;
+  font-family: FontAwesome;
+  width: 10px;
+}
+
+.job-console-section[open] > .job-console-summary::before {
+  content: "\f078";
+}
+
+.job-console-title {
+  color: #f3f4f6;
+  flex: 1 1 auto;
+  font-weight: 700;
+}
+
+.job-console-meta {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.job-console-badge {
+  background: #334155;
+  border-radius: 10px;
+  color: #dbeafe;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.job-console-badge-error {
+  background: #991b1b;
+  color: #fee2e2;
+}
+
+.job-console-badge-live {
+  animation: job-console-pulse 1.4s ease-in-out infinite;
+  background: #166534;
+  color: #dcfce7;
+}
+
+.job-console-content,
+.job-console-raw {
+  background: #0b1220;
+  border: 0;
+  border-radius: 0;
+  color: #d1d5db;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  max-width: none;
+  overflow: visible;
+  padding: 11px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.job-console-raw {
+  min-height: 70px;
+}
+
+.job-console-empty {
+  color: #9ca3af;
+  padding: 22px;
+  text-align: center;
+}
+
+@keyframes job-console-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+
+@media (max-width: 600px) {
+  .job-console-total {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .job-console-summary {
+    align-items: flex-start;
+  }
+}

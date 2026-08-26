@@ -73,6 +73,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   <!-- Alertify Js -->
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/alertify.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=1" rel="stylesheet" type="text/css" />
   <!-- jQuery UI -->
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
@@ -84,6 +85,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=2" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
   window.jobseekerCsrf = {
@@ -758,30 +760,26 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   }
 
   .main-sidebar .sidebar {
-    display: flex;
-    flex-direction: column;
+    display: block;
     min-height: calc(100vh - 50px);
   }
 
   @media (min-width: 768px) {
     .main-sidebar {
-      min-height: var(--jobseeker-sidebar-page-height, 100%);
-    }
-
-    .main-sidebar .sidebar {
-      min-height: var(--jobseeker-sidebar-content-height, calc(100vh - 50px));
+      min-height: 100%;
     }
   }
 
   .main-sidebar .sidebar-menu {
-    flex: 0 0 auto;
+    margin-bottom: 0;
   }
 
   .jobseeker-sidebar-running {
     border-top: 1px solid rgba(255,255,255,.08);
     color: #b8c7ce;
-    margin-top: auto;
+    margin: 12px 10px 14px;
     padding: 12px 10px 14px;
+    position: static;
   }
 
   .jobseeker-sidebar-running-title {
@@ -830,6 +828,13 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     font-size: 12px;
     line-height: 1.4;
     padding: 6px 0;
+  }
+
+  #sidebarRunningJobsList {
+    max-height: 240px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-right: 3px;
   }
 
   .jobseeker-sidebar-running-env {

@@ -175,6 +175,12 @@ services:
       - "${JOBSEEKER_OPENVSCODE_HOST:-127.0.0.1}:${JOBSEEKER_OPENVSCODE_PORT:-3000}:3000"
     volumes:
       - ./repository:/home/workspace/repository
+      # Job workspaces may consume the SDK and its wheel, but must never edit
+      # the shared source used to build wheels for other jobs.
+      - type: bind
+        source: ./repository/python/lib/jobseeker-sdk
+        target: /home/workspace/repository/python/lib/jobseeker-sdk
+        read_only: true
       - type: volume
         source: openvscode-server-data
         target: /home/workspace/.openvscode-server/data

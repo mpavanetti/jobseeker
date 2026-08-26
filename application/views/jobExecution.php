@@ -1326,7 +1326,7 @@
             '<div class="execution-meta-item"><span>Duration</span><strong class="run-duration"></strong></div>' +
             '<div class="execution-meta-item"><span>Console</span><strong class="run-console-size"></strong></div>' +
           '</div>' +
-          '<pre class="execution-console" id="console-' + run.id + '">Waiting for Jenkins to start this build...</pre>' +
+          '<div class="execution-console job-console-host" id="console-' + run.id + '"><div class="job-console-empty">Waiting for Jenkins to start this build...</div></div>' +
         '</div>'
       );
 
@@ -1489,7 +1489,11 @@
         run.hasConsoleText = true;
       }
 
-      consoleElement.append(document.createTextNode(text));
+      if (window.JobSeekerConsole) {
+        window.JobSeekerConsole.appendText(consoleElement, text, {live: ! run.finished});
+      } else {
+        consoleElement.append(document.createTextNode(text));
+      }
 
       if ($('#autoScrollConsole').is(':checked')) {
         consoleElement.scrollTop(consoleElement[0].scrollHeight);

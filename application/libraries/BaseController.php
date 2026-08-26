@@ -1401,7 +1401,9 @@ class BaseController extends CI_Controller {
 	 * This function is used to check the access
 	 */
 	function isManager() {
-		if ($this->role != ROLE_MANAGER) {
+		// Historical callers treat TRUE as "access denied". Both documented
+		// job-management roles must therefore return FALSE here.
+		if ($this->role != ROLE_ADMIN && $this->role != ROLE_MANAGER) {
 			return true;
 		} else {
 			return false;
