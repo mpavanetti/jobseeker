@@ -196,6 +196,25 @@ class BaseController extends CI_Controller {
 		return $this->checkJenkinsEnvironmentSlots($jobName, $environment);
 	}
 
+	protected function requestJenkinsBuild($path, $body = '', $contentType = NULL) {
+		$jobName = $this->jenkinsJobNameFromBuildPath($path);
+		if ($jobName === FALSE) {
+			return NULL;
+		}
+
+		$routingCheck = $this->ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $body);
+		if (! $routingCheck['ok']) {
+			return array(
+				'status' => isset($routingCheck['status']) ? (int) $routingCheck['status'] : 502,
+				'content_type' => 'text/plain',
+				'body' => $routingCheck['message'],
+				'headers' => array()
+			);
+		}
+
+		return $this->requestJenkins('POST', $path, $body, $contentType);
+	}
+
 	protected function ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $body = '') {
 		$jobName = $this->jenkinsJobNameFromBuildPath($path);
 		if ($jobName === FALSE) {
@@ -1355,6 +1374,7 @@ class BaseController extends CI_Controller {
 			$this->lastLogin = $this->session->userdata ( 'lastLogin' );
 			
 			$this->global ['name'] = $this->name;
+			$this->global ['user_id'] = $this->vendorId;
 			$this->global ['role'] = $this->role;
 			$this->global ['role_text'] = $this->roleText;
 			$this->global ['last_login'] = $this->lastLogin;

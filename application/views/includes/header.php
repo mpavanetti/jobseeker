@@ -88,6 +88,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 <script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=3" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
+  window.jobseekerUserId = <?php echo json_encode(isset($user_id) ? $user_id : ''); ?>;
   window.jobseekerCsrf = {
     name: <?php echo json_encode($this->security->get_csrf_token_name()); ?>,
     hash: <?php echo json_encode($this->security->get_csrf_hash()); ?>
@@ -602,6 +603,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     }
   });
 </script>
+<script src="<?php echo base_url(); ?>assets/js/job-draft-cache.js?v=2" type="text/javascript"></script>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 <style>
@@ -830,7 +832,8 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     padding: 6px 0;
   }
 
-  #sidebarRunningJobsList {
+  #sidebarRunningJobsList,
+  #sidebarCachedJobsList {
     max-height: 240px;
     overflow-x: hidden;
     overflow-y: auto;
@@ -883,6 +886,11 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     color: #8aa4af;
     font-size: 11px;
     margin-top: 2px;
+  }
+
+  .jobseeker-sidebar-cached-build strong i {
+    color: #f39c12;
+    margin-right: 3px;
   }
 
   .sidebar-collapse .jobseeker-sidebar-running {
@@ -1215,6 +1223,15 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
           }
           ?>
         </ul>
+        <?php if ($jenkins_enabled == true && ($role == ROLE_ADMIN || $role == ROLE_MANAGER)) { ?>
+          <div class="jobseeker-sidebar-running" id="sidebarCachedJobs">
+            <div class="jobseeker-sidebar-running-title">
+              <span><i class="fa fa-save"></i> Cached Drafts <small id="sidebarCachedJobsCount"></small></span>
+              <a class="jobseeker-sidebar-running-refresh" href="<?php echo base_url(); ?>jobCreation" title="Open cached job drafts"><i class="fa fa-pencil"></i></a>
+            </div>
+            <div id="sidebarCachedJobsList" class="jobseeker-sidebar-running-empty">Loading cached drafts...</div>
+          </div>
+        <?php } ?>
         <?php if ($jenkins_enabled == true) { ?>
           <div class="jobseeker-sidebar-running" id="sidebarRunningJobs">
             <div class="jobseeker-sidebar-running-title">

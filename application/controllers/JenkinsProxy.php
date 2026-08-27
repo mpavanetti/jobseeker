@@ -38,18 +38,14 @@ class JenkinsProxy extends BaseController
         $path = $this->input->get('path');
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : NULL;
 
+        $response = NULL;
         if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE)) {
-            $routingCheck = $this->ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $this->input->raw_input_stream);
-            if (! $routingCheck['ok']) {
-                $this->output
-                    ->set_status_header(isset($routingCheck['status']) ? (int) $routingCheck['status'] : 502)
-                    ->set_content_type('text/plain')
-                    ->set_output($routingCheck['message']);
-                return;
-            }
+            $response = $this->requestJenkinsBuild($path, $this->input->raw_input_stream, $contentType);
         }
 
-        $response = $this->requestJenkins($method, $path, $this->input->raw_input_stream, $contentType);
+        if ($response === NULL) {
+            $response = $this->requestJenkins($method, $path, $this->input->raw_input_stream, $contentType);
+        }
 
         if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE) && in_array($response['status'], array(301, 302, 303), TRUE)) {
             $response['status'] = 200;

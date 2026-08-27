@@ -436,10 +436,11 @@ class JobCreation extends BaseController
 
         $jobSaved = TRUE;
         $triggerBody = http_build_query(array('ENVIRONMENT' => $environment));
-        $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($previewJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
+        $triggerResponse = $this->requestJenkinsBuild($this->jenkinsJobPath($previewJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
 
         if (! $this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
-          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Unable to start the temporary Jenkins preview job. HTTP '.$triggerResponse['status'].'.'), 502);
+          $message = isset($triggerResponse['body']) && trim((string) $triggerResponse['body']) !== '' ? trim((string) $triggerResponse['body']) : 'Unable to start the temporary Jenkins preview job. HTTP '.$triggerResponse['status'].'.';
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $message), (int) $triggerResponse['status']);
           return;
         }
 
@@ -3888,23 +3889,18 @@ class JobCreation extends BaseController
                   }
 
                   if ($triggerAfterSave === '1') {
-                    $routingCheck = $this->ensureJenkinsJobEnvironmentAgentAssignment($targetJobName, $environment);
-                    if (! $routingCheck['ok']) {
-                      $triggerFailures[] = $targetJobName.' ('.$routingCheck['message'].')';
-                      continue;
-                    }
-
                     $triggerBody = http_build_query(array('ENVIRONMENT' => $environment));
-                    $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
+                    $triggerResponse = $this->requestJenkinsBuild($this->jenkinsJobPath($targetJobName) . '/buildWithParameters', $triggerBody, 'application/x-www-form-urlencoded');
 
                     if (! $this->isSuccessfulJenkinsStatus($triggerResponse['status']) && in_array((int) $triggerResponse['status'], array(400, 404), TRUE)) {
-                      $triggerResponse = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJobName) . '/build');
+                      $triggerResponse = $this->requestJenkinsBuild($this->jenkinsJobPath($targetJobName) . '/build');
                     }
 
                     if ($this->isSuccessfulJenkinsStatus($triggerResponse['status'])) {
                       $triggeredCount += 1;
                     } else {
-                      $triggerFailures[] = $targetJobName.' (HTTP '.$triggerResponse['status'].')';
+                      $failureMessage = isset($triggerResponse['body']) ? trim((string) $triggerResponse['body']) : '';
+                      $triggerFailures[] = $targetJobName.' ('.($failureMessage !== '' ? $failureMessage : 'HTTP '.$triggerResponse['status']).')';
                     }
                   }
                 }
