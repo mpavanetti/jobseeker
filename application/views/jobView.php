@@ -28,16 +28,22 @@
   }
 
   .job-view-job-option {
+    border-left: 3px solid transparent;
     border-bottom: 1px solid #f4f4f4;
     cursor: pointer;
     display: block;
     font-weight: normal;
     margin: 0;
-    padding: 9px 10px;
+    padding: 9px 10px 9px 7px;
   }
 
   .job-view-job-option:hover {
     background: #f9fafc;
+  }
+
+  .job-view-job-option.is-comparison-source {
+    background: #eef7fb;
+    border-left-color: #3c8dbc;
   }
 
   .job-view-job-option input {
@@ -273,6 +279,34 @@
     vertical-align: middle !important;
   }
 
+  .job-parameter-table th {
+    background: #f9fafc;
+    white-space: nowrap;
+  }
+
+  .job-parameter-table td:first-child {
+    min-width: 150px;
+  }
+
+  .job-parameter-table td:nth-child(3),
+  .job-parameter-table td:nth-child(4) {
+    min-width: 150px;
+    max-width: 300px;
+  }
+
+  .job-parameter-table .job-parameter-value {
+    background: transparent;
+    color: #263238;
+    display: inline-block;
+    overflow-wrap: anywhere;
+    padding: 0;
+    white-space: normal;
+  }
+
+  .job-parameter-table tr.job-parameter-override td {
+    background: #fffaf0;
+  }
+
   .job-view-status-line {
     color: #777;
     margin-top: 8px;
@@ -386,7 +420,7 @@
                 <button type="button" class="btn btn-default" id="selectVisibleJobs">
                   <i class="fa fa-check-square-o"></i> Select Visible
                 </button>
-                <button type="button" class="btn btn-default" id="selectMatchingEnvironments" title="Select matching environment variants of the first selected job">
+                <button type="button" class="btn btn-default" id="selectMatchingEnvironments" title="Select environment variants of the most recently checked job">
                   <i class="fa fa-exchange"></i> Match Environments
                 </button>
                 <button type="button" class="btn btn-default" id="clearSelectedJobs">
@@ -495,6 +529,7 @@
     var jobEnvironmentRequests = {};
     var comparisonAcrossEnvironments = false;
     var pendingComparisonKey = '';
+    var comparisonSourceJob = '';
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
     var environmentHelper = window.JobSeekerEnvironment || {
       detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
@@ -794,13 +829,29 @@
       return jobEnvironmentFilter === 'all' || environment === normalizeEnvironmentFilterValue(jobEnvironmentFilter);
     }
 
-    function jobComparisonKey(jobName) {
+    function jobComparisonIdentity(jobName) {
       var environments = configuredEnvironmentNames().concat(['DEV', 'QA', 'QAS', 'UAT', 'PREPROD', 'HML', 'PROD', 'PRD', 'PRODUCTION']);
       var environmentPattern = $.map(uniqueValues(environments), function(environment) {
         return String(environment).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       }).join('|');
       var pattern = new RegExp('(^|[/_. -])(' + environmentPattern + ')(?=$|[/_. -])', 'ig');
-      return String(jobName || '').replace(pattern, '$1').replace(/[\/_. -]{2,}/g, '-').replace(/^[\/_. -]+|[\/_. -]+$/g, '').toLowerCase();
+      var matchedEnvironment = false;
+      var key = String(jobName || '').replace(pattern, function(match, separator) {
+        matchedEnvironment = true;
+        return separator;
+      }).replace(/[\/_. -]{2,}/g, '-').replace(/^[\/_. -]+|[\/_. -]+$/g, '').toLowerCase();
+
+      return {key: key, hasEnvironment: matchedEnvironment};
+    }
+
+    function setComparisonSourceJob(jobName) {
+      comparisonSourceJob = jobName && selectedJobNames[jobName] ? jobName : '';
+      $('.job-view-job-option').removeClass('is-comparison-source');
+      if (comparisonSourceJob) {
+        $('.job-view-job-check').filter(function() {
+          return this.value === comparisonSourceJob;
+        }).closest('.job-view-job-option').addClass('is-comparison-source');
+      }
     }
 
     function applyPendingEnvironmentMatch() {
@@ -811,12 +862,14 @@
       selectedJobNames = {};
       $.each(visibleJobs, function(index, job) {
         var name = job.fullName || job.name || '';
-        if (jobComparisonKey(name) === pendingComparisonKey) {
+        var identity = jobComparisonIdentity(name);
+        if (identity.hasEnvironment && identity.key === pendingComparisonKey) {
           selectedJobNames[name] = true;
         }
       });
       pendingComparisonKey = '';
       renderJobOptions($('#jobFilter').val());
+      setComparisonSourceJob(comparisonSourceJob);
       updateSelectedJobCount();
       if (Object.keys(selectedJobNames).length > 0) {
         loadSelectedJobs();
@@ -1263,10 +1316,13 @@
           if (/ParameterDefinition$/.test(tagName)) {
             var parameterName = childText(element, 'name');
             if (parameterName) {
+              var defaultValueNodes = element.getElementsByTagName('defaultValue');
+              var fallbackValueNodes = element.getElementsByTagName('value');
               config.parameters.push({
                 type: tagName.split('.').pop().replace('ParameterDefinition', ''),
                 name: parameterName,
                 defaultValue: childText(element, 'defaultValue') || childText(element, 'value'),
+                hasDefaultValue: defaultValueNodes.length > 0 || fallbackValueNodes.length > 0,
                 description: childText(element, 'description')
               });
             }
@@ -1322,6 +1378,43 @@
       });
     }
 
+    function isSensitiveParameter(parameter) {
+      var identity = String((parameter && parameter.name) || '') + ' ' + String((parameter && parameter.type) || '');
+      return /(password|passwd|secret|credential|private.?key|access.?key|api.?key|auth.?token)/i.test(identity);
+    }
+
+    function parameterDisplayText(value, hasValue) {
+      if (! hasValue) {
+        return '';
+      }
+      value = parameterValueText(value);
+      return value === '' ? 'Empty string' : value;
+    }
+
+    function parameterValuesMatch(parameter) {
+      return parameter.hasCurrentValue && parameter.hasDefaultValue && parameterValueText(parameter.currentValue) === parameterValueText(parameter.defaultValue);
+    }
+
+    function renderParameterValue(parameter, value, hasValue) {
+      if (! hasValue) {
+        return renderMuted('Not supplied');
+      }
+      if (isSensitiveParameter(parameter)) {
+        return '<span class="label label-default"><i class="fa fa-lock"></i> Hidden</span>';
+      }
+      return '<code class="job-parameter-value">' + escapeHtml(parameterDisplayText(value, true)) + '</code>';
+    }
+
+    function renderParameterState(parameter) {
+      if (! parameter.hasCurrentValue) {
+        return '<span class="label label-default">Default only</span>';
+      }
+      if (! parameter.hasDefaultValue) {
+        return '<span class="label label-info">Runtime value</span>';
+      }
+      return parameterValuesMatch(parameter) ? '<span class="label label-success">Matches default</span>' : '<span class="label label-warning">Overrides default</span>';
+    }
+
     function renderComparisonParameters(detail) {
       if (! detail.config || ! detail.config.parameters.length) {
         return renderMuted('None');
@@ -1329,7 +1422,8 @@
       return renderList($.map(detail.config.parameters, function(parameter) {
         var current = parameter.hasCurrentValue ? parameter.currentValue : parameter.defaultValue;
         var source = parameter.hasCurrentValue ? 'latest' : 'default';
-        return parameter.name + ' = ' + current + ' (' + source + ')';
+        var displayValue = isSensitiveParameter(parameter) ? 'Hidden' : parameterDisplayText(current, parameter.hasCurrentValue || parameter.hasDefaultValue);
+        return parameter.name + ' = ' + (displayValue || 'Not supplied') + ' (' + source + ')';
       }));
     }
 
@@ -1357,7 +1451,7 @@
           return;
         }
 
-        html += '<label class="job-view-job-option" title="' + escapeAttribute(name + ' - environment: ' + environmentTextForJob(job)) + '">' +
+        html += '<label class="job-view-job-option' + (name === comparisonSourceJob ? ' is-comparison-source' : '') + '" title="' + escapeAttribute(name + ' - environment: ' + environmentTextForJob(job) + (name === comparisonSourceJob ? ' - comparison source' : '')) + '">' +
           '<input type="checkbox" class="job-view-job-check" value="' + escapeAttribute(name) + '" ' + (selectedJobNames[name] ? 'checked ' : '') + '>' +
           '<span class="job-view-job-name">' + escapeHtml(name) + '</span>' +
           '<span class="pull-right">' + renderJobStateLabel(job) + '</span>' +
@@ -1421,6 +1515,10 @@
           visibleJobs.unshift(jobsByName[jobName]);
         }
       });
+
+      if (requestedJobs.length === 1) {
+        comparisonSourceJob = requestedJobs[0];
+      }
 
       renderJobOptions($('#jobFilter').val());
       loadSelectedJobs();
@@ -1701,13 +1799,15 @@
         return renderMuted('None');
       }
 
-      var html = '<div class="table-responsive"><table class="table table-condensed table-bordered job-small-table"><thead><tr><th>Name</th><th>Type</th><th>Value</th><th>Default</th><th>Description</th></tr></thead><tbody>';
+      var html = '<div class="table-responsive"><table class="table table-condensed table-bordered job-small-table job-parameter-table"><thead><tr><th>Name</th><th>Type</th><th>Latest Build Value</th><th>Default</th><th>State</th><th>Description</th></tr></thead><tbody>';
       $.each(parameters, function(index, parameter) {
-        html += '<tr>' +
-          '<td>' + escapeHtml(parameter.name || '') + '</td>' +
+        var rowClass = parameter.hasCurrentValue && parameter.hasDefaultValue && ! parameterValuesMatch(parameter) ? ' class="job-parameter-override"' : '';
+        html += '<tr' + rowClass + '>' +
+          '<td><strong>' + escapeHtml(parameter.name || '') + '</strong></td>' +
           '<td>' + escapeHtml(parameter.type || '') + '</td>' +
-          '<td>' + (parameter.hasCurrentValue ? escapeHtml(parameter.currentValue) : '<span class="text-muted">No build value</span>') + '</td>' +
-          '<td>' + escapeHtml(parameter.defaultValue || '') + '</td>' +
+          '<td>' + renderParameterValue(parameter, parameter.currentValue, parameter.hasCurrentValue) + '</td>' +
+          '<td>' + renderParameterValue(parameter, parameter.defaultValue, parameter.hasDefaultValue) + '</td>' +
+          '<td>' + renderParameterState(parameter) + '</td>' +
           '<td>' + escapeHtml(parameter.description || '') + '</td>' +
         '</tr>';
       });
@@ -1785,13 +1885,11 @@
               '<div class="col-md-6"><div class="job-detail-section"><h4>Timeouts</h4>' + renderList(config.timeouts) + '</div></div>' +
             '</div>' +
             '<div class="job-detail-section"><h4>Command</h4>' + renderPre(config.commands.join('\n\n'), 'job-command-pre') + '</div>' +
+            '<div class="job-detail-section"><h4>Parameters</h4>' + renderParameters(config.parameters) + '</div>' +
             '<div class="row">' +
-              '<div class="col-md-6"><div class="job-detail-section"><h4>Parameters</h4>' + renderParameters(config.parameters) + '</div></div>' +
-              '<div class="col-md-6"><div class="job-detail-section"><h4>SCM</h4>' + renderList(config.scmUrls) + '</div></div>' +
-            '</div>' +
-            '<div class="row">' +
-              '<div class="col-md-6"><div class="job-detail-section"><h4>Downstream Jobs</h4>' + renderList(downstream) + '</div></div>' +
-              '<div class="col-md-6"><div class="job-detail-section"><h4>Email Notifications</h4>' + renderEmailConfig(config) + '</div></div>' +
+              '<div class="col-md-4"><div class="job-detail-section"><h4>SCM</h4>' + renderList(config.scmUrls) + '</div></div>' +
+              '<div class="col-md-4"><div class="job-detail-section"><h4>Downstream Jobs</h4>' + renderList(downstream) + '</div></div>' +
+              '<div class="col-md-4"><div class="job-detail-section"><h4>Email Notifications</h4>' + renderEmailConfig(config) + '</div></div>' +
             '</div>' +
             '<div class="job-detail-section"><h4>Latest Console Output</h4>' + (detail.consoleError ? '<p class="text-warning">' + escapeHtml(detail.consoleError) + '</p>' : '') + '<div id="' + consoleId + '"></div></div>' +
             '<div class="job-detail-section">' +
@@ -1843,8 +1941,12 @@
     $(document).on('change', '.job-view-job-check', function() {
       if (this.checked) {
         selectedJobNames[this.value] = true;
+        setComparisonSourceJob(this.value);
       } else {
         delete selectedJobNames[this.value];
+        if (comparisonSourceJob === this.value) {
+          setComparisonSourceJob('');
+        }
       }
 
       updateSelectedJobCount();
@@ -1861,13 +1963,25 @@
 
     $('#selectMatchingEnvironments').on('click', function() {
       var selected = Object.keys(selectedJobNames);
-      var sourceName = selected.length ? selected[0] : ($('.job-view-job-check:visible').first().val() || '');
+      var sourceName = comparisonSourceJob;
+
+      if (! sourceName && selected.length === 1) {
+        sourceName = selected[0];
+        setComparisonSourceJob(sourceName);
+      }
+
       if (! sourceName) {
-        toastr.info('Select a job first.', 'Environment Comparison');
+        toastr.info('Check the job you want to use as the comparison source.', 'Environment Comparison');
         return;
       }
 
-      pendingComparisonKey = jobComparisonKey(sourceName);
+      var sourceIdentity = jobComparisonIdentity(sourceName);
+      if (! sourceIdentity.hasEnvironment) {
+        toastr.warning('The selected job name does not contain a configured environment.', 'Environment Comparison');
+        return;
+      }
+
+      pendingComparisonKey = sourceIdentity.key;
       comparisonAcrossEnvironments = true;
       $('#jobComparisonScope [data-comparison-scope]').removeClass('btn-primary active').addClass('btn-default');
       $('#jobComparisonScope [data-comparison-scope="all"]').removeClass('btn-default').addClass('btn-primary active');
@@ -1876,7 +1990,9 @@
 
     $('#clearSelectedJobs').on('click', function() {
       selectedJobNames = {};
+      comparisonSourceJob = '';
       $('.job-view-job-check').prop('checked', false);
+      $('.job-view-job-option').removeClass('is-comparison-source');
       updateSelectedJobCount();
     });
 
