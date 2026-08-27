@@ -603,7 +603,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     }
   });
 </script>
-<script src="<?php echo base_url(); ?>assets/js/job-draft-cache.js?v=2" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-draft-cache.js?v=3" type="text/javascript"></script>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 <style>
@@ -824,6 +824,38 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     color: #fff;
   }
 
+  .jobseeker-sidebar-running-actions {
+    align-items: center;
+    display: inline-flex;
+    gap: 7px;
+  }
+
+  .jobseeker-sidebar-cached-row {
+    align-items: center;
+    display: flex;
+  }
+
+  .jobseeker-sidebar-cached-row .jobseeker-sidebar-cached-build {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .jobseeker-sidebar-cached-delete {
+    background: transparent;
+    border: 0;
+    color: #8aa4af;
+    flex: 0 0 25px;
+    opacity: .7;
+    padding: 6px 4px;
+  }
+
+  .jobseeker-sidebar-cached-row:hover .jobseeker-sidebar-cached-delete,
+  .jobseeker-sidebar-cached-delete:focus,
+  .jobseeker-sidebar-cached-delete:hover {
+    color: #dd4b39;
+    opacity: 1;
+  }
+
   .jobseeker-sidebar-running-empty,
   .jobseeker-sidebar-running-error {
     color: #8aa4af;
@@ -1025,6 +1057,26 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </span>
             </a>
             <ul class="treeview-menu">
+                <li>
+                  <a href="<?php echo base_url(); ?>Visualization">
+                    <i class="fa fa-compass"></i>
+                    <span>Analytics Hub</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="<?php echo base_url(); ?>Visualization/studio">
+                    <i class="fa fa-magic"></i>
+                    <span>Insight Studio</span>
+                  </a>
+                </li>
+                <?php if($role == ROLE_ADMIN || $role == ROLE_MANAGER) { ?>
+                <li>
+                  <a href="<?php echo base_url(); ?>Visualization/dataSources">
+                    <i class="fa fa-database"></i>
+                    <span>Studio Data Sources</span>
+                  </a>
+                </li>
+                <?php } ?>
                <?php
                 if(!empty($allowedReports))
                 {
@@ -1047,8 +1099,8 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                 ?>
                 <li>
                   <a href="<?php echo base_url(); ?>Visualization/config" >
-                    <i class="fa fa-gear"></i>
-                    <span>Configuration</span>
+                    <i class="fa fa-link"></i>
+                    <span>Connected Reports</span>
                   </a>
                 </li>
               <?php }  ?>
@@ -1227,7 +1279,10 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
           <div class="jobseeker-sidebar-running" id="sidebarCachedJobs">
             <div class="jobseeker-sidebar-running-title">
               <span><i class="fa fa-save"></i> Cached Drafts <small id="sidebarCachedJobsCount"></small></span>
-              <a class="jobseeker-sidebar-running-refresh" href="<?php echo base_url(); ?>jobCreation" title="Open cached job drafts"><i class="fa fa-pencil"></i></a>
+              <span class="jobseeker-sidebar-running-actions">
+                <a class="jobseeker-sidebar-running-refresh" href="<?php echo base_url(); ?>jobCreation" title="Open cached job drafts"><i class="fa fa-pencil"></i></a>
+                <button type="button" class="jobseeker-sidebar-running-refresh" id="sidebarCachedJobsClear" title="Clear all cached job drafts" style="display:none;"><i class="fa fa-trash"></i></button>
+              </span>
             </div>
             <div id="sidebarCachedJobsList" class="jobseeker-sidebar-running-empty">Loading cached drafts...</div>
           </div>

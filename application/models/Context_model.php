@@ -124,12 +124,32 @@ class Context_model extends CI_Model
         return $query->num_rows();
     }
 
+    function validateProjectExcept($name, $projectId) {
+
+        $this->db->select('Id');
+        $this->db->from('projectdetails');
+        $this->db->where('ProjectName', $name);
+        $this->db->where('Id !=', (int) $projectId);
+        $query = $this->db->get();
+        return $query->num_rows();
+    }
+
     // Validate if the record already exists.
      function validateEnvironment($name) {
 
         $this->db->select('Environment');
         $this->db->from('environment');
         $this->db->where('Environment', $name);
+        $query = $this->db->get();
+        return $query->num_rows();
+    }
+
+    function validateEnvironmentExcept($name, $environmentId) {
+
+        $this->db->select('Id');
+        $this->db->from('environment');
+        $this->db->where('Environment', $name);
+        $this->db->where('Id !=', (int) $environmentId);
         $query = $this->db->get();
         return $query->num_rows();
     }
@@ -144,6 +164,21 @@ class Context_model extends CI_Model
         $this->db->where('cd.ContextKey', $contextKey);
         $this->db->where('pd.ProjectName', $projectName);
         $this->db->where('env.Environment', $environmentName);
+        $query = $this->db->get();
+        return $query->num_rows();
+    }
+
+    // Validate uniqueness while allowing the record currently being edited.
+    function validateContextExcept($contextKey, $projectName, $environmentName, $contextId) {
+
+        $this->db->select('cd.Id');
+        $this->db->from('contextdetails cd');
+        $this->db->join('environment env', 'env.id=cd.environmentFK');
+        $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
+        $this->db->where('cd.ContextKey', $contextKey);
+        $this->db->where('pd.ProjectName', $projectName);
+        $this->db->where('env.Environment', $environmentName);
+        $this->db->where('cd.Id !=', (int) $contextId);
         $query = $this->db->get();
         return $query->num_rows();
     }

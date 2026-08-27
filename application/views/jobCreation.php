@@ -1938,7 +1938,8 @@
                   <strong><i class="fa fa-clone"></i> Job Drafts</strong>
                   <button type="button" class="btn btn-default btn-xs" id="addJobDraft"><i class="fa fa-plus"></i> Add</button>
                   <button type="button" class="btn btn-default btn-xs" id="duplicateJobDraft"><i class="fa fa-copy"></i> Duplicate</button>
-                  <button type="button" class="btn btn-danger btn-xs" id="removeJobDraft"><i class="fa fa-trash"></i> Remove</button>
+                  <button type="button" class="btn btn-warning btn-xs" id="removeJobDraft"><i class="fa fa-trash"></i> Discard Draft</button>
+                  <button type="button" class="btn btn-danger btn-xs" id="clearCachedJobDrafts"><i class="fa fa-trash-o"></i> Clear Cache</button>
                 </div>
                 <ul class="nav nav-tabs job-draft-tabs" id="jobDraftTabs"></ul>
                 <div class="table-responsive">
@@ -2945,6 +2946,10 @@
 
       $('#removeJobDraft').click(function() {
         removeJobDraft();
+      });
+
+      $('#clearCachedJobDrafts').click(function() {
+        clearAllCachedJobDrafts();
       });
 
       $('#jobDraftTabs').on('click', 'a', function(event) {
@@ -5980,6 +5985,7 @@
           activeDraftIndex = 0;
           $('#job_names').val('');
           loadJobDraft(jobDrafts[0]);
+          scheduleJobDraftCacheSave(0);
           return;
         }
 
@@ -5987,6 +5993,45 @@
         activeDraftIndex = Math.max(0, activeDraftIndex - 1);
         updateDraftNamesTextarea();
         loadJobDraft(jobDrafts[activeDraftIndex]);
+        scheduleJobDraftCacheSave(0);
+      }
+
+      function clearAllCachedJobDrafts() {
+        alertify.confirm(
+          'Clear all cached job drafts?',
+          '<p>Discard every locally cached draft currently shown in Job Creation?</p><p class="text-muted">Created Jenkins jobs are not affected.</p>',
+          function() {
+            if (draftCacheTimer) {
+              window.clearTimeout(draftCacheTimer);
+              draftCacheTimer = null;
+            }
+
+            draftCacheReady = false;
+            var result = window.JobSeekerDraftCache ? window.JobSeekerDraftCache.clear() : {ok: true};
+            jobDrafts = [createEmptyDraft('')];
+            activeDraftIndex = 0;
+            $('#job_names').val('');
+            loadJobDraft(jobDrafts[0]);
+            setBulkDraftsVisible(false);
+            draftCacheReady = true;
+
+            if (window.history && window.history.replaceState) {
+              try {
+                var url = new URL(window.location.href);
+                url.searchParams.delete('draft');
+                window.history.replaceState({}, document.title, url.toString());
+              } catch (error) {}
+            }
+
+            if (result.ok) {
+              updateDraftCacheStatus('Cached drafts cleared', false);
+              toastr.success('All cached job drafts were cleared.', 'Draft Cache');
+            } else {
+              updateDraftCacheStatus(result.message || 'Unable to clear cached drafts', true);
+            }
+          },
+          function() {}
+        );
       }
 
       function ensureJobDraftsInitialized() {
@@ -8215,6 +8260,10 @@ updateJobCreationReview();
 scheduleJobDraftCacheSave(0);
 
 $(window).on('beforeunload', function() {
+  if (window.jobseekerDraftCacheSkipBeforeUnload) {
+    return;
+  }
+
   if (draftCacheTimer) {
     window.clearTimeout(draftCacheTimer);
     draftCacheTimer = null;

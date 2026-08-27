@@ -415,9 +415,10 @@ class CI_Session {
 				{
 					$_SESSION['__ci_vars'][$key] = 'old';
 				}
-				// Hacky, but 'old' will (implicitly) always be less than time() ;)
-				// DO NOT move this above the 'new' check!
-				elseif ($value < $current_time)
+				// PHP 8 no longer treats a non-numeric string as less than an integer.
+				// Check the flash marker explicitly so data rendered on the previous
+				// request is removed instead of leaking into every later page.
+				elseif ($value === 'old' || $value < $current_time)
 				{
 					unset($_SESSION[$key], $_SESSION['__ci_vars'][$key]);
 				}

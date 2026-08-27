@@ -1,390 +1,117 @@
- <script>
-  $(document).ready(function(){
-    $('body').addClass('sidebar-collapse')
-  });
-</script>
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/visualization.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
 <style>
-    body {
-      margin: 0;
-    }
-    iframe {
-      height: 600px;
-      width: 500px;
-      box-sizing: border-box;
-    }
+  .viz-config-page .select2-container { width: 100% !important; }
+  .viz-config-page .select2-container--default .select2-selection--multiple { min-height: 42px; border-color: #dbe1eb; border-radius: 9px; }
+  .viz-config-page .alert { border: 0; border-radius: 11px; }
+  .viz-connection-preview { height: 520px; overflow: hidden; border: 1px solid #e3e8f1; border-radius: 12px; background: #f6f8fb; }
+  .viz-connection-preview iframe { width: 100% !important; height: 100% !important; }
 </style>
-
-
-<link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
-<div class="content-wrapper">    
-    <section class="content-header">
-      <h1>
-        <i class="fa fa-dashboard"></i> Data Visualization <b>Configuration</b>
-        <small>Setup and manage reports</small>
-      </h1>
-      <ol class="breadcrumb">
-        <li><a href="#"><i class="fa fa-dashboard"></i> Data Visualization</a></li>
-        <li><a href="#">Configuration</a></li>
-      </ol>
-    </section>
-
-    <section class="content">
-
-      <div class="container">
-        <div class="row" style="padding-top: 15px;">
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box animated flipInX">
-            <span class="info-box-icon bg-aqua"><i class="fa fa-pie-chart"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Available Reports</span>
-              <span class="info-box-number"><?php echo $reports; ?></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box animated flipInX">
-            <span class="info-box-icon bg-red"><i class="fa fa-bar-chart"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Software Types</span>
-              <span class="info-box-number"><?php echo $types; ?></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-
-        <!-- fix for small devices only -->
-        <div class="clearfix visible-sm-block"></div>
-
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box animated flipInX">
-            <span class="info-box-icon bg-green"><i class="fa fa-user"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Available Users</span>
-              <span class="info-box-number"><?php echo count($users); ?></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box animated flipInX">
-            <span class="info-box-icon bg-yellow"><i class="fa fa-users"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Avaiable Groups</span>
-              <span class="info-box-number"><?php echo count($groups); ?></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
+<?php
+$providerLabels = array('pbi' => 'Microsoft Power BI', 'tbl' => 'Tableau', 'tblPublic' => 'Tableau Public', 'qlikSense' => 'Qlik Sense', 'qlikView' => 'QlikView', 'superset' => 'Apache Superset', 'metabase' => 'Metabase', 'grafana' => 'Grafana', 'looker' => 'Looker', 'microstrategy' => 'MicroStrategy', 'custom' => 'Other HTTPS embed');
+?>
+<div class="content-wrapper viz-page viz-config-page">
+  <section class="content">
+    <div class="viz-shell">
+      <div class="viz-viewer-bar">
+        <div class="viz-viewer-title"><a class="viz-btn viz-btn-light" href="<?php echo base_url(); ?>Visualization"><i class="fa fa-arrow-left"></i></a><div><h1>Connected analytics</h1><p>Curate external reports and control who can discover them.</p></div></div>
+        <a class="viz-btn viz-btn-blue" href="<?php echo base_url(); ?>Visualization/studio"><i class="fa fa-magic"></i> Native Insight Studio</a>
       </div>
 
+      <?php $error = $this->session->flashdata('error'); if($error) { ?><div class="alert alert-danger"><button type="button" class="close" data-dismiss="alert">&times;</button><?php echo html_escape($error); ?></div><?php } ?>
+      <?php $success = $this->session->flashdata('success'); if($success) { ?><div class="alert alert-success"><button type="button" class="close" data-dismiss="alert">&times;</button><?php echo html_escape($success); ?></div><?php } ?>
+      <?php if(isset($this->form_validation)) { echo validation_errors('<div class="alert alert-danger">', '</div>'); } ?>
 
-       <div class="row">
-             <div class="col-md-12">
-                <?php 
-                    $this->load->helper('form');
-                    $error = $this->session->flashdata('error');
-                    if($error)
-                    {
-                ?>
-                <div class="alert alert-danger alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
-                </div>
-                <?php } ?>
-                <?php  
-                    $success = $this->session->flashdata('success');
-                    if($success)
-                    {
-                ?>
-                <div class="alert alert-success alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
-                </div>
-                <?php } ?>
-                
-                <div class="row">
-                    <div class="col-md-12">
-                        <?php echo validation_errors('<div class="alert alert-danger alert-dismissable">', ' <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button></div>'); ?>
-                    </div>
-                </div>
-            </div>
+      <div class="viz-config-grid">
+        <div class="viz-panel">
+          <div class="viz-panel-head"><div><h2><i class="fa fa-link"></i> Add a trusted report</h2><p>Paste the provider's share URL or its iframe snippet.</p></div><span class="viz-pill"><i class="fa fa-shield"></i> Sanitized</span></div>
+          <div class="viz-panel-body">
+            <form class="viz-form" action="<?php echo base_url(); ?>Visualization/add" method="POST">
+              <div class="row">
+                <div class="col-md-7 form-group"><label for="name">Report name</label><input id="name" name="name" class="form-control" maxlength="120" placeholder="e.g. Weekly delivery health" required></div>
+                <div class="col-md-5 form-group"><label for="type">Provider</label><select id="type" name="type" class="form-control"><?php foreach($providerLabels as $value => $label) { ?><option value="<?php echo html_escape($value); ?>"><?php echo html_escape($label); ?></option><?php } ?></select></div>
+              </div>
+              <div class="form-group"><label for="code">Secure share URL or iframe</label><textarea id="code" name="code" class="form-control" maxlength="5000" placeholder="https://analytics.example.com/embed/dashboard/..." required></textarea><span class="viz-help">Use a presentation/embed URL—not a database connection. Jobseeker stores no provider password or token and strips unsupported iframe attributes.</span></div>
+              <div class="row">
+                <div class="col-md-6 form-group"><label for="users">People</label><select id="users" class="form-control select2" name="users[]" multiple><option value="*">Everyone</option><?php foreach($users as $user) { ?><option value="<?php echo html_escape($user->name); ?>"><?php echo html_escape($user->name); ?></option><?php } ?></select></div>
+                <div class="col-md-6 form-group"><label for="groups">Groups</label><select id="groups" class="form-control select2" name="groups[]" multiple><?php foreach($groups as $group) { ?><option value="<?php echo html_escape($group->name); ?>"><?php echo html_escape($group->name); ?></option><?php } ?></select></div>
+              </div>
+              <div class="viz-form-actions"><button class="viz-btn viz-btn-blue" type="submit"><i class="fa fa-plus"></i> Add connection</button><span class="viz-form-note">At least one person or group is required.</span></div>
+            </form>
           </div>
-       
-        <div class="row animated fadeIn" style="margin-top: 25px;">
-           <form action="<?php echo base_url() ?>Visualization/add" method="POST" id="searchList">
-            <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>Report Name</label>
-                      <input id="name" type="text" name="name" value="" class="form-control" placeholder="Enter Report Name" maxlength="20" autocomplete="off" required/>
-                </div>
-              </div>
-
-               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>Report Software Type</label>
-                      <select id="type" class="form-control" name="type">
-                        <option value="pbi">Microsoft Power BI</option>
-                        <option value="tbl">Tableau</option>
-                        <option value="tblPublic">Tableau Public</option>
-                        <option value="qlikSense">Qlik Sense</option>
-                        <option value="qlikView">Qlik View</option>
-                        <option value="superset">Apache Superset</option>
-                        <option value="microstrategy">MicroStrategy</option>
-                      </select>
-                </div>
-              </div>
-
-               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>List of Users can view</label>
-                      <select id="users" class="form-control select2" name="users[]" multiple="multiple">
-                        <option value="*">All</option>
-                           <?php
-                          if(!empty($users))
-                          {
-                              foreach($users as $record)
-                              {
-                          ?>
-                           <option value="<?php echo html_escape($record->name) ?>"><?php echo html_escape($record->name) ?></option>
-                         <?php
-                           }
-                         }
-                        ?>
-                  </select>
-                </div>
-              </div>
-
-              <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>List of User Groups can view</label>
-                      <select id="groups" class="form-control select2" name="groups[]" multiple="multiple">
-                           <?php
-                          if(!empty($groups))
-                          {
-                              foreach($groups as $record)
-                              {
-                          ?>
-                           <option value="<?php echo html_escape($record->name) ?>"><?php echo html_escape($record->name) ?></option>
-                         <?php
-                           }
-                         }
-                        ?>
-                  </select>
-                </div>
-              </div>
-          </div>
-            <?php // listReports(); ?>
-           <div class="row animated fadeIn" style="margin-top: 25px;">
-              <div class="col-lg-6 col-md-6 col-sm-12 col-xs-12 form-group">
-                <input id="code" type="text" name="code" value="" class="form-control" placeholder="Fill in Embebed Iframe code or Report URL" autocomplete="off" required/>
-              </div>
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group">
-                <button type="submit" class="btn btn-md btn-success btn-block searchList pull-right"><i class="fa fa-plus" aria-hidden="true"></i></button> 
-              </div>
-            </div>
-         </form>
-
-     <div class="row" style="margin-top: 20px;">
-        <div class="col-xs-12">
-          <div class="box box-primary">
-            <div class="box-header">
-              <h3 class="box-title"><b>Available Reports</b></h3>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-              <table id="tableReports" class="table table-bordered table-striped dataTable">
-                <thead>
-                <tr>
-                  <th>Id</th>
-                  <th>Creation Date</th>
-                  <th>Report Name</th>
-                  <th>Report Software Type</th>
-                  <th>List of Users Can view</th>
-                  <th>List of Users Group can view</th>
-                  <th>Embebed Code</th>
-                  <th>Owner</th>
-                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
-                </tr>
-                </thead>
-                <tbody>
-                  <?php
-                    if(!empty($list))
-                    {
-                        foreach($list as $record)
-                        {
-                    ?>
-                    <tr>
-                      <td><?php echo (int) $record->id; ?></td>
-                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
-                        <td><?php echo html_escape($record->name); ?></td>
-                        <td><?php echo html_escape($record->type); ?></td>
-                        <td><?php echo html_escape($record->users); ?></td>
-                        <td><?php echo html_escape($record->groups); ?></td>
-                        <td class="text-center show" data-reportid="<?php echo (int) $record->id; ?>"><a href="#" class="btn btn-sm btn-info">Check</a></td>
-                        <td><?php echo html_escape($record->owner); ?></td>
-                       <?php if($role != 1) {  ?> <td>
-                            <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
-                        </td><?php } ?>
-                    </tr>
-                    <?php
-                        }
-                    }
-                    ?>
-                </tbody>
-                <tfoot>
-                 <tr>
-                  <th>Id</th>
-                  <th>Creation Date</th>
-                  <th>Report Name</th>
-                  <th>Report Software Type</th>
-                  <th>List of Users Can view</th>
-                  <th>List of Users Group can view</th>
-                  <th>Embebed Code</th>
-                  <th>Owner</th>
-                  <?php if($role != 1) {  ?><th>Action</th><?php } ?>
-                </tr>
-                </tfoot>
-              </table>
-            </div>
-            <!-- /.box-body -->
-          </div>
-          <!-- /.box -->
         </div>
-        <!-- /.col -->
+        <aside class="viz-panel">
+          <div class="viz-panel-head"><div><h3>Connection boundary</h3><p>What Jobseeker enforces.</p></div></div>
+          <div class="viz-panel-body">
+            <div class="viz-trust-list">
+              <div class="viz-trust-item"><i class="fa fa-code"></i><div><strong>Markup is normalized</strong><p>Only one iframe and its HTTP(S) source survive. Scripts and event handlers are discarded.</p></div></div>
+              <div class="viz-trust-item"><i class="fa fa-shield"></i><div><strong>Capabilities are constrained</strong><p>Every report receives a fixed sandbox and no-referrer policy at render time.</p></div></div>
+              <div class="viz-trust-item"><i class="fa fa-user-secret"></i><div><strong>Identity stays upstream</strong><p>Use your provider's guest, SSO or signed-embed flow. Never paste a password into the URL.</p></div></div>
+              <div class="viz-trust-item"><i class="fa fa-server"></i><div><strong>No server-side fetching</strong><p>The browser talks directly to the provider, avoiding an SSRF-style report proxy.</p></div></div>
+            </div>
+            <div class="viz-provider-row"><span>Power BI</span><span>Tableau</span><span>Superset</span><span>Metabase</span><span>Grafana</span><span>Looker</span></div>
+          </div>
+        </aside>
       </div>
 
-         
+      <section class="viz-section viz-panel">
+        <div class="viz-panel-head"><div><h2>Report catalog</h2><p><?php echo number_format((int) $reports); ?> reports across <?php echo number_format((int) $types); ?> provider types.</p></div></div>
+        <div class="table-responsive">
+          <?php if(!empty($list)) { ?>
+          <table id="tableReports" class="table viz-table">
+            <thead><tr><th>Report</th><th>Provider</th><th>Audience</th><th>Owner</th><th>Added</th><th class="text-right">Actions</th></tr></thead>
+            <tbody>
+              <?php foreach($list as $record) { $provider = isset($providerLabels[$record->type]) ? $providerLabels[$record->type] : $record->type; ?>
+              <tr data-report-row="<?php echo (int) $record->id; ?>">
+                <td><span class="viz-table-title"><?php echo html_escape($record->name); ?></span><br><small class="text-muted">#<?php echo (int) $record->id; ?></small></td>
+                <td><span class="viz-pill viz-pill-neutral"><?php echo html_escape($provider); ?></span></td>
+                <td><strong><?php echo html_escape($record->users === '*' ? 'Everyone' : $record->users); ?></strong><br><small class="text-muted"><?php echo html_escape($record->groups); ?></small></td>
+                <td><?php echo html_escape($record->owner); ?></td>
+                <td><?php echo html_escape(date('M j, Y', strtotime($record->creation_date))); ?></td>
+                <td class="text-right"><button type="button" class="viz-btn viz-btn-light viz-preview-report" data-reportid="<?php echo (int) $record->id; ?>"><i class="fa fa-eye"></i></button> <button type="button" class="viz-btn viz-btn-danger viz-delete-report" data-reportid="<?php echo (int) $record->id; ?>"><i class="fa fa-trash"></i></button></td>
+              </tr>
+              <?php } ?>
+            </tbody>
+          </table>
+          <?php } else { ?><div class="viz-empty"><i class="fa fa-plug"></i><strong>No connected reports yet</strong><p>Add a trusted embed above, or use the native studio without any external dependency.</p></div><?php } ?>
+        </div>
+      </section>
     </div>
-      
-    </section>
+  </section>
+</div>
 
-    <!-- Main content -->
-   
-    <!-- /.content -->
-</div> 
+<div class="modal fade" id="vizPreviewModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document"><div class="modal-content" style="border-radius:16px;overflow:hidden"><div class="modal-header"><button type="button" class="close" data-dismiss="modal">&times;</button><h4 class="modal-title">Connection preview</h4></div><div class="modal-body"><div id="vizPreviewMeta" style="margin-bottom:12px"></div><div id="vizPreviewFrame" class="viz-connection-preview"></div></div></div></div>
+</div>
+<script src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
+<script>
+$(function() {
+  $('.select2').select2({ placeholder: 'Select people or groups', allowClear: true });
 
-<!-- Modal -->
-  <div class="modal fade" id="modal-default" style="display: none;">
-          <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-              <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                  <span aria-hidden="true">×</span></button>
-                <h4 class="modal-title"><b>Email Content Info</b></h4>
-              </div>
-              <div class="modal-body">
-                <div id="content">
-                  
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-primary pull-left" data-dismiss="modal">Close</button>
-              </div>
-            </div>
-            <!-- /.modal-content -->
-          </div>
-          <!-- /.modal-dialog -->
-        </div>
-<!-- Modal -->
-
-
-
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
-
-<script type="text/javascript">
-  $(document).ready(function() {
-    function escapeHtml(value) {
-      return $('<div>').text(value == null ? '' : String(value)).html();
-    }
-
-    $('.select2').select2({
-       placeholder: " Click to Select a option to fetch",
-       allowClear: true
-    });
-
-
-    jQuery(document).on("click", ".deleteUser", function(){
-    
-    var userId = $(this).data("userid"),
-      hitURL = baseURL + "Visualization/delete" ,
-      currentRow = $(this);
-   
-    alertify.confirm('Report Delete Confirmation Required','<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Are you sure to delete this Report record permanently ?</b></p></div></div></div>', 
-      function(){ 
-        jQuery.ajax({
-      type : "POST",
-      dataType : "json",
-      url : hitURL,
-      data : { userId : userId } 
-      }).done(function(data){
-        console.log(data);
-        if(data.status === true) {
-          currentRow.parents('tr').remove();
-          alertify.success('Your Record has been successfully deleted !');
-        }
-        else if(data.status === false) { alertify.error("data deletion failed"); }
-        else { alert("Access denied..!"); }
-      });
-
-    }, 
-      function(){ 
-        alertify.error('Operation Aborted, good choice.')
-    }
-  );
-    
+  $(document).on('click', '.viz-preview-report', function() {
+    var id = $(this).data('reportid');
+    $('#vizPreviewMeta').html('<i class="fa fa-spinner fa-spin"></i> Loading safe preview…');
+    $('#vizPreviewFrame').empty();
+    $.getJSON(baseURL + 'Visualization/fetch/' + encodeURIComponent(id)).done(function(payload) {
+      var report = payload.data && payload.data[0];
+      if (!report) { toastr.error('Report not found.'); return; }
+      $('#vizPreviewMeta').html($('<strong>').text(report.name)).append(' · ').append($('<span class="text-muted">').text(report.type + ' · ' + report.owner));
+      $('#vizPreviewFrame').html(report.code || '<div class="viz-empty">The saved connection is invalid.</div>');
+      $('#vizPreviewModal').modal('show');
+    }).fail(function() { toastr.error('Could not load the report preview.'); });
   });
 
+  $(document).on('click', '.viz-delete-report', function() {
+    var id = $(this).data('reportid');
+    alertify.confirm('Remove connected report', 'Remove this report from the Jobseeker catalog? The upstream report will not be deleted.', function() {
+      $.post(baseURL + 'Visualization/delete', { userId: id }).done(function(payload) {
+        if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch (ignore) {} }
+        if (payload && payload.status === true) { $('[data-report-row="' + id + '"]').remove(); toastr.success('Connected report removed.'); }
+        else { toastr.error('Report could not be removed.'); }
+      }).fail(function() { toastr.error('Report could not be removed.'); });
+    }, function() {});
+  });
 
-
-$("#tableReports").on('click','.show',function(){
-
-         var currentRow=$(this).closest("tr"); 
-         var id = $(this).data("reportid") || currentRow.find("td:eq(0)").text();
-
-         var show = $.parseJSON($.ajax({
-            contentType: "application/json",
-            url:  '<?php echo base_url(); ?>Visualization/fetch/' + encodeURIComponent(id),
-            dataType: "json", 
-            async: false,
-            beforeSend: function() {
-
-              $(".destroy").remove();
-            },
-            error: function() {
-               toastr.error("Error During query error list data \n Id: " + id, "Query Data Error");
-            },
-
-            success: function() {
-            },
-            complete: function(data) {
-                dateRequest = data;
-            }
-
-         }).responseText);
-
-
-         var report = show.data && show.data[0] ? show.data[0] : {};
-         var creationDate = moment(report.creation_date);
-
-
-         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th style="width: 20px;">Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ escapeHtml(creationDate.isValid() ? creationDate.format('dddd, MMMM Do YYYY, h:mm:ss') : '') +'</td></tr><tr><td>Report Name</td><td>'+ escapeHtml(report.name) +'</td></tr><tr><td>Report Type</td><td>'+ escapeHtml(report.type) +'</td></tr><tr><td>Allowed Users</td><td>'+ escapeHtml(report.users) +'</td></tr><tr><td>Allowed Groups</td><td>'+ escapeHtml(report.groups) +'</td></tr><tr><td>Owner</td><td>'+ escapeHtml(report.owner) +'</td></tr><tr><td>Embebed Report</td><td style="height: 600px;">'+ (report.code || '') +'</td></tr></tbody></table></div>')
-
-         $('#modal-default').modal('show');
-
-    });   
-
+  $('#vizPreviewModal').on('hidden.bs.modal', function() { $('#vizPreviewFrame').empty(); });
 });
 </script>

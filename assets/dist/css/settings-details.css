@@ -1,0 +1,127 @@
+.settings-page .settings-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-page .settings-toolbar {
+  grid-template-columns: minmax(260px, 1fr) 190px auto;
+}
+
+.settings-page .settings-toolbar .context-filter-search {
+  grid-column: auto;
+}
+
+.settings-page .settings-field-name {
+  grid-column: span 4;
+}
+
+.settings-page .settings-field-wide {
+  grid-column: span 6;
+}
+
+.settings-page .settings-field-status {
+  grid-column: span 2;
+}
+
+.settings-page .settings-table-footer {
+  align-items: center;
+  border-top: 1px solid #f4f4f4;
+  display: flex;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.settings-page .settings-table-info .dataTables_info {
+  color: #777;
+  padding-top: 0;
+}
+
+.settings-page .settings-table-pagination .dataTables_paginate {
+  margin: 0;
+}
+
+.settings-page .settings-name {
+  color: #333;
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.settings-page .settings-path {
+  background: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  color: #444;
+  display: inline-block;
+  font-size: 12px;
+  max-width: 460px;
+  overflow: hidden;
+  padding: 3px 6px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.settings-page .settings-empty-value {
+  color: #999;
+  font-style: italic;
+}
+
+.settings-page .settings-actions {
+  white-space: nowrap;
+}
+
+.settings-page .settings-actions .btn + .btn {
+  margin-left: 3px;
+}
+
+.settings-page .settings-edit-meta {
+  background: #f9fafc;
+  border-left: 3px solid #3c8dbc;
+  color: #777;
+  display: flex;
+  font-size: 12px;
+  gap: 24px;
+  margin-bottom: 15px;
+  padding: 10px 12px;
+}
+
+.settings-page .settings-edit-meta strong {
+  color: #555;
+  display: block;
+  font-size: 10px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 991px) {
+  .settings-page .settings-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-page .settings-field-name,
+  .settings-page .settings-field-wide,
+  .settings-page .settings-field-status {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-page .settings-metrics,
+  .settings-page .settings-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page .settings-field-name,
+  .settings-page .settings-field-wide,
+  .settings-page .settings-field-status {
+    grid-column: 1 / -1;
+  }
+
+  .settings-page .settings-table-footer,
+  .settings-page .settings-edit-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}

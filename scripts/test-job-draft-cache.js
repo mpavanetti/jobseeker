@@ -81,6 +81,12 @@ if (cache.targetDraftId() !== 'requested-draft') {
   throw new Error('Expected the requested sidebar draft ID to be read from the URL.');
 }
 
+cache.removeByIds([drafts[0]._cacheId]);
+if (cache.read().drafts.length !== 1 || cache.read().drafts[0].job_name !== 'report-refresh') {
+  throw new Error('Expected a cached draft to be removable by its stable ID.');
+}
+
+cache.save(drafts, 1);
 cache.removeByNames(['daily-etl'], false);
 if (cache.read().drafts.length !== 1 || cache.read().drafts[0].job_name !== 'report-refresh') {
   throw new Error('Expected created jobs to be removed from the draft cache.');
@@ -89,6 +95,12 @@ if (cache.read().drafts.length !== 1 || cache.read().drafts[0].job_name !== 'rep
 cache.removeByNames(['report-refresh'], false);
 if (cache.read() !== null) {
   throw new Error('Expected the cache to clear after its final draft was created.');
+}
+
+cache.save(drafts, 0);
+cache.clear();
+if (cache.read() !== null) {
+  throw new Error('Expected the full draft cache to clear on request.');
 }
 
 console.log('Job draft cache tests passed.');

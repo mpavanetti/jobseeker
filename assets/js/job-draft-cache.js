@@ -114,6 +114,39 @@
     return save(remaining, activeIndex);
   }
 
+  function removeByIds(ids) {
+    var cached = read();
+    if (! cached) {
+      return {ok: true};
+    }
+
+    var removedIds = {};
+    (Array.isArray(ids) ? ids : [ids]).forEach(function(id) {
+      id = $.trim(String(id || ''));
+      if (id) {
+        removedIds[id] = true;
+      }
+    });
+
+    var remaining = cached.drafts.filter(function(draft) {
+      return ! removedIds[$.trim(String(draft && draft._cacheId || ''))];
+    });
+
+    if (! remaining.length) {
+      return clear();
+    }
+
+    var activeIndex = 0;
+    remaining.some(function(draft, index) {
+      if (draft._cacheId === cached.activeDraftId) {
+        activeIndex = index;
+        return true;
+      }
+      return false;
+    });
+    return save(remaining, activeIndex);
+  }
+
   function targetDraftId() {
     try {
       return new URL(window.location.href).searchParams.get('draft') || '';
@@ -157,6 +190,7 @@
     value = value && Array.isArray(value.drafts) ? value : read();
     var drafts = value && Array.isArray(value.drafts) ? value.drafts : [];
     $('#sidebarCachedJobsCount').text(drafts.length ? '(' + drafts.length + ')' : '');
+    $('#sidebarCachedJobsClear').toggle(drafts.length > 0);
 
     if (! drafts.length) {
       container.html('<div class="jobseeker-sidebar-running-empty">No cached job drafts.</div>');
@@ -168,10 +202,13 @@
       var environment = $.trim(String(draft.environment || ''));
       var detail = environment && environment !== '0' ? environment + ' - ' : '';
       detail += formatUpdatedAt(draft._cacheUpdatedAt || value.updatedAt);
-      return '<a class="jobseeker-sidebar-running-build jobseeker-sidebar-cached-build" href="' + escapeHtml(draftUrl(draft)) + '" title="Continue editing ' + escapeHtml(name) + '">' +
-        '<strong><i class="fa fa-file-text-o"></i> ' + escapeHtml(name) + '</strong>' +
-        '<small>' + escapeHtml(detail) + '</small>' +
-      '</a>';
+      return '<div class="jobseeker-sidebar-cached-row">' +
+        '<a class="jobseeker-sidebar-running-build jobseeker-sidebar-cached-build" href="' + escapeHtml(draftUrl(draft)) + '" title="Continue editing ' + escapeHtml(name) + '">' +
+          '<strong><i class="fa fa-file-text-o"></i> ' + escapeHtml(name) + '</strong>' +
+          '<small>' + escapeHtml(detail) + '</small>' +
+        '</a>' +
+        '<button type="button" class="jobseeker-sidebar-cached-delete" data-draft-id="' + escapeHtml(draft._cacheId || '') + '" data-draft-name="' + escapeHtml(name) + '" title="Delete cached draft ' + escapeHtml(name) + '"><i class="fa fa-trash"></i></button>' +
+      '</div>';
     }).join('');
 
     container.html(html);
@@ -182,6 +219,7 @@
     key: storageKey,
     newId: newId,
     read: read,
+    removeByIds: removeByIds,
     removeByNames: removeByNames,
     render: render,
     save: save,
@@ -190,6 +228,62 @@
 
   $(function() {
     render();
+
+    function confirmDelete(title, message, callback) {
+      if (window.alertify && window.alertify.confirm) {
+        window.alertify.confirm(title, message, callback, function() {});
+        return;
+      }
+
+      if (window.confirm($('<div>').html(message).text())) {
+        callback();
+      }
+    }
+
+    function refreshCreationPageIfNeeded() {
+      if (/\/jobcreation\/?$/i.test(window.location.pathname || '')) {
+        window.jobseekerDraftCacheSkipBeforeUnload = true;
+        window.location.reload();
+      }
+    }
+
+    $(document).on('click', '.jobseeker-sidebar-cached-delete', function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      var id = $(this).data('draft-id') || '';
+      var name = $(this).data('draft-name') || 'this draft';
+
+      confirmDelete(
+        'Delete cached draft?',
+        '<p>Delete the locally cached draft <strong>' + escapeHtml(name) + '</strong>?</p><p class="text-muted">This does not delete any Jenkins job.</p>',
+        function() {
+          var result = removeByIds([id]);
+          if (result.ok) {
+            if (window.toastr) {
+              window.toastr.success('Cached draft deleted.');
+            }
+            refreshCreationPageIfNeeded();
+          }
+        }
+      );
+    });
+
+    $('#sidebarCachedJobsClear').on('click', function() {
+      confirmDelete(
+        'Clear all cached drafts?',
+        '<p>Delete every locally cached Job Creation draft for this user?</p><p class="text-muted">Created Jenkins jobs are not affected.</p>',
+        function() {
+          var result = clear();
+          if (result.ok) {
+            if (window.toastr) {
+              window.toastr.success('All cached drafts cleared.');
+            }
+            refreshCreationPageIfNeeded();
+          }
+        }
+      );
+    });
+
     $(window).on('storage', function(event) {
       var original = event.originalEvent || event;
       if (original.key === storageKey) {

@@ -1,0 +1,453 @@
+.context-page .content {
+  padding: 15px;
+}
+
+.context-shell {
+  margin: 0 auto;
+  max-width: 1580px;
+  width: 100%;
+}
+
+.context-page-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 5px 0 15px;
+}
+
+.context-page-heading h2 {
+  color: #333;
+  font-size: 22px;
+  font-weight: 400;
+  margin: 0 0 4px;
+}
+
+.context-page-heading p {
+  color: #777;
+  margin: 0;
+}
+
+.context-scope-pill {
+  background-color: #3c8dbc;
+  border-radius: .25em;
+  color: #fff;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: .5em .8em;
+  text-transform: uppercase;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.context-scope-pill .fa {
+  margin-right: 4px;
+}
+
+.context-metrics {
+  display: grid;
+  gap: 15px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 5px;
+}
+
+.context-page .context-metric {
+  border-radius: 2px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .1);
+  margin-bottom: 15px;
+  min-height: 90px;
+}
+
+.context-page .context-metric-icon {
+  border-radius: 2px 0 0 2px;
+  font-size: 38px;
+  height: 90px;
+  line-height: 90px;
+  width: 90px;
+}
+
+.context-page .context-metric .info-box-content {
+  margin-left: 90px;
+  padding: 16px 10px;
+}
+
+.context-page .context-metric-label {
+  color: #555;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.context-page .context-metric-value {
+  color: #333;
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.context-page .context-card {
+  border-radius: 3px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .1);
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.context-page .context-card-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.context-page .context-card-header::before,
+.context-page .context-card-header::after {
+  display: none;
+}
+
+.context-card-header h3 {
+  color: #444;
+  font-size: 18px;
+  font-weight: 400;
+  margin: 0 0 2px;
+}
+
+.context-card-header p {
+  color: #777;
+  font-size: 12px;
+  margin: 0;
+}
+
+.context-card-title {
+  align-items: center;
+  display: flex;
+}
+
+.context-card-title-icon {
+  color: #3c8dbc;
+  display: inline-block;
+  font-size: 18px;
+  margin-right: 9px;
+  text-align: center;
+  width: 22px;
+}
+
+.context-page .context-card-body {
+  padding: 15px;
+}
+
+.context-form-grid {
+  display: grid;
+  gap: 15px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.context-field {
+  grid-column: span 3;
+  margin: 0;
+  min-width: 0;
+}
+
+.context-field-key {
+  grid-column: span 6;
+}
+
+.context-field-value {
+  grid-column: span 8;
+}
+
+.context-field-description {
+  grid-column: span 4;
+}
+
+.context-field label,
+.context-filter label {
+  color: #333;
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.context-field .form-control,
+.context-filter .form-control {
+  border-color: #d2d6de;
+  border-radius: 0;
+  box-shadow: none;
+  color: #555;
+  height: 34px;
+}
+
+.context-field textarea.form-control {
+  height: 68px;
+  min-height: 68px;
+  resize: vertical;
+}
+
+.context-field .form-control:focus,
+.context-filter .form-control:focus {
+  border-color: #3c8dbc;
+  box-shadow: none;
+}
+
+.context-help {
+  color: #777;
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+}
+
+.context-value-group .form-control {
+  font-family: Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.context-value-group .btn {
+  border-color: #d2d6de;
+  border-radius: 0;
+  height: 34px;
+}
+
+.context-page .context-form-footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 15px;
+}
+
+.context-form-note {
+  color: #777;
+  font-size: 12px;
+}
+
+.context-form-actions {
+  display: flex;
+  gap: 7px;
+  margin-left: auto;
+}
+
+.context-toolbar {
+  align-items: end;
+  background: #f9fafc;
+  border-bottom: 1px solid #f4f4f4;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(125px, 1fr)) auto;
+  padding: 12px 10px;
+}
+
+.context-search-wrap {
+  position: relative;
+}
+
+.context-search-wrap > i {
+  color: #999;
+  left: 11px;
+  position: absolute;
+  top: 10px;
+  z-index: 2;
+}
+
+.context-search-wrap .form-control {
+  padding-left: 32px;
+}
+
+.context-filter-reset {
+  border-radius: 3px;
+  height: 34px;
+  white-space: nowrap;
+}
+
+.context-table-wrap {
+  overflow-x: auto;
+  padding: 0 10px 10px;
+}
+
+.context-table {
+  margin-bottom: 0 !important;
+  width: 100% !important;
+}
+
+.context-table > thead > tr > th {
+  border-bottom: 2px solid #f4f4f4;
+  color: #333;
+  font-size: 12px;
+  padding: 10px 8px;
+  white-space: nowrap;
+}
+
+.context-table > tbody > tr > td {
+  border-top-color: #f4f4f4;
+  color: #444;
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.context-key {
+  color: #333;
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.context-row-meta,
+.context-description {
+  color: #999;
+  display: block;
+  font-size: 11px;
+}
+
+.context-description {
+  margin-top: 2px;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-value-preview {
+  background: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  color: #444;
+  display: inline-block;
+  font-size: 12px;
+  max-width: 310px;
+  overflow: hidden;
+  padding: 3px 6px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.context-secret-value {
+  color: #777;
+  font-family: Consolas, "Liberation Mono", Menlo, monospace;
+  letter-spacing: 2px;
+}
+
+.context-badge {
+  border-radius: .25em;
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: .4em .6em;
+  white-space: nowrap;
+}
+
+.context-badge-active {
+  background-color: #00a65a;
+  color: #fff;
+}
+
+.context-badge-inactive {
+  background-color: #d2d6de;
+  color: #444;
+}
+
+.context-badge-environment {
+  background-color: #3c8dbc;
+  color: #fff;
+}
+
+.context-badge-secret {
+  background-color: #f39c12;
+  color: #fff;
+}
+
+.context-page .context-table-footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.context-table-footer .dataTables_paginate {
+  margin: 0 !important;
+}
+
+.context-empty-filter {
+  color: #777;
+  font-size: 12px;
+  font-weight: 400;
+  margin: 0;
+}
+
+.context-edit-meta {
+  background: #f9fafc;
+  border-left: 3px solid #3c8dbc;
+  color: #777;
+  display: flex;
+  font-size: 12px;
+  gap: 24px;
+  margin-bottom: 15px;
+  padding: 10px 12px;
+}
+
+.context-edit-meta strong {
+  color: #555;
+  display: block;
+  font-size: 10px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1199px) {
+  .context-toolbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .context-filter-search {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 991px) {
+  .context-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .context-field,
+  .context-field-key,
+  .context-field-value,
+  .context-field-description {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 767px) {
+  .context-page-heading,
+  .context-page .context-card-header,
+  .context-page .context-form-footer,
+  .context-page .context-table-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .context-metrics,
+  .context-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .context-filter-search,
+  .context-field,
+  .context-field-key,
+  .context-field-value,
+  .context-field-description {
+    grid-column: 1 / -1;
+  }
+
+  .context-form-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .context-form-actions .btn {
+    flex: 1;
+  }
+
+  .context-edit-meta {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

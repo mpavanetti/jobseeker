@@ -1,110 +1,48 @@
- <script>
-  $(document).ready(function(){
-    $('body').addClass('sidebar-collapse')
-  });
-</script>
-<style>
-    body {
-      margin: 0;
-    }
-    iframe {
-      height: 600px;
-      width: 500px;
-      box-sizing: border-box;
-    }
-</style>
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=1">
 
+<div class="content-wrapper context-page settings-page">
+  <section class="content-header">
+    <h1><i class="fa fa-folder-open"></i> Context Settings <b>Edit Project</b><small>Update a project scope</small></h1>
+    <ol class="breadcrumb"><li><a href="<?php echo base_url(); ?>"><i class="fa fa-dashboard"></i> Home</a></li><li><a href="<?php echo base_url(); ?>Context/projectDetails">Project Details</a></li><li class="active">Edit</li></ol>
+  </section>
 
-<link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
-<div class="content-wrapper">    
-    <section class="content-header">
-      <h1>
-        <i class="fa fa-dashboard"></i> Context Settings <b>Edit Project Details</b>
-        <small>Setup and manage projects</small>
-      </h1>
-      <ol class="breadcrumb">
-        <li><a href="#"><i class="fa fa-dashboard"></i> Extract, Transform, Load</a></li>
-        <li><a href="#">Context Settings</a></li>
-        <li><a href="#">Project Details</a></li>
-      </ol>
-    </section>
+  <section class="content">
+    <div class="context-shell">
+      <div class="context-page-heading"><div><h2>Edit <?php echo html_escape($project->ProjectName); ?></h2><p>Changes apply wherever this project is used as a context scope.</p></div></div>
 
-    <section class="content">
+      <?php
+        $this->load->helper('form');
+        $error = $this->session->flashdata('error');
+        $success = $this->session->flashdata('success');
+      ?>
+      <?php if ($error) { ?><div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button><?php echo html_escape($error); ?></div><?php } ?>
+      <?php if ($success) { ?><div class="alert alert-success alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button><?php echo html_escape($success); ?></div><?php } ?>
+      <?php echo validation_errors('<div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>', '</div>'); ?>
 
-      <div class="container">
-
-       <div class="row">
-             <div class="col-md-12">
-                <?php 
-                    $this->load->helper('form');
-                    $error = $this->session->flashdata('error');
-                    if($error)
-                    {
-                ?>
-                <div class="alert alert-danger alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
-                </div>
-                <?php } ?>
-                <?php  
-                    $success = $this->session->flashdata('success');
-                    if($success)
-                    {
-                ?>
-                <div class="alert alert-success alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
-                </div>
-                <?php } ?>
-                
-                <div class="row">
-                    <div class="col-md-12">
-                        <?php echo validation_errors('<div class="alert alert-danger alert-dismissable">', ' <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button></div>'); ?>
-                    </div>
-                </div>
+      <div class="box box-primary context-card animated fadeIn">
+        <div class="box-header with-border context-card-header">
+          <div class="context-card-title"><span class="context-card-title-icon"><i class="fa fa-pencil"></i></span><div><h3>Project configuration</h3><p>Review the scope before saving.</p></div></div>
+          <a href="<?php echo base_url(); ?>Context/projectDetails" class="btn btn-default"><i class="fa fa-arrow-left"></i> Back to projects</a>
+        </div>
+        <form action="<?php echo base_url(); ?>Context/editProjectUpdate" method="POST" id="projectEditForm">
+          <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
+          <input type="hidden" name="Id" value="<?php echo (int) $project->Id; ?>">
+          <div class="box-body context-card-body">
+            <div class="settings-edit-meta">
+              <div><strong>Project ID</strong>#<?php echo (int) $project->Id; ?></div>
+              <div><strong>Created</strong><?php echo !empty($project->CreatedOn) ? html_escape(date('Y-m-d H:i', strtotime($project->CreatedOn))) : 'Unknown'; ?></div>
+              <div><strong>Last modified</strong><?php echo !empty($project->ModifiedOn) ? html_escape(date('Y-m-d H:i', strtotime($project->ModifiedOn))) : 'Never'; ?></div>
+            </div>
+            <div class="context-form-grid">
+              <div class="context-field settings-field-name"><label for="name">Project name <span class="text-danger">*</span></label><input id="name" type="text" name="name" value="<?php echo html_escape($project->ProjectName); ?>" class="form-control" maxlength="1000" autocomplete="off" required><span class="context-help">The name must remain unique.</span></div>
+              <div class="context-field settings-field-wide"><label for="gitpath">Git path</label><input id="gitpath" type="text" name="gitpath" value="<?php echo html_escape($project->GitPath); ?>" class="form-control" placeholder="https://github.com/organization/repository.git" maxlength="2000" autocomplete="off"><span class="context-help">Optional source repository or local Git path.</span></div>
+              <div class="context-field settings-field-status"><label for="active">Status</label><select id="active" class="form-control" name="active"><option value="1" <?php echo (int) $project->IsActive === 1 ? 'selected' : ''; ?>>Active</option><option value="0" <?php echo (int) $project->IsActive === 0 ? 'selected' : ''; ?>>Inactive</option></select></div>
             </div>
           </div>
-       
-        <div class="row animated fadeIn" style="margin-top: 25px;">
-           <form action="<?php echo base_url() ?>Context/editProjectUpdate" method="POST" id="searchList">
-            <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-              <div class="input-group" style="width: 100%; display: none;">
-                  <label>Id Name</label>
-                      <input id="name" type="text" name="Id" value="<?php echo $project->Id ?>" class="form-control" placeholder="Enter Project Id" maxlength="11" autocomplete="off" required/>
-                </div>
-                <div class="input-group" style="width: 100%;">
-                  <label>Project Name</label>
-                      <input id="name" type="text" name="name" value="<?php echo $project->ProjectName ?>" class="form-control" placeholder="Enter Project Name" maxlength="1000" autocomplete="off" required/>
-                </div>
-              </div>
-
-               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>Active Project</label>
-                      <select id="type" class="form-control" name="active">
-                        <option value="1">True</option>
-                        <option value="0">False</option>
-                      </select>
-                </div>
-              </div>
-
-              <div class="col-lg-5 col-md-5 col-sm-6 col-xs-12 form-group">
-                <div class="input-group" style="width: 100%;">
-                  <label>Git Path</label>
-                      <input id="gitpath" type="text" name="gitpath" value="<?php echo $project->GitPath ?>" class="form-control" placeholder="Enter Git Path" maxlength="2000" autocomplete="off"/>
-                </div>
-              </div>
-
-              <div class="col-lg-1 col-md-1 col-sm-6 col-xs-12 form-group" style="margin-top: 25px;">
-                <button type="submit" class="btn btn-md btn-success btn-block searchList pull-right"><i class="fa fa-save" aria-hidden="true"></i></button> 
-              </div>
-          </div>
-         </form>
+          <div class="box-footer context-form-footer"><span class="context-form-note"><i class="fa fa-info-circle"></i> Existing contexts keep their project association.</span><div class="context-form-actions"><a href="<?php echo base_url(); ?>Context/projectDetails" class="btn btn-default">Cancel</a><button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Save changes</button></div></div>
+        </form>
+      </div>
     </div>
-      
-    </section>
-
-    <!-- Main content -->
-   
-    <!-- /.content -->
-</div> 
+  </section>
+</div>

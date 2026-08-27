@@ -268,6 +268,8 @@ DEMO_PREFIX=showcase DEMO_SLEEP_SECONDS=1200 DEMO_BLOCKER_COUNT=5 ./seed_demo_da
 4. [Job Management](doc/jobseeker/JobManagement)
 5. [Jenkins Setup Notes](doc/Jenkins)
 
+The visualization workspace includes a native drag-and-drop Insight Studio backed by six built-in operational datasets, governed MySQL/MariaDB or PostgreSQL table connections, and sandboxed external BI reports. It supports global filters, searchable fields, presentation mode, portable JSON templates, and private or team-shared dashboards. Database credentials are encrypted at rest; no arbitrary SQL or credentials are exposed to the browser.
+
 ### Example Implementations
 
 1. [Talend Data Integration Use Case](doc/Talend)
