@@ -49,6 +49,11 @@ class JobCreation extends BaseController
       return in_array((int) $status, array(200, 201, 302, 303), TRUE);
     }
 
+    private function jenkinsJobExists($jobName) {
+      $jobResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($jobName) . '/api/json');
+      return (int) $jobResponse['status'] === 200;
+    }
+
     private function saveGeneratedJenkinsJob($jobName, $xml) {
       $jobPath = $this->jenkinsJobPath($jobName);
       $jobResponse = $this->requestJenkins('GET', $jobPath . '/api/json');
@@ -1706,6 +1711,64 @@ class JobCreation extends BaseController
         return hash_equals($snapshot['signature'], $expectedSignature) ? FALSE : $snapshot;
       }
 
+      private function submittedInlineWorkspaceMatchesSnapshot($snapshot, $sourceCode, $requirementsText, $pyprojectText, $dockerfileText, $inlineFiles) {
+        if (! is_array($snapshot) || ! is_array($inlineFiles)) {
+          return FALSE;
+        }
+
+        $normalizeText = function($value) {
+          return str_replace(array("\r\n", "\r"), "\n", (string) $value);
+        };
+
+        if ($normalizeText($sourceCode) !== $normalizeText(isset($snapshot['sourceCode']) ? $snapshot['sourceCode'] : '')) {
+          return FALSE;
+        }
+
+        if ($requirementsText !== NULL && $normalizeText($requirementsText) !== $normalizeText(isset($snapshot['requirementsText']) ? $snapshot['requirementsText'] : '')) {
+          return FALSE;
+        }
+
+        if ($pyprojectText !== NULL && $normalizeText($pyprojectText) !== $normalizeText(isset($snapshot['pyprojectText']) ? $snapshot['pyprojectText'] : '')) {
+          return FALSE;
+        }
+
+        if ($dockerfileText !== NULL && $normalizeText($dockerfileText) !== $normalizeText(isset($snapshot['dockerfileText']) ? $snapshot['dockerfileText'] : '')) {
+          return FALSE;
+        }
+
+        $submittedFiles = array();
+        foreach (isset($inlineFiles['files']) && is_array($inlineFiles['files']) ? $inlineFiles['files'] : array() as $path => $content) {
+          $submittedFiles[(string) $path] = $normalizeText($content);
+        }
+        ksort($submittedFiles);
+
+        $snapshotFiles = array();
+        $snapshotFileList = isset($snapshot['files']['files']) && is_array($snapshot['files']['files']) ? $snapshot['files']['files'] : array();
+        foreach ($snapshotFileList as $file) {
+          if (is_array($file) && isset($file['path'])) {
+            $snapshotFiles[(string) $file['path']] = $normalizeText(isset($file['content']) ? $file['content'] : '');
+          }
+        }
+        $defaultSmokeTest = "def test_python_environment():\n    assert True\n";
+        if (! isset($submittedFiles['tests/test_smoke.py']) && isset($snapshotFiles['tests/test_smoke.py']) && $snapshotFiles['tests/test_smoke.py'] === $defaultSmokeTest) {
+          unset($snapshotFiles['tests/test_smoke.py']);
+        }
+        ksort($snapshotFiles);
+        if ($submittedFiles !== $snapshotFiles) {
+          return FALSE;
+        }
+
+        $submittedDirectories = isset($inlineFiles['directories']) && is_array($inlineFiles['directories']) ? array_values($inlineFiles['directories']) : array();
+        $snapshotDirectories = isset($snapshot['files']['directories']) && is_array($snapshot['files']['directories']) ? array_values($snapshot['files']['directories']) : array();
+        if (! in_array('tests', $submittedDirectories, TRUE) && in_array('tests', $snapshotDirectories, TRUE) && ! isset($submittedFiles['tests/test_smoke.py'])) {
+          $snapshotDirectories = array_values(array_diff($snapshotDirectories, array('tests')));
+        }
+        sort($submittedDirectories);
+        sort($snapshotDirectories);
+
+        return $submittedDirectories === $snapshotDirectories;
+      }
+
       private function openVsCodeWorkspaceRoot() {
         $workspaceRoot = trim((string) getenv('JOBSEEKER_OPENVSCODE_WORKSPACE'));
         if ($workspaceRoot === '') {
@@ -2625,13 +2688,13 @@ class JobCreation extends BaseController
         }
 
         // Opening the editor also synchronizes the browser draft into the
-        // workspace. Refuse that write if VS Code (or another browser tab)
-        // changed any durable project file since the draft was loaded.
+        // workspace. Existing jobs require a matching signature; new drafts
+        // may initialize a workspace prepared earlier in the same draft flow.
         $workspaceConflict = $this->inlinePythonWorkspaceConflict(
           $cleanJobName['name'],
           $entryPoint,
           $this->input->post('pythonWorkspaceSignature'),
-          TRUE
+          $this->jenkinsJobExists($cleanJobName['name'])
         );
         if ($workspaceConflict !== FALSE) {
           $workspaceConflict['ok'] = TRUE;
@@ -2723,6 +2786,7 @@ class JobCreation extends BaseController
 
         $snapshot = $this->inlinePythonWorkspaceSnapshot($pythonExecution, $entryPoint);
         $snapshot['ok'] = TRUE;
+        $snapshot['jenkinsJobExists'] = $this->jenkinsJobExists($cleanJobName['name']);
         $this->jsonJobCreationResponse($snapshot);
       }
 
@@ -3305,8 +3369,18 @@ class JobCreation extends BaseController
                     $job_name,
                     $pythonEntryPoint ?: 'main.py',
                     $this->input->post('pythonWorkspaceSignature'),
-                    TRUE
+                    $this->jenkinsJobExists($job_name)
                   );
+                  if ($workspaceConflict !== FALSE && $this->submittedInlineWorkspaceMatchesSnapshot(
+                    $workspaceConflict,
+                    $pythonInlineCode,
+                    $pythonRequirementsTextForInlineSave,
+                    $pythonPyprojectTextForInlineSave,
+                    $pythonDockerfileTextForInlineSave,
+                    $pythonInlineFiles
+                  )) {
+                    $workspaceConflict = FALSE;
+                  }
                   if ($workspaceConflict !== FALSE) {
                     $this->session->set_flashdata('error', 'The inline Python workspace changed after this form was loaded, so JobSeeker did not overwrite it. Reload the job to review the latest VS Code files before saving again.');
                     redirect('JobCreation');
