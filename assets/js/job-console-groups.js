@@ -19,6 +19,7 @@
     'python-environment': { title: 'Python environment', icon: 'fa-wrench' },
     'python-tests': { title: 'Python tests', icon: 'fa-check-square-o' },
     python: { title: 'Python execution', icon: 'fa-code' },
+    email: { title: 'Email notification', icon: 'fa-envelope-o' },
     cleanup: { title: 'Cleanup', icon: 'fa-trash-o' },
     result: { title: 'Build result', icon: 'fa-flag-checkered' }
   };
@@ -29,6 +30,14 @@
 
   function isBuildResult(line) {
     return /^Finished:\s+(?:SUCCESS|FAILURE|ABORTED|UNSTABLE|NOT_BUILT)\s*$/i.test(line);
+  }
+
+  function isBuildResultDetail(line) {
+    return /^(?:Build was aborted|Aborted by\b|Build step .* marked build as failure)/i.test(line);
+  }
+
+  function isEmailNotification(line) {
+    return /^\[JobSeeker Email\]|^Email was triggered for:|^Sending email for trigger:|^Sending email to:|^Successfully sent email to:|^Not sent to the following|^An attempt to send an e-mail|^Email sending failed/i.test(line);
   }
 
   function isCleanup(line) {
@@ -86,8 +95,12 @@
       return 'jobseeker';
     }
 
-    if (isBuildResult(line)) {
+    if (isBuildResult(line) || isBuildResultDetail(line)) {
       return 'result';
+    }
+
+    if (isEmailNotification(line)) {
+      return 'email';
     }
 
     if (isCleanup(line)) {
@@ -100,6 +113,10 @@
 
     if (isPytestCommand(line)) {
       return 'python-tests';
+    }
+
+    if (currentKind === 'email') {
+      return 'email';
     }
 
     if (currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'cleanup' || currentKind === 'result') {
@@ -214,7 +231,7 @@
   }
 
   function defaultOpen(section, index, total, options) {
-    return section.hasError || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'cleanup' ||
+    return section.hasError || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'email' || section.kind === 'cleanup' ||
       section.kind === 'result' || total === 1 || (!! options.live && index === total - 1);
   }
 

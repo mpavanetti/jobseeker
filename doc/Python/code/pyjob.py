@@ -22,6 +22,8 @@ def build_employee_dataframe():
 
 
 def operation():
+    started_at = time.monotonic()
+
     with JobSeeker(environment=ENVIRONMENT, job=JOB_NAME) as js:
         with js.task("Sample Python Job", "DW_Master") as tmf:
             rows = tmf.context("rows", cast=int, default=10)
@@ -35,6 +37,14 @@ def operation():
             html = output.to_html(index=False)
             message = "<h4>This is a HTML table generated from python pandas</h4><br>" + html
             tmf.finish(total=rows, processed=len(output.index), msg=message)
+
+            js.email_metrics(
+                dataset="employees",
+                rows_read=len(df.index),
+                rows_written=len(output.index),
+                rows_rejected=max(0, len(df.index) - len(output.index)),
+                duration="{:.2f} seconds".format(time.monotonic() - started_at),
+            )
 
     return True
 

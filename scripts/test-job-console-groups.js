@@ -82,4 +82,33 @@ assert.deepStrictEqual(localEnvironment.sections.map((section) => section.kind),
   'result'
 ]);
 
+const abortedEmail = consoleGroups.parse([
+  'Started by user jobseeker',
+  '+ python3 -u main.py',
+  'Processing row 1/5',
+  'Build was aborted',
+  'Aborted by jobseeker',
+  'Email was triggered for: Aborted',
+  'Sending email for trigger: Aborted',
+  '[JobSeeker Email] From: JobSeeker <jobseeker@local.test>',
+  '[JobSeeker Email] To: operator@example.com',
+  '[JobSeeker Email] Subject: [ABORTED] sample #42',
+  'Sending email to: operator@example.com',
+  '[JobSeeker Email] Delivery completed.',
+  'Finished: ABORTED'
+].join('\n'));
+assert.deepStrictEqual(abortedEmail.sections.map((section) => section.kind), [
+  'jenkins',
+  'python',
+  'result',
+  'email',
+  'result'
+]);
+const emailSection = abortedEmail.sections.find((section) => section.kind === 'email');
+assert.strictEqual(emailSection.title, 'Email notification');
+assert(emailSection.text.includes('From: JobSeeker <jobseeker@local.test>'));
+assert(emailSection.text.includes('To: operator@example.com'));
+assert(emailSection.text.includes('Subject: [ABORTED] sample #42'));
+assert(!abortedEmail.sections.find((section) => section.kind === 'python').text.includes('Sending email'));
+
 console.log('Job console grouping tests passed.');

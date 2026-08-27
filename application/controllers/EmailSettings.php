@@ -54,6 +54,73 @@ class EmailSettings extends BaseController
         return $debug;
     }
 
+    private function templatePreviewStatus($template)
+    {
+        $text = strtolower(trim((string) $template['name'].' '.(string) $template['subject']));
+        if (strpos($text, 'abort') !== FALSE) {
+            return 'ABORTED';
+        }
+        if (strpos($text, 'fail') !== FALSE) {
+            return 'FAILED';
+        }
+        if (strpos($text, 'success') !== FALSE) {
+            return 'SUCCESS';
+        }
+
+        return 'PREVIEW';
+    }
+
+    private function renderTemplatePreview($content, $template)
+    {
+        $publicUrl = rtrim((string) getenv('JOBSEEKER_JENKINS_PUBLIC_URL'), '/').'/';
+        if ($publicUrl === '/') {
+            $publicUrl = 'http://localhost:8080/';
+        }
+
+        $projectUrl = $publicUrl.'job/jobseeker-email-preview/';
+        $buildUrl = $projectUrl.'42/';
+        $environmentValues = array(
+            'ENVIRONMENT' => 'DEV',
+            'BUILD_ID' => '2026-08-26_204025',
+            'BUILD_TAG' => 'jenkins-jobseeker-email-preview-42',
+            'NODE_NAME' => 'built-in',
+            'EXECUTOR_NUMBER' => '0',
+            'WORKSPACE' => '/var/jenkins_home/workspace/jobseeker-email-preview',
+            'JOBSEEKER_DATASET' => 'customers_daily',
+            'JOBSEEKER_ROWS_READ' => '12,500',
+            'JOBSEEKER_ROWS_WRITTEN' => '12,492',
+            'JOBSEEKER_ROWS_REJECTED' => '8',
+            'JOBSEEKER_DURATION' => '00:02:14'
+        );
+        $values = array(
+            '${PROJECT_NAME}' => 'JobSeeker ETL Preview',
+            '${BUILD_NUMBER}' => '42',
+            '${BUILD_STATUS}' => $this->templatePreviewStatus($template),
+            '${CAUSE}' => 'Started by the JobSeeker email template preview.',
+            '${BUILD_URL}' => $buildUrl,
+            '${PROJECT_URL}' => $projectUrl
+        );
+
+        $content = strtr((string) $content, $values);
+        $content = preg_replace_callback('/\$\{ENV,\s*var="([^"]+)"\}/', function($matches) use ($environmentValues) {
+            return isset($environmentValues[$matches[1]]) ? $environmentValues[$matches[1]] : 'Sample value';
+        }, $content);
+        $propertyValues = array(
+            'dataset' => 'customers_daily',
+            'rows_read' => '12,500',
+            'rows_written' => '12,492',
+            'rows_rejected' => '8',
+            'duration' => '00:02:14'
+        );
+        $content = preg_replace_callback('/\$\{PROPFILE,\s*file="jobseeker-email-metrics\.properties",\s*property="([^"]+)"\}/', function($matches) use ($propertyValues) {
+            return isset($propertyValues[$matches[1]]) ? $propertyValues[$matches[1]] : 'Not reported';
+        }, $content);
+        $content = preg_replace('/\$\{BUILD_LOG_REGEX\b[^}]*\}/s', "Traceback (most recent call last):\n  File \"etl_job.py\", line 84, in run\nRuntimeError: Sample transformation error for template preview", $content);
+        $content = preg_replace('/\$\{BUILD_LOG\b[^}]*\}/s', "[JobSeeker] ETL execution\nRead 12,500 rows from customers_daily\nWrote 12,492 rows\nRejected 8 rows\nFinished: ".$this->templatePreviewStatus($template), $content);
+
+        return $content;
+    }
+
     public function mail() {
 
         $this->output->set_content_type('application/json');
@@ -149,8 +216,8 @@ class EmailSettings extends BaseController
             $this->email->cc($array['cc']);
         }
 
-        $this->email->subject($array['subject']);
-        $this->email->message($array['msg']);
+        $this->email->subject($this->renderTemplatePreview($array['subject'], $array));
+        $this->email->message($this->renderTemplatePreview($array['msg'], $array));
 
         $sent = $this->email->send();
         if (! $sent) {
@@ -211,6 +278,11 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->model->fetch($id);
+         if (! empty($listJobsJson["data"])) {
+             $template = (array) $listJobsJson["data"][0];
+             $listJobsJson["data"][0]->preview_subject = $this->renderTemplatePreview($template['subject'], $template);
+             $listJobsJson["data"][0]->preview_msg = $this->renderTemplatePreview($template['msg'], $template);
+         }
          echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }

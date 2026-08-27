@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS `email_settings` (
   `cc` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `bcc` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `subject` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
-  `msg` varchar(2000) COLLATE utf8_unicode_ci NOT NULL,
+  `msg` mediumtext COLLATE utf8_unicode_ci NOT NULL,
   `attachment` varchar(2000) COLLATE utf8_unicode_ci NOT NULL,
   `smtp` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `enabled` int(1) NOT NULL,
