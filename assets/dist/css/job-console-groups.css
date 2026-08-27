@@ -51,6 +51,7 @@
 .job-console-section-docker-runtime { border-left-color: #38bdf8; }
 .job-console-section-python-environment { border-left-color: #fbbf24; }
 .job-console-section-python { border-left-color: #4ade80; }
+.job-console-section-email { border-left-color: #2dd4bf; }
 .job-console-section-cleanup { border-left-color: #c084fc; }
 .job-console-section-result { border-left-color: #22c55e; }
 .job-console-section.has-error { border-left-color: #f87171; }

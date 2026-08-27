@@ -32,6 +32,22 @@ JobSeeker resolves database settings from environment variables first, then uses
 
 The SDK also contains an HTTP transport boundary for a future JobSeeker API. When matching backend endpoints are available, jobs can switch transports with `JOBSEEKER_TRANSPORT=api`, `JOBSEEKER_API_URL`, and `JOBSEEKER_API_TOKEN` without changing task code.
 
+## Success Email Metrics
+
+Success email templates can show ETL row counts and duration. Publish those values near the end of a successful job:
+
+```python
+js.email_metrics(
+    dataset="customers_daily",
+    rows_read=12500,
+    rows_written=12492,
+    rows_rejected=8,
+    duration="2m 14s",
+)
+```
+
+The SDK writes stable `JOBSEEKER_EMAIL_*` markers to the Jenkins console and a `jobseeker-email-metrics.properties` file for the Success template. JobSeeker transports that file from both local and Docker Python runtimes. Jobs that do not publish metrics show `Not reported` in those cells.
+
 ## Context Manager Style
 
 Use one `JobSeeker` client for the job, then create one TMF task per tracked unit of work. Each task writes its own TMF row and has its own `instance_id`.
@@ -174,7 +190,7 @@ Publish the job, then run it from Job Execution.
 
 ![Context](img/context9.JPG)
 
-The Jenkins console shows the Python output, and the Transaction Monitoring Framework shows the TMF row and HTML message produced by `tmf.finish(...)`.
+The Jenkins console shows the Python output and email metrics, while the Transaction Monitoring Framework shows the TMF row and HTML message produced by `tmf.finish(...)`.
 
 ![Context](img/context10.JPG)
 

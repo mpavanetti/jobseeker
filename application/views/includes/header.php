@@ -73,7 +73,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   <!-- Alertify Js -->
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/alertify.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
-  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=1" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=2" rel="stylesheet" type="text/css" />
   <!-- jQuery UI -->
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
@@ -85,7 +85,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=2" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=3" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
   window.jobseekerCsrf = {

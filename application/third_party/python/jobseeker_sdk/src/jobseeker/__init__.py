@@ -506,6 +506,40 @@ class JobSeeker:
             return "Context provided was not found on database, please check your context parameter."
         return value
 
+    def email_metrics(
+        self,
+        dataset: Any,
+        rows_read: Any,
+        rows_written: Any,
+        rows_rejected: Any = 0,
+        duration: Any = "",
+    ) -> Dict[str, str]:
+        metrics = {
+            "DATASET": dataset,
+            "ROWS_READ": rows_read,
+            "ROWS_WRITTEN": rows_written,
+            "ROWS_REJECTED": rows_rejected,
+            "DURATION": duration,
+        }
+        normalized = {
+            key: str(value if value is not None else "").replace("\r", " ").replace("\n", " ").strip()
+            for key, value in metrics.items()
+        }
+
+        for key, value in normalized.items():
+            print("JOBSEEKER_EMAIL_%s=%s" % (key, value))
+
+        metrics_file = os.environ.get("JOBSEEKER_EMAIL_METRICS_FILE", "").strip()
+        if metrics_file:
+            directory = os.path.dirname(os.path.abspath(metrics_file))
+            os.makedirs(directory, exist_ok=True)
+            with open(metrics_file, "w", encoding="utf-8") as stream:
+                for key, value in normalized.items():
+                    property_value = value.replace("\\", "\\\\").replace("\t", "\\t")
+                    stream.write("%s=%s\n" % (key.lower(), property_value))
+
+        return normalized
+
     def begin(
         self,
         eventText: str = "",

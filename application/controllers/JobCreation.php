@@ -2874,6 +2874,8 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_RUN_PYTEST='.escapeshellarg($runTests ? '1' : '0');
         $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
         $lines[] = 'export PYTHONUNBUFFERED=1';
+        $lines[] = 'export JOBSEEKER_EMAIL_METRICS_FILE="$WORKSPACE/jobseeker-email-metrics.properties"';
+        $lines[] = 'printf "%s\n" "dataset=Not reported" "rows_read=Not reported" "rows_written=Not reported" "rows_rejected=Not reported" "duration=Not reported" > "$JOBSEEKER_EMAIL_METRICS_FILE"';
         $lines[] = 'export JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_SCRIPT_PATH")"';
         $lines[] = 'cd "$JOBSEEKER_SOURCE_DIR"';
 
@@ -2947,7 +2949,8 @@ class JobCreation extends BaseController
           $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
           $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-python-docker-context"';
           $lines[] = 'JOBSEEKER_DOCKER_BUILT_IMAGE=""';
-          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
+          $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME=""';
+          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
           $lines[] = 'trap jobseeker_python_docker_cleanup EXIT';
           $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
           $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source" "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"';
@@ -2969,14 +2972,20 @@ class JobCreation extends BaseController
           $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile"; fi';
           $lines[] = 'JOBSEEKER_DOCKER_RUN_IMAGE="$JOBSEEKER_DOCKER_IMAGE"';
           $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILT_IMAGE="$JOBSEEKER_DOCKER_RUN_IMAGE"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; DOCKER_BUILDKIT=1 docker build --network host --pull -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
+          $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME="$(printf "jobseeker-email-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
+          $lines[] = 'docker volume create "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null';
+          $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "chmod 0777 /jobseeker-email"';
           $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
           $lines[] = '  --network host \\';
+          $lines[] = '  -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" \\';
           $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
+          $lines[] = '  -e JOBSEEKER_EMAIL_METRICS_FILE=/jobseeker-email/jobseeker-email-metrics.properties \\';
           $lines[] = '  -e PYTHONUNBUFFERED \\';
           $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
           $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
           $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+          $lines[] = 'docker run --rm --user 0 --entrypoint cat -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email:ro" "$JOBSEEKER_DOCKER_RUN_IMAGE" /jobseeker-email/jobseeker-email-metrics.properties > "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" 2>/dev/null && mv "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" "$JOBSEEKER_EMAIL_METRICS_FILE" || rm -f "$JOBSEEKER_EMAIL_METRICS_FILE.tmp"';
         } else {
           $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
           $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
@@ -3662,141 +3671,25 @@ class JobCreation extends BaseController
                   $attr_hudson_ExtendedMailer = new DOMAttr('plugin', 'email-ext@2.68');
                   $hudson_ExtendedMailer->setAttributeNode($attr_hudson_ExtendedMailer);
                   $publishers->appendChild($hudson_ExtendedMailer);
+                  $this->appendEmailConsoleLogging($dom, $hudson_ExtendedMailer);
                 
                   $configuredTriggers = $dom->createElement('configuredTriggers');
                   $hudson_ExtendedMailer->appendChild($configuredTriggers);
 
                   // On Success
                   if($onSuccess != "0") { // if On success template is selected
-
-                  // Load EmailSettings Model in order to fech the email template
-                  $this->load->model('emailSettings_model','model');
-                  $listMailTemplates = $this->model->fetchName($onSuccess); 
-
-                  $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.SuccessTrigger');
-                  $configuredTriggers->appendChild($successTrigger);
-
-                  $email = $dom->createElement('email');
-                  $successTrigger->appendChild($email);
-
-                  $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
-
-                  $this->appendTextElement($dom, $email, 'subject', $this->failureEmailSubject($listMailTemplates[0]->subject, $environment));
-
-                  $this->appendTextElement($dom, $email, 'body', $this->failureEmailBodyWithEnvironment($listMailTemplates[0]->msg, $environment));
-
-                  $recipientProviders = $dom->createElement('recipientProviders');
-                  $email->appendChild($recipientProviders);
-
-                  $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
-                  $recipientProviders->appendChild($recipientProvidersPlugin);
-
-                  $attachments = $dom->createElement('attachmentsPattern', '');
-                  $email->appendChild($attachments);
-
-                  $attachBuildLog = $dom->createElement('attachBuildLog', $attSuccess);
-                  $email->appendChild($attachBuildLog);
-
-                  $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
-                  $email->appendChild($compressBuildLog);
-
-                  $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
-                  $email->appendChild($replyTo);
-
-                  $contentType = $dom->createElement('contentType', 'both');
-                  $email->appendChild($contentType);
-
-                  $this->appendTextElement($dom, $hudson_ExtendedMailer, 'from', $listMailTemplates[0]->from);
-
+                    $this->appendEditableEmailTrigger($dom, $configuredTriggers, $hudson_ExtendedMailer, 'SuccessTrigger', $onSuccess, $attSuccess);
                   }
 
 
                   // On Failure
                   if($onFailure != "0") { // if On success template is selected
-
-                  // Load EmailSettings Model in order to fech the email template
-                  $this->load->model('emailSettings_model','model');
-                  $listMailTemplates = $this->model->fetchName($onFailure); 
-
-                  $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
-                  $configuredTriggers->appendChild($successTrigger);
-
-                  $email = $dom->createElement('email');
-                  $successTrigger->appendChild($email);
-
-                  $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
-
-                  $this->appendTextElement($dom, $email, 'subject', $listMailTemplates[0]->subject);
-
-                  $this->appendTextElement($dom, $email, 'body', $listMailTemplates[0]->msg);
-
-                  $recipientProviders = $dom->createElement('recipientProviders');
-                  $email->appendChild($recipientProviders);
-
-                  $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
-                  $recipientProviders->appendChild($recipientProvidersPlugin);
-
-                  $attachments = $dom->createElement('attachmentsPattern', '');
-                  $email->appendChild($attachments);
-
-                  $attachBuildLog = $dom->createElement('attachBuildLog', $attFailure);
-                  $email->appendChild($attachBuildLog);
-
-                  $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
-                  $email->appendChild($compressBuildLog);
-
-                  $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
-                  $email->appendChild($replyTo);
-
-                  $contentType = $dom->createElement('contentType', 'both');
-                  $email->appendChild($contentType);
-
-                  $this->appendTextElement($dom, $hudson_ExtendedMailer, 'from', $listMailTemplates[0]->from);
-
+                    $this->appendEditableEmailTrigger($dom, $configuredTriggers, $hudson_ExtendedMailer, 'FailureTrigger', $onFailure, $attFailure);
                   }
 
                    // On Abort
                   if($onAbort != "0") { // if On success template is selected
-
-                  // Load EmailSettings Model in order to fech the email template
-                  $this->load->model('emailSettings_model','model');
-                  $listMailTemplates = $this->model->fetchName($onAbort);
-
-                  $successTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.AbortedTrigger');
-                  $configuredTriggers->appendChild($successTrigger);
-
-                  $email = $dom->createElement('email');
-                  $successTrigger->appendChild($email);
-
-                  $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($listMailTemplates[0]));
-
-                  $this->appendTextElement($dom, $email, 'subject', $listMailTemplates[0]->subject);
-
-                  $this->appendTextElement($dom, $email, 'body', $listMailTemplates[0]->msg);
-
-                  $recipientProviders = $dom->createElement('recipientProviders');
-                  $email->appendChild($recipientProviders);
-
-                  $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
-                  $recipientProviders->appendChild($recipientProvidersPlugin);
-
-                  $attachments = $dom->createElement('attachmentsPattern', '');
-                  $email->appendChild($attachments);
-
-                  $attachBuildLog = $dom->createElement('attachBuildLog', $attAbort);
-                  $email->appendChild($attachBuildLog);
-
-                  $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
-                  $email->appendChild($compressBuildLog);
-
-                  $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
-                  $email->appendChild($replyTo);
-
-                  $contentType = $dom->createElement('contentType', 'both');
-                  $email->appendChild($contentType);
-
-                  $this->appendTextElement($dom, $hudson_ExtendedMailer, 'from', $listMailTemplates[0]->from);
-
+                    $this->appendEditableEmailTrigger($dom, $configuredTriggers, $hudson_ExtendedMailer, 'AbortedTrigger', $onAbort, $attAbort);
                   }
 
                  }
@@ -4009,11 +3902,25 @@ class JobCreation extends BaseController
       $attrPublisher = new DOMAttr('plugin', 'email-ext@2.68');
       $publisher->setAttributeNode($attrPublisher);
       $publishers->appendChild($publisher);
+      $this->appendEmailConsoleLogging($dom, $publisher);
 
       $configuredTriggers = $dom->createElement('configuredTriggers');
       $publisher->appendChild($configuredTriggers);
 
       return array('publisher' => $publisher, 'configuredTriggers' => $configuredTriggers);
+    }
+
+    private function appendEmailConsoleLogging($dom, $publisher) {
+      $preSendScript = <<<'GROOVY'
+def from = msg.getFrom() == null ? "Not configured" : msg.getFrom().collect { it.toString() }.join(", ")
+def recipients = msg.getAllRecipients() == null ? "Not configured" : msg.getAllRecipients().collect { it.toString() }.join(", ")
+logger.println("[JobSeeker Email] From: " + from)
+logger.println("[JobSeeker Email] To: " + recipients)
+logger.println("[JobSeeker Email] Subject: " + msg.getSubject())
+GROOVY;
+
+      $this->appendTextElement($dom, $publisher, 'presendScript', $preSendScript);
+      $this->appendTextElement($dom, $publisher, 'postsendScript', 'logger.println("[JobSeeker Email] Delivery completed.")');
     }
 
     private function appendTextElement($dom, $parent, $name, $value) {
@@ -4040,6 +3947,46 @@ class JobCreation extends BaseController
       return $recipients;
     }
 
+    private function appendEditableEmailTrigger($dom, $configuredTriggers, $publisher, $triggerName, $templateName, $attachBuildLog) {
+      $this->load->model('emailSettings_model', 'model');
+      $templates = $this->model->fetchName($templateName);
+
+      if (empty($templates)) {
+        return;
+      }
+
+      $template = $templates[0];
+      $trigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.'.$triggerName);
+      $configuredTriggers->appendChild($trigger);
+
+      $email = $dom->createElement('email');
+      $trigger->appendChild($email);
+      $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($template));
+      $this->appendTextElement($dom, $email, 'subject', $template->subject);
+
+      $body = $dom->createElement('body');
+      $body->appendChild($dom->createCDATASection((string) $template->msg));
+      $email->appendChild($body);
+
+      $recipientProviders = $dom->createElement('recipientProviders');
+      $email->appendChild($recipientProviders);
+      $recipientProviders->appendChild($dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider'));
+
+      $this->appendTextElement($dom, $email, 'attachmentsPattern', '');
+      $this->appendTextElement($dom, $email, 'attachBuildLog', $this->normalizeAttachBuildLog($attachBuildLog));
+      $this->appendTextElement($dom, $email, 'compressBuildLog', 'false');
+      $this->appendTextElement($dom, $email, 'replyTo', '$PROJECT_DEFAULT_REPLYTO');
+      $this->appendTextElement($dom, $email, 'contentType', 'text/html');
+
+      if ($publisher->getElementsByTagName('from')->length === 0) {
+        $this->appendTextElement($dom, $publisher, 'from', $template->from);
+      }
+    }
+
+    private function normalizeAttachBuildLog($value) {
+      return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+    }
+
     private function appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients, $environment = '') {
       $failureTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
       $configuredTriggers->appendChild($failureTrigger);
@@ -4050,7 +3997,7 @@ class JobCreation extends BaseController
       $recipientList = $dom->createElement('recipientList', $recipients);
       $email->appendChild($recipientList);
 
-      $subject = $dom->createElement('subject', $this->failureEmailSubject('[${BUILD_STATUS}] ${PROJECT_NAME} #${BUILD_NUMBER}', $environment));
+      $subject = $dom->createElement('subject', $this->failureEmailSubject('[FAILED] ${PROJECT_NAME} #${BUILD_NUMBER}', $environment));
       $email->appendChild($subject);
 
       $body = $dom->createElement('body');
@@ -4109,7 +4056,7 @@ class JobCreation extends BaseController
       $environmentLabel = htmlspecialchars($this->emailEnvironmentLabel($environment), ENT_QUOTES, 'UTF-8');
 
       return '<div style="background:'.$palette['start'].'; background:linear-gradient(to right, '.$palette['start'].', '.$palette['end'].'); color:#ffffff; padding:20px 24px;">'
-        .'<p style="margin:0 0 6px; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:'.$palette['text'].';">${BUILD_STATUS} - '.$environmentLabel.'</p>'
+        .'<p style="margin:0 0 6px; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:'.$palette['text'].';">FAILED - '.$environmentLabel.'</p>'
         .'<h1 style="margin:0; font-size:23px; line-height:1.3;">'.$environmentLabel.' - ${PROJECT_NAME} #${BUILD_NUMBER} failed</h1>'
         .'<p style="margin:8px 0 0; font-size:14px; line-height:1.4; color:'.$palette['text'].';">${CAUSE}</p>'
         .'</div>';
@@ -4145,17 +4092,17 @@ class JobCreation extends BaseController
         @@JOBSEEKER_ENVIRONMENT_EMAIL_HEADER@@
         <div style="padding:24px;">
           <p style="margin:0 0 18px; font-size:15px; line-height:1.55;">Jenkins marked this JobSeeker build as failed. Start with the highlighted error excerpt, then open the console log if the surrounding context is needed.</p>
-          <p style="margin:0 0 20px;">
-            <a href="${BUILD_URL}" style="display:inline-block; margin:0 8px 8px 0; padding:9px 13px; background:#1f2937; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Open build</a>
-            <a href="${BUILD_URL}console" style="display:inline-block; margin:0 8px 8px 0; padding:9px 13px; background:#2563eb; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Console log</a>
-            <a href="${BUILD_URL}consoleText" style="display:inline-block; margin:0 8px 8px 0; padding:9px 13px; background:#475569; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Raw log</a>
-            <a href="${PROJECT_URL}" style="display:inline-block; margin:0 0 8px 0; padding:9px 13px; background:#e5e7eb; color:#111827; text-decoration:none; border-radius:4px; font-size:13px;">Job page</a>
-          </p>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin:0 0 20px;"><tr>
+            <td style="padding:0 8px 8px 0;"><a href="${BUILD_URL}" style="display:block; white-space:nowrap; padding:9px 13px; background:#1f2937; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Open build</a></td>
+            <td style="padding:0 8px 8px 0;"><a href="${BUILD_URL}console" style="display:block; white-space:nowrap; padding:9px 13px; background:#2563eb; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Console log</a></td>
+            <td style="padding:0 8px 8px 0;"><a href="${BUILD_URL}consoleText" style="display:block; white-space:nowrap; padding:9px 13px; background:#475569; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Raw log</a></td>
+            <td style="padding:0 0 8px;"><a href="${PROJECT_URL}" style="display:block; white-space:nowrap; padding:9px 13px; background:#e5e7eb; color:#111827; text-decoration:none; border-radius:4px; font-size:13px;">Job page</a></td>
+          </tr></table>
           <table style="width:100%; border-collapse:collapse; margin:0 0 20px; font-size:14px;">
             <tr><th align="left" style="width:150px; padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Job</th><td style="padding:8px; border:1px solid #d8dee9;">${PROJECT_NAME}</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Environment</th><td style="padding:8px; border:1px solid #d8dee9; font-weight:bold;">@@JOBSEEKER_EMAIL_ENVIRONMENT@@</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build</th><td style="padding:8px; border:1px solid #d8dee9;">#${BUILD_NUMBER}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d8dee9; color:#991b1b; font-weight:bold;">${BUILD_STATUS}</td></tr>
+            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d8dee9; color:#991b1b; font-weight:bold;">FAILED</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build ID</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_ID"}</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build tag</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_TAG"}</td></tr>
             <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Node</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="NODE_NAME"} / executor ${ENV,var="EXECUTOR_NUMBER"}</td></tr>

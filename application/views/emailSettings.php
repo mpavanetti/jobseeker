@@ -9,7 +9,13 @@
     white-space: pre-wrap; 
     word-break: break-word;
     max-width: 750px;
-}
+  }
+  .email-template-preview {
+    width: 100%;
+    min-height: 620px;
+    border: 1px solid #d8dee9;
+    background: #f3f4f6;
+  }
 </style>
  <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
@@ -311,7 +317,9 @@ $("#table4").on('click','.showMail',function(){
          if (status == 0) { var status = 'Disabled'} else {var status = 'Enabled'};
 
          var creationDate = moment(mail.creation_date);
-         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th>Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ escapeHtml(creationDate.isValid() ? creationDate.format('dddd, MMMM Do YYYY, h:mm:ss') : '') +'</td></tr><tr><td>Name</td><td>'+ escapeHtml(mail.name) +'</td></tr><tr><td>To</td><td>'+ escapeHtml(mail['to']) +'</td></tr><tr><td>From</td><td>'+ escapeHtml(mail['from']) +'</td></tr><tr><td>Cc</td><td>'+ escapeHtml(mail.cc) +'</td></tr><tr><td>Subject</td><td>'+ escapeHtml(mail.subject) +'</td></tr><tr><td>Smtp</td><td>'+ escapeHtml(mail.smtp) +'</td></tr><tr><td>Description</td><td>'+ escapeHtml(mail.description) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(status) +'</td></tr><tr><td>Email Content</td><td><pre>'+ escapeHtml(mail.msg) +'</pre></td></tr></tbody></table></div>')
+         var previewId = 'email-template-preview-' + String(mail.id || 'content');
+         $("#content").append('<div class="destroy"><table class="table table-bordered"><tbody><tr><th>Header</th><th>Task</th></tr><tr><td>Creation Date</td><td>'+ escapeHtml(creationDate.isValid() ? creationDate.format('dddd, MMMM Do YYYY, h:mm:ss') : '') +'</td></tr><tr><td>Name</td><td>'+ escapeHtml(mail.name) +'</td></tr><tr><td>To</td><td>'+ escapeHtml(mail['to']) +'</td></tr><tr><td>From</td><td>'+ escapeHtml(mail['from']) +'</td></tr><tr><td>Cc</td><td>'+ escapeHtml(mail.cc) +'</td></tr><tr><td>Subject</td><td>'+ escapeHtml(mail.preview_subject || mail.subject) +'</td></tr><tr><td>Smtp</td><td>'+ escapeHtml(mail.smtp) +'</td></tr><tr><td>Description</td><td>'+ escapeHtml(mail.description) +'</td></tr><tr><td>Status</td><td>'+ escapeHtml(status) +'</td></tr><tr><td colspan="2"><iframe id="'+ previewId +'" class="email-template-preview" sandbox="" title="Rendered email template preview"></iframe></td></tr></tbody></table></div>')
+         document.getElementById(previewId).srcdoc = mail.preview_msg || mail.msg || '';
 
          $('#modal-default').modal('show');
 

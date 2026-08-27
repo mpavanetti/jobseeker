@@ -255,7 +255,7 @@ services:
       - JOBSEEKER_SMTP_PORT=${JOBSEEKER_SMTP_PORT:-1025}
       - JOBSEEKER_SMTP_SSL=${JOBSEEKER_SMTP_SSL:-false}
       - JOBSEEKER_SMTP_REPLY_TO=${JOBSEEKER_SMTP_REPLY_TO:-jobseeker@local.test}
-      - JOBSEEKER_JENKINS_ROOT_URL=${JOBSEEKER_JENKINS_ROOT_URL:-http://jenkins:8080/}
+      - JOBSEEKER_JENKINS_ROOT_URL=${JOBSEEKER_JENKINS_PUBLIC_URL:-http://localhost:8080/}
       - DOCKER_HOST=${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1"]

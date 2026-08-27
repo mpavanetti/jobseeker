@@ -7110,14 +7110,43 @@
       var extendedMailer = firstXmlElement(xmlDoc, 'hudson.plugins.emailext.ExtendedEmailPublisher');
       var generatedFailureEmail = false;
       if (extendedMailer) {
-        var failureTrigger = firstXmlElement(xmlDoc, 'hudson.plugins.emailext.plugins.trigger.FailureTrigger', extendedMailer);
-        var recipientList = firstXmlText(xmlDoc, 'recipientList', failureTrigger);
-        var body = firstXmlText(xmlDoc, 'body', failureTrigger);
-        if (recipientList !== '') {
-          $('#emailCheck').prop('checked', true);
-          $('#enableEmail').show();
-          $('#recipients').val(recipientList);
-          generatedFailureEmail = body.indexOf('Jenkins marked this JobSeeker build as failed') !== -1;
+        var failureTriggers = extendedMailer.getElementsByTagName('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
+        $.each(failureTriggers, function(index, failureTrigger) {
+          var body = firstXmlText(xmlDoc, 'body', failureTrigger);
+          if (body.indexOf('Jenkins marked this JobSeeker build as failed') !== -1 && body.indexOf('Error Focus') !== -1) {
+            generatedFailureEmail = true;
+            $('#emailCheck').prop('checked', true);
+            $('#enableEmail').show();
+            $('#recipients').val(firstXmlText(xmlDoc, 'recipientList', failureTrigger));
+          }
+        });
+      }
+
+      var editableTriggers = [];
+      if (extendedMailer) {
+        $.each([
+          { tag: 'hudson.plugins.emailext.plugins.trigger.SuccessTrigger', select: '#onSuccess', attach: '#attSuccess' },
+          { tag: 'hudson.plugins.emailext.plugins.trigger.FailureTrigger', select: '#onFailure', attach: '#attFailure' },
+          { tag: 'hudson.plugins.emailext.plugins.trigger.AbortedTrigger', select: '#onAbort', attach: '#attAbort' }
+        ], function(index, config) {
+          $.each(extendedMailer.getElementsByTagName(config.tag), function(triggerIndex, trigger) {
+            var body = firstXmlText(xmlDoc, 'body', trigger);
+            if (config.tag.indexOf('FailureTrigger') !== -1 && body.indexOf('Jenkins marked this JobSeeker build as failed') !== -1 && body.indexOf('Error Focus') !== -1) {
+              return;
+            }
+            editableTriggers.push({
+              select: config.select,
+              attach: config.attach,
+              subject: firstXmlText(xmlDoc, 'subject', trigger),
+              body: body,
+              attachBuildLog: firstXmlText(xmlDoc, 'attachBuildLog', trigger) === 'true' ? 'true' : 'false'
+            });
+          });
+        });
+
+        if (editableTriggers.length) {
+          $('#editableEmailCheck').prop('checked', true);
+          $('#editableEmail').show();
         }
       }
 
@@ -7135,9 +7164,33 @@
         $('input[name="optionsRadios"][value="' + (thresholdName == 'FAILURE' ? '2' : '1') + '"]').prop('checked', true);
       }
 
-      if (extendedMailer && !generatedFailureEmail) {
-        toastr.warning('Editable email templates cannot be restored from Jenkins XML. Select templates again before saving if you want to keep editable email notifications.', 'Edit Job');
+      if (!editableTriggers.length) {
+        return $.Deferred().resolve().promise();
       }
+
+      return $.ajax({
+        type: 'GET',
+        url: '<?php echo base_url(); ?>EmailSettings/fetchall/all',
+        dataType: 'json'
+      }).then(function(response) {
+        var templates = response && response.data ? response.data : [];
+        $('.fetchEmail').empty().append($('<option>', { value: '0', text: 'Please, select an option' }));
+        $.each(templates, function(index, template) {
+          $('.fetchEmail').append($('<option>', { value: template.name, text: template.name }));
+        });
+
+        $.each(editableTriggers, function(index, saved) {
+          var template = templates.find(function(candidate) {
+            return candidate.subject === saved.subject && candidate.msg === saved.body;
+          });
+          if (template) {
+            setSelectValue(saved.select, template.name);
+          }
+          setSelectValue(saved.attach, saved.attachBuildLog);
+        });
+      }, function() {
+        toastr.warning('Email templates could not be loaded. Select templates again before saving this job.', 'Edit Job');
+      });
     }
 
     function hydrateBuildWrappers(xmlDoc) {
@@ -7175,7 +7228,7 @@
       $('#description').val(firstXmlText(xmlDoc, 'description'));
       hydrateSchedule(xmlDoc);
       var workspaceRequest = hydrateBuilders(xmlDoc, jobName);
-      hydratePublishers(xmlDoc);
+      var publisherRequest = hydratePublishers(xmlDoc);
       hydrateBuildWrappers(xmlDoc);
 
       function finishHydration() {
@@ -7189,7 +7242,7 @@
         $('html, body').animate({ scrollTop: $('#InsertDbSettings').offset().top - 70 }, 300);
       }
 
-      return $.when(workspaceRequest).then(finishHydration, finishHydration);
+      return $.when(workspaceRequest, publisherRequest).then(finishHydration, finishHydration);
     }
 
     function loadJobForEdit(jobName) {

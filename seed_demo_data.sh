@@ -184,12 +184,14 @@ export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:${PYTHONPATH:-}"
 
 "$JOBSEEKER_PYTHON" - <<'PY'
 import os
+import time
 
 from jobseeker import JobSeeker
 
 
 environment = os.environ.get("JOBSEEKER_SAMPLE_ENV", "LOCAL")
 job_name = os.environ.get("JOB_NAME") or "jobseeker-sdk-agent-sample"
+started_at = time.monotonic()
 
 with JobSeeker(environment=environment, job=job_name) as js:
     with js.task("Sample SDK Agent Job", "DW_Master") as tmf:
@@ -200,6 +202,13 @@ with JobSeeker(environment=environment, job=job_name) as js:
             tmf.progress(total=rows, processed=index, msg="Agent sample processed {} of {} rows".format(index, rows))
 
         tmf.finish(total=rows, processed=rows, msg="JobSeeker SDK sample completed on Jenkins agent")
+    js.email_metrics(
+      dataset="sdk_agent_sample",
+      rows_read=rows,
+      rows_written=rows,
+      rows_rejected=0,
+      duration="{:.2f} seconds".format(time.monotonic() - started_at),
+    )
 
 print("JobSeeker SDK agent sample complete")
 PY
@@ -221,12 +230,14 @@ cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"
 
 cat > "$JOBSEEKER_DOCKER_CONTEXT/main.py" <<'PY'
 import os
+import time
 
 from jobseeker import JobSeeker
 
 
 environment = os.environ.get("JOBSEEKER_SAMPLE_ENV", "LOCAL")
 job_name = os.environ.get("JOB_NAME") or "jobseeker-sdk-docker-sample"
+started_at = time.monotonic()
 
 with JobSeeker(environment=environment, job=job_name) as js:
     with js.task("Sample SDK Docker Job", "DW_Master") as tmf:
@@ -236,6 +247,13 @@ with JobSeeker(environment=environment, job=job_name) as js:
         print("Docker sample heartbeat at {} of {} rows".format(midpoint, rows))
         tmf.progress(total=rows, processed=midpoint, msg="Docker sample heartbeat")
         tmf.finish(total=rows, processed=rows, msg="JobSeeker SDK sample completed in Docker")
+        js.email_metrics(
+          dataset="sdk_docker_sample",
+          rows_read=rows,
+          rows_written=rows,
+          rows_rejected=0,
+          duration="{:.2f} seconds".format(time.monotonic() - started_at),
+        )
 
 print("JobSeeker SDK Docker sample complete")
 PY
