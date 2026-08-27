@@ -3,9 +3,29 @@
     transform: scale(1.5);
   }
 
+  .delete-actions {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 10px;
+  }
+
+  .delete-actions::before,
+  .delete-actions::after {
+    content: none;
+    display: none;
+  }
+
   .delete-actions .btn {
-    margin-right: 6px;
-    margin-bottom: 6px;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  .delete-actions .delete-primary-action {
+    grid-column: 1 / -1;
   }
 
   .delete-job-layout {
@@ -24,6 +44,13 @@
     flex-direction: column;
     min-height: 480px;
     width: 100%;
+  }
+
+  .delete-job-box > form {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .delete-job-box .box-body {
@@ -92,6 +119,16 @@
     .delete-job-box {
       display: block;
       min-height: 0;
+    }
+  }
+
+  @media (max-width: 479px) {
+    .delete-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .delete-actions .delete-primary-action {
+      grid-column: auto;
     }
   }
 
@@ -166,7 +203,7 @@
            <button type="button" id="selectAllJobs" class="btn btn-default"><i class="fa fa-check-square-o"></i> Select All</button>
            <button type="button" id="clearSelectedJobs" class="btn btn-default"><i class="fa fa-square-o"></i> Clear</button>
            <button type="button" id="reloadDeleteJobs" class="btn btn-info"><i class="fa fa-refresh"></i> Reload</button>
-           <button type="button" id="deleteJob" class="btn btn-danger"><i class="fa fa-trash"></i> Delete Selected Jobs</button>
+           <button type="button" id="deleteJob" class="btn btn-danger delete-primary-action"><i class="fa fa-trash"></i> Delete Selected Jobs</button>
      </div>
  </form> 
 </div>
@@ -197,7 +234,7 @@
    <button type="button" id="selectAllRepos" class="btn btn-default"><i class="fa fa-check-square-o"></i> Select All</button>
    <button type="button" id="clearSelectedRepos" class="btn btn-default"><i class="fa fa-square-o"></i> Clear</button>
    <button type="button" id="reloadDeleteRepos" class="btn btn-info"><i class="fa fa-refresh"></i> Reload</button>
-   <button type="button" id="delRepoBtn" class="btn btn-danger"><i class="fa fa-trash"></i> Delete Selected Repositories</button>
+   <button type="button" id="delRepoBtn" class="btn btn-danger delete-primary-action"><i class="fa fa-trash"></i> Delete Selected Repositories</button>
 </div>
 </form> 
 </div>

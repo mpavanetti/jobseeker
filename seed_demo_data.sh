@@ -36,6 +36,8 @@ Creates a repeatable demo dataset for screenshots:
   - JobSeeker Python SDK sample jobs that import jobseeker and write live TMF rows.
   - TMF/TMF error database history across past dates, statuses, dimensions, and environments.
   - JobSeeker-created-date metadata so Available Jobs sorts newest created jobs first.
+  - Two public Tableau sample reports in the connected analytics catalog.
+  - Three shared Insight Studio starter dashboards spanning every native dataset.
 
 Environment overrides:
   DEMO_PREFIX=$DEMO_PREFIX
@@ -308,6 +310,7 @@ EOF
 seed_database() {
   python3 - "$DEMO_PREFIX" <<'PY' | docker compose exec -T mariadb mariadb -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME"
 import datetime
+import json
 import sys
 
 prefix = sys.argv[1]
@@ -341,6 +344,8 @@ def q(value):
 print("START TRANSACTION;")
 print(f"DELETE FROM tmf_error WHERE tmf_id LIKE {q(prefix + '-%')} OR job_name LIKE {q(prefix + '-%')};")
 print(f"DELETE FROM tmf WHERE interface_id LIKE {q(prefix + '-%')} OR instance_id LIKE {q(prefix + '-%')} OR job_name LIKE {q(prefix + '-%')};")
+print(f"DELETE FROM reports WHERE owner = 'JobSeeker Demo' AND name LIKE {q(prefix + ' - %')};")
+print(f"DELETE FROM visualization_dashboards WHERE owner = 'JobSeeker Demo' AND name LIKE {q(prefix + ' - %')};")
 
 rows = []
 errors = []
@@ -394,6 +399,84 @@ print(",\n".join("(" + ",".join(q(value) for value in row) + ")" for row in rows
 if errors:
     print("INSERT INTO tmf_error (tmf_id,job_name,moment,type,origin,message,code) VALUES")
     print(",\n".join("(" + ",".join(q(value) for value in row) + ")" for row in errors) + ";")
+
+sample_reports = [
+    (f"{prefix} - Sales overview", "https://public.tableau.com/views/SalesOverview_16591884572210/SalesOverview?:showVizHome=no&:embed=true"),
+    (f"{prefix} - Four-chart dashboard", "https://public.tableau.com/views/SampleDashboardFourChartLayout/Sample?:showVizHome=no&:embed=true"),
+]
+print("INSERT INTO reports (creation_date,name,type,users,groups,code,owner) VALUES")
+print(",\n".join("(" + ",".join(q(value) for value in (now.strftime("%Y-%m-%d %H:%M:%S"), name, "tblPublic", "*", "None", url, "JobSeeker Demo")) + ")" for name, url in sample_reports) + ";")
+
+def widget(widget_id, title, dataset, chart, dimension, measure, date_range="all", palette="aurora", size=6):
+    return {
+        "id": widget_id,
+        "title": title,
+        "dataset": dataset,
+        "chart": chart,
+        "dimension": dimension,
+        "measure": measure,
+        "date_range": date_range,
+        "environment": "all",
+        "palette": palette,
+        "size": size,
+    }
+
+sample_dashboards = [
+    (
+        f"{prefix} - Operations command center",
+        "A live operating view of pipeline volume, completion, failures, and the errors that need attention.",
+        [
+            widget("ops_runs", "Total runs", "tmf_runs", "kpi", "", "runs", "30d", "aurora", 4),
+            widget("ops_failures", "Runs needing attention", "tmf_runs", "kpi", "", "failures", "30d", "signal", 4),
+            widget("ops_completion", "Record completion", "tmf_runs", "kpi", "", "completion_rate", "30d", "ocean", 4),
+            widget("ops_health", "Run health", "tmf_runs", "doughnut", "status", "runs", "30d", "signal", 4),
+            widget("ops_volume", "Daily run volume", "tmf_runs", "line", "activity_day", "runs", "30d", "aurora", 8),
+            widget("ops_error_origin", "Errors by origin", "tmf_errors", "bar", "origin", "errors", "90d", "signal", 6),
+            widget("ops_affected_jobs", "Affected runs by job", "tmf_errors", "bar", "job_name", "affected_runs", "90d", "ocean", 6),
+            widget("ops_attention", "Jobs needing attention", "tmf_runs", "table", "job_name", "failures", "30d", "mono", 12),
+        ],
+    ),
+    (
+        f"{prefix} - Platform activity and adoption",
+        "A product-usage view combining account activity, registered components, and the outputs teams create.",
+        [
+            widget("adoption_sessions", "Sessions", "login_activity", "kpi", "", "sessions", "30d", "aurora", 4),
+            widget("adoption_users", "Active users", "login_activity", "kpi", "", "unique_users", "30d", "ocean", 4),
+            widget("adoption_components", "Catalog components", "job_catalog", "kpi", "", "components", "all", "signal", 4),
+            widget("adoption_trend", "Login trend", "login_activity", "line", "activity_day", "sessions", "90d", "aurora", 8),
+            widget("adoption_platform", "Sessions by platform", "login_activity", "doughnut", "platform", "sessions", "90d", "ocean", 4),
+            widget("adoption_catalog", "Catalog by component type", "job_catalog", "bar", "component_type", "components", "all", "signal", 6),
+            widget("adoption_outputs", "Outputs by job", "job_outputs", "bar", "job_name", "outputs", "all", "aurora", 6),
+        ],
+    ),
+    (
+        f"{prefix} - Configuration governance",
+        "A privacy-safe inventory of configuration coverage, ownership, lifecycle state, and encryption adoption.",
+        [
+            widget("governance_keys", "Context keys", "context_inventory", "kpi", "", "keys", "all", "aurora", 4),
+            widget("governance_active", "Active keys", "context_inventory", "kpi", "", "active_keys", "all", "ocean", 4),
+            widget("governance_encrypted", "Encrypted keys", "context_inventory", "kpi", "", "encrypted_keys", "all", "signal", 4),
+            widget("governance_environment", "Coverage by environment", "context_inventory", "doughnut", "environment", "keys", "all", "aurora", 4),
+            widget("governance_project", "Coverage by project", "context_inventory", "bar", "project", "keys", "all", "ocean", 8),
+            widget("governance_growth", "Inventory growth", "context_inventory", "line", "created_month", "keys", "all", "aurora", 8),
+            widget("governance_state", "Active versus inactive", "context_inventory", "bar", "state", "keys", "all", "signal", 4),
+        ],
+    ),
+]
+print("INSERT INTO visualization_dashboards (name,description,owner_id,owner,definition_json,is_shared,created_at,updated_at) VALUES")
+print(",\n".join(
+    "(" + ",".join(q(value) for value in (
+        name,
+        description,
+        1,
+        "JobSeeker Demo",
+        json.dumps({"version": 1, "widgets": widgets}, separators=(",", ":")),
+        1,
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+        now.strftime("%Y-%m-%d %H:%M:%S"),
+    )) + ")"
+    for name, description, widgets in sample_dashboards
+) + ";")
 
 print("COMMIT;")
 PY
@@ -451,6 +534,8 @@ cleanup_demo() {
   docker compose exec -T mariadb mariadb -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" <<SQL
 DELETE FROM tmf_error WHERE tmf_id LIKE '${DEMO_PREFIX}-%' OR job_name LIKE '${DEMO_PREFIX}-%';
 DELETE FROM tmf WHERE interface_id LIKE '${DEMO_PREFIX}-%' OR instance_id LIKE '${DEMO_PREFIX}-%' OR job_name LIKE '${DEMO_PREFIX}-%';
+DELETE FROM reports WHERE owner = 'JobSeeker Demo' AND name LIKE '${DEMO_PREFIX} - %';
+DELETE FROM visualization_dashboards WHERE owner = 'JobSeeker Demo' AND name LIKE '${DEMO_PREFIX} - %';
 SQL
 
   python3 - "$DEMO_PREFIX" <<'PY'

@@ -1954,7 +1954,7 @@ public function addProject() {
 
     $this->load->library('form_validation');
 
-    $this->form_validation->set_rules('name','Project Name','required|max_length[1000]');
+    $this->form_validation->set_rules('name','Project Name','trim|required|max_length[1000]');
     $this->form_validation->set_rules('active','Active Project','required|max_length[1]');
     $this->form_validation->set_rules('gitpath','Git Path','trim|max_length[2000]');
 
@@ -2022,8 +2022,8 @@ public function addEnvironment() {
 
     $this->load->library('form_validation');
 
-    $this->form_validation->set_rules('name','Environment Name','required|max_length[100]');
-    $this->form_validation->set_rules('active','Active Project','required|max_length[1]');
+    $this->form_validation->set_rules('name','Environment Name','trim|required|max_length[100]');
+    $this->form_validation->set_rules('active','Active Environment','required|max_length[1]');
     $this->form_validation->set_rules('description','Description','trim|max_length[2000]');
 
     if($this->form_validation->run() == FALSE)
@@ -2090,7 +2090,7 @@ public function addContext() {
     $this->load->library('form_validation');
 
     $this->form_validation->set_rules('contextValue','Context Value','required|max_length[1000]');
-    $this->form_validation->set_rules('contextKey','Context Key','required|max_length[1000]');
+    $this->form_validation->set_rules('contextKey','Context Key','trim|required|max_length[1000]');
     $this->form_validation->set_rules('active','Active Context','required|max_length[1]');
     $this->form_validation->set_rules('encrypted','Encrypted Context','required|max_length[1]');
     $this->form_validation->set_rules('projectName','Project Name','required|max_length[255]');
@@ -2099,7 +2099,7 @@ public function addContext() {
 
     if($this->form_validation->run() == FALSE)
     {
-      $this->projectDetails();
+      $this->contextDetails();
     }
     else
     {
@@ -2121,6 +2121,12 @@ public function addContext() {
      $validateSetting = $this->model->validateContext($contextKey,$projectName,$environmentName);
      $projectIdReturn = $this->model->getProjectId($projectName);
      $environmentIdReturn = $this->model->getEnvironmentId($environmentName);
+
+     if (empty($projectIdReturn) || empty($environmentIdReturn)) {
+       $this->session->set_flashdata('error', 'The selected project or environment is no longer available. Please choose another scope.');
+       redirect('Context/contextDetails');
+     }
+
      $projectId = $projectIdReturn[0]->id;
      $environmentId = $environmentIdReturn[0]->id;
 
@@ -2252,6 +2258,11 @@ public function addContext() {
 
         $data['project'] = $this->model->getProject($id);
 
+        if (empty($data['project'])) {
+          $this->session->set_flashdata('error', 'The requested project could not be found.');
+          redirect('Context/projectDetails');
+        }
+
         $this->global['pageTitle'] = 'Job Seeker : Edit Data';
 
         $this->loadViews("projectDetailsEdit", $this->global, $data, NULL);
@@ -2277,6 +2288,11 @@ public function addContext() {
 
         $data['environment'] = $this->model->getEnvironment($id);
 
+        if (empty($data['environment'])) {
+          $this->session->set_flashdata('error', 'The requested environment could not be found.');
+          redirect('Context/environment');
+        }
+
         $this->global['pageTitle'] = 'Job Seeker : Edit Data';
 
         $this->loadViews("environmentEdit", $this->global, $data, NULL);
@@ -2301,6 +2317,12 @@ public function addContext() {
 
 
         $data["list"] = $this->model->listContextId($id);
+
+        if (empty($data["list"])) {
+          $this->session->set_flashdata('error', 'The requested context variable could not be found.');
+          redirect('Context/contextDetails');
+        }
+
         $data["listProjects"] = $this->model->listProjects();
         $data["listEnvironments"] = $this->model->listEnvironments();
         $data["contexts"] = $this->model->listAvailableContexts();
@@ -2323,18 +2345,24 @@ public function addContext() {
 
         $this->load->library('form_validation');
 
-        $this->form_validation->set_rules('name','Project Name','required|max_length[1000]');
-        $this->form_validation->set_rules('Id','Project Id','required|max_length[11]');
+        $Id = (int) $this->security->xss_clean($this->input->post('Id'));
+
+        $this->form_validation->set_rules('name','Project Name','trim|required|max_length[1000]');
+        $this->form_validation->set_rules('Id','Project Id','required|integer');
         $this->form_validation->set_rules('active','Active Project','required|max_length[1]');
         $this->form_validation->set_rules('gitpath','Git Path','trim|max_length[2000]');
 
         if($this->form_validation->run() == FALSE)
         {
-          $this->projectDetails();
+          if ($Id > 0) {
+            $this->editProject($Id);
+          } else {
+            $this->session->set_flashdata('error', 'The project update request did not include a valid project ID.');
+            redirect('Context/projectDetails');
+          }
         }
         else
         {
-          $Id = $this->security->xss_clean($this->input->post('Id'));
           $name = $this->security->xss_clean($this->input->post('name'));
           $active = $this->security->xss_clean($this->input->post('active'));
           $gitpath = $this->security->xss_clean($this->input->post('gitpath'));
@@ -2344,8 +2372,10 @@ public function addContext() {
            redirect('Context/projectDetails');
          }
 
-                // Check if the data is alredy on table
-         $validateSetting = $this->model->validateProject($name);
+         if ($this->model->validateProjectExcept($name, $Id) > 0) {
+           $this->session->set_flashdata('error', 'A project with this name already exists.');
+           redirect('Context/editProject/'.$Id);
+         }
 
          $Info = array(
           'ProjectName'=>$name, 
@@ -2358,7 +2388,7 @@ public function addContext() {
 
          if($result == True)
          {
-          $this->session->set_flashdata('success', 'New Project has successfully updated and now is available to be used.');
+          $this->session->set_flashdata('success', 'The project was updated successfully.');
         }
         else
         {
@@ -2384,25 +2414,36 @@ public function addContext() {
 
     $this->load->library('form_validation');
 
-    $this->form_validation->set_rules('Id','Environment Id','required|max_length[11]');
-    $this->form_validation->set_rules('name','Environment Name','required|max_length[100]');
-    $this->form_validation->set_rules('active','Active Project','required|max_length[1]');
+    $Id = (int) $this->security->xss_clean($this->input->post('Id'));
+
+    $this->form_validation->set_rules('Id','Environment Id','required|integer');
+    $this->form_validation->set_rules('name','Environment Name','trim|required|max_length[100]');
+    $this->form_validation->set_rules('active','Active Environment','required|max_length[1]');
     $this->form_validation->set_rules('description','Description','trim|max_length[2000]');
 
     if($this->form_validation->run() == FALSE)
     {
-      $this->environment();
+      if ($Id > 0) {
+        $this->editEnvironment($Id);
+      } else {
+        $this->session->set_flashdata('error', 'The environment update request did not include a valid environment ID.');
+        redirect('Context/environment');
+      }
     }
     else
     {
-      $Id = $this->security->xss_clean($this->input->post('Id'));
       $name = $this->security->xss_clean($this->input->post('name'));
       $active = $this->security->xss_clean($this->input->post('active'));
       $description = $this->security->xss_clean($this->input->post('description'));
 
-      if ($name == null || $active == null || $Id == null) {
+     if ($name == null || $active == null || $Id == null) {
        $this->session->set_flashdata('error', 'Environment Setup failed ! You must type an environment name,id and active status');
        redirect('Context/environment');
+     }
+
+     if ($this->model->validateEnvironmentExcept($name, $Id) > 0) {
+       $this->session->set_flashdata('error', 'An environment with this name already exists.');
+       redirect('Context/editEnvironment/'.$Id);
      }
 
      $Info = array(
@@ -2416,7 +2457,7 @@ public function addContext() {
 
       if($result > 0)
       {
-        $this->session->set_flashdata('success', 'New Environment has successfully updated and now is available to be used.');
+        $this->session->set_flashdata('success', 'The environment was updated successfully.');
       }
       else
       {
@@ -2442,8 +2483,11 @@ public function editContextUpdate() {
     $user = $this->global['name'];
     $this->load->library('form_validation');
 
+    $Id = (int) $this->security->xss_clean($this->input->post('ContextId'));
+
     $this->form_validation->set_rules('contextValue','Context Value','required|max_length[1000]');
-    $this->form_validation->set_rules('contextKey','Context Key','required|max_length[1000]');
+    $this->form_validation->set_rules('contextKey','Context Key','trim|required|max_length[1000]');
+    $this->form_validation->set_rules('ContextId','Context Id','required|integer');
     $this->form_validation->set_rules('active','Active Context','required|max_length[1]');
     $this->form_validation->set_rules('encrypted','Encrypted Context','required|max_length[1]');
     $this->form_validation->set_rules('projectName','Project Name','required|max_length[255]');
@@ -2452,12 +2496,16 @@ public function editContextUpdate() {
 
     if($this->form_validation->run() == FALSE)
     {
-      $this->projectDetails();
+      if ($Id > 0) {
+        $this->editContext($Id);
+      } else {
+        $this->session->set_flashdata('error', 'The context update request did not include a valid context ID.');
+        redirect('Context/contextDetails');
+      }
     }
     else
     {
 
-      $Id = $this->security->xss_clean($this->input->post('ContextId'));
       $contextValue = $this->security->xss_clean($this->input->post('contextValue'));
       $contextKey = $this->security->xss_clean($this->input->post('contextKey'));
       $active = $this->security->xss_clean($this->input->post('active'));
@@ -2474,6 +2522,17 @@ public function editContextUpdate() {
      // Check if the data is alredy on table
      $projectIdReturn = $this->model->getProjectId($projectName);
      $environmentIdReturn = $this->model->getEnvironmentId($environmentName);
+
+     if (empty($projectIdReturn) || empty($environmentIdReturn)) {
+       $this->session->set_flashdata('error', 'The selected project or environment is no longer available. Please choose another scope.');
+       redirect('Context/editContext/'.$Id);
+     }
+
+     if ($this->model->validateContextExcept($contextKey, $projectName, $environmentName, $Id) > 0) {
+       $this->session->set_flashdata('error', 'A context with this key already exists in the selected project and environment.');
+       redirect('Context/editContext/'.$Id);
+     }
+
      $projectId = $projectIdReturn[0]->id;
      $environmentId = $environmentIdReturn[0]->id;
 
@@ -2494,7 +2553,7 @@ public function editContextUpdate() {
 
       if($result > 0)
       {
-        $this->session->set_flashdata('success', 'New Context has successfully updated and now is available to be used.');
+        $this->session->set_flashdata('success', 'The context variable was updated successfully.');
       }
       else
       {

@@ -207,6 +207,66 @@ CREATE TABLE IF NOT EXISTS `reports` (
 /*!40000 ALTER TABLE `reports` DISABLE KEYS */;
 /*!40000 ALTER TABLE `reports` ENABLE KEYS */;
 
+-- Saved, governed dashboards created in Insight Studio
+CREATE TABLE IF NOT EXISTS `visualization_dashboards` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `description` varchar(500) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `owner_id` int(11) NOT NULL,
+  `owner` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `definition_json` mediumtext COLLATE utf8_unicode_ci NOT NULL,
+  `is_shared` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `visualization_dashboards_owner` (`owner_id`),
+  KEY `visualization_dashboards_shared` (`is_shared`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Encrypted, governed data sources exposed through Insight Studio. Credentials
+-- never leave the server and dataset definitions contain approved fields only.
+CREATE TABLE IF NOT EXISTS `visualization_connections` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `driver` varchar(20) COLLATE utf8_unicode_ci NOT NULL,
+  `host` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `port` int(11) NOT NULL,
+  `database_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `username` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `password_encrypted` text COLLATE utf8_unicode_ci NOT NULL,
+  `ssl_mode` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'required',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `owner_id` int(11) NOT NULL,
+  `owner` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `visualization_connections_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `visualization_datasets` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `connection_id` int(11) NOT NULL,
+  `name` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `dataset_key` varchar(40) COLLATE utf8_unicode_ci NOT NULL,
+  `description` varchar(500) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `table_schema` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `table_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `dimensions_json` mediumtext COLLATE utf8_unicode_ci NOT NULL,
+  `measures_json` mediumtext COLLATE utf8_unicode_ci NOT NULL,
+  `time_column` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `environment_column` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `owner_id` int(11) NOT NULL,
+  `owner` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `visualization_datasets_key` (`dataset_key`),
+  KEY `visualization_datasets_connection` (`connection_id`),
+  KEY `visualization_datasets_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Copiando estrutura para tabela jobseeker.smtp_settings
 CREATE TABLE IF NOT EXISTS `smtp_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
