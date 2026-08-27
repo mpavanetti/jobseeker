@@ -1962,6 +1962,7 @@
             <button type="submit" id="send" href="#" class="btn btn-success buildXmlBtn"><i class="fa fa-save"></i> Create Job</button>
             <button type="submit" id="saveAndTrigger" class="btn btn-primary buildXmlBtn"><i class="fa fa-play"></i> Create And Trigger</button>
             <span class="saveJobStatus text-muted" style="display: none; margin-left: 10px;"></span>
+            <span id="jobDraftCacheStatus" class="text-muted" style="display: none; margin-left: 10px;"><i class="fa fa-check-circle"></i> <span></span></span>
           </div>
         </div>
         <!-- /.box-body -->
@@ -3049,6 +3050,7 @@
 
         syncAllDraftEnvironments($('#environment').val() || '0');
         syncPythonInlineFilesInput();
+        persistJobDraftCache();
         if (submitJobDraftsIfNeeded()) {
           event.preventDefault();
         }
@@ -3208,6 +3210,8 @@
       var jobDrafts = [];
       var activeDraftIndex = 0;
       var applyingJobDraft = false;
+      var draftCacheReady = false;
+      var draftCacheTimer = null;
       var activeConfigPanel = '';
       var availableJobCache = [];
       var availableJobsLoading = false;
@@ -5992,6 +5996,131 @@
         }
       }
 
+      function updateDraftCacheStatus(message, isError) {
+        var status = $('#jobDraftCacheStatus');
+        status.toggleClass('text-danger', !!isError).toggleClass('text-muted', !isError);
+        status.find('i').attr('class', isError ? 'fa fa-warning' : 'fa fa-check-circle');
+        status.find('span').text(message || '');
+        status.toggle(!!message);
+      }
+
+      function persistJobDraftCache() {
+        if (! draftCacheReady || ! window.JobSeekerDraftCache) {
+          return;
+        }
+
+        ensureJobDraftsInitialized();
+        saveActiveJobDraft(false);
+        var hasUnsavedWork = $.grep(jobDrafts, function(draft) {
+          return draftHasUnsavedWork(draft);
+        }).length > 0;
+
+        if (! hasUnsavedWork) {
+          window.JobSeekerDraftCache.clear();
+          updateDraftCacheStatus('', false);
+          return;
+        }
+
+        var result = window.JobSeekerDraftCache.save(jobDrafts, activeDraftIndex);
+        if (result.ok) {
+          updateDraftCacheStatus('Autosaved locally', false);
+        } else {
+          updateDraftCacheStatus(result.message || 'Unable to cache drafts', true);
+        }
+      }
+
+      function draftHasUnsavedWork(draft) {
+        if (! draft) {
+          return false;
+        }
+
+        var meaningfulTextFields = [
+          'job_name', 'description', 'windowsCommandLine', 'linuxCommandLine',
+          'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch',
+          'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText',
+          'recipients'
+        ];
+        var hasText = $.grep(meaningfulTextFields, function(field) {
+          return $.trim(String(draft[field] || '')) !== '';
+        }).length > 0;
+        var hasEnabledOption = $.grep(['checkBuild', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'], function(field) {
+          return draftChecked(draft, field);
+        }).length > 0;
+        var hasPipeline = normalizeArray(draft.jobList).length > 0 || normalizeArray(draft.upstreamJobList).length > 0;
+        var hasExtraFiles = $.trim(String(draft.pythonInlineFilesJson || '')) !== '' && $.trim(String(draft.pythonInlineFilesJson || '')) !== '{"files":[],"directories":[]}';
+
+        return hasText || hasEnabledOption || hasPipeline || hasExtraFiles;
+      }
+
+      function discardCreatedDrafts(names) {
+        var createdNames = {};
+        $.each(names || [], function(index, name) {
+          createdNames[$.trim(String(name || ''))] = true;
+        });
+
+        if (window.JobSeekerDraftCache) {
+          window.JobSeekerDraftCache.removeByNames(names || [], false);
+        }
+
+        jobDrafts = $.grep(jobDrafts, function(draft) {
+          return ! createdNames[$.trim(String(draft.job_name || ''))];
+        });
+        if (! jobDrafts.length) {
+          jobDrafts = [createEmptyDraft('')];
+        }
+        activeDraftIndex = Math.min(activeDraftIndex, jobDrafts.length - 1);
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+        setBulkDraftsVisible(jobDrafts.length > 1);
+        scheduleJobDraftCacheSave(0);
+      }
+
+      function scheduleJobDraftCacheSave(delay) {
+        if (! draftCacheReady || ! window.JobSeekerDraftCache) {
+          return;
+        }
+
+        if (draftCacheTimer) {
+          window.clearTimeout(draftCacheTimer);
+        }
+        draftCacheTimer = window.setTimeout(function() {
+          draftCacheTimer = null;
+          persistJobDraftCache();
+        }, typeof delay === 'number' ? delay : 400);
+      }
+
+      function restoreJobDraftCache() {
+        if (! window.JobSeekerDraftCache) {
+          return false;
+        }
+
+        var cached = window.JobSeekerDraftCache.read();
+        if (! cached || ! cached.drafts.length) {
+          return false;
+        }
+
+        jobDrafts = $.map(cached.drafts, function(draft) {
+          return draft && typeof draft === 'object' ? $.extend(true, createEmptyDraft(''), draft) : null;
+        });
+        if (! jobDrafts.length) {
+          return false;
+        }
+
+        var requestedId = window.JobSeekerDraftCache.targetDraftId();
+        var selectedId = requestedId || cached.activeDraftId || '';
+        activeDraftIndex = 0;
+        $.each(jobDrafts, function(index, draft) {
+          if (draft._cacheId === selectedId) {
+            activeDraftIndex = index;
+            return false;
+          }
+        });
+
+        loadJobDraft(jobDrafts[activeDraftIndex]);
+        setBulkDraftsVisible(jobDrafts.length > 1);
+        updateDraftCacheStatus('Restored from local cache', false);
+        return true;
+      }
+
       function validateDraftNames(drafts) {
         var seen = {};
 
@@ -6241,6 +6370,7 @@
               jobCreationDates[jobName] = new Date().toISOString();
             });
             setSaveJobState(false, '');
+            discardCreatedDrafts(savedNames);
             toastr.success(savedNames.length + ' job draft(s) saved.', 'Job Creation');
             expandAvailableJobsBox();
             refreshAvailableJobsTable(false);
@@ -6250,16 +6380,21 @@
 
           setSaveJobState(true, 'Saving ' + (index + 1) + ' of ' + drafts.length + ': ' + drafts[index].job_name + '...');
           postJobDraft(drafts[index], triggerAfterSave).done(function() {
+            savedNames.push(drafts[index].job_name);
+            if (window.JobSeekerDraftCache) {
+              window.JobSeekerDraftCache.removeByNames([drafts[index].job_name], false);
+            }
             refreshSavedDraftWorkspaceSignature(drafts[index]).done(function() {
-              savedNames.push(drafts[index].job_name);
               index += 1;
               submitNext();
             }).fail(function(errorText) {
               setSaveJobState(false, '');
+              discardCreatedDrafts(savedNames);
               toastr.error(errorText, 'Job Creation');
             });
           }).fail(function(errorText) {
             setSaveJobState(false, '');
+            discardCreatedDrafts(savedNames);
             toastr.error(errorText || ('Unable to save ' + drafts[index].job_name + '.'), 'Job Creation');
           });
         }
@@ -6313,6 +6448,7 @@
         renderJobDraftTabs();
         renderJobDraftComparison();
         renderJobPipelineGraph();
+        scheduleJobDraftCacheSave();
       }
 
       function generateBatchNames(count) {
@@ -8066,10 +8202,25 @@ function loadTable () {
 }
 
 setTimeout(function(){ loadTable() }, 1000);
-ensureJobDraftsInitialized();
+if (window.JobSeekerDraftCache && savedJobNames.length) {
+  window.JobSeekerDraftCache.removeByNames(savedJobNames, true);
+}
+if (! restoreJobDraftCache()) {
+  ensureJobDraftsInitialized();
+}
 syncEnvironmentFromGlobal(true);
+draftCacheReady = true;
 refreshJobOptionPanels();
 updateJobCreationReview();
+scheduleJobDraftCacheSave(0);
+
+$(window).on('beforeunload', function() {
+  if (draftCacheTimer) {
+    window.clearTimeout(draftCacheTimer);
+    draftCacheTimer = null;
+  }
+  persistJobDraftCache();
+});
 
 $(document).on('jobseeker:environment-change', function() {
   syncEnvironmentFromGlobal(true);

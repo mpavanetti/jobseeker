@@ -4,7 +4,9 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
+    "test": "npm run test:console-groups && npm run test:draft-cache",
     "test:console-groups": "node scripts/test-job-console-groups.js",
+    "test:draft-cache": "node scripts/test-job-draft-cache.js",
     "postinstall": "npm run assets:sync"
   },
   "engines": {
