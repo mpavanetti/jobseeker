@@ -111,6 +111,7 @@ public function promotion() {
     $data["jenkinsJobs"] = $jenkinsJobs['jobs'];
     $data["jenkinsError"] = $jenkinsJobs['error'];
     $data["jenkinsStatus"] = $jenkinsJobs['status'];
+    $data["promotionHistory"] = $this->listPromotionHistory();
     $data["role"] = $this->isManager();
 
     $this->loadViews("contextPromotion", $this->global, $data, NULL);
@@ -172,6 +173,7 @@ public function promoteJob() {
       }
 
       $result = $this->buildJobPromotionResult($input, FALSE);
+      $this->recordPromotionHistory($input, $result);
 
       if (! $result['ok']) {
         $this->session->set_flashdata('error', $result['message']);
@@ -200,6 +202,7 @@ public function rollbackJobPromotion() {
   {
     $rollbackId = $this->security->xss_clean($this->input->post('rollbackId'));
     $result = $this->performPromotionRollback($rollbackId);
+    $this->updatePromotionHistoryRollback($rollbackId, $result);
 
     if (! $result['ok']) {
       $this->session->set_flashdata('error', $result['message']);
@@ -677,13 +680,32 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
     'source_environment' => $input['source_environment']->Environment,
     'target_environment_id' => (int) $input['target_environment']->Id,
     'target_environment' => $input['target_environment']->Environment,
+    'source_job' => $input['source_job'],
+    'target_job' => $input['target_job'],
+    'parameters' => array(
+      'overwrite_existing' => !empty($input['overwrite']),
+      'include_dependencies' => !empty($input['include_dependencies']),
+      'promote_contexts' => !empty($input['promote_contexts']),
+      'context_project_id' => isset($input['context_project_id']) ? (int) $input['context_project_id'] : 0,
+      'context_project' => !empty($input['context_project']) && isset($input['context_project']->ProjectName) ? $input['context_project']->ProjectName : '',
+      'overwrite_contexts' => !empty($input['overwrite_contexts'])
+    ),
     'jobs' => array(),
     'artifacts' => array(),
     'contexts' => array('enabled' => !empty($contextPlan['enabled']), 'snapshot' => !empty($contextPlan['enabled']) ? $contextPlan['snapshot'] : array('total' => 0, 'rows' => array()))
   );
 
   foreach ($preparedJobs as $prepared) {
-    $jobSnapshot = array('target_job' => $prepared['target_job'], 'existed' => $prepared['target_exists'], 'config_xml' => '');
+    $jobSnapshot = array(
+      'source_job' => $prepared['source_job'],
+      'target_job' => $prepared['target_job'],
+      'existed' => $prepared['target_exists'],
+      'command_updates' => $prepared['command_updates'],
+      'parameter_updates' => $prepared['parameter_updates'],
+      'artifact_path_updates' => $prepared['artifact_path_updates'],
+      'downstream_updates' => $prepared['downstream_updates'],
+      'config_xml' => ''
+    );
 
     if ($prepared['target_exists']) {
       $configResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($prepared['target_job']) . '/config.xml');
@@ -701,7 +723,7 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
         return array('ok' => FALSE, 'message' => 'Promotion failed. Artifact rollback path is invalid for '.$artifact['target'].'.');
       }
 
-      $artifactSnapshot = array('label' => $artifact['label'], 'target' => $artifact['target'], 'existed' => is_dir($targetPath), 'backup_path' => '');
+      $artifactSnapshot = array('label' => $artifact['label'], 'source' => isset($artifact['source']) ? $artifact['source'] : '', 'target' => $artifact['target'], 'existed' => is_dir($targetPath), 'backup_path' => '');
       if ($artifactSnapshot['existed']) {
         $backupRelativePath = 'artifacts/'.count($bundle['artifacts']);
         $backupPath = $rollbackDirectory.DIRECTORY_SEPARATOR.$backupRelativePath;
@@ -804,6 +826,159 @@ private function performPromotionRollback($rollbackId) {
   }
   @rename($filePath, $filePath.'.rolledback.'.date('YmdHis'));
   return array('ok' => TRUE, 'message' => 'Rollback completed. Jobs restored: '.$restoredJobs.', jobs deleted: '.$deletedJobs.', artifact folders restored: '.$restoredArtifacts.', artifact folders deleted: '.$deletedArtifacts.', contexts restored: '.$contextResult['restored'].', contexts deleted: '.$contextResult['deleted'].'.');
+}
+
+private function recordPromotionHistory($input, $result) {
+  $root = $this->promotionHistoryRoot();
+  if ($root === FALSE) {
+    log_message('error', 'Promotion history folder could not be prepared.');
+    return FALSE;
+  }
+
+  $historyId = date('YmdHis').'-'.substr(sha1(uniqid('', TRUE)), 0, 10);
+  $rollbackId = isset($result['rollback_id']) ? (string) $result['rollback_id'] : '';
+  $status = !empty($result['ok']) ? 'completed' : (!empty($result['rolled_back']) ? 'rolled_back' : 'failed');
+  $record = array(
+    'id' => $historyId,
+    'created_at' => date('c'),
+    'created_by' => isset($input['user']) ? $input['user'] : '',
+    'status' => $status,
+    'message' => isset($result['message']) ? $result['message'] : '',
+    'source_environment' => isset($input['source_environment']->Environment) ? $input['source_environment']->Environment : '',
+    'target_environment' => isset($input['target_environment']->Environment) ? $input['target_environment']->Environment : '',
+    'source_job' => isset($input['source_job']) ? $input['source_job'] : '',
+    'target_job' => isset($input['target_job']) ? $input['target_job'] : '',
+    'rollback_id' => $rollbackId,
+    'rollback_at' => !empty($result['rolled_back']) ? date('c') : '',
+    'rollback_by' => !empty($result['rolled_back']) && isset($this->global['name']) ? $this->global['name'] : '',
+    'rollback_message' => !empty($result['rolled_back']) && isset($result['message']) ? $result['message'] : '',
+    'parameters' => array(
+      'overwrite_existing' => !empty($input['overwrite']),
+      'include_dependencies' => !empty($input['include_dependencies']),
+      'promote_contexts' => !empty($input['promote_contexts']),
+      'context_project' => !empty($input['context_project']) && isset($input['context_project']->ProjectName) ? $input['context_project']->ProjectName : '',
+      'overwrite_contexts' => !empty($input['overwrite_contexts']),
+      'create_rollback' => !empty($input['create_rollback'])
+    ),
+    'metrics' => array(
+      'job_count' => isset($result['job_count']) ? (int) $result['job_count'] : 0,
+      'dependency_count' => isset($result['dependency_count']) ? (int) $result['dependency_count'] : 0,
+      'command_updates' => isset($result['command_updates']) ? (int) $result['command_updates'] : 0,
+      'parameter_updates' => isset($result['parameter_updates']) ? (int) $result['parameter_updates'] : 0,
+      'artifact_path_updates' => isset($result['artifact_path_updates']) ? (int) $result['artifact_path_updates'] : 0,
+      'downstream_updates' => isset($result['downstream_updates']) ? (int) $result['downstream_updates'] : 0
+    ),
+    'jobs' => isset($result['jobs']) && is_array($result['jobs']) ? $result['jobs'] : array(),
+    'artifacts' => $this->promotionHistoryArtifactSummary(isset($result['artifacts']) ? $result['artifacts'] : array()),
+    'contexts' => isset($result['context_promotion']) && is_array($result['context_promotion']) ? $result['context_promotion'] : array()
+  );
+
+  return file_put_contents($root.DIRECTORY_SEPARATOR.$historyId.'.json', json_encode($record, JSON_PRETTY_PRINT), LOCK_EX) !== FALSE;
+}
+
+private function promotionHistoryArtifactSummary($artifacts) {
+  $summary = array('planned' => array(), 'copied' => array(), 'skipped' => array(), 'errors' => array());
+  foreach ($summary as $group => $items) {
+    if (empty($artifacts[$group]) || ! is_array($artifacts[$group])) {
+      continue;
+    }
+
+    foreach ($artifacts[$group] as $artifact) {
+      if (is_array($artifact)) {
+        $summary[$group][] = array(
+          'label' => isset($artifact['label']) ? $artifact['label'] : '',
+          'source' => isset($artifact['source']) ? $artifact['source'] : '',
+          'target' => isset($artifact['target']) ? $artifact['target'] : '',
+          'reason' => isset($artifact['reason']) ? $artifact['reason'] : ''
+        );
+      } else {
+        $summary[$group][] = (string) $artifact;
+      }
+    }
+  }
+  return $summary;
+}
+
+private function listPromotionHistory() {
+  $records = array();
+  $rollbackIds = array();
+  $root = $this->promotionHistoryRoot();
+
+  if ($root !== FALSE) {
+    foreach ((array) glob($root.DIRECTORY_SEPARATOR.'*.json') as $filePath) {
+      $record = json_decode(file_get_contents($filePath), TRUE);
+      if (! is_array($record) || empty($record['id'])) {
+        continue;
+      }
+      $record['rollback_available'] = !empty($record['rollback_id']) && is_readable($this->promotionRollbackFilePath($record['rollback_id']));
+      $records[] = $record;
+      if (!empty($record['rollback_id'])) {
+        $rollbackIds[$record['rollback_id']] = TRUE;
+      }
+    }
+  }
+
+  $rollbackRoot = $this->promotionRollbackRoot();
+  if ($rollbackRoot !== FALSE) {
+    foreach ((array) glob($rollbackRoot.DIRECTORY_SEPARATOR.'*.json*') as $filePath) {
+      $bundle = json_decode(file_get_contents($filePath), TRUE);
+      if (! is_array($bundle) || empty($bundle['id']) || isset($rollbackIds[$bundle['id']])) {
+        continue;
+      }
+      $jobs = array();
+      foreach (isset($bundle['jobs']) && is_array($bundle['jobs']) ? $bundle['jobs'] : array() as $job) {
+        $jobs[] = array('source_job' => isset($job['source_job']) ? $job['source_job'] : '', 'target_job' => isset($job['target_job']) ? $job['target_job'] : '');
+      }
+      $rolledBack = strpos(basename($filePath), '.rolledback.') !== FALSE;
+      $records[] = array(
+        'id' => 'checkpoint-'.$bundle['id'],
+        'created_at' => isset($bundle['created_at']) ? $bundle['created_at'] : '',
+        'created_by' => isset($bundle['created_by']) ? $bundle['created_by'] : '',
+        'status' => $rolledBack ? 'rolled_back' : 'checkpoint',
+        'message' => 'Imported from an existing rollback checkpoint.',
+        'source_environment' => isset($bundle['source_environment']) ? $bundle['source_environment'] : '',
+        'target_environment' => isset($bundle['target_environment']) ? $bundle['target_environment'] : '',
+        'source_job' => isset($bundle['source_job']) ? $bundle['source_job'] : '',
+        'target_job' => isset($bundle['target_job']) ? $bundle['target_job'] : (!empty($jobs[0]['target_job']) ? $jobs[0]['target_job'] : ''),
+        'rollback_id' => $bundle['id'],
+        'rollback_available' => !$rolledBack && substr($filePath, -5) === '.json',
+        'parameters' => isset($bundle['parameters']) ? $bundle['parameters'] : array(),
+        'metrics' => array('job_count' => count($jobs), 'dependency_count' => max(0, count($jobs) - 1)),
+        'jobs' => $jobs,
+        'artifacts' => array('planned' => isset($bundle['artifacts']) ? $bundle['artifacts'] : array(), 'copied' => array(), 'skipped' => array(), 'errors' => array()),
+        'contexts' => isset($bundle['contexts']) ? array('enabled' => !empty($bundle['contexts']['enabled']), 'total' => isset($bundle['contexts']['snapshot']['total']) ? (int) $bundle['contexts']['snapshot']['total'] : 0) : array()
+      );
+    }
+  }
+
+  usort($records, function($left, $right) {
+    return strcmp(isset($right['created_at']) ? $right['created_at'] : '', isset($left['created_at']) ? $left['created_at'] : '');
+  });
+  return array_slice($records, 0, 100);
+}
+
+private function updatePromotionHistoryRollback($rollbackId, $result) {
+  $root = $this->promotionHistoryRoot();
+  if ($root === FALSE || $rollbackId === '') {
+    return;
+  }
+
+  foreach ((array) glob($root.DIRECTORY_SEPARATOR.'*.json') as $filePath) {
+    $record = json_decode(file_get_contents($filePath), TRUE);
+    if (! is_array($record) || !isset($record['rollback_id']) || $record['rollback_id'] !== $rollbackId) {
+      continue;
+    }
+    $record['status'] = !empty($result['ok']) ? 'rolled_back' : 'rollback_failed';
+    $record['rollback_at'] = date('c');
+    $record['rollback_by'] = isset($this->global['name']) ? $this->global['name'] : '';
+    $record['rollback_message'] = isset($result['message']) ? $result['message'] : '';
+    file_put_contents($filePath, json_encode($record, JSON_PRETTY_PRINT), LOCK_EX);
+  }
+}
+
+private function promotionHistoryRoot() {
+  $root = APPPATH.'cache'.DIRECTORY_SEPARATOR.'promotion_history';
+  return $this->ensureDirectory($root) ? $root : FALSE;
 }
 
 private function promotionRollbackRoot() {

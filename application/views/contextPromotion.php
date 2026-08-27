@@ -32,6 +32,7 @@ if(!empty($listProjects))
 }
 
 $promotionJobs = !empty($jenkinsJobs) ? $jenkinsJobs : array();
+$promotionHistory = !empty($promotionHistory) && is_array($promotionHistory) ? $promotionHistory : array();
 $rollbackId = $this->session->flashdata('rollback_id');
 ?>
 <script>
@@ -255,6 +256,30 @@ $rollbackId = $this->session->flashdata('rollback_id');
     margin-top: 18px;
   }
 
+  .promotion-tabs {
+    margin-top: 15px;
+  }
+
+  .promotion-history-panel {
+    padding-top: 18px;
+  }
+
+  .promotion-history-detail {
+    color: #52606d;
+    font-size: 12px;
+    line-height: 1.55;
+    min-width: 260px;
+  }
+
+  .promotion-history-detail details {
+    margin-top: 6px;
+  }
+
+  .promotion-history-detail summary {
+    color: #3c8dbc;
+    cursor: pointer;
+  }
+
   .promotion-inventory-card .box-header {
     border-bottom: 1px solid #edf1f5;
   }
@@ -357,6 +382,12 @@ $rollbackId = $this->session->flashdata('rollback_id');
         </div>
       </div>
 
+      <ul class="nav nav-tabs promotion-tabs" role="tablist">
+        <li class="active"><a href="#promotionWorkspace" data-toggle="tab"><i class="fa fa-level-up"></i> Promote</a></li>
+        <li><a href="#promotionHistory" data-toggle="tab"><i class="fa fa-history"></i> History <span class="badge"><?php echo count($promotionHistory); ?></span></a></li>
+      </ul>
+      <div class="tab-content">
+      <div class="tab-pane active" id="promotionWorkspace">
       <div class="row" style="margin-top: 15px;">
         <div class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
           <div class="promotion-summary-card">
@@ -510,6 +541,66 @@ $rollbackId = $this->session->flashdata('rollback_id');
             </tbody>
           </table>
         </div>
+      </div>
+      </div>
+
+      <div class="tab-pane promotion-history-panel" id="promotionHistory">
+        <div class="box box-primary">
+          <div class="box-header with-border">
+            <h3 class="box-title"><b>Promotion History</b></h3>
+          </div>
+          <div class="box-body table-responsive">
+            <table id="promotionHistoryTable" class="table table-bordered table-striped" style="width: 100%;">
+              <thead><tr><th>Created</th><th>User</th><th>Route</th><th>Jobs</th><th>Parameters and Artifacts</th><th>Status</th><th>Rollback</th></tr></thead>
+              <tbody>
+              <?php foreach($promotionHistory as $history) { ?>
+                <?php
+                  $historyStatus = isset($history['status']) ? $history['status'] : 'unknown';
+                  $historyStatusClass = $historyStatus === 'completed' ? 'success' : ($historyStatus === 'rolled_back' ? 'info' : ($historyStatus === 'failed' || $historyStatus === 'rollback_failed' ? 'danger' : 'warning'));
+                  $historyJobs = isset($history['jobs']) && is_array($history['jobs']) ? $history['jobs'] : array();
+                  $historyParameters = isset($history['parameters']) && is_array($history['parameters']) ? $history['parameters'] : array();
+                  $historyArtifacts = isset($history['artifacts']) && is_array($history['artifacts']) ? $history['artifacts'] : array();
+                  $artifactCount = 0;
+                  foreach(array('copied', 'planned') as $artifactGroup) {
+                    if (!empty($historyArtifacts[$artifactGroup]) && is_array($historyArtifacts[$artifactGroup])) {
+                      $artifactCount = max($artifactCount, count($historyArtifacts[$artifactGroup]));
+                    }
+                  }
+                ?>
+                <tr>
+                  <td data-order="<?php echo html_escape(isset($history['created_at']) ? $history['created_at'] : ''); ?>"><?php echo html_escape(isset($history['created_at']) && $history['created_at'] !== '' ? date('Y-m-d H:i:s', strtotime($history['created_at'])) : 'Unknown'); ?></td>
+                  <td><?php echo html_escape(isset($history['created_by']) && $history['created_by'] !== '' ? $history['created_by'] : 'Unknown'); ?></td>
+                  <td><span class="label label-default"><?php echo html_escape(isset($history['source_environment']) ? $history['source_environment'] : ''); ?></span> <i class="fa fa-long-arrow-right"></i> <span class="label label-primary"><?php echo html_escape(isset($history['target_environment']) ? $history['target_environment'] : ''); ?></span></td>
+                  <td class="promotion-history-detail">
+                    <b><?php echo html_escape(isset($history['source_job']) ? $history['source_job'] : ''); ?></b><br>
+                    <i class="fa fa-long-arrow-right"></i> <?php echo html_escape(isset($history['target_job']) ? $history['target_job'] : ''); ?>
+                    <?php if(count($historyJobs) > 1) { ?><details><summary><?php echo count($historyJobs); ?> promoted jobs</summary><?php foreach($historyJobs as $job) { ?><div><?php echo html_escape(isset($job['source_job']) ? $job['source_job'] : ''); ?> &rarr; <?php echo html_escape(isset($job['target_job']) ? $job['target_job'] : ''); ?></div><?php } ?></details><?php } ?>
+                  </td>
+                  <td class="promotion-history-detail">
+                    <div>Dependencies: <b><?php echo !empty($historyParameters['include_dependencies']) ? 'Yes' : 'No'; ?></b>; overwrite: <b><?php echo !empty($historyParameters['overwrite_existing']) ? 'Yes' : 'No'; ?></b></div>
+                    <div>Contexts: <b><?php echo !empty($historyParameters['promote_contexts']) ? 'Yes' : 'No'; ?></b><?php echo !empty($historyParameters['context_project']) ? ' ('.html_escape($historyParameters['context_project']).')' : ''; ?>; artifacts: <b><?php echo (int) $artifactCount; ?></b></div>
+                    <?php if($artifactCount > 0) { ?><details><summary>Artifact paths</summary><?php $artifactRows = !empty($historyArtifacts['copied']) ? $historyArtifacts['copied'] : $historyArtifacts['planned']; foreach($artifactRows as $artifact) { ?><div><?php echo html_escape(is_array($artifact) ? ((isset($artifact['label']) ? $artifact['label'].': ' : '').(isset($artifact['source']) ? $artifact['source'].' -> ' : '').(isset($artifact['target']) ? $artifact['target'] : '')) : $artifact); ?></div><?php } ?></details><?php } ?>
+                  </td>
+                  <td><span class="label label-<?php echo $historyStatusClass; ?>"><?php echo html_escape(ucwords(str_replace('_', ' ', $historyStatus))); ?></span><?php if(!empty($history['message'])) { ?><div class="promotion-history-detail" style="margin-top: 5px;"><?php echo html_escape($history['message']); ?></div><?php } ?></td>
+                  <td>
+                    <?php if(!empty($history['rollback_available'])) { ?>
+                    <form action="<?php echo base_url() ?>Context/rollbackJobPromotion" method="POST">
+                      <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
+                      <input type="hidden" name="rollbackId" value="<?php echo html_escape($history['rollback_id']); ?>" />
+                      <button type="submit" class="btn btn-warning btn-xs" onclick="return confirm('Rollback checkpoint <?php echo html_escape($history['rollback_id']); ?>?');"><i class="fa fa-undo"></i> Rollback</button>
+                    </form>
+                    <?php } else { ?>
+                    <span class="text-muted"><?php echo $historyStatus === 'rolled_back' ? 'Rolled back' : 'No checkpoint'; ?></span>
+                    <?php } ?>
+                  </td>
+                </tr>
+              <?php } ?>
+              </tbody>
+            </table>
+            <?php if(empty($promotionHistory)) { ?><p class="text-muted text-center" style="padding: 24px;">No promotions have been recorded yet.</p><?php } ?>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   </section>
@@ -1085,6 +1176,21 @@ $rollbackId = $this->session->flashdata('rollback_id');
         promotionInventoryTable.columns.adjust();
       }, 0);
     }
+    if ($.fn.dataTable && ! $.fn.dataTable.isDataTable('#promotionHistoryTable')) {
+      $('#promotionHistoryTable').DataTable({
+        order: [[0, 'desc']],
+        pageLength: 20,
+        autoWidth: false,
+        columnDefs: [
+          { orderable: false, targets: [4, 6] }
+        ]
+      });
+    }
+    $('a[data-toggle="tab"]').on('shown.bs.tab', function() {
+      if ($.fn.dataTable) {
+        $.fn.dataTable.tables({visible: true, api: true}).columns.adjust();
+      }
+    });
     schedulePreview();
   });
 </script>
