@@ -145,6 +145,12 @@
     box-shadow: inset 4px 0 0 #3c8dbc;
   }
 
+  button.job-option-card {
+    font: inherit;
+    text-align: left;
+    width: 100%;
+  }
+
   .job-option-card input {
     opacity: 0;
     position: absolute;
@@ -296,6 +302,13 @@
   .linux-execution-choice.active {
     border-color: #3c8dbc;
     box-shadow: inset 3px 0 0 #3c8dbc;
+  }
+
+  .linux-execution-choice:disabled {
+    background: #f4f4f4;
+    color: #999;
+    cursor: not-allowed;
+    opacity: .8;
   }
 
   .linux-execution-choice i {
@@ -1980,13 +1993,25 @@
                 <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
               </label>
             <?php } else { ?>
-              <label class="job-option-card" data-option-panel="#runlinuxCommand">
-                <input type="checkbox" name="linuxCommand" id="linuxCommand" value="1">
+              <input type="checkbox" name="linuxCommand" id="linuxCommand" value="1" style="display: none;">
+              <button type="button" class="job-option-card job-execution-option" data-execution-family="shell" data-option-panel="#runlinuxCommand">
                 <i class="fa fa-terminal job-option-icon"></i>
-                <span class="job-option-title">Linux Execution</span>
-                <span class="job-option-detail">Choose Bash/Shell or Python in the execution panel.</span>
+                <span class="job-option-title">Linux Shell</span>
+                <span class="job-option-detail">Run shell commands or upload Bash packages.</span>
                 <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
-              </label>
+              </button>
+              <button type="button" class="job-option-card job-execution-option" data-execution-family="python" data-option-panel="#runlinuxCommand">
+                <i class="fa fa-code job-option-icon"></i>
+                <span class="job-option-title">Python</span>
+                <span class="job-option-detail">Inline workspace, upload, repository path, or Git source.</span>
+                <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+              </button>
+              <button type="button" class="job-option-card job-execution-option" data-execution-family="etl" data-option-panel="#runlinuxCommand">
+                <i class="fa fa-cubes job-option-icon"></i>
+                <span class="job-option-title">ETL Tools</span>
+                <span class="job-option-detail">Run Talend packages; additional ETL engines can be added here.</span>
+                <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+              </button>
             <?php }?>
             <label class="job-option-card" data-option-panel="#build">
               <input type="checkbox" name="checkBuild" id="checkBuild" value="1">
@@ -2113,29 +2138,16 @@
                     <button id="hideLinuxCommand" type="button" class="btn btn-box-tool"><i class="fa fa-times"></i></button>
                   </div>
                   <h3 class="box-title">
-                    <b>Linux Execution</b></h3>
+                    <b id="linuxExecutionPanelTitle">Execution</b></h3>
                   </div><div class="box-body">
-                    <div class="linux-execution-mode-grid">
-                      <button type="button" class="linux-execution-mode" data-linux-mode="bash">
-                        <i class="fa fa-terminal"></i>
-                        <strong>Bash / Shell</strong>
-                        <span>Run a command, upload a Bash archive, or use the shell runtime.</span>
-                      </button>
-                      <button type="button" class="linux-execution-mode" data-linux-mode="python">
-                        <i class="fa fa-code"></i>
-                        <strong>Python</strong>
-                        <span>Open the inline Python workspace with runtime and dependency controls.</span>
-                      </button>
-                    </div>
                     <div class="linux-execution-section linux-shell-options" style="display: none;">
                       <div class="linux-execution-section-header">
-                        <strong>Shell execution</strong>
-                        <span>Use these for direct shell commands, Bash archives, and Talend shell packages.</span>
+                        <strong>Linux shell execution</strong>
+                        <span>Use a direct shell command or upload a Bash package.</span>
                       </div>
                       <div class="linux-execution-choice-grid">
                         <button type="button" class="linux-execution-choice" data-linux-shell-choice="command"><i class="fa fa-terminal"></i><strong>Command</strong><span>Paste and run shell commands.</span></button>
                         <button type="button" class="linux-execution-choice" data-linux-shell-choice="bash"><i class="fa fa-file-archive-o"></i><strong>Bash Script</strong><span>Upload a Bash zip package.</span></button>
-                        <button type="button" class="linux-execution-choice" data-linux-shell-choice="talend"><i class="fa fa-cubes"></i><strong>Talend Script</strong><span>Upload a Talend Linux package.</span></button>
                       </div>
                     </div>
                     <div class="linux-execution-section linux-python-options" style="display: none;">
@@ -2148,6 +2160,16 @@
                         <button type="button" class="linux-execution-choice" data-linux-python-choice="upload"><i class="fa fa-upload"></i><strong>Upload Python</strong><span>Upload a .py file or zip package.</span></button>
                         <button type="button" class="linux-execution-choice" data-linux-python-choice="path"><i class="fa fa-folder-open"></i><strong>Repository Path</strong><span>Run Python already in the repository.</span></button>
                         <button type="button" class="linux-execution-choice" data-linux-python-choice="git"><i class="fa fa-code-fork"></i><strong>Git Source</strong><span>Clone and run a branch or tag.</span></button>
+                      </div>
+                    </div>
+                    <div class="linux-execution-section linux-etl-options" style="display: none;">
+                      <div class="linux-execution-section-header">
+                        <strong>ETL tool</strong>
+                        <span>Select the engine used to execute this integration package.</span>
+                      </div>
+                      <div class="linux-execution-choice-grid">
+                        <button type="button" class="linux-execution-choice" data-linux-etl-choice="talend"><i class="fa fa-cubes"></i><strong>Talend</strong><span>Upload and execute a Talend Linux package.</span></button>
+                        <button type="button" class="linux-execution-choice" disabled><i class="fa fa-random"></i><strong>Apache Hop</strong><span>Coming soon.</span></button>
                       </div>
                     </div>
                     <div class="row linuxLegacyExecutionFields">
@@ -4485,6 +4507,24 @@
           .text(message || '');
       }
 
+      function storeDraftWorkspaceSignature(jobName, entryPoint, signature) {
+        if (! signature) {
+          return;
+        }
+
+        var draftIndex = findDraftIndexByName(jobName);
+        if (draftIndex >= 0) {
+          var draftEntryPoint = jobDrafts[draftIndex].pythonEntryPoint || 'main.py';
+          if (draftEntryPoint === entryPoint) {
+            jobDrafts[draftIndex].pythonWorkspaceSignature = signature;
+          }
+        }
+
+        if (currentPythonInlineJobName() === jobName && pythonInlineEntryPath() === entryPoint) {
+          $('#pythonWorkspaceSignature').val(signature);
+        }
+      }
+
       function stopPythonExternalSync(clearStatus) {
         if (pythonExternalSyncTimer) {
           clearInterval(pythonExternalSyncTimer);
@@ -4568,17 +4608,24 @@
           return;
         }
 
-        pythonExternalSyncRequest = $.ajax({
+        var requestJobName = pythonExternalSyncJobName;
+        var requestEntryPoint = pythonExternalSyncEntryPoint;
+        var request = $.ajax({
           type: 'GET',
           url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalSnapshot',
           dataType: 'json',
           cache: false,
           data: {
-            job_name: pythonExternalSyncJobName,
-            entry_point: pythonExternalSyncEntryPoint
+            job_name: requestJobName,
+            entry_point: requestEntryPoint
           }
         }).done(function(response) {
           if (! response || ! response.ok) {
+            return;
+          }
+
+          storeDraftWorkspaceSignature(requestJobName, requestEntryPoint, response.signature || '');
+          if (currentPythonInlineJobName() !== requestJobName || pythonInlineEntryPath() !== requestEntryPoint || pythonExternalSyncJobName !== requestJobName) {
             return;
           }
 
@@ -4594,8 +4641,11 @@
 
           setPythonExternalSyncStatus(pythonInlinePreviewError(xhr, 'Unable to sync inline Python workspace from disk.'), 'error');
         }).always(function() {
-          pythonExternalSyncRequest = null;
+          if (pythonExternalSyncRequest === request) {
+            pythonExternalSyncRequest = null;
+          }
         });
+        pythonExternalSyncRequest = request;
       }
 
       function startPythonExternalSync(response) {
@@ -4642,6 +4692,8 @@
         var originalHtml = button.html();
         ensurePythonPyprojectText();
         var payload = currentPythonExternalPayload();
+        var requestJobName = payload.job_name;
+        var requestEntryPoint = payload.entry_point;
         var webWindow = window.open('about:blank', '_blank');
         payload.editor_mode = 'web';
         button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
@@ -4660,8 +4712,12 @@
             return;
           }
 
-          applyPythonExternalSnapshot(response);
-          startPythonExternalSync(response);
+          storeDraftWorkspaceSignature(requestJobName, requestEntryPoint, response.signature || '');
+          var requestDraftStillActive = currentPythonInlineJobName() === requestJobName && pythonInlineEntryPath() === requestEntryPoint;
+          if (requestDraftStillActive) {
+            applyPythonExternalSnapshot(response);
+            startPythonExternalSync(response);
+          }
           var launchUrl = pythonExternalLaunchUrl(response);
           if (launchUrl) {
             if (webWindow) {
@@ -4669,7 +4725,9 @@
             } else {
               window.open(launchUrl, '_blank');
             }
-            setPythonExternalSyncStatus('OpenVSCode Server opened for ' + (response.openVsCodePath || response.externalEditorPath || pythonExternalSyncJobName) + '.', 'ready');
+            if (requestDraftStillActive) {
+              setPythonExternalSyncStatus('OpenVSCode Server opened for ' + (response.openVsCodePath || response.externalEditorPath || requestJobName) + '.', 'ready');
+            }
             toastr.info('Opening VS Code Web.', 'Inline Python');
           } else {
             if (webWindow) {
@@ -4686,6 +4744,11 @@
           var conflictSnapshot = xhr && xhr.responseJSON && xhr.responseJSON.conflict ? xhr.responseJSON.currentSnapshot : null;
           if (conflictSnapshot) {
             var conflictMessage = xhr.responseJSON.message || 'The workspace changed on disk. Reload it before opening VS Code.';
+            if (currentPythonInlineJobName() !== requestJobName || pythonInlineEntryPath() !== requestEntryPoint) {
+              setPythonExternalSyncStatus('', '');
+              toastr.warning('OpenVSCode detected newer files for ' + requestJobName + '. Return to that draft and reload it before opening VS Code again.', 'Inline Python');
+              return;
+            }
             if (window.confirm(conflictMessage + '\n\nReload the current files from disk now? Unsaved browser edits will be replaced.')) {
               conflictSnapshot.ok = true;
               applyPythonExternalSnapshot(conflictSnapshot);
@@ -5358,24 +5421,26 @@
 
         if ($('#linuxCommand').is(':checked')) {
           if ($('#linuxExecutionStrategy').val() == 'command') {
-            return 'Linux command / ' + pythonRuntimeSummary();
+            return 'Linux Shell / command / ' + pythonRuntimeSummary();
           }
 
           if ($('#linuxExecutionStrategy').val() == 'python_inline') {
-            return 'Linux Inline Python Code / ' + pythonRuntimeSummary();
+            return 'Python / inline workspace / ' + pythonRuntimeSummary();
           }
 
           if ($('#linuxExecutionStrategy').val() == 'script') {
-            var source = selectedText('#linuxScriptType', 'script');
             if ($('#linuxScriptType').val() == 'python') {
-              source += ' / ' + selectedText('#pythonSourceMode', 'uploaded source') + ' / ' + pythonRuntimeSummary();
-            } else if ($('#linuxScriptType').val() != '0') {
-              source += ' / ' + pythonRuntimeSummary();
+              return 'Python / ' + selectedText('#pythonSourceMode', 'uploaded source') + ' / ' + pythonRuntimeSummary();
             }
-            return 'Linux ' + source;
+            if ($('#linuxScriptType').val() == 'talend') {
+              return 'ETL Tools / Talend / ' + pythonRuntimeSummary();
+            }
+            if ($('#linuxScriptType').val() == 'bash') {
+              return 'Linux Shell / Bash script / ' + pythonRuntimeSummary();
+            }
           }
 
-          return 'Linux execution enabled';
+          return 'Execution enabled';
         }
 
         return 'No command or script selected';
@@ -5568,24 +5633,26 @@
 
         if (draftChecked(draft, 'linuxCommand')) {
           if (draft.linuxExecutionStrategy === 'command') {
-            return 'Linux command / ' + draftPythonRuntimeSummary(draft);
+            return 'Linux Shell / command / ' + draftPythonRuntimeSummary(draft);
           }
 
           if (draft.linuxExecutionStrategy === 'python_inline') {
-            return 'Linux Inline Python Code / ' + draftPythonRuntimeSummary(draft);
+            return 'Python / inline workspace / ' + draftPythonRuntimeSummary(draft);
           }
 
           if (draft.linuxExecutionStrategy === 'script') {
-            var source = draftSelectedValue(draft, 'linuxScriptType', 'script');
             if (draft.linuxScriptType === 'python') {
-              source += ' / ' + draftSelectedValue(draft, 'pythonSourceMode', 'upload') + ' / ' + draftPythonRuntimeSummary(draft);
-            } else if (draft.linuxScriptType !== '0') {
-              source += ' / ' + draftPythonRuntimeSummary(draft);
+              return 'Python / ' + draftSelectedValue(draft, 'pythonSourceMode', 'upload') + ' / ' + draftPythonRuntimeSummary(draft);
             }
-            return 'Linux ' + source;
+            if (draft.linuxScriptType === 'talend') {
+              return 'ETL Tools / Talend / ' + draftPythonRuntimeSummary(draft);
+            }
+            if (draft.linuxScriptType === 'bash') {
+              return 'Linux Shell / Bash script / ' + draftPythonRuntimeSummary(draft);
+            }
           }
 
-          return 'Linux execution';
+          return 'Execution enabled';
         }
 
         return 'No command or script selected';
@@ -5678,7 +5745,8 @@
         $('.job-option-card').each(function() {
           var card = $(this);
           var checkbox = card.find('input[type="checkbox"]');
-          var isEnabled = checkbox.is(':checked');
+          var executionFamily = card.data('execution-family');
+          var isEnabled = executionFamily ? ($('#linuxCommand').is(':checked') && currentExecutionFamily() === executionFamily) : checkbox.is(':checked');
           var panelSelector = card.data('option-panel');
 
           card.toggleClass('active', isEnabled);
@@ -5777,7 +5845,7 @@
         $('.windowsCommandForm').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'command');
         $('.uploadScript').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'script' && $('#scriptType').val() != '0');
 
-        $('.linuxScriptTypeForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script');
+        $('.linuxScriptTypeForm').hide();
         $('.linuxCommandForm').toggle($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'command');
         updatePythonSourceControls();
         if ($('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() != '0') {
@@ -5788,6 +5856,7 @@
       }
 
       function loadJobDraft(draft) {
+        stopPythonExternalSync(true);
         var normalizedDraft = $.extend(true, createEmptyDraft(''), draft || {});
         normalizedDraft.checkEnvironment = '1';
         normalizedDraft.environment = isConfiguredGlobalEnvironment(currentGlobalEnvironmentValue()) ? normalizeGlobalEnvironment(currentGlobalEnvironmentValue()) : '0';
@@ -5985,19 +6054,152 @@
       }
 
       function postJobDraft(draft, triggerAfterSave) {
-        return $.ajax({
-          url: $('#InsertDbSettings').attr('action'),
-          method: 'POST',
-          data: draftFormData(draft, triggerAfterSave),
-          processData: false,
-          contentType: false
-        }).then(function(responseText) {
-          var errorText = responseFlashText(responseText, '.alert-danger, .alert-error');
-          if (errorText !== '') {
-            return $.Deferred().reject(errorText).promise();
+        return ensureDraftWorkspaceSignature(draft).then(function() {
+          return $.ajax({
+            url: $('#InsertDbSettings').attr('action'),
+            method: 'POST',
+            data: draftFormData(draft, triggerAfterSave),
+            processData: false,
+            contentType: false
+          }).then(function(responseText) {
+            var errorText = responseFlashText(responseText, '.alert-danger, .alert-error');
+            if (errorText !== '') {
+              return $.Deferred().reject(errorText).promise();
+            }
+
+            return responseFlashText(responseText, '.alert-success') || 'Saved';
+          });
+        });
+      }
+
+      function draftUsesInlinePythonWorkspace(draft) {
+        return draft && draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'python_inline';
+      }
+
+      function normalizedWorkspaceText(value) {
+        return String(value == null ? '' : value).replace(/\r\n?/g, '\n');
+      }
+
+      function canonicalInlineWorkspaceFiles(payload) {
+        var files = [];
+        var directories = [];
+
+        try {
+          payload = typeof payload === 'string' ? JSON.parse(payload || '{"files":[],"directories":[]}') : (payload || {});
+        } catch (error) {
+          return null;
+        }
+
+        $.each($.isArray(payload.files) ? payload.files : [], function(index, file) {
+          if (file && file.path) {
+            files.push({path: String(file.path), content: normalizedWorkspaceText(file.content)});
+          }
+        });
+        $.each($.isArray(payload.directories) ? payload.directories : [], function(index, directory) {
+          directories.push(String(directory && directory.path ? directory.path : directory));
+        });
+        files.sort(function(left, right) { return left.path.localeCompare(right.path); });
+        directories.sort();
+
+        return JSON.stringify({files: files, directories: directories});
+      }
+
+      function draftMatchesWorkspaceSnapshot(draft, snapshot) {
+        if (normalizedWorkspaceText(draft.pythonInlineCode) !== normalizedWorkspaceText(snapshot.sourceCode)) {
+          return false;
+        }
+
+        if (canonicalInlineWorkspaceFiles(draft.pythonInlineFilesJson) !== canonicalInlineWorkspaceFiles(snapshot.files)) {
+          return false;
+        }
+
+        if (draft.pythonRuntimeMode === 'docker') {
+          if (normalizedWorkspaceText(draft.pythonPyprojectText) !== normalizedWorkspaceText(snapshot.pyprojectText)) {
+            return false;
+          }
+          if (normalizedWorkspaceText(draftChecked(draft, 'pythonUseDockerfile') ? draft.pythonDockerfileText : '') !== normalizedWorkspaceText(snapshot.dockerfileText)) {
+            return false;
+          }
+        } else if (normalizedWorkspaceText(draft.pythonRequirementsText) !== normalizedWorkspaceText(snapshot.requirementsText)) {
+          return false;
+        }
+
+        return true;
+      }
+
+      function ensureDraftWorkspaceSignature(draft) {
+        var deferred = $.Deferred();
+
+        if (! draftUsesInlinePythonWorkspace(draft) || /^[a-f0-9]{64}$/i.test(draft.pythonWorkspaceSignature || '')) {
+          deferred.resolve();
+          return deferred.promise();
+        }
+
+        $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalSnapshot',
+          dataType: 'json',
+          cache: false,
+          data: {
+            job_name: draft.job_name,
+            entry_point: draft.pythonEntryPoint || 'main.py'
+          }
+        }).done(function(snapshot) {
+          if (! snapshot || ! snapshot.ok || ! snapshot.jenkinsJobExists) {
+            deferred.resolve();
+            return;
           }
 
-          return responseFlashText(responseText, '.alert-success') || 'Saved';
+          if (! draftMatchesWorkspaceSnapshot(draft, snapshot)) {
+            deferred.reject('The inline Python workspace changed after this form was loaded, so JobSeeker did not overwrite it. Reload the job to review the latest VS Code files before saving again.');
+            return;
+          }
+
+          draft.pythonWorkspaceSignature = snapshot.signature;
+          storeDraftWorkspaceSignature(draft.job_name, draft.pythonEntryPoint || 'main.py', snapshot.signature);
+          deferred.resolve();
+        }).fail(function(xhr) {
+          if (xhr && xhr.status === 404) {
+            deferred.resolve();
+            return;
+          }
+
+          deferred.reject('Unable to verify the inline Python workspace for ' + draft.job_name + '. Reload Job Creation and try again.');
+        });
+
+        return deferred.promise();
+      }
+
+      function refreshSavedDraftWorkspaceSignature(draft) {
+        if (! draftUsesInlinePythonWorkspace(draft)) {
+          return $.Deferred().resolve().promise();
+        }
+
+        return $.ajax({
+          type: 'GET',
+          url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalSnapshot',
+          dataType: 'json',
+          cache: false,
+          data: {
+            job_name: draft.job_name,
+            entry_point: draft.pythonEntryPoint || 'main.py'
+          }
+        }).then(function(response) {
+          if (! response || ! response.ok || ! response.signature) {
+            return $.Deferred().reject('Saved ' + draft.job_name + ', but could not refresh its inline workspace signature. Reload Job Creation before retrying this batch.').promise();
+          }
+
+          draft.pythonWorkspaceSignature = response.signature;
+          $.each(jobDrafts, function(draftIndex, currentDraft) {
+            if (currentDraft.job_name === draft.job_name) {
+              currentDraft.pythonWorkspaceSignature = response.signature;
+              return false;
+            }
+          });
+
+          if ($.trim($('#job_name').val()) === draft.job_name) {
+            $('#pythonWorkspaceSignature').val(response.signature);
+          }
         });
       }
 
@@ -6048,9 +6250,14 @@
 
           setSaveJobState(true, 'Saving ' + (index + 1) + ' of ' + drafts.length + ': ' + drafts[index].job_name + '...');
           postJobDraft(drafts[index], triggerAfterSave).done(function() {
-            savedNames.push(drafts[index].job_name);
-            index += 1;
-            submitNext();
+            refreshSavedDraftWorkspaceSignature(drafts[index]).done(function() {
+              savedNames.push(drafts[index].job_name);
+              index += 1;
+              submitNext();
+            }).fail(function(errorText) {
+              setSaveJobState(false, '');
+              toastr.error(errorText, 'Job Creation');
+            });
           }).fail(function(errorText) {
             setSaveJobState(false, '');
             toastr.error(errorText || ('Unable to save ' + drafts[index].job_name + '.'), 'Job Creation');
@@ -6229,7 +6436,7 @@
       function syncLinuxExecutionControls(resetScriptType) {
         if (! $('#linuxCommand').is(':checked')) {
           $('#runlinuxCommand').hide();
-          $('.linux-shell-options, .linux-python-options, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm').hide();
+          $('.linux-shell-options, .linux-python-options, .linux-etl-options, .linuxScriptTypeForm, .linuxCommandForm, .linuxUploadScript, .pythonSourceForm, .pythonRuntimeForm, .pythonPathSourceForm, .pythonGitSourceForm, .pythonInlineSourceForm').hide();
           $('.destroyDropzone').remove();
           syncLinuxExecutionChoiceControls();
           return;
@@ -6265,45 +6472,64 @@
         syncLinuxExecutionChoiceControls();
       }
 
-      function currentLinuxExecutionMode() {
-        return linuxExecutionUsesPython() ? 'python' : 'bash';
+      function currentExecutionFamily() {
+        if (linuxExecutionUsesPython()) {
+          return 'python';
+        }
+
+        return linuxExecutionUsesTalend() ? 'etl' : 'shell';
       }
 
       function syncLinuxExecutionChoiceControls() {
         var enabled = $('#linuxCommand').is(':checked');
-        var mode = enabled ? currentLinuxExecutionMode() : '';
+        var mode = enabled ? currentExecutionFamily() : '';
         var strategy = $('#linuxExecutionStrategy').val();
         var scriptType = $('#linuxScriptType').val();
 
-        $('.linux-execution-mode, .linux-execution-choice').removeClass('active');
-        $('.linux-shell-options, .linux-python-options').hide();
+        $('.linux-execution-choice').removeClass('active');
+        $('.linux-shell-options, .linux-python-options, .linux-etl-options').hide();
 
         if (! enabled) {
+          $('#linuxExecutionPanelTitle').text('Execution');
           return;
         }
 
-        $('.linux-execution-mode[data-linux-mode="' + mode + '"]').addClass('active');
-
         if (mode == 'python') {
+          $('#linuxExecutionPanelTitle').text('Python');
           var pythonChoice = strategy == 'python_inline' ? 'inline' : ($('#pythonSourceMode').val() || 'upload');
           $('.linux-python-options').show();
           $('.linux-execution-choice[data-linux-python-choice="' + pythonChoice + '"]').addClass('active');
+        } else if (mode == 'etl') {
+          $('#linuxExecutionPanelTitle').text('ETL Tools');
+          $('.linux-etl-options').show();
+          $('.linux-execution-choice[data-linux-etl-choice="' + scriptType + '"]').addClass('active');
         } else {
-          var shellChoice = strategy == 'script' ? (scriptType == 'talend' ? 'talend' : 'bash') : 'command';
+          $('#linuxExecutionPanelTitle').text('Linux Shell');
+          var shellChoice = strategy == 'script' ? 'bash' : 'command';
           $('.linux-shell-options').show();
           $('.linux-execution-choice[data-linux-shell-choice="' + shellChoice + '"]').addClass('active');
         }
       }
 
-      function applyLinuxExecutionMode(mode) {
+      function applyExecutionFamily(mode) {
+        if ($('#linuxCommand').is(':checked') && currentExecutionFamily() === mode) {
+          $('#linuxCommand').prop('checked', false);
+          refreshJobOptionPanels();
+          updateJobCreationReview();
+          return;
+        }
+
         $('#linuxCommand').prop('checked', true);
         activeConfigPanel = '#runlinuxCommand';
 
-        if (mode == 'python' && ! linuxExecutionUsesPython()) {
+        if (mode == 'python') {
           setSelectValue('#linuxExecutionStrategy', 'python_inline');
           $('#linuxScriptType').val(0);
           setSelectValue('#pythonSourceMode', 'upload');
-        } else if (mode != 'python' && linuxExecutionUsesPython()) {
+        } else if (mode == 'etl') {
+          setSelectValue('#linuxExecutionStrategy', 'script');
+          setSelectValue('#linuxScriptType', 'talend');
+        } else {
           setSelectValue('#linuxExecutionStrategy', 'command');
           $('#linuxScriptType').val(0);
         }
@@ -6317,7 +6543,7 @@
         $('#linuxCommand').prop('checked', true);
         activeConfigPanel = '#runlinuxCommand';
 
-        if (choice == 'bash' || choice == 'talend') {
+        if (choice == 'bash') {
           setSelectValue('#linuxExecutionStrategy', 'script');
           setSelectValue('#linuxScriptType', choice);
         } else {
@@ -6325,6 +6551,16 @@
           $('#linuxScriptType').val(0);
         }
 
+        syncLinuxExecutionControls(true);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
+      }
+
+      function applyLinuxEtlChoice(choice) {
+        $('#linuxCommand').prop('checked', true);
+        activeConfigPanel = '#runlinuxCommand';
+        setSelectValue('#linuxExecutionStrategy', 'script');
+        setSelectValue('#linuxScriptType', choice || 'talend');
         syncLinuxExecutionControls(true);
         refreshJobOptionPanels();
         updateJobCreationReview();
@@ -6375,8 +6611,8 @@
         updateJobCreationReview();
       });
 
-      $(document).on('click', '.linux-execution-mode', function() {
-        applyLinuxExecutionMode($(this).data('linux-mode'));
+      $(document).on('click', '.job-execution-option', function() {
+        applyExecutionFamily($(this).data('execution-family'));
       });
 
       $(document).on('click', '.linux-execution-choice[data-linux-shell-choice]', function() {
@@ -6385,6 +6621,16 @@
 
       $(document).on('click', '.linux-execution-choice[data-linux-python-choice]', function() {
         applyLinuxPythonChoice($(this).data('linux-python-choice'));
+      });
+
+      $(document).on('click', '.linux-execution-choice[data-linux-etl-choice]', function() {
+        applyLinuxEtlChoice($(this).data('linux-etl-choice'));
+      });
+
+      $('#hideLinuxCommand').click(function() {
+        $('#linuxCommand').prop('checked', false);
+        refreshJobOptionPanels();
+        updateJobCreationReview();
       });
 
      // get Jenkins credentials
