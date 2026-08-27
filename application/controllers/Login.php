@@ -116,8 +116,6 @@ class Login extends CI_Controller
      */
     function resetPasswordUser()
     {
-        $status = '';
-        
         $this->load->library('form_validation');
         
         $this->form_validation->set_rules('login_email','Email','trim|required|valid_email');
@@ -133,10 +131,12 @@ class Login extends CI_Controller
             if($this->login_model->checkEmailExist($email))
             {
                 $encoded_email = urlencode($email);
-                
-                $this->load->helper('string');
                 $data['email'] = $email;
-                $data['activation_id'] = random_string('alnum',15);
+                try {
+                    $data['activation_id'] = bin2hex(random_bytes(16));
+                } catch (Exception $error) {
+                    $data['activation_id'] = substr(hash('sha256', uniqid('', TRUE).mt_rand()), 0, 32);
+                }
                 $data['createdDtm'] = date('Y-m-d H:i:s');
                 $data['agent'] = getBrowserAgent();
                 $data['client_ip'] = $this->input->ip_address();
@@ -157,23 +157,21 @@ class Login extends CI_Controller
                     $sendStatus = resetPasswordEmail($data1);
 
                     if($sendStatus){
-                        $status = "send";
-                        setFlashData($status, "Reset password link sent successfully, please check mails.");
+                        setFlashData('send', "If the address is registered, a password reset link has been sent.");
                     } else {
-                        $status = "notsend";
-                        setFlashData($status, "Email has been failed, try again.");
+                        $this->login_model->deleteResetPasswordToken($email, $data['activation_id']);
+                        log_message('error', 'Password reset email could not be sent for a registered account.');
+                        setFlashData('notsend', "The reset email could not be sent. Check the SMTP configuration and try again.");
                     }
                 }
                 else
                 {
-                    $status = 'unable';
-                    setFlashData($status, "It seems an error while sending your details, try again.");
+                    setFlashData('unable', "The reset request could not be saved. Try again.");
                 }
             }
             else
             {
-                $status = 'invalid';
-                setFlashData($status, "This email is not registered with us.");
+                setFlashData('send', "If the address is registered, a password reset link has been sent.");
             }
             redirect('/forgotPassword');
         }
@@ -187,7 +185,14 @@ class Login extends CI_Controller
     function resetPasswordConfirmUser($activation_id, $email)
     {
         // Get email and activation code from URL values at index 3-4
-        $email = urldecode($email);
+        $email = strtolower(urldecode($email));
+        $activation_id = trim((string) $activation_id);
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^[a-f0-9]{32}$/i', $activation_id)) {
+            setFlashData('error', 'This password reset link is invalid or expired.');
+            redirect('/forgotPassword');
+            return;
+        }
         
         // Check activation id in database
         $is_correct = $this->login_model->checkActivationDetails($email, $activation_id);
@@ -201,7 +206,8 @@ class Login extends CI_Controller
         }
         else
         {
-            redirect('/login');
+            setFlashData('error', 'This password reset link is invalid or expired.');
+            redirect('/forgotPassword');
         }
     }
     
@@ -212,13 +218,13 @@ class Login extends CI_Controller
     {
         $status = '';
         $message = '';
-        $email = strtolower($this->input->post("email"));
-        $activation_id = $this->input->post("activation_code");
+        $email = strtolower(trim((string) $this->input->post("email")));
+        $activation_id = trim((string) $this->input->post("activation_code"));
         
         $this->load->library('form_validation');
         
-        $this->form_validation->set_rules('password','Password','required|max_length[20]');
-        $this->form_validation->set_rules('cpassword','Confirm Password','trim|required|matches[password]|max_length[20]');
+        $this->form_validation->set_rules('password','Password','required|min_length[8]|max_length[64]');
+        $this->form_validation->set_rules('cpassword','Confirm Password','trim|required|matches[password]|min_length[8]|max_length[64]');
         
         if($this->form_validation->run() == FALSE)
         {
@@ -234,10 +240,13 @@ class Login extends CI_Controller
             
             if($is_correct == 1)
             {                
-                $this->login_model->createPasswordUser($email, $password);
-                
-                $status = 'success';
-                $message = 'Password reset successfully';
+                if ($this->login_model->createPasswordUser($email, $password, $activation_id)) {
+                    $status = 'success';
+                    $message = 'Password reset successfully. Sign in with your new password.';
+                } else {
+                    $status = 'error';
+                    $message = 'Password reset failed. Request a new link.';
+                }
             }
             else
             {
