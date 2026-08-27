@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>CodeInsect | Reset Password</title>
+    <title>Job Seeker : Reset Password</title>
     <meta content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' name='viewport'>
     <link href="<?php echo base_url(); ?>assets/bower_components/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="<?php echo base_url(); ?>assets/bower_components/font-awesome/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
@@ -17,10 +17,10 @@
     <!-- Google Font -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
   </head>
-  <body class="login-page">
+  <body class="login-page" style="background: url(<?php echo base_url(); ?>assets/images/wallpaper/wallpaper2.jpg) no-repeat center center fixed; background-size: cover;">
     <div class="login-box">
       <div class="login-logo">
-        <a href="#"><b>CodeInsect</b><br>Admin System</a>
+        <a href="<?php echo base_url(); ?>" style="color:white;"><b>Job Seeker</b><br>Admin System</a>
       </div><!-- /.login-logo -->
       <div class="login-box-body">
         <p class="login-box-msg">Reset Password</p>
@@ -45,17 +45,17 @@
         <form action="<?php echo base_url(); ?>createPasswordUser" method="post">
           <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
           <div class="form-group has-feedback">
-            <input type="email" class="form-control" placeholder="Email" name="email" value="<?php echo $email; ?>" readonly required />
+            <input type="email" class="form-control" placeholder="Email" name="email" value="<?php echo html_escape($email); ?>" readonly required />
             <span class="glyphicon glyphicon-envelope form-control-feedback"></span>
-            <input type="hidden" name="activation_code"  value="<?php echo $activation_code; ?>" required />
+            <input type="hidden" name="activation_code" value="<?php echo html_escape($activation_code); ?>" required />
           </div>
           <hr>
           <div class="form-group has-feedback">
-            <input type="password" class="form-control" placeholder="Password" name="password" required />
+            <input type="password" class="form-control" placeholder="Password (8 characters minimum)" name="password" minlength="8" maxlength="64" autocomplete="new-password" required />
             <span class="glyphicon glyphicon-lock form-control-feedback"></span>
           </div>
           <div class="form-group has-feedback">
-            <input type="password" class="form-control" placeholder="Confirm Password" name="cpassword" required />
+            <input type="password" class="form-control" placeholder="Confirm Password" name="cpassword" minlength="8" maxlength="64" autocomplete="new-password" required />
             <span class="glyphicon glyphicon-lock form-control-feedback"></span>
           </div>
           <div class="row">

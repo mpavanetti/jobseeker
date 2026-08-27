@@ -58,13 +58,18 @@ class Login_model extends CI_Model
      */
     function resetPasswordUser($data)
     {
-        $result = $this->db->insert('tbl_reset_password', $data);
+        $this->db->trans_start();
+        $this->db->delete('tbl_reset_password', array('email' => $data['email']));
+        $this->db->insert('tbl_reset_password', $data);
+        $this->db->trans_complete();
+        return $this->db->trans_status();
+    }
 
-        if($result) {
-            return TRUE;
-        } else {
-            return FALSE;
-        }
+    function deleteResetPasswordToken($email, $activation_id)
+    {
+        $this->db->where('email', $email);
+        $this->db->where('activation_id', $activation_id);
+        return $this->db->delete('tbl_reset_password');
     }
 
     /**
@@ -94,17 +99,26 @@ class Login_model extends CI_Model
         $this->db->from('tbl_reset_password');
         $this->db->where('email', $email);
         $this->db->where('activation_id', $activation_id);
+        $this->db->where('isDeleted', 0);
+        $this->db->where('createdDtm >=', date('Y-m-d H:i:s', time() - 3600));
         $query = $this->db->get();
         return $query->num_rows();
     }
 
     // This function used to create new password by reset link
-    function createPasswordUser($email, $password)
+    function createPasswordUser($email, $password, $activation_id)
     {
+        if ($this->checkActivationDetails($email, $activation_id) !== 1) {
+            return FALSE;
+        }
+
+        $this->db->trans_start();
         $this->db->where('email', $email);
         $this->db->where('isDeleted', 0);
         $this->db->update('tbl_users', array('password'=>getHashedPassword($password)));
         $this->db->delete('tbl_reset_password', array('email'=>$email));
+        $this->db->trans_complete();
+        return $this->db->trans_status();
     }
 
     /**
