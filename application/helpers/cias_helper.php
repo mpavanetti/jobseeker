@@ -157,20 +157,27 @@ if(!function_exists('resetPasswordEmail'))
 {
     function resetPasswordEmail($detail)
     {
+        if (empty($detail['email']) || !filter_var($detail['email'], FILTER_VALIDATE_EMAIL) || empty($detail['reset_link'])) {
+            log_message('error', 'Password reset email is missing a valid recipient or reset link.');
+            return FALSE;
+        }
+
         $data["data"] = $detail;
-        // pre($detail);
-        // die;
-        
         $CI = setProtocol();        
         
         $fromEmail = isset($CI->jobseeker_mail_from) ? $CI->jobseeker_mail_from : EMAIL_FROM;
         $fromEmail = filter_var($fromEmail, FILTER_VALIDATE_EMAIL) ? $fromEmail : 'jobseeker@local.test';
-        $fromName = trim((string) FROM_NAME) !== '' ? FROM_NAME : 'JobSeeker';
+        $fromName = 'Job Seeker';
 
         $CI->email->from($fromEmail, $fromName);
         $CI->email->reply_to($fromEmail, $fromName);
-        $CI->email->subject("Reset Password");
+        $CI->email->subject("Reset your Job Seeker password");
         $CI->email->message($CI->load->view('email/resetPassword', $data, TRUE));
+        $CI->email->set_alt_message(
+            "A password reset was requested for your Job Seeker account. " .
+            "This one-time link expires in 60 minutes: " . $detail['reset_link'] . "\n\n" .
+            "If you did not request this change, you can ignore this email."
+        );
         $CI->email->to($detail["email"]);
         $status = $CI->email->send();
         

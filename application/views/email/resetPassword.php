@@ -1,88 +1,65 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-	<head>
-		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-		<title>Reset Your Password</title>
-	</head>
-	<body>
-		<div>
-			<table style="width:100%;border-spacing:0" cellpadding="0" cellspacing="0">
-				<tbody>
-					<tr>
-					<th style="border-top:solid 5px #f56400;font-weight:normal;text-align:center;background:#ffffff;border-bottom:solid 1px #e3e5e1">
-						<table style="width:100%;max-width:596px;border-spacing:0;margin:0 auto" cellpadding="0" cellspacing="0" align="center">
-							<tbody>
-								<tr>
-									<td>
-										<table style="margin:0%;width:100%;border-spacing:0;table-layout:fixed" cellpadding="0" cellspacing="0">
-											<tbody>
-												<tr>
-													<td style="padding:17px 3.358% 15px">
-														<cite style="text-align:center;display:block;font-style:normal">
-															<span style="font-size:1px;min-height:0;color:#fff;width:0;display:block">Just one more step.</span>
-															<dl style="list-style-type:none;padding:0;overflow:hidden;margin:0">
-																<dt style="font-size:15px;display:inline-block;width:100%;margin:0;padding:0 0 12px 0;vertical-align:top;padding-bottom:0!important">
-																	<a href="<?php echo base_url(); ?>" title="Job Seeker" style="display:inline-block" target="_blank">Job Seeker</a>
-																</dt>
-																<div style="font-size:15px;display:inline-block;width:100%;margin:0;vertical-align:top"></div>
-															</dl>
-														</cite>
-													</td>
-												</tr>
-											</tbody>
-										</table>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</th>
-					</tr>
-					<tr><th style="background:#f5f5f1;height:28px"></th></tr>
-					<tr>
-					<th style="background:#f5f5f1;font-weight:normal;text-align:left">
-						<table style="width:100%;max-width:596px;border-spacing:0;margin:0 auto" cellpadding="0" cellspacing="0" align="center">
-							<tbody>
-								<tr>
-									<td>
-										<table style="margin:0%;width:100%;border-spacing:0;table-layout:fixed" cellpadding="0" cellspacing="0">
-											<tbody>
-												<tr>
-													<td style="padding:0 3.358%;font-size:15px;color:#555;line-height:24px">    
-														<div style="min-height:28px"></div>
-														<div style="padding:24px 3.6% 24px;background:#fff;border:1px solid #e3e5e1">
-															<table cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:0">
-																<tbody>
-																	<tr>
-																		<td align="center">
-																			<div style="width:100%">
-																				<b>Hi, <?php echo $data["name"]; ?></b>! <span class="il"><?php echo $data["message"]; ?></span>
-																				<div style="min-height:20px"></div>
-																				<div style="width:100%">
-																					<a style="display:inline-block;font-size:15px;padding:10px 18px;vertical-align:middle;color:#ffffff;background:#34a8c4;border-top:solid 1px #2c8ea6;border-right:solid 1px #2c8ea6;border-bottom:solid 1px #2c8ea6;border-left:solid 1px #2c8ea6;border-radius:3px;text-decoration:none;white-space:normal;font-weight:bold;line-height:18px" href="<?php echo $data['reset_link']; ?>" target="_blank"> <span class="il"> Reset Password Link </span></a>
-																				</div>
-																				<div style="min-height:28px"></div>
-																			</div>
-																		</td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</td>
-												</tr>
-											</tbody>
-										</table>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-						<div class="yj6qo"></div>
-						<div class="adL"></div>
-					</th>
-					</tr>
-					<tr><th style="background:#f5f5f1;height:28px"></th></tr>
-					<tr><th style="background:#f5f5f1;height:28px"></th></tr>
-				</tbody>
-			</table>
-		</div>
-	</body>
+<?php
+$recipientName = isset($data['name']) && trim((string) $data['name']) !== '' ? trim((string) $data['name']) : 'there';
+$resetLink = isset($data['reset_link']) ? (string) $data['reset_link'] : '';
+$requestedAt = isset($data['requested_at']) ? (string) $data['requested_at'] : '';
+$clientIp = isset($data['client_ip']) ? (string) $data['client_ip'] : '';
+?>
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset your Job Seeker password</title>
+  </head>
+  <body style="background:#eef1f4;color:#263238;font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;">
+    <div style="display:none;font-size:1px;color:#eef1f4;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+      Your one-time Job Seeker password reset link expires in 60 minutes.
+    </div>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#eef1f4;border-collapse:collapse;width:100%;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;max-width:600px;width:100%;">
+            <tr>
+              <td style="background:#263238;border-radius:6px 6px 0 0;color:#ffffff;padding:20px 28px;">
+                <a href="<?php echo html_escape(base_url()); ?>" style="color:#ffffff;font-size:20px;font-weight:bold;text-decoration:none;">Job Seeker</a>
+                <div style="color:#b0bec5;font-size:12px;margin-top:4px;">Account security</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#ffffff;border:1px solid #d9e0e5;border-top:0;padding:32px 28px;">
+                <h1 style="color:#1f2d33;font-size:24px;line-height:32px;margin:0 0 16px;">Reset your password</h1>
+                <p style="font-size:15px;line-height:24px;margin:0 0 14px;">Hi <?php echo html_escape($recipientName); ?>,</p>
+                <p style="font-size:15px;line-height:24px;margin:0 0 24px;">We received a request to reset the password for your Job Seeker account. Use the button below to choose a new password.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 24px;">
+                  <tr>
+                    <td style="background:#157a8a;border-radius:4px;">
+                      <a href="<?php echo html_escape($resetLink); ?>" style="color:#ffffff;display:inline-block;font-size:15px;font-weight:bold;padding:12px 20px;text-decoration:none;" target="_blank">Reset password</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="color:#52646d;font-size:14px;line-height:22px;margin:0 0 18px;"><strong>This link is one-time use and expires in 60 minutes.</strong> If another reset email is requested, this link will stop working.</p>
+                <?php if ($requestedAt !== '' || $clientIp !== '') { ?>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f7f9fa;border-collapse:collapse;border-left:3px solid #f0ad4e;margin:0 0 20px;width:100%;">
+                  <tr>
+                    <td style="color:#52646d;font-size:13px;line-height:21px;padding:12px 14px;">
+                      <?php if ($requestedAt !== '') { ?><strong>Requested:</strong> <?php echo html_escape($requestedAt); ?><br><?php } ?>
+                      <?php if ($clientIp !== '') { ?><strong>IP address:</strong> <?php echo html_escape($clientIp); ?><?php } ?>
+                    </td>
+                  </tr>
+                </table>
+                <?php } ?>
+                <p style="font-size:14px;line-height:22px;margin:0 0 18px;">If you did not request a password reset, no action is needed and your password will remain unchanged.</p>
+                <p style="color:#6b7c85;font-size:12px;line-height:19px;margin:0;">Button not working? Open this address:<br><a href="<?php echo html_escape($resetLink); ?>" style="color:#157a8a;overflow-wrap:anywhere;word-break:break-all;" target="_blank"><?php echo html_escape($resetLink); ?></a></p>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:#718089;font-size:12px;line-height:18px;padding:18px 28px;text-align:center;">
+                This automated message was sent by Job Seeker.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
 </html>

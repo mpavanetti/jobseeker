@@ -59,6 +59,9 @@ class Login_model extends CI_Model
     function resetPasswordUser($data)
     {
         $this->db->trans_start();
+        $this->db->query('SELECT userId FROM tbl_users WHERE email = ? AND isDeleted = 0 FOR UPDATE', array($data['email']));
+        $this->db->where('createdDtm <', date('Y-m-d H:i:s', time() - 3600));
+        $this->db->delete('tbl_reset_password');
         $this->db->delete('tbl_reset_password', array('email' => $data['email']));
         $this->db->insert('tbl_reset_password', $data);
         $this->db->trans_complete();
@@ -68,7 +71,7 @@ class Login_model extends CI_Model
     function deleteResetPasswordToken($email, $activation_id)
     {
         $this->db->where('email', $email);
-        $this->db->where('activation_id', $activation_id);
+        $this->db->where_in('activation_id', $this->resetTokenValues($activation_id));
         return $this->db->delete('tbl_reset_password');
     }
 
@@ -95,30 +98,62 @@ class Login_model extends CI_Model
      */
     function checkActivationDetails($email, $activation_id)
     {
-        $this->db->select('id');
+        $request = $this->getResetPasswordRequest($activation_id);
+        return !empty($request) && strtolower($request->email) === strtolower($email) ? 1 : 0;
+    }
+
+    function getResetPasswordRequest($activation_id)
+    {
+        $this->db->select('id, email, createdDtm');
         $this->db->from('tbl_reset_password');
-        $this->db->where('email', $email);
-        $this->db->where('activation_id', $activation_id);
+        $this->db->where_in('activation_id', $this->resetTokenValues($activation_id));
         $this->db->where('isDeleted', 0);
         $this->db->where('createdDtm >=', date('Y-m-d H:i:s', time() - 3600));
+        $this->db->order_by('id', 'DESC');
+        $this->db->limit(1);
         $query = $this->db->get();
-        return $query->num_rows();
+        return $query->row();
     }
 
     // This function used to create new password by reset link
-    function createPasswordUser($email, $password, $activation_id)
+    function createPasswordUser($password, $activation_id)
     {
-        if ($this->checkActivationDetails($email, $activation_id) !== 1) {
+        $tokenValues = $this->resetTokenValues($activation_id);
+        $this->db->trans_begin();
+        $query = $this->db->query(
+            'SELECT id, email FROM tbl_reset_password WHERE activation_id IN (?, ?) AND isDeleted = 0 AND createdDtm >= ? ORDER BY id DESC LIMIT 1 FOR UPDATE',
+            array($tokenValues[0], $tokenValues[1], date('Y-m-d H:i:s', time() - 3600))
+        );
+        $request = $query->row();
+
+        if (empty($request)) {
+            $this->db->trans_rollback();
             return FALSE;
         }
 
-        $this->db->trans_start();
-        $this->db->where('email', $email);
+        $this->db->where('email', $request->email);
         $this->db->where('isDeleted', 0);
         $this->db->update('tbl_users', array('password'=>getHashedPassword($password)));
-        $this->db->delete('tbl_reset_password', array('email'=>$email));
-        $this->db->trans_complete();
-        return $this->db->trans_status();
+
+        if ($this->db->affected_rows() !== 1) {
+            $this->db->trans_rollback();
+            return FALSE;
+        }
+
+        $this->db->delete('tbl_reset_password', array('email'=>$request->email));
+        if ($this->db->trans_status() === FALSE) {
+            $this->db->trans_rollback();
+            return FALSE;
+        }
+
+        $this->db->trans_commit();
+        return TRUE;
+    }
+
+    private function resetTokenValues($activation_id)
+    {
+        $activation_id = trim((string) $activation_id);
+        return array($activation_id, substr(hash('sha256', $activation_id), 0, 32));
     }
 
     /**
