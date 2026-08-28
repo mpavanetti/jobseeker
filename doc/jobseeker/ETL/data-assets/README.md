@@ -59,6 +59,8 @@ The resolver selects the most specific contract in this order:
 
 Missing required inputs fail with a message naming the asset and expected file. Use `required=False` for an optional catalog entry.
 
+Inline previews resolve job-scoped contracts using the Job Name currently entered in Job Creation, not the temporary Jenkins preview name. When Job Name is empty, preview discovery intentionally uses Shared assets only. The selected preview environment must still match the contract or its `ALL` fallback.
+
 ## Shell and other runtimes
 
 Every generated Linux job receives:
@@ -68,6 +70,7 @@ JOBSEEKER_REPOSITORY_ROOT
 JOBSEEKER_DATA_ASSETS_MANIFEST
 JOBSEEKER_ENVIRONMENT
 JOBSEEKER_JOB_NAME
+JOBSEEKER_DATA_ASSET_JOB
 ```
 
 Jenkins agents also include the SDK command-line resolver:

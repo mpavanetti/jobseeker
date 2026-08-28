@@ -80,6 +80,7 @@ def main():
         source = catalog.resolve("customer-reference")
         assert source is not None
         assert source.environment == "DEV" and source.job == "load-customers"
+        assert os.fspath(source) == source.path and str(source) == source.path
         assert source.read() == [{"id": "2", "name": "Exact"}]
 
         fallback = catalog.resolve("customer-reference", environment="PROD", job="another-job")
@@ -94,6 +95,12 @@ def main():
 
         assert catalog.resolve("missing", required=False) is None
         try:
+            catalog.resolve("missing")
+            raise AssertionError("required missing assets must fail with catalog guidance")
+        except JobSeekerError as error:
+            assert "Available input key(s): customer-reference" in str(error)
+            assert "Data Assets" in str(error)
+        try:
             source.write([{"id": 3}])
             raise AssertionError("input-only assets must reject writes")
         except JobSeekerError:
@@ -102,6 +109,17 @@ def main():
         with JobSeeker(environment="DEV", job="load-customers", install_signal_handlers=False) as seeker:
             seeker._data_asset_catalog = catalog
             assert seeker.dataset("customer-reference").path == source.path
+
+        previous_asset_job = os.environ.get("JOBSEEKER_DATA_ASSET_JOB")
+        os.environ["JOBSEEKER_DATA_ASSET_JOB"] = "previewed-job"
+        try:
+            with JobSeeker(environment="DEV", job="temporary-jenkins-job", install_signal_handlers=False) as seeker:
+                assert seeker.data_assets.job == "previewed-job"
+        finally:
+            if previous_asset_job is None:
+                os.environ.pop("JOBSEEKER_DATA_ASSET_JOB", None)
+            else:
+                os.environ["JOBSEEKER_DATA_ASSET_JOB"] = previous_asset_job
 
     print("JobSeeker Data Assets SDK tests passed.")
 

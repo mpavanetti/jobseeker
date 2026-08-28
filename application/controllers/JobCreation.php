@@ -342,6 +342,20 @@ class JobCreation extends BaseController
       return 'if command -v timeout >/dev/null 2>&1; then timeout '.$timeoutSeconds.'s sh -lc '.$wrappedCommand.'; else sh -lc '.$wrappedCommand.'; fi';
     }
 
+    private function cleanupInlinePythonPreviewTelemetry($jobName) {
+      $jobName = trim((string) $jobName);
+      if (strpos($jobName, '__jobseeker_py_preview_') !== 0) {
+        return;
+      }
+
+      if ($this->db->table_exists('tmf_error')) {
+        $this->db->where('job_name', $jobName)->delete('tmf_error');
+      }
+      if ($this->db->table_exists('tmf')) {
+        $this->db->where('job_name', $jobName)->delete('tmf');
+      }
+    }
+
     public function runInlinePythonPreview() {
       if (! $this->canManageJobs()) {
         $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
@@ -393,6 +407,18 @@ class JobCreation extends BaseController
         return;
       }
 
+      $assetJobName = trim((string) $this->input->post('job_name'));
+      if ($assetJobName !== '') {
+        $cleanAssetJobName = $this->cleanSubmittedJobName($assetJobName);
+        if (! $cleanAssetJobName['ok']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $cleanAssetJobName['message']), 400);
+          return;
+        }
+        $assetJobName = $cleanAssetJobName['name'];
+      } else {
+        $assetJobName = '*';
+      }
+
       try {
         $token = substr(bin2hex(random_bytes(5)), 0, 10);
       } catch (Exception $exception) {
@@ -419,7 +445,7 @@ class JobCreation extends BaseController
           return;
         }
 
-        $command = "export JOBSEEKER_PREVIEW=1\nexport JOBSEEKER_PREVIEW_MAX_ROWS=5\n" . $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, 1), array(
+        $command = "export JOBSEEKER_PREVIEW=1\nexport JOBSEEKER_PREVIEW_MAX_ROWS=5\nexport JOBSEEKER_DATA_ASSET_JOB=".escapeshellarg($assetJobName)."\n" . $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, 1), array(
           'mode' => 'local',
           'pythonExecutable' => $pythonExecutable,
           'requirementsText' => $requirementsText,
@@ -456,6 +482,8 @@ class JobCreation extends BaseController
         $message = $wait['ok'] ? 'Inline Python preview succeeded with Jenkins Python.' : 'Inline Python preview finished with status '.$wait['status'].'.';
         if ($wait['status'] === 'TIMEOUT') {
           $message = 'Inline Python preview timed out after '.$previewTimeoutSeconds.' seconds.';
+        } else if (! $wait['ok'] && preg_match('/(?:^|\n)jobseeker\.JobSeekerError:\s*([^\r\n]+)/', $output, $assetError)) {
+          $message = 'Inline Python preview failed: '.trim($assetError[1]);
         }
 
         $this->jsonJobCreationResponse(array(
@@ -471,6 +499,8 @@ class JobCreation extends BaseController
         if ($jobSaved) {
           $this->requestJenkins('POST', $this->jenkinsJobPath($previewJobName) . '/doDelete');
         }
+
+        $this->cleanupInlinePythonPreviewTelemetry($previewJobName);
 
         if (is_array($pythonExecution) && isset($pythonExecution['sourceDirectory']) && is_dir($pythonExecution['sourceDirectory'])) {
           $this->removeUploadDirectory($pythonExecution['sourceDirectory']);
@@ -2044,6 +2074,9 @@ class JobCreation extends BaseController
       private function ensureInlinePythonProjectFiles($pythonExecution, $runtimeOptions) {
         $projectFiles = array();
         $baseDirectory = $pythonExecution['sourceDirectory'];
+        $workspaceJobName = isset($runtimeOptions['jobName']) && trim((string) $runtimeOptions['jobName']) !== ''
+          ? trim((string) $runtimeOptions['jobName'])
+          : basename($baseDirectory);
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : $this->defaultPythonDockerImage();
         $workspacePythonVersion = $this->pythonVersionFromDockerImage($dockerImage);
         $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
@@ -2057,7 +2090,8 @@ class JobCreation extends BaseController
         $editorRepositoryRoot = $this->openVsCodeWorkspaceRoot().'/repository';
         $editorDataAssetEnvironment = array(
           'JOBSEEKER_REPOSITORY_ROOT' => $editorRepositoryRoot,
-          'JOBSEEKER_DATA_ASSETS_MANIFEST' => $editorRepositoryRoot.'/data-assets/manifest.json'
+          'JOBSEEKER_DATA_ASSETS_MANIFEST' => $editorRepositoryRoot.'/data-assets/manifest.json',
+          'JOBSEEKER_DATA_ASSET_JOB' => $workspaceJobName
         );
         $settings = array(
           'python.defaultInterpreterPath' => '${workspaceFolder}/.venv/bin/python',
@@ -2081,7 +2115,8 @@ class JobCreation extends BaseController
             'PYTHONPATH' => NULL,
             'PYTHONNOUSERSITE' => '1',
             'JOBSEEKER_REPOSITORY_ROOT' => $editorRepositoryRoot,
-            'JOBSEEKER_DATA_ASSETS_MANIFEST' => $editorRepositoryRoot.'/data-assets/manifest.json'
+            'JOBSEEKER_DATA_ASSETS_MANIFEST' => $editorRepositoryRoot.'/data-assets/manifest.json',
+            'JOBSEEKER_DATA_ASSET_JOB' => $workspaceJobName
           ),
           'python.testing.pytestEnabled' => TRUE,
           'python.testing.unittestEnabled' => FALSE,
@@ -2739,7 +2774,8 @@ class JobCreation extends BaseController
           'mode' => $pythonRuntimeMode,
           'pythonExecutable' => $pythonExecutable,
           'dockerImage' => $pythonDockerImage,
-          'pyprojectText' => $pyprojectText
+          'pyprojectText' => $pyprojectText,
+          'jobName' => $cleanJobName['name']
         );
         $projectFiles = $this->ensureInlinePythonProjectFiles($pythonExecution, $runtimeOptions);
         if ($projectFiles === FALSE) {
@@ -2852,7 +2888,8 @@ class JobCreation extends BaseController
           'export JOBSEEKER_REPOSITORY_ROOT='.escapeshellarg($repositoryRoot),
           'export JOBSEEKER_DATA_ASSETS_MANIFEST="$JOBSEEKER_REPOSITORY_ROOT/data-assets/manifest.json"',
           'export JOBSEEKER_ENVIRONMENT="${ENVIRONMENT:-${JOBSEEKER_ENVIRONMENT:-}}"',
-          'export JOBSEEKER_JOB_NAME="${JOB_NAME:-${JOBSEEKER_JOB_NAME:-}}"'
+          'export JOBSEEKER_JOB_NAME="${JOB_NAME:-${JOBSEEKER_JOB_NAME:-}}"',
+          'export JOBSEEKER_DATA_ASSET_JOB="${JOBSEEKER_DATA_ASSET_JOB:-${JOBSEEKER_JOB_NAME:-}}"'
         );
       }
 
@@ -2885,7 +2922,7 @@ class JobCreation extends BaseController
         $lines[] = '  -e "JOBSEEKER_LINUX_COMMAND_B64=$JOBSEEKER_LINUX_COMMAND_B64" \\';
         $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
         $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
-        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME \\';
+        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
@@ -2944,7 +2981,7 @@ class JobCreation extends BaseController
         $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
         $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
         $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
-        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME \\';
+        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
@@ -3104,7 +3141,7 @@ class JobCreation extends BaseController
           $lines[] = '  -e JOBSEEKER_EMAIL_METRICS_FILE=/jobseeker-email/jobseeker-email-metrics.properties \\';
           $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
           $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
-          $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME \\';
+          $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
           $lines[] = '  -e PYTHONUNBUFFERED \\';
           $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';

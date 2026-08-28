@@ -141,6 +141,14 @@ class DataAsset:
             raise JobSeekerError("Data asset path escapes the configured repository: %s" % self.key)
         return candidate
 
+    def __fspath__(self) -> str:
+        """Allow pathlib, pandas, and other path-aware libraries to consume the asset directly."""
+
+        return self.path
+
+    def __str__(self) -> str:
+        return self.path
+
     @property
     def exists(self) -> bool:
         return os.path.isfile(self.path)
@@ -307,7 +315,7 @@ class DataAssetCatalog:
         manifest_path: Optional[str] = None,
     ):
         self.environment = (environment or _env("JOBSEEKER_ENVIRONMENT", "LOCAL")).upper()
-        self.job = job or _safe_job_name(None)
+        self.job = job or _env("JOBSEEKER_DATA_ASSET_JOB") or _safe_job_name(None)
         self.repository_root = os.path.abspath(
             repository_root or _env("JOBSEEKER_REPOSITORY_ROOT", "/php/repository")
         )
@@ -368,9 +376,44 @@ class DataAssetCatalog:
 
         if not matches:
             if required:
+                key_contracts = [item for item in self._load() if item.get("key") == key]
+                role_contracts = [
+                    item
+                    for item in key_contracts
+                    if _data_asset_mode_allowed(str(item.get("direction", "input")), mode)
+                ]
+                if key_contracts and not role_contracts:
+                    roles = sorted({str(item.get("direction", "input")) for item in key_contracts})
+                    hint = " Registered role(s): %s." % ", ".join(roles)
+                elif role_contracts:
+                    scopes = sorted(
+                        {
+                            "%s/%s"
+                            % (
+                                str(item.get("environment", "ALL")).upper(),
+                                "shared" if str(item.get("job", "*")) == "*" else str(item.get("job")),
+                            )
+                            for item in role_contracts
+                        }
+                    )
+                    hint = " Published scope(s): %s." % ", ".join(scopes[:8])
+                else:
+                    available_keys = sorted(
+                        {
+                            str(item.get("key"))
+                            for item in self._load()
+                            if item.get("key") and _data_asset_mode_allowed(str(item.get("direction", "input")), mode)
+                        }
+                    )
+                    hint = " Available %s key(s): %s." % (
+                        mode,
+                        ", ".join(available_keys[:8]) if available_keys else "none",
+                    )
                 raise JobSeekerError(
-                    "Data asset %s was not published for environment=%s job=%s mode=%s."
-                    % (key, target_environment, target_job, mode)
+                    "Data asset %s was not published for environment=%s job=%s mode=%s.%s "
+                    "Register a matching contract in Extract Transform Load > Data Assets, "
+                    "or pass required=False for an optional input."
+                    % (key, target_environment, target_job, mode, hint)
                 )
             return None
 
@@ -762,7 +805,8 @@ class JobSeeker:
     @property
     def data_assets(self) -> DataAssetCatalog:
         if self._data_asset_catalog is None:
-            self._data_asset_catalog = DataAssetCatalog(environment=self.environment, job=self.job)
+            asset_job = _env("JOBSEEKER_DATA_ASSET_JOB") or self.job
+            self._data_asset_catalog = DataAssetCatalog(environment=self.environment, job=asset_job)
         return self._data_asset_catalog
 
     def asset(

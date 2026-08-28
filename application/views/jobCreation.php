@@ -2145,7 +2145,7 @@
                     <div class="alert alert-info" style="padding:10px 12px; margin-bottom:14px;">
                       <i class="fa fa-cubes"></i>
                       <strong>Data Assets are available in every Linux runtime.</strong>
-                      Python can use <code>js.asset(&quot;asset-key&quot;)</code>; shell and ETL jobs receive the repository and manifest environment variables.
+                      Python can use <code>js.asset(&quot;asset-key&quot;)</code>; shell and ETL jobs receive the repository and manifest environment variables. Match the selected environment, and use a Shared asset unless the contract is intentionally job-specific.
                       <a class="alert-link pull-right" href="<?php echo base_url(); ?>data-assets" target="_blank">Manage Data Assets <i class="fa fa-external-link"></i></a>
                     </div>
                     <div class="linux-execution-section linux-shell-options" style="display: none;">
@@ -3271,9 +3271,15 @@
           'def operation():',
           '    with JobSeeker(environment=ENVIRONMENT, job=JOB_NAME) as js:',
           '        with js.task("Inline Python Job", "DW_Master") as tmf:',
-          '            # Resolve a catalog file without hardcoding its repository path:',
-          '            # source = tmf.asset("customer-reference")',
-          '            # source_rows = source.read()',
+          '            # Optional assets let this starter run before a file is registered.',
+          '            source = tmf.asset("customer-reference", required=False)',
+          '            if source is None:',
+          '                print("Optional Data Asset customer-reference is not registered for this scope.")',
+          '            else:',
+          '                source_rows = source.read()',
+          '                sample_rows = source_rows[:5] if isinstance(source_rows, list) else str(source_rows)[:2000]',
+          '                print("Resolved {} (version {})".format(source.uri, source.version))',
+          '                print(sample_rows)',
           '            rows = tmf.context("rows", cast=int, default=5)',
           '            rows = min(rows, 5) if PREVIEW else rows',
           '            wait_seconds = 0.2 if PREVIEW else 1',
@@ -5356,6 +5362,7 @@
           url: '<?php echo base_url(); ?>jobCreation/runInlinePythonPreview',
           dataType: 'json',
           data: {
+            job_name: $('#job_name').val() || '',
             environment: $('#environment').val() || '',
             pythonEntryPoint: $('#pythonEntryPoint').val() || 'main.py',
             pythonInlineCode: $('#pythonInlineCode').val() || '',
