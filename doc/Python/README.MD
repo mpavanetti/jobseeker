@@ -54,6 +54,16 @@ target.write([{"country": "US", "active_customers": 2}])
 
 Use `read_dataframe()` and `write_dataframe()` for pandas, Excel, or Parquet workloads. The catalog supplies CSV delimiter/header/encoding and Excel sheet metadata automatically. `dataset()` is an alias for `asset()` when dataset terminology reads more naturally.
 
+For optional starter data, let the job continue when no matching contract exists:
+
+```python
+source = js.asset("customer-reference", required=False)
+if source is not None:
+    print(source.read())
+```
+
+`DataAsset` also implements Python's path protocol, so current path-aware libraries accept it directly—`pandas.read_csv(source)` works. Prefer `source.read_dataframe()` when you want the catalog's delimiter, encoding, header, or sheet metadata applied automatically. Do not pass `source.relative_path` to file libraries; it is catalog metadata relative to the repository, while `source.path` is the absolute runtime path.
+
 See the complete [code/data_asset_job.py](code/data_asset_job.py) example and the [Data Assets guide](../jobseeker/ETL/data-assets/README.md).
 
 The example transforms the bundled four-row CSV into a `customer-summary` output containing active-customer counts for the UK and US. Opening Data Assets after the run discovers the generated file and publishes its size, SHA-256 checksum, and next revision automatically.
