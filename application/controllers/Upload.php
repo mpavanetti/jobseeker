@@ -23,10 +23,7 @@ class Upload extends BaseController
      */
     public function index()
     {
-
-        $this->global['pageTitle'] = 'Job Seeker : File Upload';
-        
-        $this->loadViews("upload", $this->global, NULL, NULL);
+        redirect('data-assets');
     }
 
     function listJobsJson() {

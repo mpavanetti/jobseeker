@@ -23,24 +23,12 @@ class JobsTable extends BaseController
      */
     public function index()
     {
-
-        $this->global['pageTitle'] = 'Talend Job Seeker : Input Components';
-
-        $data["jobs"] = $this->model->listJobs();
-        $data["role"] = $this->isManager();
-        
-        $this->loadViews("JobsTable", $this->global, $data, NULL);
+        redirect('data-assets?direction=input');
     }
 
     public function outputTable()
     {
-
-        $this->global['pageTitle'] = 'Talend Job Seeker : Output Components';
-
-        $data["jobs"] = $this->model->listOutputComponents();
-        $data["role"] = $this->isManager();
-        
-        $this->loadViews("outputTable", $this->global, $data, NULL);
+        redirect('data-assets?direction=output');
     }
 
     function listJobs() {
@@ -128,19 +116,7 @@ class JobsTable extends BaseController
      */
     function addNewJob()
     {
-        if($this->isManager() == TRUE)
-        {
-            $this->loadThis();
-        }
-        else
-        {
-            $this->load->model('user_model');
-            $data['roles'] = $this->user_model->getUserRoles();
-            
-            $this->global['pageTitle'] = 'Talend Job Seeker : Add New Input Component';
-
-            $this->loadViews("addNewJob", $this->global, $data, NULL);
-        }
+        redirect('data-assets?direction=input#assetEditor');
     }
 
     /**
@@ -149,19 +125,7 @@ class JobsTable extends BaseController
 
     function addNewOutputComponent()
     {
-        if($this->isManager() == TRUE)
-        {
-            $this->loadThis();
-        }
-        else
-        {
-            $this->load->model('user_model');
-            $data['roles'] = $this->user_model->getUserRoles();
-            
-            $this->global['pageTitle'] = 'Talend Job Seeker : Add New Output Component';
-
-            $this->loadViews("addNewOutputComponent", $this->global, $data, NULL);
-        }
+        redirect('data-assets?direction=output#assetEditor');
     }
 
     /**

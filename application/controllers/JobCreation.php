@@ -2054,6 +2054,11 @@ class JobCreation extends BaseController
           $existingRequirementsText = is_readable($pythonExecution['requirementsPath']) ? file_get_contents($pythonExecution['requirementsPath']) : '';
           $pyprojectText = $this->defaultInlinePythonPyproject(basename($baseDirectory), $existingRequirementsText, $workspacePythonVersion);
         }
+        $editorRepositoryRoot = $this->openVsCodeWorkspaceRoot().'/repository';
+        $editorDataAssetEnvironment = array(
+          'JOBSEEKER_REPOSITORY_ROOT' => $editorRepositoryRoot,
+          'JOBSEEKER_DATA_ASSETS_MANIFEST' => $editorRepositoryRoot.'/data-assets/manifest.json'
+        );
         $settings = array(
           'python.defaultInterpreterPath' => '${workspaceFolder}/.venv/bin/python',
           // BasedPyright reads python.pythonPath directly when the Microsoft
@@ -2074,7 +2079,9 @@ class JobCreation extends BaseController
             'VIRTUAL_ENV' => '${workspaceFolder}/.venv',
             'PATH' => '${workspaceFolder}/.venv/bin:${env:PATH}',
             'PYTHONPATH' => NULL,
-            'PYTHONNOUSERSITE' => '1'
+            'PYTHONNOUSERSITE' => '1',
+            'JOBSEEKER_REPOSITORY_ROOT' => $editorRepositoryRoot,
+            'JOBSEEKER_DATA_ASSETS_MANIFEST' => $editorRepositoryRoot.'/data-assets/manifest.json'
           ),
           'python.testing.pytestEnabled' => TRUE,
           'python.testing.unittestEnabled' => FALSE,
@@ -2212,6 +2219,7 @@ class JobCreation extends BaseController
               'type' => 'shell',
               'command' => '".venv/bin/python" -u "${file}"',
               'dependsOn' => 'JobSeeker: setup Python environment',
+              'options' => array('env' => $editorDataAssetEnvironment),
               'problemMatcher' => array()
             ),
             array(
@@ -2265,7 +2273,7 @@ class JobCreation extends BaseController
               'console' => 'integratedTerminal',
               'cwd' => '${workspaceFolder}',
               'justMyCode' => TRUE,
-              'env' => array('PYTHONNOUSERSITE' => '1')
+              'env' => array_merge(array('PYTHONNOUSERSITE' => '1'), $editorDataAssetEnvironment)
             ),
             array(
               'name' => 'JobSeeker: debug pytest',
@@ -2277,7 +2285,8 @@ class JobCreation extends BaseController
               'args' => array('-ra'),
               'console' => 'integratedTerminal',
               'cwd' => '${workspaceFolder}',
-              'justMyCode' => FALSE
+              'justMyCode' => FALSE,
+              'env' => $editorDataAssetEnvironment
             )
           )
         );
@@ -2837,37 +2846,65 @@ class JobCreation extends BaseController
         return implode(' ', $escapedArguments);
       }
 
-      private function buildLinuxCommandExecutionCommand($commandText, $runtimeOptions = array()) {
+      private function dataAssetsRuntimeLines($repositoryRoot) {
+        $repositoryRoot = rtrim((string) $repositoryRoot, '/\\');
+        return array(
+          'export JOBSEEKER_REPOSITORY_ROOT='.escapeshellarg($repositoryRoot),
+          'export JOBSEEKER_DATA_ASSETS_MANIFEST="$JOBSEEKER_REPOSITORY_ROOT/data-assets/manifest.json"',
+          'export JOBSEEKER_ENVIRONMENT="${ENVIRONMENT:-${JOBSEEKER_ENVIRONMENT:-}}"',
+          'export JOBSEEKER_JOB_NAME="${JOB_NAME:-${JOBSEEKER_JOB_NAME:-}}"'
+        );
+      }
+
+      private function buildLinuxCommandExecutionCommand($commandText, $runtimeOptions = array(), $repositoryRoot = '') {
         $commandText = str_replace(array("\r\n", "\r"), "\n", (string) $commandText);
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'alpine:3.20';
+        $runtimeLines = $this->dataAssetsRuntimeLines($repositoryRoot);
 
         if ($runtimeMode !== 'docker') {
-          return $commandText;
+          $runtimeLines[] = $commandText;
+          return implode("\n", $runtimeLines);
         }
 
-        $lines = array('set -e');
+        $lines = array_merge(array('set -e'), $runtimeLines);
         $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
         $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
         $lines[] = 'export JOBSEEKER_LINUX_COMMAND_B64='.escapeshellarg(base64_encode($commandText));
         $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+        $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
+        $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
+        $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
+        $lines[] = 'jobseeker_asset_cleanup() { docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
+        $lines[] = 'trap jobseeker_asset_cleanup EXIT';
+        $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
+        $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
         $lines[] = 'docker run --rm -i \\';
         $lines[] = '  --network host \\';
+        $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
         $lines[] = '  -e "JOBSEEKER_LINUX_COMMAND_B64=$JOBSEEKER_LINUX_COMMAND_B64" \\';
+        $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
+        $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
+        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\'';
+        $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
+        $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
 
         return implode("\n", $lines);
       }
 
-      private function buildShellScriptExecutionCommand($execution, $runtimeOptions = array()) {
+      private function buildShellScriptExecutionCommand($execution, $runtimeOptions = array(), $repositoryRoot = '') {
         $arguments = isset($execution['arguments']) ? $execution['arguments'] : array();
         $argumentString = $this->shellArgumentString($arguments);
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : ($execution['scriptType'] === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
 
+        $runtimeLines = $this->dataAssetsRuntimeLines($repositoryRoot);
+
         if ($runtimeMode !== 'docker') {
-          return 'sh '.escapeshellarg($execution['scriptPath']).($argumentString !== '' ? ' '.$argumentString : '');
+          $runtimeLines[] = 'sh '.escapeshellarg($execution['scriptPath']).($argumentString !== '' ? ' '.$argumentString : '');
+          return implode("\n", $runtimeLines);
         }
 
         $dockerScript = implode("\n", array(
@@ -2880,7 +2917,7 @@ class JobCreation extends BaseController
           'sh "$JOBSEEKER_ENTRYPOINT" "$@"'
         ));
 
-        $lines = array('set -e');
+        $lines = array_merge(array('set -e'), $runtimeLines);
         $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
         $lines[] = 'export JOBSEEKER_LINUX_SCRIPT_TYPE='.escapeshellarg($execution['scriptType']);
         $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
@@ -2894,11 +2931,24 @@ class JobCreation extends BaseController
         $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source"';
         $lines[] = 'cp -R "$JOBSEEKER_SOURCE_DIR/." "$JOBSEEKER_DOCKER_CONTEXT/source/"';
         $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type d \( -name .git -o -name .venv -o -name venv -o -name __pycache__ -o -name .pytest_cache -o -name .mypy_cache -o -name .ruff_cache \) -prune -exec rm -rf {} +';
+        $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
+        $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
+        $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
+        $lines[] = 'jobseeker_linux_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
+        $lines[] = 'trap jobseeker_linux_docker_cleanup EXIT';
+        $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
+        $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
         $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
         $lines[] = '  --network host \\';
+        $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
         $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
+        $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
+        $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
+        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '');
+        $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
+        $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
 
         return implode("\n", $lines);
       }
@@ -2912,7 +2962,7 @@ class JobCreation extends BaseController
         $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
         $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $runTests = ! isset($runtimeOptions['runTests']) || (bool) $runtimeOptions['runTests'];
-        $lines = array('set -e');
+        $lines = array_merge(array('set -e'), $this->dataAssetsRuntimeLines($repositoryRoot));
 
         if ($execution['mode'] === 'git') {
           $cloneCommand = 'git clone --depth 1';
@@ -3015,7 +3065,8 @@ class JobCreation extends BaseController
           $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-python-docker-context"';
           $lines[] = 'JOBSEEKER_DOCKER_BUILT_IMAGE=""';
           $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME=""';
-          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
+          $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME=""';
+          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DATA_ASSETS_VOLUME" ]; then docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
           $lines[] = 'trap jobseeker_python_docker_cleanup EXIT';
           $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
           $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source" "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"';
@@ -3040,17 +3091,28 @@ class JobCreation extends BaseController
           $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME="$(printf "jobseeker-email-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
           $lines[] = 'docker volume create "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null';
           $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "chmod 0777 /jobseeker-email"';
+          $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
+          $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
+          $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
+          $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
+          $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
           $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
           $lines[] = '  --network host \\';
           $lines[] = '  -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" \\';
+          $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
           $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
           $lines[] = '  -e JOBSEEKER_EMAIL_METRICS_FILE=/jobseeker-email/jobseeker-email-metrics.properties \\';
+          $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
+          $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
+          $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME \\';
           $lines[] = '  -e PYTHONUNBUFFERED \\';
           $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
           $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
-          $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+          $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '').' || JOBSEEKER_DOCKER_STATUS=$?';
           $lines[] = 'docker run --rm --user 0 --entrypoint cat -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email:ro" "$JOBSEEKER_DOCKER_RUN_IMAGE" /jobseeker-email/jobseeker-email-metrics.properties > "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" 2>/dev/null && mv "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" "$JOBSEEKER_EMAIL_METRICS_FILE" || rm -f "$JOBSEEKER_EMAIL_METRICS_FILE.tmp"';
+          $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
+          $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
         } else {
           $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
           $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
@@ -3700,7 +3762,7 @@ class JobCreation extends BaseController
                       }
                       $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment), $pythonRuntimeOptions));
                     } else {
-                      $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildShellScriptExecutionCommand($linuxScriptExecution, $linuxRuntimeOptions));
+                      $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildShellScriptExecutionCommand($linuxScriptExecution, $linuxRuntimeOptions, $repositoryRoot));
                     }
 
                     $builders->appendChild($hudson_task_BashFile);
@@ -3719,7 +3781,8 @@ class JobCreation extends BaseController
                   } else if($linuxExecutionStrategy == 'command') {
 
                     $hudson_task_BashFile = $dom->createElement('hudson.tasks.Shell');
-                    $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildLinuxCommandExecutionCommand($filePath, $linuxRuntimeOptions));
+                    $repositoryRoot = rtrim($storeFolder, '/\\');
+                    $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildLinuxCommandExecutionCommand($filePath, $linuxRuntimeOptions, $repositoryRoot));
                     $builders->appendChild($hudson_task_BashFile);
 
                   }

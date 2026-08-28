@@ -1,5 +1,6 @@
-## Input Components
-This area has the idea of having a way to input files to feed your ETL process dynamically, so that you can specify your file location or folder location and the environment and call it your etl job by reading the database table. this was most designed for Talend users but can also be used by python etl jobs.
+## Input Components (legacy)
+
+Input Components has been folded into [Data Assets](../data-assets). Register an asset with the **Input** role and optionally upload its first version in the same form. Python and shell jobs resolve the asset key at runtime instead of querying the old component table or hardcoding a Talend path.
 
 ### Table
 This table contain your input file or directories registries.

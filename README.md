@@ -14,9 +14,10 @@ It gives data teams one place to create and trigger Jenkins jobs, schedule recur
 - Promote Jenkins jobs between environments with dependency discovery, context-variable promotion, artifact folder copy, dry-run previews, and rollback checkpoints.
 - Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history, console output, environment badges, worker-node visibility, and focused environment filters.
 - Query TMF records by job, status, environment, date/time range, dimension, event text, and reprocess flag.
-- Run Python jobs with the bundled `jobseeker` SDK for TMF logging, context lookup, progress updates, and Jenkins-agent or Docker execution.
+- Run Python jobs with the bundled `jobseeker` SDK for TMF logging, context lookup, Data Asset discovery, progress updates, and Jenkins-agent or Docker execution.
+- Publish environment-aware Data Assets that unify uploaded datasets, declared inputs, and generated outputs behind stable `jobseeker://` URIs for Python, shell, Talend, and Docker jobs.
 - Track processed records, warnings, errors, messages, hostnames, users, and execution timing.
-- Manage database settings, generic key-value settings, SMTP settings, email templates, file paths, projects, environments, and context variables.
+- Manage database settings, generic key-value settings, SMTP settings, email templates, versioned data files, projects, environments, and context variables.
 - Publish embedded Power BI, Tableau, Qlik Sense, or iframe dashboards with user and group access control.
 - Manage users, roles, uploads, runtime settings, and operational dashboards from the same portal.
 

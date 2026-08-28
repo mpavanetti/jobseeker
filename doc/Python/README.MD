@@ -1,6 +1,6 @@
 # JobSeeker Python SDK
 
-JobSeeker ships a small Python SDK that lets Python jobs write to the Transaction Monitoring Framework (TMF), read JobSeeker context values, update progress, and report failures with very little boilerplate.
+JobSeeker ships a small Python SDK that lets Python jobs write to the Transaction Monitoring Framework (TMF), read context values, resolve Data Assets, update progress, and report failures with very little boilerplate.
 
 Jobs created from the Job Creation screen receive the SDK as a preinstalled runtime package, so new jobs can import it directly:
 
@@ -31,6 +31,32 @@ JobSeeker resolves database settings from environment variables first, then uses
 | `JOBSEEKER_DB_NAME` or `MYSQL_DATABASE` | `jobseeker` |
 
 The SDK also contains an HTTP transport boundary for a future JobSeeker API. When matching backend endpoints are available, jobs can switch transports with `JOBSEEKER_TRANSPORT=api`, `JOBSEEKER_API_URL`, and `JOBSEEKER_API_TOKEN` without changing task code.
+
+## Reading and writing Data Assets
+
+Data Assets are environment-aware file contracts managed under **Extract Transform Load → Data Assets**. They replace the separate File Upload, Input Components, and Output Components workflows.
+
+Register an Input asset with key `customer-reference`, select CSV, and upload [code/customer_reference.csv](code/customer_reference.csv). A Python job can then read both the file and its catalog metadata without a hardcoded path:
+
+```python
+with JobSeeker(environment="PROD", job="load-customers") as js:
+    source = js.asset("customer-reference")
+    rows = source.read()
+    print(source.uri, source.version, source.checksum)
+```
+
+Register `customer-summary` as an Output CSV to create a stable write destination:
+
+```python
+target = js.asset("customer-summary", mode="output")
+target.write([{"country": "US", "active_customers": 2}])
+```
+
+Use `read_dataframe()` and `write_dataframe()` for pandas, Excel, or Parquet workloads. The catalog supplies CSV delimiter/header/encoding and Excel sheet metadata automatically. `dataset()` is an alias for `asset()` when dataset terminology reads more naturally.
+
+See the complete [code/data_asset_job.py](code/data_asset_job.py) example and the [Data Assets guide](../jobseeker/ETL/data-assets/README.md).
+
+The example transforms the bundled four-row CSV into a `customer-summary` output containing active-customer counts for the UK and US. Opening Data Assets after the run discovers the generated file and publishes its size, SHA-256 checksum, and next revision automatically.
 
 ## Success Email Metrics
 

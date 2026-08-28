@@ -1,5 +1,8 @@
-## File Upload
-This section is used when you have created an input component and wants to manually feed a file into the directory you have setup dynamically in the input component area.
+## File Upload (legacy)
+
+File Upload has been replaced by [Data Assets](../data-assets). Data Assets combines registration and upload, works with Python, shell, Talend, and Docker jobs, and adds environment/job scoping, stable URIs, format metadata, checksums, and revisions.
+
+Existing legacy input registrations are imported automatically; the old URL redirects to the new catalog.
 
 ### Home Screen
 ![Home](img/home.JPG)
