@@ -5,6 +5,7 @@ from __future__ import print_function
 import functools
 import getpass
 import inspect
+import csv
 import json
 import logging
 import os
@@ -75,6 +76,330 @@ def _function_accepts_keyword(function: Callable[..., Any], keyword: str) -> boo
             return True
 
     return False
+
+
+def _data_asset_mode_allowed(direction: str, mode: str) -> bool:
+    if mode == "input":
+        return direction in ("input", "input_output")
+    if mode == "output":
+        return direction in ("output", "input_output")
+    return direction in ("input", "output", "input_output")
+
+
+@dataclass
+class DataAsset:
+    """A resolved, environment-aware file contract from the Data Assets catalog."""
+
+    key: str
+    name: str
+    uri: str
+    direction: str
+    format: str
+    environment: str
+    job: str
+    relative_path: str
+    file_name: str
+    required: bool = True
+    version: int = 0
+    size: Optional[int] = None
+    checksum: Optional[str] = None
+    uploaded_at: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
+    description: str = ""
+    repository_root: str = ""
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        return {
+            "key": self.key,
+            "name": self.name,
+            "uri": self.uri,
+            "direction": self.direction,
+            "format": self.format,
+            "environment": self.environment,
+            "job": self.job,
+            "relative_path": self.relative_path,
+            "file_name": self.file_name,
+            "required": self.required,
+            "version": self.version,
+            "size": self.size,
+            "checksum": self.checksum,
+            "uploaded_at": self.uploaded_at,
+            "options": dict(self.options or {}),
+            "description": self.description,
+        }
+
+    @property
+    def path(self) -> str:
+        root = os.path.realpath(os.path.abspath(self.repository_root))
+        candidate = os.path.realpath(os.path.abspath(os.path.join(root, self.relative_path)))
+        try:
+            within_root = os.path.commonpath((root, candidate)) == root
+        except ValueError:
+            within_root = False
+        if not within_root:
+            raise JobSeekerError("Data asset path escapes the configured repository: %s" % self.key)
+        return candidate
+
+    @property
+    def exists(self) -> bool:
+        return os.path.isfile(self.path)
+
+    def require(self) -> "DataAsset":
+        if not self.exists:
+            raise JobSeekerError(
+                "Required data asset %s has no file at %s. Upload a version in JobSeeker Data Assets."
+                % (self.key, self.path)
+            )
+        return self
+
+    def open(self, mode: str = "r", **kwargs: Any) -> Any:
+        writing = any(flag in mode for flag in ("w", "a", "+", "x"))
+        if writing and not _data_asset_mode_allowed(self.direction, "output"):
+            raise JobSeekerError("Data asset %s is registered as input-only." % self.key)
+        if not writing and not _data_asset_mode_allowed(self.direction, "input"):
+            raise JobSeekerError("Data asset %s is registered as output-only." % self.key)
+
+        if writing:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        elif self.required:
+            self.require()
+
+        if "b" not in mode and "encoding" not in kwargs:
+            kwargs["encoding"] = str((self.options or {}).get("encoding") or "UTF-8")
+        return open(self.path, mode, **kwargs)
+
+    def read(self, **kwargs: Any) -> Any:
+        """Read common formats without forcing pandas on lightweight jobs."""
+
+        metadata = dict(self.options or {})
+        options = dict(kwargs)
+        if self.format == "csv":
+            delimiter = options.pop("delimiter", metadata.get("delimiter", ","))
+            has_header = bool(options.pop("header", metadata.get("header", True)))
+            with self.open("r", newline="") as stream:
+                reader = csv.DictReader(stream, delimiter=delimiter, **options) if has_header else csv.reader(stream, delimiter=delimiter, **options)
+                return list(reader)
+        if self.format == "json":
+            with self.open("r") as stream:
+                return json.load(stream, **options)
+        if self.format == "jsonl":
+            with self.open("r") as stream:
+                return [json.loads(line) for line in stream if line.strip()]
+        if self.format in ("txt", "xml"):
+            with self.open("r") as stream:
+                return stream.read()
+        if self.format == "binary":
+            with self.open("rb") as stream:
+                return stream.read()
+        if self.format in ("xlsx", "parquet"):
+            raise JobSeekerDependencyError(
+                "%s assets require pandas and the matching engine; use asset.read_dataframe()." % self.format.upper()
+            )
+        raise JobSeekerError("Unsupported data asset format: %s" % self.format)
+
+    def write(self, data: Any, **kwargs: Any) -> str:
+        """Write common formats to a declared output or handoff asset."""
+
+        metadata = dict(self.options or {})
+        options = dict(kwargs)
+        if self.format == "csv":
+            rows = list(data)
+            delimiter = options.pop("delimiter", metadata.get("delimiter", ","))
+            has_header = bool(options.pop("header", metadata.get("header", True)))
+            with self.open("w", newline="") as stream:
+                if rows and isinstance(rows[0], Mapping):
+                    writer = csv.DictWriter(stream, fieldnames=list(rows[0].keys()), delimiter=delimiter, **options)
+                    if has_header:
+                        writer.writeheader()
+                    writer.writerows(rows)
+                else:
+                    csv.writer(stream, delimiter=delimiter, **options).writerows(rows)
+        elif self.format == "json":
+            with self.open("w") as stream:
+                json.dump(data, stream, **options)
+        elif self.format == "jsonl":
+            with self.open("w") as stream:
+                for row in data:
+                    stream.write(json.dumps(row, **options) + "\n")
+        elif self.format in ("txt", "xml"):
+            with self.open("w") as stream:
+                stream.write(str(data))
+        elif self.format == "binary":
+            with self.open("wb") as stream:
+                stream.write(data)
+        elif self.format in ("xlsx", "parquet"):
+            raise JobSeekerDependencyError(
+                "%s assets require pandas and the matching engine; use asset.write_dataframe(frame)." % self.format.upper()
+            )
+        else:
+            raise JobSeekerError("Unsupported data asset format: %s" % self.format)
+        return self.path
+
+    def read_dataframe(self, **kwargs: Any) -> Any:
+        try:
+            import pandas as pd  # type: ignore
+        except ImportError as error:
+            raise JobSeekerDependencyError("pandas is required for DataAsset.read_dataframe().") from error
+
+        options = dict(kwargs)
+        metadata = dict(self.options or {})
+        if self.required:
+            self.require()
+        if self.format == "csv":
+            options.setdefault("sep", metadata.get("delimiter", ","))
+            options.setdefault("encoding", metadata.get("encoding", "UTF-8"))
+            options.setdefault("header", 0 if metadata.get("header", True) else None)
+            return pd.read_csv(self.path, **options)
+        if self.format in ("json", "jsonl"):
+            options.setdefault("lines", self.format == "jsonl")
+            return pd.read_json(self.path, **options)
+        if self.format == "xlsx":
+            if metadata.get("sheet"):
+                options.setdefault("sheet_name", metadata["sheet"])
+            return pd.read_excel(self.path, **options)
+        if self.format == "parquet":
+            return pd.read_parquet(self.path, **options)
+        if self.format == "xml":
+            return pd.read_xml(self.path, **options)
+        raise JobSeekerError("Format %s cannot be loaded as a dataframe." % self.format)
+
+    def write_dataframe(self, frame: Any, **kwargs: Any) -> str:
+        if not _data_asset_mode_allowed(self.direction, "output"):
+            raise JobSeekerError("Data asset %s is registered as input-only." % self.key)
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        metadata = dict(self.options or {})
+        if self.format == "csv":
+            kwargs.setdefault("sep", metadata.get("delimiter", ","))
+            kwargs.setdefault("encoding", metadata.get("encoding", "UTF-8"))
+            kwargs.setdefault("header", metadata.get("header", True))
+            kwargs.setdefault("index", False)
+            frame.to_csv(self.path, **kwargs)
+        elif self.format == "json":
+            frame.to_json(self.path, **kwargs)
+        elif self.format == "jsonl":
+            kwargs.setdefault("orient", "records")
+            kwargs.setdefault("lines", True)
+            frame.to_json(self.path, **kwargs)
+        elif self.format == "xlsx":
+            kwargs.setdefault("index", False)
+            if metadata.get("sheet"):
+                kwargs.setdefault("sheet_name", metadata["sheet"])
+            frame.to_excel(self.path, **kwargs)
+        elif self.format == "parquet":
+            kwargs.setdefault("index", False)
+            frame.to_parquet(self.path, **kwargs)
+        elif self.format == "xml":
+            frame.to_xml(self.path, **kwargs)
+        else:
+            raise JobSeekerError("Format %s cannot be written from a dataframe." % self.format)
+        return self.path
+
+
+class DataAssetCatalog:
+    """Resolve catalog entries using exact environment/job matches and shared fallbacks."""
+
+    def __init__(
+        self,
+        environment: Optional[str] = None,
+        job: Optional[str] = None,
+        repository_root: Optional[str] = None,
+        manifest_path: Optional[str] = None,
+    ):
+        self.environment = (environment or _env("JOBSEEKER_ENVIRONMENT", "LOCAL")).upper()
+        self.job = job or _safe_job_name(None)
+        self.repository_root = os.path.abspath(
+            repository_root or _env("JOBSEEKER_REPOSITORY_ROOT", "/php/repository")
+        )
+        self.manifest_path = os.path.abspath(
+            manifest_path
+            or _env("JOBSEEKER_DATA_ASSETS_MANIFEST", os.path.join(self.repository_root, "data-assets", "manifest.json"))
+        )
+        self._assets: Optional[List[Dict[str, Any]]] = None
+
+    def _load(self) -> List[Dict[str, Any]]:
+        if self._assets is not None:
+            return self._assets
+        try:
+            with open(self.manifest_path, "r", encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except FileNotFoundError as error:
+            raise JobSeekerError(
+                "Data Assets catalog was not found at %s. Open Data Assets in JobSeeker to publish it."
+                % self.manifest_path
+            ) from error
+        except (OSError, ValueError) as error:
+            raise JobSeekerError("Data Assets catalog is unreadable: %s" % error) from error
+        assets = payload.get("assets", []) if isinstance(payload, dict) else []
+        self._assets = [item for item in assets if isinstance(item, dict) and item.get("active", True)]
+        return self._assets
+
+    def refresh(self) -> "DataAssetCatalog":
+        self._assets = None
+        return self
+
+    def list(self, mode: str = "any") -> List[DataAsset]:
+        results = []
+        for item in self._load():
+            if _data_asset_mode_allowed(str(item.get("direction", "input")), mode):
+                results.append(self._from_item(item))
+        return results
+
+    def resolve(
+        self,
+        key: str,
+        mode: str = "input",
+        environment: Optional[str] = None,
+        job: Optional[str] = None,
+        required: bool = True,
+    ) -> Optional[DataAsset]:
+        target_environment = (environment or self.environment).upper()
+        target_job = job or self.job
+        matches = []
+        for item in self._load():
+            if item.get("key") != key or not _data_asset_mode_allowed(str(item.get("direction", "input")), mode):
+                continue
+            item_environment = str(item.get("environment", "ALL")).upper()
+            item_job = str(item.get("job", "*"))
+            if item_environment not in (target_environment, "ALL") or item_job not in (target_job, "*"):
+                continue
+            score = (20 if item_environment == target_environment else 10) + (2 if item_job == target_job else 1)
+            matches.append((score, item))
+
+        if not matches:
+            if required:
+                raise JobSeekerError(
+                    "Data asset %s was not published for environment=%s job=%s mode=%s."
+                    % (key, target_environment, target_job, mode)
+                )
+            return None
+
+        matches.sort(key=lambda match: match[0], reverse=True)
+        asset = self._from_item(matches[0][1])
+        if mode == "input" and (required or asset.required):
+            asset.require()
+        return asset
+
+    def _from_item(self, item: Mapping[str, Any]) -> DataAsset:
+        return DataAsset(
+            key=str(item.get("key", "")),
+            name=str(item.get("name", item.get("key", ""))),
+            uri=str(item.get("uri", "")),
+            direction=str(item.get("direction", "input")),
+            format=str(item.get("format", "binary")),
+            environment=str(item.get("environment", "ALL")),
+            job=str(item.get("job", "*")),
+            relative_path=str(item.get("relative_path", "")),
+            file_name=str(item.get("file_name", "")),
+            required=bool(item.get("required", True)),
+            version=_coerce_int(item.get("version"), 0),
+            size=None if item.get("size") is None else _coerce_int(item.get("size"), 0),
+            checksum=item.get("checksum"),
+            uploaded_at=item.get("uploaded_at"),
+            options=dict(item.get("options") or {}),
+            description=str(item.get("description") or ""),
+            repository_root=self.repository_root,
+        )
 
 
 @dataclass(frozen=True)
@@ -427,11 +752,38 @@ class JobSeeker:
         self.transaction_open = False
         self._active_tasks: List[Any] = []
         self._signal_handlers_installed = False
+        self._data_asset_catalog: Optional[DataAssetCatalog] = None
 
         if install_signal_handlers:
             self.registerSignalHandlers()
 
         LOGGER.info("JobSeeker job=%s environment=%s instance_id=%s", self.job, self.environment, self.instance_id)
+
+    @property
+    def data_assets(self) -> DataAssetCatalog:
+        if self._data_asset_catalog is None:
+            self._data_asset_catalog = DataAssetCatalog(environment=self.environment, job=self.job)
+        return self._data_asset_catalog
+
+    def asset(
+        self,
+        key: str,
+        mode: str = "input",
+        required: bool = True,
+        environment: Optional[str] = None,
+        job: Optional[str] = None,
+    ) -> Optional[DataAsset]:
+        """Resolve a named Data Asset for this job's runtime scope."""
+
+        return self.data_assets.resolve(
+            key,
+            mode=mode,
+            required=required,
+            environment=environment,
+            job=job,
+        )
+
+    dataset = asset
 
     def _base_payload(self, instance_id: Optional[str] = None) -> Dict[str, Any]:
         return {
@@ -736,6 +1088,18 @@ class TmfTask:
     ) -> Any:
         return self.client.get_context(key, default=default, cast=cast, required=required, project=project)
 
+    def asset(
+        self,
+        key: str,
+        mode: str = "input",
+        required: bool = True,
+        environment: Optional[str] = None,
+        job: Optional[str] = None,
+    ) -> Optional[DataAsset]:
+        return self.client.asset(key, mode=mode, required=required, environment=environment, job=job)
+
+    dataset = asset
+
     def progress(
         self,
         processed: Optional[int] = None,
@@ -848,9 +1212,55 @@ def get_context(
         return seeker.get_context(key, default=default, cast=cast, required=required, project=project)
 
 
+def get_asset(
+    key: str,
+    mode: str = "input",
+    required: bool = True,
+    environment: Optional[str] = None,
+    job: Optional[str] = None,
+    repository_root: Optional[str] = None,
+    manifest_path: Optional[str] = None,
+) -> Optional[DataAsset]:
+    catalog = DataAssetCatalog(
+        environment=environment,
+        job=job,
+        repository_root=repository_root,
+        manifest_path=manifest_path,
+    )
+    return catalog.resolve(key, mode=mode, required=required)
+
+
+def asset_cli() -> None:
+    """Resolve an asset path for shell jobs: jobseeker-asset ASSET_KEY."""
+
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Resolve a JobSeeker Data Asset runtime path.")
+    parser.add_argument("key", help="Published Data Asset key")
+    parser.add_argument("--mode", choices=("input", "output", "any"), default="input")
+    parser.add_argument("--environment", default=None)
+    parser.add_argument("--job", default=None)
+    parser.add_argument("--metadata", action="store_true", help="Print the resolved contract as JSON")
+    arguments = parser.parse_args()
+    try:
+        asset = get_asset(
+            arguments.key,
+            mode=arguments.mode,
+            environment=arguments.environment,
+            job=arguments.job,
+        )
+        if asset is None:
+            raise JobSeekerError("Data asset was not found: %s" % arguments.key)
+        print(json.dumps(asset.metadata, indent=2, sort_keys=True) if arguments.metadata else asset.path)
+    except JobSeekerError as error:
+        parser.exit(2, "jobseeker-asset: %s\n" % error)
+
+
 __all__ = [
     "ApiConfig",
     "ApiTransport",
+    "DataAsset",
+    "DataAssetCatalog",
     "DatabaseConfig",
     "JobSeeker",
     "JobSeekerDependencyError",
@@ -859,6 +1269,7 @@ __all__ = [
     "TmfTask",
     "TmfTransport",
     "client",
+    "get_asset",
     "get_context",
     "jobSeeker",
     "task",

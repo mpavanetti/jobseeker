@@ -175,6 +175,44 @@ CREATE TABLE IF NOT EXISTS `job_output` (
 /*!40000 ALTER TABLE `job_output` DISABLE KEYS */;
 /*!40000 ALTER TABLE `job_output` ENABLE KEYS */;
 
+-- Unified runtime-neutral input/output datasets and file contracts.
+CREATE TABLE IF NOT EXISTS `data_assets` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `asset_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `direction` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'input',
+  `format` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'csv',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT '*',
+  `storage_path` varchar(1000) COLLATE utf8_unicode_ci NOT NULL,
+  `file_name` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `options_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_required` tinyint(1) NOT NULL DEFAULT 1,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `version` int(11) NOT NULL DEFAULT 0,
+  `file_size` bigint(20) unsigned DEFAULT NULL,
+  `checksum` char(64) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `uploaded_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `legacy_source` varchar(30) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `legacy_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `data_assets_scope` (`asset_key`,`environment`,`job_name`),
+  UNIQUE KEY `data_assets_legacy` (`legacy_source`,`legacy_id`),
+  KEY `data_assets_environment` (`environment`),
+  KEY `data_assets_direction` (`direction`),
+  KEY `data_assets_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `data_asset_migrations` (
+  `migration_key` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `applied_at` datetime NOT NULL,
+  PRIMARY KEY (`migration_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Copiando estrutura para tabela jobseeker.projectdetails
 CREATE TABLE IF NOT EXISTS `projectdetails` (
   `Id` int(11) NOT NULL AUTO_INCREMENT,

@@ -98,6 +98,12 @@ $route['setup/testJenkinsApi'] = "Setup/testJenkinsApi";
 
 #Input and Output Settings
 
+$route['data-assets'] = "DataAssets/index";
+$route['data-assets/save'] = "DataAssets/save";
+$route['data-assets/delete'] = "DataAssets/delete";
+$route['data-assets/download/(:num)'] = "DataAssets/download/$1";
+$route['data-assets/preview/(:num)'] = "DataAssets/preview/$1";
+$route['data-assets/catalog'] = "DataAssets/catalog";
 $route['deleteJobInput'] = "JobsTable/delete";
 $route['addNewJob'] = "JobsTable/addNewJob";
 $route['addNewJobInsert'] = "JobsTable/addNewJobInsert";

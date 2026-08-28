@@ -4,12 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobseeker-runtime"
-version = "0.1.0"
-description = "JobSeeker Python SDK for TMF logging and context lookup"
+version = "0.2.0"
+description = "JobSeeker Python SDK for TMF, context lookup, and runtime data assets"
 requires-python = ">=3.8"
 dependencies = [
     "mysql-connector-python>=9.4.0",
 ]
+
+[project.scripts]
+jobseeker-asset = "jobseeker:asset_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

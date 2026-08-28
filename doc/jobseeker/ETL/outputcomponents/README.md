@@ -1,5 +1,6 @@
-## Output Components
-This area has the idea of having a way to output files from your ETL process dynamically, so that you can specify your file location or folder location and the environment and call it your etl job by reading the database table. this was most designed for Talend users but can also be used by python etl jobs.
+## Output Components (legacy)
+
+Output Components has been folded into [Data Assets](../data-assets). Register an asset with the **Output** role to give jobs a governed, environment-aware write destination, or use **Input + output** for a handoff consumed by downstream jobs.
 
 ### Table
 This table contain your output file registries.

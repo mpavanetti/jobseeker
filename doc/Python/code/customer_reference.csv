@@ -1,0 +1,5 @@
+customer_id,name,country,active
+1001,Ada Lovelace,UK,true
+1002,Grace Hopper,US,true
+1003,Linus Torvalds,FI,false
+1004,Margaret Hamilton,US,true
