@@ -24,6 +24,12 @@ const dockerLog = [
   'python -u "$JOBSEEKER_ENTRYPOINT" "$@" sh UAT',
   'Processing row 1/2',
   'Processing row 2/2',
+  '[JobSeeker] Cleanup',
+  '+ docker run --rm --user 0 --entrypoint cat -v jobseeker-email-sample-1:/jobseeker-email:ro sample /jobseeker-email/jobseeker-email-metrics.properties',
+  '+ rm -f /var/jenkins_home/workspace/sample/jobseeker-email-metrics.properties.tmp',
+  '+ docker run --rm --user 0 --entrypoint sh -v jobseeker-assets-sample-1:/jobseeker-repository sample -c rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets',
+  '+ tar -C /php/repository -xf -',
+  '+ [ 0 -ne 0 ]',
   '+ jobseeker_python_docker_cleanup',
   '+ docker image rm sample',
   'Finished: SUCCESS'
@@ -41,6 +47,8 @@ assert.deepStrictEqual(parsed.sections.map((section) => section.kind), [
   'result'
 ]);
 assert(parsed.sections.find((section) => section.kind === 'python').text.includes('Processing row 2/2'));
+assert(!parsed.sections.find((section) => section.kind === 'python').text.includes('jobseeker-email-metrics.properties'));
+assert(parsed.sections.find((section) => section.kind === 'cleanup').text.includes('data-assets/manifest.json'));
 assert(parsed.sections.find((section) => section.kind === 'python-tests').text.includes('1 passed'));
 assert(parsed.sections.find((section) => section.kind === 'docker-runtime').text.includes('pip install'));
 assert.strictEqual(parsed.sections.find((section) => section.kind === 'result').hasError, false);
@@ -110,5 +118,19 @@ assert(emailSection.text.includes('From: JobSeeker <jobseeker@local.test>'));
 assert(emailSection.text.includes('To: operator@example.com'));
 assert(emailSection.text.includes('Subject: [ABORTED] sample #42'));
 assert(!abortedEmail.sections.find((section) => section.kind === 'python').text.includes('Sending email'));
+
+const legacyDockerCleanup = consoleGroups.parse([
+  '[JobSeeker] Python execution',
+  'python -u "$JOBSEEKER_ENTRYPOINT" "$@" sh DEV',
+  'Completed',
+  '+ docker run --rm --user 0 --entrypoint cat -v jobseeker-email-2-1:/jobseeker-email:ro jobseeker-python-custom:2-1 /jobseeker-email/jobseeker-email-metrics.properties',
+  '+ rm -f /var/jenkins_home/workspace/2/jobseeker-email-metrics.properties.tmp',
+  '+ docker run --rm --user 0 --entrypoint sh -v jobseeker-assets-2-1:/jobseeker-repository jobseeker-python-custom:2-1 -c rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets',
+  '+ tar -C /php/repository -xf -',
+  '+ [ 0 -ne 0 ]',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.deepStrictEqual(legacyDockerCleanup.sections.map((section) => section.kind), ['python', 'cleanup', 'result']);
+assert(legacyDockerCleanup.sections.find((section) => section.kind === 'cleanup').text.includes('[ 0 -ne 0 ]'));
 
 console.log('Job console grouping tests passed.');

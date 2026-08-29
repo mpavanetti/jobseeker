@@ -179,6 +179,43 @@
     margin-top: 5px;
   }
 
+  .data-assets-runtime-alert {
+    align-items: flex-start;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+  }
+
+  .data-assets-runtime-alert > .fa {
+    margin-top: 2px;
+  }
+
+  .data-assets-runtime-copy {
+    flex: 1 1 auto;
+    line-height: 1.45;
+    min-width: 0;
+  }
+
+  .data-assets-runtime-copy strong {
+    display: block;
+  }
+
+  .data-assets-runtime-link {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767px) {
+    .data-assets-runtime-alert {
+      flex-wrap: wrap;
+    }
+
+    .data-assets-runtime-link {
+      margin-left: 24px;
+    }
+  }
+
   .job-option-state {
     position: absolute;
     right: 10px;
@@ -1912,7 +1949,7 @@
       <!-- input fields -->
         <div class="box-body" style="padding-top: 15px;">
           <div class="form-group">
-            <label for="exampleInputEmail1">Job Name</label>
+            <label for="job_name">Job Name</label>
             <input type="text" name ="job_name" class="form-control" id="job_name" maxlength="50" placeholder="Auto-generated if empty" onkeypress="return event.charCode != 32">
             <p class="help-block">Primary job name. Leave empty to generate one.</p>
           </div>
@@ -2142,11 +2179,13 @@
                   <h3 class="box-title">
                     <b id="linuxExecutionPanelTitle">Execution</b></h3>
                   </div><div class="box-body">
-                    <div class="alert alert-info" style="padding:10px 12px; margin-bottom:14px;">
+                    <div class="alert alert-info data-assets-runtime-alert">
                       <i class="fa fa-cubes"></i>
-                      <strong>Data Assets are available in every Linux runtime.</strong>
-                      Python can use <code>js.asset(&quot;asset-key&quot;)</code>; shell and ETL jobs receive the repository and manifest environment variables. Match the selected environment, and use a Shared asset unless the contract is intentionally job-specific.
-                      <a class="alert-link pull-right" href="<?php echo base_url(); ?>data-assets" target="_blank">Manage Data Assets <i class="fa fa-external-link"></i></a>
+                      <div class="data-assets-runtime-copy">
+                        <strong id="dataAssetsRuntimeTitle">Data Assets for Linux Shell</strong>
+                        <span id="dataAssetsRuntimeMessage">Resolve a published path with <code>jobseeker-asset asset-key</code>; use <code>$JOBSEEKER_DATA_ASSETS_MANIFEST</code> when the shell script needs the full contract.</span>
+                      </div>
+                      <a class="alert-link data-assets-runtime-link" href="<?php echo base_url(); ?>data-assets" target="_blank" rel="noopener">Manage Data Assets <i class="fa fa-external-link"></i></a>
                     </div>
                     <div class="linux-execution-section linux-shell-options" style="display: none;">
                       <div class="linux-execution-section-header">
@@ -2338,7 +2377,7 @@
                                 <div class="python-lint-panel" id="pythonInlineLintPanel" aria-live="polite"></div>
                                 <div class="python-preview-panel" id="pythonInlinePreviewPanel" aria-live="polite"></div>
                                 <div class="python-external-sync-status" id="pythonExternalSyncStatus" aria-live="polite"></div>
-                                <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
+                                <div class="linux-code-editor-status"><span>Python</span><span id="pythonInlineCursorPosition">Ln 1, Col 1</span><span>Spaces: 4</span><span>UTF-8</span><span>LF</span></div>
                               </div>
                               </div>
                               <div class="python-inline-editor-panel" data-python-inline-pane="requirements">
@@ -2394,7 +2433,7 @@
                                     </div>
                                   </div>
                                   <div class="python-lint-panel" id="pythonInlineExtraLintPanel" aria-live="polite"></div>
-                                  <div class="linux-code-editor-status"><span>Python</span><span>UTF-8</span><span>LF</span></div>
+                                  <div class="linux-code-editor-status"><span>Python</span><span id="pythonInlineExtraCursorPosition">Ln 1, Col 1</span><span>Spaces: 4</span><span>UTF-8</span><span>LF</span></div>
                                 </div>
                               </div>
                             </div>
@@ -2699,7 +2738,7 @@
                         </div>
                         <div class="col-md-6 timeoutSeconds">
                           <div class="form-group">
-                            <label for="timeoutMinutes">Timeout Seconds</label>
+                            <label for="timeoutSeconds">Timeout Seconds</label>
                             <input type="number" class="form-control" id="timeoutSeconds" name="timeoutSeconds" min="60" maxlength="50" autocomplete="off">
                           </div>
                         </div>
@@ -2726,7 +2765,7 @@
                <div id="runJob" style="display: none;">
                 <div class="col-lg-6 col-md-6 col-xs-12">
                   <div class="box box-primary">
-                    <div id="overlay" class="overlay" style="display: none;">
+                    <div class="overlay" style="display: none;">
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
                     <div class="box-header with-border">
@@ -2805,7 +2844,7 @@
                <div id="editableEmail" style="display: none;">
                 <div class="col-lg-6 col-md-6 col-xs-12">
                   <div class="box box-primary">
-                    <div id="overlay" class="overlay" style="display: none;">
+                    <div class="overlay" style="display: none;">
                       <i class="fa fa-refresh fa-spin"></i>
                     </div>
                     <div class="box-header with-border">
@@ -3059,6 +3098,13 @@
           return false;
         }
 
+        // Keep the browser draft and the Jenkins job on the same generated
+        // name. If generation is deferred to the server, the cached record
+        // still has an empty name and cannot be reconciled after the redirect.
+        if ($.trim($('#job_name').val()) === '' && $.trim($('#job_names').val()) === '') {
+          ensureJobName();
+        }
+
         syncAllDraftEnvironments($('#environment').val() || '0');
         syncPythonInlineFilesInput();
         persistJobDraftCache();
@@ -3080,7 +3126,9 @@
       });
 
       $('#pythonInlineCode, #pythonInlineExtraCode').on('keydown', function(event) {
-        handleCodeEditorTab(event, this);
+        handlePythonCodeEditorKey(event, this);
+      }).on('click keyup select', function() {
+        updatePythonCursorPosition(this);
       });
 
       $('#pythonRequirementsText').on('input change scroll', function() {
@@ -4199,6 +4247,87 @@
         $(textarea).trigger('input');
       }
 
+      function setEditorSelection(textarea, start, end, direction, contentChanged) {
+        textarea.focus();
+        textarea.setSelectionRange(start, end, direction || 'none');
+        if (contentChanged) {
+          $(textarea).trigger('input');
+        }
+        updatePythonCursorPosition(textarea);
+      }
+
+      function updatePythonCursorPosition(textarea) {
+        if (! textarea) {
+          return;
+        }
+
+        var cursor = textarea.selectionStart || 0;
+        var before = textarea.value.substring(0, cursor);
+        var line = before.split('\n').length;
+        var lineStart = before.lastIndexOf('\n') + 1;
+        var column = cursor - lineStart + 1;
+        var selector = textarea.id === 'pythonInlineExtraCode' ? '#pythonInlineExtraCursorPosition' : '#pythonInlineCursorPosition';
+        $(selector).text('Ln ' + line + ', Col ' + column);
+      }
+
+      function handlePythonCodeEditorKey(event, textarea) {
+        if (! event || ! textarea) {
+          return;
+        }
+
+        if (event.key === 'Tab') {
+          handleCodeEditorTab(event, textarea);
+          return;
+        }
+
+        var value = textarea.value || '';
+        var start = textarea.selectionStart || 0;
+        var end = textarea.selectionEnd || start;
+        var lineStart = value.lastIndexOf('\n', start - 1) + 1;
+        var lineEnd = value.indexOf('\n', start);
+        lineEnd = lineEnd === -1 ? value.length : lineEnd;
+
+        if (event.key === 'Home' && ! event.ctrlKey && ! event.metaKey) {
+          event.preventDefault();
+          var firstContent = lineStart + ((value.substring(lineStart, lineEnd).match(/^[ \t]*/) || [''])[0].length);
+          var homeTarget = start === firstContent ? lineStart : firstContent;
+          var homeAnchor = event.shiftKey ? end : homeTarget;
+          setEditorSelection(textarea, Math.min(homeAnchor, homeTarget), Math.max(homeAnchor, homeTarget), homeAnchor > homeTarget ? 'backward' : 'forward');
+          return;
+        }
+
+        if (event.key === 'End' && ! event.ctrlKey && ! event.metaKey) {
+          event.preventDefault();
+          var endAnchor = event.shiftKey ? start : lineEnd;
+          setEditorSelection(textarea, Math.min(endAnchor, lineEnd), Math.max(endAnchor, lineEnd), endAnchor > lineEnd ? 'backward' : 'forward');
+          return;
+        }
+
+        if (event.key !== 'Enter' || event.ctrlKey || event.metaKey || event.altKey) {
+          return;
+        }
+
+        event.preventDefault();
+        var currentLine = value.substring(lineStart, start);
+        var leadingWhitespace = (currentLine.match(/^[ \t]*/) || [''])[0].replace(/\t/g, '    ');
+        var trimmedBeforeCursor = currentLine.replace(/[ \t]+$/, '');
+        var indent = leadingWhitespace + (/(:|\{|\[|\()$/.test(trimmedBeforeCursor) ? '    ' : '');
+        var beforeCharacter = value.charAt(start - 1);
+        var afterCharacter = value.charAt(end);
+        var matchingPair = (beforeCharacter === '(' && afterCharacter === ')') ||
+          (beforeCharacter === '[' && afterCharacter === ']') ||
+          (beforeCharacter === '{' && afterCharacter === '}');
+        var replacement = '\n' + indent;
+        var cursorPosition = start + replacement.length;
+
+        if (matchingPair) {
+          replacement += '\n' + leadingWhitespace;
+        }
+
+        textarea.value = value.substring(0, start) + replacement + value.substring(end);
+        setEditorSelection(textarea, cursorPosition, cursorPosition, 'none', true);
+      }
+
       function updatePythonInlineEditor() {
         var editor = $('#pythonInlineCode');
         var lineNumbers = $('#pythonInlineCodeNumbers');
@@ -4221,6 +4350,7 @@
         renderPythonSyntaxHighlight(editor, $('#pythonInlineCodeHighlight'));
         renderPythonLintPanel($('#pythonInlineLintPanel'), lintPythonInlineCode(value));
         $('#pythonInlineEditorFile, #pythonInlineEditorActiveFile').text($.trim($('#pythonEntryPoint').val()) || 'main.py');
+        updatePythonCursorPosition(editor.get(0));
       }
 
       function updatePythonRequirementsEditor() {
@@ -4700,6 +4830,74 @@
         return response.vscodeUrl || '';
       }
 
+      function showPythonExternalWaitingWindow(webWindow) {
+        if (! webWindow || webWindow.closed) {
+          return;
+        }
+
+        try {
+          webWindow.document.title = 'Starting OpenVSCode';
+          webWindow.document.body.style.cssText = 'font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#ecf0f5;color:#333;padding:40px;';
+          webWindow.document.body.innerHTML = '<div style="max-width:520px;margin:10vh auto;background:#fff;border-top:3px solid #3c8dbc;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.15)"><h2 style="margin:0 0 12px;font-size:20px"><span style="color:#3c8dbc">&#8635;</span> Starting OpenVSCode</h2><p>JobSeeker started the editor container. This page will open your workspace as soon as the environment is healthy.</p><p style="color:#777">This normally takes a few seconds.</p></div>';
+        } catch (error) {
+          // Popup policies can prevent styling the temporary tab.
+        }
+      }
+
+      function launchPythonExternalWindow(response, webWindow, requestDraftStillActive) {
+        var launchUrl = pythonExternalLaunchUrl(response);
+        if (! launchUrl) {
+          if (webWindow) {
+            webWindow.close();
+          }
+          setPythonExternalSyncStatus('OpenVSCode Server URL was not returned.', 'error');
+          toastr.error('OpenVSCode Server URL was not returned.', 'Inline Python');
+          return;
+        }
+
+        if (webWindow && ! webWindow.closed) {
+          webWindow.location.href = launchUrl;
+        } else {
+          window.open(launchUrl, '_blank');
+        }
+        if (requestDraftStillActive) {
+          setPythonExternalSyncStatus('OpenVSCode Server opened for ' + (response.openVsCodePath || response.externalEditorPath || currentPythonInlineJobName()) + '.', 'ready');
+        }
+        var idleMinutes = Number(response.openVsCodeIdleShutdownMinutes) || 0;
+        var idleMessage = idleMinutes > 0 ? ' It will stop automatically after ' + idleMinutes + ' minutes without a connected editor.' : '';
+        toastr.info('Opening VS Code Web.' + idleMessage, 'Inline Python');
+      }
+
+      function waitForPythonExternalReady(response, webWindow, requestDraftStillActive, attempt) {
+        attempt = attempt || 0;
+        if (attempt >= 30) {
+          if (webWindow) {
+            webWindow.close();
+          }
+          setPythonExternalSyncStatus('OpenVSCode did not become ready within 45 seconds. Check Docker Monitoring and try again.', 'error');
+          toastr.error('OpenVSCode startup timed out. Check Docker Monitoring.', 'Inline Python');
+          return;
+        }
+
+        window.setTimeout(function() {
+          $.ajax({
+            type: 'GET',
+            url: '<?php echo base_url(); ?>jobCreation/inlinePythonExternalStatus',
+            dataType: 'json',
+            cache: false
+          }).done(function(status) {
+            if (status && status.ready) {
+              launchPythonExternalWindow(response, webWindow, requestDraftStillActive);
+              return;
+            }
+            setPythonExternalSyncStatus('OpenVSCode is starting (' + (attempt + 1) + '/30). Your workspace will open automatically...', '');
+            waitForPythonExternalReady(response, webWindow, requestDraftStillActive, attempt + 1);
+          }).fail(function() {
+            waitForPythonExternalReady(response, webWindow, requestDraftStillActive, attempt + 1);
+          });
+        }, 1500);
+      }
+
       function openPythonInlineInVscode() {
 
         if (! pythonInlineVscodeAvailable()) {
@@ -4719,6 +4917,7 @@
         var requestJobName = payload.job_name;
         var requestEntryPoint = payload.entry_point;
         var webWindow = window.open('about:blank', '_blank');
+        showPythonExternalWaitingWindow(webWindow);
         payload.editor_mode = 'web';
         button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
         setPythonExternalSyncStatus('Preparing inline Python workspace...', '');
@@ -4742,23 +4941,12 @@
             applyPythonExternalSnapshot(response);
             startPythonExternalSync(response);
           }
-          var launchUrl = pythonExternalLaunchUrl(response);
-          if (launchUrl) {
-            if (webWindow) {
-              webWindow.location.href = launchUrl;
-            } else {
-              window.open(launchUrl, '_blank');
-            }
-            if (requestDraftStillActive) {
-              setPythonExternalSyncStatus('OpenVSCode Server opened for ' + (response.openVsCodePath || response.externalEditorPath || requestJobName) + '.', 'ready');
-            }
-            toastr.info('Opening VS Code Web.', 'Inline Python');
+          if (response.openVsCodeReady === false) {
+            setPythonExternalSyncStatus(response.message || 'OpenVSCode is starting. Your workspace will open automatically...', '');
+            toastr.info('OpenVSCode is starting. The workspace will open when it is ready.', 'Inline Python');
+            waitForPythonExternalReady(response, webWindow, requestDraftStillActive, 0);
           } else {
-            if (webWindow) {
-              webWindow.close();
-            }
-            setPythonExternalSyncStatus('OpenVSCode Server URL was not returned.', 'error');
-            toastr.error('OpenVSCode Server URL was not returned.', 'Inline Python');
+            launchPythonExternalWindow(response, webWindow, requestDraftStillActive);
           }
         }).fail(function(xhr) {
           if (webWindow) {
@@ -6693,15 +6881,21 @@
 
         if (mode == 'python') {
           $('#linuxExecutionPanelTitle').text('Python');
+          $('#dataAssetsRuntimeTitle').text('Data Assets for Python');
+          $('#dataAssetsRuntimeMessage').html('Resolve an input with <code>tmf.asset(&quot;asset-key&quot;)</code> or <code>js.asset(&quot;asset-key&quot;)</code>, then use <code>read()</code>, <code>read_dataframe()</code>, or pass the asset directly to libraries such as pandas.');
           var pythonChoice = strategy == 'python_inline' ? 'inline' : ($('#pythonSourceMode').val() || 'upload');
           $('.linux-python-options').show();
           $('.linux-execution-choice[data-linux-python-choice="' + pythonChoice + '"]').addClass('active');
         } else if (mode == 'etl') {
           $('#linuxExecutionPanelTitle').text('ETL Tools');
+          $('#dataAssetsRuntimeTitle').text('Data Assets for ETL Packages');
+          $('#dataAssetsRuntimeMessage').html('Published files are mounted at stable repository paths. Use <code>$JOBSEEKER_DATA_ASSETS_MANIFEST</code> to resolve the selected environment and job scope from Talend or another ETL runtime.');
           $('.linux-etl-options').show();
           $('.linux-execution-choice[data-linux-etl-choice="' + scriptType + '"]').addClass('active');
         } else {
           $('#linuxExecutionPanelTitle').text('Linux Shell');
+          $('#dataAssetsRuntimeTitle').text('Data Assets for Linux Shell');
+          $('#dataAssetsRuntimeMessage').html('Resolve a published path with <code>jobseeker-asset asset-key</code>; use <code>$JOBSEEKER_DATA_ASSETS_MANIFEST</code> when the shell script needs the full contract.');
           var shellChoice = strategy == 'script' ? 'bash' : 'command';
           $('.linux-shell-options').show();
           $('.linux-execution-choice[data-linux-shell-choice="' + shellChoice + '"]').addClass('active');

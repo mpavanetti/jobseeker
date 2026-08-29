@@ -33,7 +33,16 @@ if (class_exists('CI_Model')) {
 $jobseekerGlobalEnvironmentOptions = array_values(array_unique($jobseekerGlobalEnvironmentOptions));
 sort($jobseekerGlobalEnvironmentOptions);
 $jobseekerGlobalEnvironmentOptionValues = array_values(array_unique(array_map('jobseeker_normalize_global_environment', $jobseekerGlobalEnvironmentOptions)));
+$jobseekerCurrentController = strtolower((string) $this->router->fetch_class());
+$jobseekerCurrentMethod = strtolower((string) $this->router->fetch_method());
+$jobseekerExecutorMonitorActive = $jobseekerCurrentController === 'jobexecution' && $jobseekerCurrentMethod === 'executors';
+$jobseekerDockerMonitorActive = $jobseekerCurrentController === 'dockermonitoring';
+$jobseekerTransactionMonitorActive = $jobseekerCurrentController === 'tmf';
+$jobseekerMonitoringActive = $jobseekerExecutorMonitorActive || $jobseekerDockerMonitorActive;
 $jobseekerSelectedEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE);
+if (trim((string) $jobseekerSelectedEnvironment) === '') {
+  $jobseekerSelectedEnvironment = $this->input->cookie('jobseeker_global_environment', TRUE);
+}
 $jobseekerSelectedEnvironment = trim((string) $jobseekerSelectedEnvironment);
 if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*' || strtolower($jobseekerSelectedEnvironment) === 'all') {
   $jobseekerSelectedEnvironment = 'all';
@@ -85,7 +94,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=3" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=4" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
   window.jobseekerUserId = <?php echo json_encode(isset($user_id) ? $user_id : ''); ?>;
@@ -185,8 +194,9 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       try {
         window.localStorage.setItem(storageKey, value || 'all');
       } catch (error) {
-        return;
+        // The non-sensitive environment cookie still keeps server-rendered pages aligned.
       }
+      document.cookie = 'jobseeker_global_environment=' + encodeURIComponent(value || 'all') + '; path=/; max-age=31536000; SameSite=Lax' + (window.location.protocol === 'https:' ? '; Secure' : '');
     }
 
     function normalize(value) {
@@ -1106,9 +1116,9 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               <?php }  ?>
             </ul>
           </li>
-          <li>
+          <li<?php echo $jobseekerTransactionMonitorActive ? ' class="active"' : ''; ?>>
             <a href="<?php echo base_url(); ?>Tmf">
-              <i class="fa fa-desktop"></i> <span>Transaction Monitoring</span></i>
+              <i class="fa fa-desktop"></i> <span>Transaction Monitoring</span>
             </a>
           </li>
           <li class="treeview">
@@ -1128,7 +1138,13 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               <li>
                 <a href="<?php echo base_url(); ?>dbSettings" >
                   <i class="fa fa-database"></i>
-                  <span>Database Settings</span>
+                  <span>Connectors</span>
+                </a>
+              </li>
+              <li>
+                <a href="<?php echo base_url(); ?>pipelines" >
+                  <i class="fa fa-sitemap"></i>
+                  <span>Pipelines</span>
                 </a>
               </li>
             <!-- <li>
@@ -1168,7 +1184,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
             <li><a href="<?php echo base_url(); ?>Context/projectDetails"><i class="fa fa-table"></i><span>Project Details</span></a></li>
             <li><a href="<?php echo base_url(); ?>Context/environment"><i class="fa fa-globe"></i><span>Environment Details</span></a></li>
             <li><a href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-sliders"></i><span>Context Details</span></a></li>
-            <li><a href="<?php echo base_url(); ?>Context/promotion"><i class="fa fa-level-up"></i><span>Environment Promotion</span></a></li>
+            <li><a href="<?php echo base_url(); ?>Context/promotion"><i class="fa fa-level-up"></i><span>Environment Deployment</span></a></li>
           </ul>
         </li>
         <?php  if ($jenkins_enabled == true) { 
@@ -1202,12 +1218,6 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                   </a>
                 </li>
                 <li>
-                  <a href="<?php echo base_url(); ?>jobExecution/executors" >
-                    <i class="fa fa-tachometer"></i>
-                    <span>Executor Monitor</span>
-                  </a>
-                </li>
-                <li>
                   <a href="<?php echo base_url(); ?>jobView" >
                     <i class="fa fa-eye"></i>
                     <span>View Job</span>
@@ -1228,6 +1238,30 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </ul>
             </li>
           <?php } } ?>
+          <?php if($role == ROLE_ADMIN || $role == ROLE_MANAGER) { ?>
+          <li class="treeview<?php echo $jobseekerMonitoringActive ? ' active' : ''; ?>">
+            <a href="#">
+              <i class="fa fa-heartbeat"></i> <span>Infrastructure Monitoring</span>
+              <span class="pull-right-container">
+                <i class="fa fa-angle-left pull-right"></i>
+              </span>
+            </a>
+            <ul class="treeview-menu">
+              <?php if($jenkins_enabled == true) { ?>
+              <li<?php echo $jobseekerExecutorMonitorActive ? ' class="active"' : ''; ?>>
+                <a href="<?php echo base_url(); ?>jobExecution/executors">
+                  <i class="fa fa-tachometer"></i> <span>Executor Monitor</span>
+                </a>
+              </li>
+              <?php } ?>
+              <li<?php echo $jobseekerDockerMonitorActive ? ' class="active"' : ''; ?>>
+                <a href="<?php echo base_url(); ?>docker-monitoring">
+                  <i class="fa fa-cubes"></i> <span>Docker Monitor</span>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <?php } ?>
           <?php
           if($role == ROLE_ADMIN)
           {

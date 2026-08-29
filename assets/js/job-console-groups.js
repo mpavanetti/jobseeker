@@ -41,7 +41,7 @@
   }
 
   function isCleanup(line) {
-    return /jobseeker_python_(?:docker_)?cleanup|rm -rf .*jobseeker-python-docker-context|docker image rm\b/i.test(line);
+    return /jobseeker_python_(?:docker_)?cleanup|rm -rf .*jobseeker-python-docker-context|docker image rm\b|docker run .*jobseeker-email.*jobseeker-email-metrics\.properties|rm -f .*jobseeker-email-metrics\.properties\.tmp|docker run .*jobseeker-assets.*data-assets\/manifest\.json/i.test(line);
   }
 
   function isPythonCommand(line) {
@@ -59,6 +59,10 @@
 
     if (/^\[JobSeeker\]\s+Python execution\s*$/i.test(line)) {
       return 'python';
+    }
+
+    if (/^\[JobSeeker\]\s+Cleanup\s*$/i.test(line)) {
+      return 'cleanup';
     }
 
     return '';
