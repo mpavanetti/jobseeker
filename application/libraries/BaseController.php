@@ -181,6 +181,24 @@ class BaseController extends CI_Controller {
 		return isset($aliases[$value]) ? $aliases[$value] : $value;
 	}
 
+	/**
+	 * Browser preferences must not leak between users sharing a browser. Keep
+	 * the user identifier in the cookie name so server-rendered views resolve
+	 * the same environment as the user-scoped localStorage key.
+	 */
+	protected function jobSeekerUserPreferenceCookieName($preference) {
+		$userId = preg_replace('/[^0-9]/', '', (string) $this->vendorId);
+		if ($userId === '') {
+			$userId = 'anonymous';
+		}
+
+		return 'jobseeker_'.preg_replace('/[^a-z0-9_]/', '_', strtolower((string) $preference)).'_user_'.$userId;
+	}
+
+	protected function jobSeekerEnvironmentPreference() {
+		return trim((string) $this->input->cookie($this->jobSeekerUserPreferenceCookieName('global_environment'), TRUE));
+	}
+
 	protected function checkJenkinsEnvironmentSlots($jobName, $environment) {
 		$environment = $this->normalizeJobSeekerEnvironment($environment);
 
@@ -1169,7 +1187,7 @@ class BaseController extends CI_Controller {
 		return $environment !== '' ? $environment : $this->detectEnvironmentFromJenkinsJobName($jobName);
 	}
 
-	private function jenkinsEnvironmentFromJobConfig($jobName) {
+	protected function jenkinsEnvironmentFromJobConfig($jobName) {
 		$response = $this->requestJenkins('GET', $this->jenkinsEncodedJobPath($jobName).'/config.xml');
 		if ((int) $response['status'] !== 200) {
 			return '';

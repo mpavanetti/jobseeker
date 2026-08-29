@@ -94,7 +94,7 @@ class DbSettings extends BaseController
     {
         $value = trim((string) $this->input->get('environment', TRUE));
         if ($value === '') {
-            $value = trim((string) $this->input->cookie('jobseeker_global_environment', TRUE));
+            $value = $this->jobSeekerEnvironmentPreference();
         }
         $environment = $this->normalizeJobSeekerEnvironment($value);
         if ($environment === '' || $environment === '*' || $environment === 'ALL') {
@@ -365,14 +365,17 @@ class DbSettings extends BaseController
             return;
         }
 
+        $selectedEnvironment = $this->selectedGlobalEnvironment();
         $editId = (int) $this->input->get('edit');
         $editing = $editId > 0 ? $this->model->getSetting($editId) : NULL;
+        if ($editing && $selectedEnvironment !== 'ALL' && ! in_array($this->normalizeJobSeekerEnvironment($editing->environment), array($selectedEnvironment, 'ALL'), TRUE)) {
+            $editing = NULL;
+        }
         if ($editing) {
             $editing->secret_reference_values = json_decode((string) $editing->secret_reference, TRUE) ?: array();
         }
 
         $this->global['pageTitle'] = 'Job Seeker : Connectors';
-        $selectedEnvironment = $this->selectedGlobalEnvironment();
         $data = array(
             'settings' => $this->model->listSettings($selectedEnvironment),
             'editing' => $editing,

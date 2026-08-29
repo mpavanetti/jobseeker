@@ -59,6 +59,9 @@ vm.runInNewContext(fs.readFileSync('assets/js/job-draft-cache.js', 'utf8'), {
 });
 
 const cache = window.JobSeekerDraftCache;
+if (cache.key !== 'jobseeker.jobCreation.drafts.v1.user.7') {
+  throw new Error('Expected the draft cache key to be isolated by authenticated user ID.');
+}
 const drafts = [
   {job_name: 'daily-etl', environment: 'DEV'},
   {job_name: 'report-refresh', environment: 'QA'}
