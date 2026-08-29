@@ -2329,6 +2329,18 @@
                         </div>
                       </div>
                     </div>
+                    <div class="row pythonContainerLimits" style="display: none;">
+                      <div class="col-md-12">
+                        <div class="well well-sm" style="margin-bottom: 12px;">
+                          <div class="row">
+                            <div class="col-sm-4"><div class="form-group" style="margin-bottom: 6px;"><label for="containerCpuLimit"><i class="fa fa-microchip"></i> CPU limit</label><div class="input-group"><input type="number" class="form-control" id="containerCpuLimit" name="containerCpuLimit" min="0.1" max="64" step="0.1" value="1" inputmode="decimal"><span class="input-group-addon">cores</span></div></div></div>
+                            <div class="col-sm-4"><div class="form-group" style="margin-bottom: 6px;"><label for="containerMemoryLimitMb"><i class="fa fa-tasks"></i> Memory limit</label><div class="input-group"><input type="number" class="form-control" id="containerMemoryLimitMb" name="containerMemoryLimitMb" min="64" max="262144" step="64" value="512" inputmode="numeric"><span class="input-group-addon">MB</span></div></div></div>
+                            <div class="col-sm-4"><label>Presets</label><div class="btn-group btn-group-sm btn-group-justified container-limit-presets" role="group" aria-label="Container limit presets"><a href="#" class="btn btn-default" data-cpu="0.5" data-memory="256">Small</a><a href="#" class="btn btn-default" data-cpu="1" data-memory="512">Standard</a><a href="#" class="btn btn-default" data-cpu="2" data-memory="2048">Large</a></div></div>
+                          </div>
+                          <small class="text-muted"><i class="fa fa-shield"></i> Enforced by Docker on the primary job container, including containers launched from Jenkins agents. Memory swap is capped at the same value.</small>
+                        </div>
+                      </div>
+                    </div>
                     <div class="row pythonInlineSourceForm" style="display: none;">
                       <div class="col-md-12">
                         <div class="form-group">
@@ -3245,6 +3257,16 @@
         updateJobCreationReview();
       });
 
+      $('.container-limit-presets a').on('click', function(event) {
+        event.preventDefault();
+        $('#containerCpuLimit').val($(this).data('cpu'));
+        $('#containerMemoryLimitMb').val($(this).data('memory'));
+        updateJobCreationReview();
+        scheduleJobDraftCacheSave(0);
+      });
+
+      $('#containerCpuLimit, #containerMemoryLimitMb').on('input change', updateJobCreationReview);
+
       $('#pythonUseDockerfile').on('change', function() {
         if ($(this).is(':checked')) {
           ensurePythonDockerfileText();
@@ -3298,7 +3320,7 @@
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -3517,10 +3539,6 @@
         $('#jobList, #upstreamJobList').empty();
 
         $.each(availableJobCache, function(index, item) {
-          if (! availableJobMatchesGlobalEnvironment(item)) {
-            return;
-          }
-
           availableNames[item.name] = true;
           ensureSelectOption('#jobList', item.name);
           ensureSelectOption('#upstreamJobList', item.name);
@@ -3878,7 +3896,7 @@
         });
 
         $.each(availableJobCache, function(index, item) {
-          if (draftNames[item.name] != null || ! availableJobMatchesGlobalEnvironment(item) || ! jobFlowNodeMatchesSearch(item.name, query)) {
+          if (draftNames[item.name] != null || ! jobFlowNodeMatchesSearch(item.name, query)) {
             return;
           }
 
@@ -5442,6 +5460,8 @@
         var hasRuntime = linuxExecutionHasRuntime();
         var isDockerRuntime = $('#pythonRuntimeMode').val() == 'docker';
         $('.pythonRuntimeForm').toggle(hasRuntime);
+        $('.pythonContainerLimits').toggle(hasRuntime && isDockerRuntime);
+        $('#containerCpuLimit, #containerMemoryLimitMb').prop('required', hasRuntime && isDockerRuntime);
 
         if (! hasRuntime) {
           return;
@@ -5469,10 +5489,10 @@
           var image = $.trim($('#pythonDockerImage').val()) || dockerImageForLinuxExecution();
           var testSummary = $('#pythonRunTests').is(':checked') ? ' + pytest' : '';
           if (pythonInlineUsesDockerfile()) {
-            return 'Dockerfile from ' + image + testSummary;
+            return 'Dockerfile from ' + image + testSummary + ' / ' + ($('#containerCpuLimit').val() || '1') + ' CPU / ' + ($('#containerMemoryLimitMb').val() || '512') + ' MB';
           }
 
-          return 'Docker image ' + image + testSummary;
+          return 'Docker image ' + image + testSummary + ' / ' + ($('#containerCpuLimit').val() || '1') + ' CPU / ' + ($('#containerMemoryLimitMb').val() || '512') + ' MB';
         }
 
         return linuxExecutionUsesPython() ? 'Jenkins Agent python3' : 'Jenkins Agent shell';
@@ -5701,6 +5721,8 @@
           pythonRuntimeMode: 'local',
           pythonVersion: 'python3',
           pythonDockerImage: '',
+          containerCpuLimit: '1',
+          containerMemoryLimitMb: '512',
           linuxCommandLine: '',
           action: '0',
           tag: '@hourly',
@@ -5810,10 +5832,10 @@
           var image = draft.pythonDockerImage || draftDockerImageDefault(draft);
           var testSummary = draftChecked(draft, 'pythonRunTests') ? ' + pytest' : '';
           if (draft.linuxExecutionStrategy === 'python_inline' && draftChecked(draft, 'pythonUseDockerfile')) {
-            return 'Dockerfile from ' + image + testSummary;
+            return 'Dockerfile from ' + image + testSummary + ' / ' + (draft.containerCpuLimit || '1') + ' CPU / ' + (draft.containerMemoryLimitMb || '512') + ' MB';
           }
 
-          return 'Docker image ' + image + testSummary;
+          return 'Docker image ' + image + testSummary + ' / ' + (draft.containerCpuLimit || '1') + ' CPU / ' + (draft.containerMemoryLimitMb || '512') + ' MB';
         }
 
         return draftUsesPythonRuntime(draft) ? 'Jenkins Agent python3' : 'Jenkins Agent shell';
@@ -7036,7 +7058,6 @@
       var savedJobCreatedAt = <?php echo json_encode($savedJobCreatedAt); ?>;
       var savedJobCreationDates = <?php echo json_encode($savedJobCreationDates); ?> || {};
       var jobCreationDates = <?php echo json_encode($jobCreationDates); ?> || {};
-      var jobCreationAvailableFilterRegistered = false;
 
       $.each(savedJobCreationDates, function(jobName, createdAt) {
         jobCreationDates[jobName] = createdAt;
@@ -7167,23 +7188,6 @@
 
     function availableJobEnvironmentText(row) {
       return environmentHelper.text(availableJobEnvironmentInfo(row));
-    }
-
-    function availableJobMatchesGlobalEnvironment(rowOrItem) {
-      var row = rowOrItem && rowOrItem.row ? rowOrItem.row : rowOrItem;
-      var selectedEnvironment = currentGlobalEnvironmentValue();
-
-      if (selectedEnvironment === 'all') {
-        return true;
-      }
-
-      var environment = normalizeGlobalEnvironment(availableJobEnvironmentText(row));
-
-      if (! isConfiguredGlobalEnvironment(environment)) {
-        return false;
-      }
-
-      return environment === normalizeGlobalEnvironment(selectedEnvironment);
     }
 
     function availableJobsRequestData() {
@@ -7341,6 +7345,8 @@
       $('#pythonRuntimeMode').val('local');
       $('#pythonVersion').val('python3');
       $('#pythonDockerImage').val('');
+      $('#containerCpuLimit').val('1');
+      $('#containerMemoryLimitMb').val('512');
       $('#pythonUseDockerfile').prop('checked', true);
       $('#pythonRunTests').prop('checked', true);
       $('#pythonPyprojectText').val('');
@@ -7548,6 +7554,8 @@
       var pyprojectText = shellExportBase64Value(command, 'JOBSEEKER_PYPROJECT_B64');
       var dockerfileText = shellExportBase64Value(command, 'JOBSEEKER_PYTHON_DOCKERFILE_B64');
       var runTests = shellExportValue(command, 'JOBSEEKER_RUN_PYTEST');
+      var containerCpuLimit = shellExportValue(command, 'JOBSEEKER_CONTAINER_CPUS');
+      var containerMemoryLimitMb = shellExportValue(command, 'JOBSEEKER_CONTAINER_MEMORY_MB');
       var isDockerRuntime = runtimeMode == 'docker';
 
       setSelectValue('#pythonRuntimeMode', isDockerRuntime ? 'docker' : 'local');
@@ -7557,6 +7565,8 @@
         dockerImage = dockerImageForPythonVersion(pythonExecutable);
       }
       setSelectValue('#pythonVersion', 'python3');
+      $('#containerCpuLimit').val(containerCpuLimit || '1');
+      $('#containerMemoryLimitMb').val(containerMemoryLimitMb || '512');
 
       if (dockerImage !== '') {
         $('#pythonDockerImage').val(dockerImage);
@@ -7591,9 +7601,13 @@
     function hydrateLinuxRuntime(command) {
       var runtimeMode = shellExportValue(command, 'JOBSEEKER_LINUX_RUNTIME');
       var dockerImage = shellExportValue(command, 'JOBSEEKER_DOCKER_IMAGE');
+      var containerCpuLimit = shellExportValue(command, 'JOBSEEKER_CONTAINER_CPUS');
+      var containerMemoryLimitMb = shellExportValue(command, 'JOBSEEKER_CONTAINER_MEMORY_MB');
 
       setSelectValue('#pythonRuntimeMode', runtimeMode == 'docker' ? 'docker' : 'local');
       $('#pythonVersion').val('python3');
+      $('#containerCpuLimit').val(containerCpuLimit || '1');
+      $('#containerMemoryLimitMb').val(containerMemoryLimitMb || '512');
 
       if (dockerImage !== '') {
         $('#pythonDockerImage').val(dockerImage);
@@ -8240,23 +8254,6 @@ $('#abort').click(function(){
     }
   }
 
-  function ensureAvailableJobFilterRegistered() {
-    if (jobCreationAvailableFilterRegistered || ! $.fn.DataTable) {
-      return;
-    }
-
-    $.fn.DataTable.ext.search.push(function(settings, data, dataIndex, rowData) {
-      if (! settings || ! settings.nTable || settings.nTable.id !== 'myTable') {
-        return true;
-      }
-
-      var row = rowData || (settings.aoData && settings.aoData[dataIndex] ? settings.aoData[dataIndex]._aData : null);
-      return availableJobMatchesGlobalEnvironment(row || {});
-    });
-
-    jobCreationAvailableFilterRegistered = true;
-  }
-
   function triggerAvailableJobRequest(jobName) {
     return $.ajax({
       url: jenkins_url + jenkinsJobPath(jobName) + '/build?delay=0sec',
@@ -8388,7 +8385,6 @@ function loadTable () {
      if (savedJobName) {
        expandAvailableJobsBox();
      }
-        ensureAvailableJobFilterRegistered();
         $("#myTable").dataTable().fnDestroy();
         $('#myTable').DataTable({
           "lengthMenu": [3,5,10,13,20,100,200,500,1000,2000,5000],

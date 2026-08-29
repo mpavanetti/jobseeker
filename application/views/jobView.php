@@ -1157,10 +1157,12 @@
       var rawCommand = (commands || []).join('\n\n');
       var runtime = {
         commandPreview: '',
+        cpuLimit: shellExportValue(rawCommand, 'JOBSEEKER_CONTAINER_CPUS'),
         dockerImage: shellExportValue(rawCommand, 'JOBSEEKER_DOCKER_IMAGE'),
         entryPoint: shellExportValue(rawCommand, 'JOBSEEKER_ENTRYPOINT') || shellExportValue(rawCommand, 'JOBSEEKER_DOCKER_ENTRYPOINT'),
         linuxRuntime: shellExportValue(rawCommand, 'JOBSEEKER_LINUX_RUNTIME'),
         mode: 'Jenkins Agent',
+        memoryLimitMb: shellExportValue(rawCommand, 'JOBSEEKER_CONTAINER_MEMORY_MB'),
         pythonExecutable: shellExportValue(rawCommand, 'JOBSEEKER_PYTHON'),
         pythonRuntime: shellExportValue(rawCommand, 'JOBSEEKER_PYTHON_RUNTIME'),
         rawCommand: rawCommand,
@@ -1215,6 +1217,8 @@
         runtimeField('Environment', renderEnvironmentInfo(config ? config.environmentInfo : environmentHelper.detectFromName(''))) +
         runtimeField('Runtime', renderRuntimeBadges(config)) +
         runtimeField('Docker Image', runtime.dockerImage ? escapeHtml(runtime.dockerImage) : renderMuted('No Docker image')) +
+        runtimeField('CPU Limit', runtime.usesDocker ? escapeHtml((runtime.cpuLimit || '1') + ' cores') : renderMuted('Agent managed')) +
+        runtimeField('Memory Limit', runtime.usesDocker ? escapeHtml((runtime.memoryLimitMb || '512') + ' MB') : renderMuted('Agent managed')) +
         runtimeField('Job Type', escapeHtml(runtime.type || 'Shell')) +
         runtimeField('Source', escapeHtml(runtime.sourceKind || 'Not detected')) +
         runtimeField('Entrypoint', runtime.entryPoint ? escapeHtml(runtime.entryPoint) : renderMuted('None')) +
@@ -1745,6 +1749,7 @@
         {label: 'In Queue', render: function(detail) { return detail.inQueue ? '<span class="label label-warning">Queued</span><br><small>' + escapeHtml(detail.queueWhy || '') + '</small>' : '<span class="label label-default">No</span>'; }},
         {label: 'Runtime', render: function(detail) { return renderRuntimeBadges(detail.config); }},
         {label: 'Docker Image', render: function(detail) { return detail.config && detail.config.runtime && detail.config.runtime.dockerImage ? renderValue(detail.config.runtime.dockerImage) : renderMuted('No Docker image'); }},
+        {label: 'Container Limit', render: function(detail) { var runtime = detail.config && detail.config.runtime; return runtime && runtime.usesDocker ? renderValue((runtime.cpuLimit || '1') + ' CPU / ' + (runtime.memoryLimitMb || '512') + ' MB') : renderMuted('Agent managed'); }},
         {label: 'Entrypoint', render: function(detail) { return detail.config && detail.config.runtime ? renderValue(detail.config.runtime.entryPoint) : renderMuted('None'); }},
         {label: 'Next Build', render: function(detail) { return renderValue(detail.nextBuildNumber); }},
         {label: 'Last Build', render: function(detail) { return renderBuild(detail.lastBuild); }},
