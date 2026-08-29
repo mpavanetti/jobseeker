@@ -41,7 +41,9 @@ $jobseekerTransactionMonitorActive = $jobseekerCurrentController === 'tmf';
 $jobseekerMonitoringActive = $jobseekerExecutorMonitorActive || $jobseekerDockerMonitorActive;
 $jobseekerSelectedEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE);
 if (trim((string) $jobseekerSelectedEnvironment) === '') {
-  $jobseekerSelectedEnvironment = $this->input->cookie('jobseeker_global_environment', TRUE);
+  $jobseekerPreferenceUserId = preg_replace('/[^0-9]/', '', (string) (isset($user_id) ? $user_id : ''));
+  $jobseekerPreferenceUserId = $jobseekerPreferenceUserId === '' ? 'anonymous' : $jobseekerPreferenceUserId;
+  $jobseekerSelectedEnvironment = $this->input->cookie('jobseeker_global_environment_user_'.$jobseekerPreferenceUserId, TRUE);
 }
 $jobseekerSelectedEnvironment = trim((string) $jobseekerSelectedEnvironment);
 if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*' || strtolower($jobseekerSelectedEnvironment) === 'all') {
@@ -164,7 +166,9 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   }
 
   window.JobSeekerGlobalEnvironment = (function() {
-    var storageKey = 'jobseeker.global.environment';
+    var preferenceUserId = String(window.jobseekerUserId == null || window.jobseekerUserId === '' ? 'anonymous' : window.jobseekerUserId).replace(/[^0-9]/g, '') || 'anonymous';
+    var storageKey = 'jobseeker.global.environment.user.' + preferenceUserId;
+    var cookieName = 'jobseeker_global_environment_user_' + preferenceUserId;
     var applying = false;
     var retryTimer = null;
     var dashboardRedirecting = false;
@@ -196,7 +200,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       } catch (error) {
         // The non-sensitive environment cookie still keeps server-rendered pages aligned.
       }
-      document.cookie = 'jobseeker_global_environment=' + encodeURIComponent(value || 'all') + '; path=/; max-age=31536000; SameSite=Lax' + (window.location.protocol === 'https:' ? '; Secure' : '');
+      document.cookie = cookieName + '=' + encodeURIComponent(value || 'all') + '; path=/; max-age=31536000; SameSite=Lax' + (window.location.protocol === 'https:' ? '; Secure' : '');
     }
 
     function normalize(value) {

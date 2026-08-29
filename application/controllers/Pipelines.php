@@ -55,7 +55,7 @@ class Pipelines extends BaseController
     {
         $value = trim((string) $this->input->get('environment', TRUE));
         if ($value === '') {
-            $value = trim((string) $this->input->cookie('jobseeker_global_environment', TRUE));
+            $value = $this->jobSeekerEnvironmentPreference();
         }
         $environment = $this->normalizeJobSeekerEnvironment($value);
         if ($environment === '' || $environment === '*' || $environment === 'ALL') {
