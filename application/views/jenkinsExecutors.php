@@ -379,26 +379,6 @@
       return labels.length ? '<span class="executor-monitor-label-list">' + labels.join(', ') + '</span>' : '<span class="text-muted">None</span>';
     }
 
-    function scopedRows(rows, selected) {
-      if (! selected || selected === 'all') {
-        return rows || [];
-      }
-
-      return $.grep(rows || [], function(row) {
-        return String(row.environment || '').toUpperCase() === selected;
-      });
-    }
-
-    function scopedEnvironments(environments, selected) {
-      if (! selected || selected === 'all') {
-        return environments || {};
-      }
-
-      var scoped = {};
-      scoped[selected] = environments && environments[selected] ? environments[selected] : {};
-      return scoped;
-    }
-
     function renderRows(selector, rows, emptyMessage, colspan) {
       $(selector).html(rows.length ? rows.join('') : '<tr><td colspan="' + colspan + '" class="executor-monitor-empty">' + escapeHtml(emptyMessage) + '</td></tr>');
     }
@@ -545,9 +525,9 @@
       $.getJSON(scopedUrl('jenkins/executorMonitor')).done(function(payload) {
         var selected = selectedEnvironment();
         var environments = payload.environments || {};
-        var visibleEnvironments = scopedEnvironments(environments, selected);
+        var visibleEnvironments = environments;
         var slots = selected && selected !== 'all' ? environments[selected] || {running: 0, queued: 0, active: 0, limit: payload.defaultLimit || 1, available: payload.defaultLimit || 1} : null;
-        var visibleExecutors = scopedRows(payload.executors, selected);
+        var visibleExecutors = payload.executors || [];
         var slotActive = 0;
         var slotLimit = 0;
         var queued = 0;
@@ -581,8 +561,8 @@
         $('#executorMonitorRoutingDetail').html(routingDetail(payload, selected, slots));
 
         renderRows('#executorMonitorSlotRows', slotRows(visibleEnvironments), 'No environment slot data is available.', 9);
-        renderRows('#executorMonitorQueueRows', queueRows(scopedRows(payload.queue, selected)), 'The Jenkins queue is empty.', 4);
-        renderRows('#executorMonitorNodeRows', nodeRows(scopedRows(payload.nodes, selected)), 'No worker nodes were returned for this scope.', 6);
+        renderRows('#executorMonitorQueueRows', queueRows(payload.queue || []), 'The Jenkins queue is empty.', 4);
+        renderRows('#executorMonitorNodeRows', nodeRows(payload.nodes || []), 'No worker nodes were returned for this scope.', 6);
         renderRows('#executorMonitorExecutorRows', executorRows(visibleExecutors), 'No Jenkins executors were returned for this scope.', 5);
       }).fail(function(xhr) {
         var message = xhr && xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unable to load Jenkins executor monitor.';

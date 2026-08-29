@@ -11,7 +11,7 @@
     <section class="content-header">
       <h1>
         Generic Settings
-        <small>advanced tables</small>
+        <small>legacy compatibility</small>
       </h1>
       <ol class="breadcrumb">
         <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
@@ -23,15 +23,17 @@
     <!-- Main content -->
     <section class="content">
       <div class="container">
-   <?php if($role != 1) {  ?>
+        <div class="callout callout-warning">
+          <h4><i class="fa fa-exclamation-triangle"></i> Legacy settings are not injected into jobs</h4>
+          <p>Existing rows remain available for ETL code that queries <code>generic_settings</code> directly. Use environment-scoped Context Details for Python, Talend, shell, and container runtime variables.</p>
+        </div>
     <div class="row">
             <div class="col-xs-12 text-left">
                 <div class="form-group">
-                    <a class="btn btn-primary" href="<?php echo base_url(); ?>AddSettings"><i class="fa fa-plus"></i> Add New Setting</a>
+                    <a class="btn btn-primary" href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-sliders"></i> Open Context Details</a>
                 </div>
             </div>
         </div> 
-      <?php } ?>
       <div class="row" style="margin-top: 5px;">
         <div class="col-xs-12">
           <div class="box box-primary">

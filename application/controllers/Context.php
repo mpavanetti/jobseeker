@@ -18,6 +18,29 @@ class Context extends BaseController
       date_default_timezone_set('America/Sao_Paulo');
     }
 
+    private function selectedContextEnvironment()
+    {
+      $environment = trim((string) $this->input->get('environment', TRUE));
+      if ($environment === '') {
+        $environment = $this->jobSeekerEnvironmentPreference();
+      }
+      $environment = $this->normalizeJobSeekerEnvironment($environment);
+      return $environment === '' || $environment === '*' ? 'ALL' : $environment;
+    }
+
+    private function contextRowsMatchSelectedEnvironment($rows, $environment = NULL)
+    {
+      $environment = $environment === NULL ? $this->selectedContextEnvironment() : $this->normalizeJobSeekerEnvironment($environment);
+      if ($environment === 'ALL') {
+        return ! empty($rows);
+      }
+      if (empty($rows)) {
+        return FALSE;
+      }
+
+      return $this->normalizeJobSeekerEnvironment($rows[0]->Environment) === $environment;
+    }
+
 
     public function projectDetails() {
 
@@ -83,18 +106,17 @@ public function contextDetails() {
 
     $this->global['pageTitle'] = 'Job Seeker : ContextDetails Config';
     $user = $this->global['name'];
-    $selectedEnvironment = $this->normalizeJobSeekerEnvironment($this->input->get('environment', TRUE));
-    if ($selectedEnvironment === '') {
-      $selectedEnvironment = $this->normalizeJobSeekerEnvironment($this->jobSeekerEnvironmentPreference());
-    }
-    if ($selectedEnvironment === '*' || $selectedEnvironment === 'ALL') {
-      $selectedEnvironment = 'ALL';
-    }
+    $selectedEnvironment = $this->selectedContextEnvironment();
 
     $data["user"] = $user;
     $data["list"] = $this->model->listContexts($selectedEnvironment);
     $data["listProjects"] = $this->model->listProjects();
     $data["listEnvironments"] = $this->model->listEnvironments();
+    if ($selectedEnvironment !== 'ALL') {
+      $data["listEnvironments"] = array_values(array_filter($data["listEnvironments"], function($row) use ($selectedEnvironment) {
+        return $this->normalizeJobSeekerEnvironment($row->Environment) === $selectedEnvironment;
+      }));
+    }
     $data["contexts"] = $this->model->listAvailableContexts($selectedEnvironment);
     $data["activeContexts"] = $this->model->listActiveContexts($selectedEnvironment);
     $data["selectedEnvironment"] = $selectedEnvironment;
@@ -116,15 +138,56 @@ public function promotion() {
     $this->global['pageTitle'] = 'Job Seeker : Environment Deployment';
     $data["listEnvironments"] = $this->model->listEnvironments();
     $data["listProjects"] = $this->model->listProjects();
+    $selectedEnvironment = $this->selectedPromotionEnvironment();
     $jenkinsJobs = $this->listPromotionJenkinsJobs();
-    $data["jenkinsJobs"] = $this->annotatePromotionWorkloads($jenkinsJobs['jobs']);
+    $data["jenkinsJobs"] = $this->filterPromotionWorkloads($this->annotatePromotionWorkloads($jenkinsJobs['jobs']), $selectedEnvironment);
     $data["jenkinsError"] = $jenkinsJobs['error'];
     $data["jenkinsStatus"] = $jenkinsJobs['status'];
     $data["promotionHistory"] = $this->listPromotionHistory();
+    $data["selectedEnvironment"] = $selectedEnvironment;
+    $this->global['selectedEnvironment'] = $selectedEnvironment;
     $data["role"] = $this->isManager();
 
     $this->loadViews("contextPromotion", $this->global, $data, NULL);
   }
+}
+
+public function promotionJobs() {
+  if($this->isManager() == TRUE)
+  {
+    $this->output->set_status_header(403)->set_content_type('application/json')->set_output(json_encode(array('jobs' => array(), 'error' => 'Access denied.')));
+    return;
+  }
+
+  $environment = $this->selectedPromotionEnvironment();
+  $jenkinsJobs = $this->listPromotionJenkinsJobs();
+  $jobs = $this->filterPromotionWorkloads($this->annotatePromotionWorkloads($jenkinsJobs['jobs']), $environment);
+  $this->output
+    ->set_status_header((int) $jenkinsJobs['status'])
+    ->set_header('Cache-Control: no-store, max-age=0')
+    ->set_content_type('application/json')
+    ->set_output(json_encode(array('jobs' => $jobs, 'environment' => $environment, 'error' => $jenkinsJobs['error'])));
+}
+
+private function selectedPromotionEnvironment() {
+  $environment = trim((string) $this->input->get('environment', TRUE));
+  if ($environment === '') {
+    $environment = $this->jobSeekerEnvironmentPreference();
+  }
+  $environment = $this->normalizeJobSeekerEnvironment($environment);
+  return $environment === '' || $environment === '*' ? 'ALL' : $environment;
+}
+
+private function filterPromotionWorkloads($jobs, $environment) {
+  $environment = $this->normalizeJobSeekerEnvironment($environment);
+  if ($environment === '' || $environment === 'ALL') {
+    return array_values($jobs);
+  }
+
+  return array_values(array_filter($jobs, function($job) use ($environment) {
+    $jobEnvironment = ! empty($job['pipelineEnvironment']) ? $job['pipelineEnvironment'] : (isset($job['environment']) ? $job['environment'] : '');
+    return $this->normalizeJobSeekerEnvironment($jobEnvironment) === $environment;
+  }));
 }
 
 public function promoteContext() {
@@ -224,7 +287,9 @@ public function rollbackJobPromotion() {
 }
 
 private function listPromotionJenkinsJobs() {
-  $response = $this->requestJenkins('GET', 'api/json?tree=jobs[_class,name,fullName,color,buildable,lastBuild[number,result,timestamp],jobs[_class,name,fullName,color,buildable,lastBuild[number,result,timestamp],jobs[_class,name,fullName,color,buildable,lastBuild[number,result,timestamp]]]]');
+  $fields = '_class,name,fullName,color,buildable,lastBuild[number,result,timestamp],property[parameterDefinitions[name,defaultParameterValue[value]]]';
+  $tree = 'jobs['.$fields.',jobs['.$fields.',jobs['.$fields.']]]';
+  $response = $this->requestJenkins('GET', 'api/json?tree='.rawurlencode($tree));
 
   if ((int) $response['status'] !== 200) {
     return array('jobs' => array(), 'error' => 'Jenkins jobs could not be loaded. HTTP '.$response['status'].'.', 'status' => $response['status']);
@@ -300,13 +365,14 @@ private function flattenPromotionJenkinsJobs($jobs) {
     $isFolder = stripos($jobClass, 'Folder') !== FALSE;
 
     if (! empty($job->fullName) && ! $isFolder) {
-      $flatJobs[] = array(
+    $flatJobs[] = array(
         'name' => isset($job->name) ? (string) $job->name : (string) $job->fullName,
         'fullName' => (string) $job->fullName,
         'color' => isset($job->color) ? (string) $job->color : '',
-        'buildable' => isset($job->buildable) ? (bool) $job->buildable : TRUE,
-        'lastBuild' => isset($job->lastBuild) ? $job->lastBuild : NULL
-      );
+      'buildable' => isset($job->buildable) ? (bool) $job->buildable : TRUE,
+      'lastBuild' => isset($job->lastBuild) ? $job->lastBuild : NULL,
+      'environment' => $this->jenkinsEnvironmentFromJobData($job, (string) $job->fullName)
+    );
     }
 
     if (isset($job->jobs) && is_array($job->jobs)) {
@@ -1118,7 +1184,7 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
 
   $parameterUpdates = $this->rewriteEnvironmentParameterDefaults($dom, $sourceEnvironment, $targetEnvironment);
   $downstreamUpdates = $this->rewritePromotionDownstreamJobs($dom, $sourceEnvironment, $targetEnvironment, $jobNameMap);
-  $agentAssignmentUpdates = $this->rewritePromotionAgentAssignment($dom, $targetEnvironment);
+  $agentAssignmentUpdates = $this->rewritePromotionAgentAssignment($dom, $sourceEnvironment, $targetEnvironment);
 
   return array(
     'ok' => TRUE,
@@ -1438,16 +1504,38 @@ private function rewritePromotionDownstreamJobs($dom, $sourceEnvironment, $targe
   return $updates;
 }
 
-private function rewritePromotionAgentAssignment($dom, $targetEnvironment) {
-  $agentLabel = $this->jenkinsEnvironmentAgentLabel($targetEnvironment);
-  if ($agentLabel === '' || ! $dom->documentElement) {
+private function rewritePromotionAgentAssignment($dom, $sourceEnvironment, $targetEnvironment) {
+  if (! $dom->documentElement) {
     return 0;
   }
 
+  $targetCapacity = $this->jenkinsOnlineEnvironmentAgentCapacity($targetEnvironment);
+  $targetAgentLabel = $targetCapacity['label'];
+  $agentLabel = (int) $targetCapacity['executors'] > 0 ? $targetAgentLabel : '';
+  $sourceAgentLabel = $this->jenkinsEnvironmentAgentLabel($sourceEnvironment);
   $updates = 0;
   $root = $dom->documentElement;
   $assignedNode = $this->directChildElement($root, 'assignedNode');
   $canRoam = $this->directChildElement($root, 'canRoam');
+
+  if ($agentLabel === '') {
+    $currentLabel = $assignedNode ? trim((string) $assignedNode->nodeValue) : '';
+    if ($assignedNode && $currentLabel !== '' && in_array($currentLabel, array($sourceAgentLabel, $targetAgentLabel), TRUE)) {
+      while ($assignedNode->firstChild) {
+        $assignedNode->removeChild($assignedNode->firstChild);
+      }
+      $updates++;
+    }
+
+    if ($updates > 0 && $canRoam && $canRoam->nodeValue !== 'true') {
+      while ($canRoam->firstChild) {
+        $canRoam->removeChild($canRoam->firstChild);
+      }
+      $canRoam->appendChild($dom->createTextNode('true'));
+      $updates++;
+    }
+    return $updates;
+  }
 
   if (! $assignedNode) {
     $assignedNode = $dom->createElement('assignedNode');
@@ -2165,10 +2253,16 @@ public function addContext() {
       $projectName = $this->security->xss_clean($this->input->post('projectName'));
       $environmentName = $this->security->xss_clean($this->input->post('environmentName'));
       $description = $this->security->xss_clean($this->input->post('description'));
+      $selectedEnvironment = $this->selectedContextEnvironment();
 
       if ($contextKey == null || $contextValue == null || $projectName == null || $environmentName == null) {
        $this->session->set_flashdata('error', 'Context Creation failed ! You must type a context key, value, project and environment.');
        redirect('Context/contextDetails');
+     }
+
+     if ($selectedEnvironment !== 'ALL' && $this->normalizeJobSeekerEnvironment($environmentName) !== $selectedEnvironment) {
+       $this->session->set_flashdata('error', 'The target context environment is outside the current backend scope.');
+       redirect('Context/contextDetails?environment='.rawurlencode($selectedEnvironment));
      }
 
      // Check if the data is alredy on table
@@ -2284,11 +2378,10 @@ public function addContext() {
       }
 
       $id = $this->input->post('userId');
-      $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->input->post('environment'));
-      if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL') {
+      $requestedEnvironment = $this->selectedContextEnvironment();
+      if ($requestedEnvironment !== 'ALL') {
         $contextRows = $this->model->listContextId($id);
-        $actualEnvironment = empty($contextRows) ? '' : $this->normalizeJobSeekerEnvironment($contextRows[0]->Environment);
-        if ($actualEnvironment === '' || $actualEnvironment !== $requestedEnvironment) {
+        if (! $this->contextRowsMatchSelectedEnvironment($contextRows, $requestedEnvironment)) {
           $this->output->set_status_header(409);
           echo(json_encode(array('status'=>FALSE, 'message'=>'The context does not belong to the selected environment.')));
           return;
@@ -2382,15 +2475,23 @@ public function addContext() {
 
         $data["list"] = $this->model->listContextId($id);
 
-        if (empty($data["list"])) {
+        $selectedEnvironment = $this->selectedContextEnvironment();
+        if (! $this->contextRowsMatchSelectedEnvironment($data["list"], $selectedEnvironment)) {
           $this->session->set_flashdata('error', 'The requested context variable could not be found.');
           redirect('Context/contextDetails');
         }
 
         $data["listProjects"] = $this->model->listProjects();
         $data["listEnvironments"] = $this->model->listEnvironments();
-        $data["contexts"] = $this->model->listAvailableContexts();
-        $data["activeContexts"] = $this->model->listActiveContexts();
+        if ($selectedEnvironment !== 'ALL') {
+          $data["listEnvironments"] = array_values(array_filter($data["listEnvironments"], function($row) use ($selectedEnvironment) {
+            return $this->normalizeJobSeekerEnvironment($row->Environment) === $selectedEnvironment;
+          }));
+        }
+        $data["contexts"] = $this->model->listAvailableContexts($selectedEnvironment);
+        $data["activeContexts"] = $this->model->listActiveContexts($selectedEnvironment);
+        $data["selectedEnvironment"] = $selectedEnvironment;
+        $this->global['selectedEnvironment'] = $selectedEnvironment;
 
         $this->global['pageTitle'] = 'Job Seeker : Edit Data';
 
@@ -2548,6 +2649,11 @@ public function editContextUpdate() {
     $this->load->library('form_validation');
 
     $Id = (int) $this->security->xss_clean($this->input->post('ContextId'));
+    $selectedEnvironment = $this->selectedContextEnvironment();
+    if (! $this->contextRowsMatchSelectedEnvironment($this->model->listContextId($Id), $selectedEnvironment)) {
+      $this->session->set_flashdata('error', 'The requested context variable is outside the current environment.');
+      redirect('Context/contextDetails');
+    }
 
     $this->form_validation->set_rules('contextValue','Context Value','required|max_length[1000]');
     $this->form_validation->set_rules('contextKey','Context Key','trim|required|max_length[1000]');
@@ -2578,9 +2684,14 @@ public function editContextUpdate() {
       $environmentName = $this->security->xss_clean($this->input->post('environmentName'));
       $description = $this->security->xss_clean($this->input->post('description'));
 
-      if ($contextKey == null || $contextValue == null || $projectName == null || $environmentName == null) {
+     if ($contextKey == null || $contextValue == null || $projectName == null || $environmentName == null) {
        $this->session->set_flashdata('error', 'Context Creation failed ! You must type a context key, value, project and environment.');
        redirect('Context/contextDetails');
+     }
+
+     if ($selectedEnvironment !== 'ALL' && $this->normalizeJobSeekerEnvironment($environmentName) !== $selectedEnvironment) {
+       $this->session->set_flashdata('error', 'The target context environment is outside the current backend scope.');
+       redirect('Context/editContext/'.$Id);
      }
 
      // Check if the data is alredy on table

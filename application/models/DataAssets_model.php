@@ -2,6 +2,16 @@
 
 class DataAssets_model extends CI_Model
 {
+    private function environmentFilterValues($environment)
+    {
+        $environment = strtoupper(trim((string) $environment));
+        $aliases = array(
+            'QA' => array('QA', 'QAS'), 'QAS' => array('QA', 'QAS'),
+            'PROD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRODUCTION' => array('PROD', 'PRD', 'PRODUCTION'),
+            'HML' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOG' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOGATION' => array('HML', 'HOMOLOG', 'HOMOLOGATION')
+        );
+        return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
+    }
     public function __construct()
     {
         parent::__construct();
@@ -156,7 +166,7 @@ class DataAssets_model extends CI_Model
         $this->db->from('data_assets');
         $environment = strtoupper(trim((string) $environment));
         if ($environment !== '' && $environment !== '*' && $environment !== 'ALL') {
-            $this->db->where_in('environment', array($environment, 'ALL'));
+            $this->db->where_in('environment', array_merge($this->environmentFilterValues($environment), array('ALL')));
         }
         return $this->db
             ->order_by('is_active', 'DESC')
@@ -233,7 +243,7 @@ class DataAssets_model extends CI_Model
         $this->db->from('data_assets');
         $environment = strtoupper(trim((string) $environment));
         if ($environment !== '' && $environment !== '*' && $environment !== 'ALL') {
-            $this->db->where_in('environment', array($environment, 'ALL'));
+            $this->db->where_in('environment', array_merge($this->environmentFilterValues($environment), array('ALL')));
         }
         $row = $this->db->get()->row();
 

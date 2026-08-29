@@ -8,6 +8,7 @@ const view = fs.readFileSync(path.join(root, 'application', 'views', 'dashboard.
 const model = fs.readFileSync(path.join(root, 'application', 'models', 'Dashboard_model.php'), 'utf8');
 const controller = fs.readFileSync(path.join(root, 'application', 'controllers', 'Dashboard.php'), 'utf8');
 const jenkinsProxy = fs.readFileSync(path.join(root, 'application', 'controllers', 'JenkinsProxy.php'), 'utf8');
+const baseController = fs.readFileSync(path.join(root, 'application', 'libraries', 'BaseController.php'), 'utf8');
 const routes = fs.readFileSync(path.join(root, 'application', 'config', 'routes.php'), 'utf8');
 
 function assert(condition, message) {
@@ -58,6 +59,9 @@ assert(model.includes('DATE(last_activity) AS activity_date'), 'Trend buckets mu
 assert(model.includes('Data Quality & Governance') && model.includes('Warehouse & Lakehouse') && model.includes('ML & Feature Pipelines'), 'Modern data workload classifications must remain supported.');
 assert(controller.includes('function overview()'), 'The consolidated dashboard endpoint must remain available.');
 assert(jenkinsProxy.includes('function dashboardMetrics()'), 'The sanitized Jenkins dashboard endpoint must remain available.');
+assert(jenkinsProxy.includes("$slots[$field] += isset($row[$field])"), 'Dashboard slots must aggregate backend environment limits.');
+assert(jenkinsProxy.includes("'onlineAgentExecutors' => 0"), 'Dashboard capacity rows must expose online agent executors.');
+assert(baseController.includes("$effectiveLimit = $configuredLimit + (int) $slotStatus['environments'][$environmentName]['onlineAgentExecutors']"), 'Online environment-agent executors must be additive to dashboard slot limits.');
 assert(routes.includes("dashboard/overview") && routes.includes("jenkins/dashboardMetrics"), 'Dashboard routes must remain registered.');
 
 console.log('Dashboard metric and rendering tests passed.');

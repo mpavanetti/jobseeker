@@ -2,6 +2,16 @@
 
 class Pipeline_model extends CI_Model
 {
+    private function environmentFilterValues($environment)
+    {
+        $environment = strtoupper(trim((string) $environment));
+        $aliases = array(
+            'QA' => array('QA', 'QAS'), 'QAS' => array('QA', 'QAS'),
+            'PROD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRODUCTION' => array('PROD', 'PRD', 'PRODUCTION'),
+            'HML' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOG' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOGATION' => array('HML', 'HOMOLOG', 'HOMOLOGATION')
+        );
+        return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
+    }
     public function __construct()
     {
         parent::__construct();
@@ -61,7 +71,7 @@ class Pipeline_model extends CI_Model
     {
         $this->db->from('job_pipelines');
         if ($environment !== '' && $environment !== 'ALL') {
-            $this->db->where('environment', $environment);
+            $this->db->where_in('environment', $this->environmentFilterValues($environment));
         }
         return $this->db
             ->order_by('group_name', 'ASC')
@@ -79,7 +89,7 @@ class Pipeline_model extends CI_Model
     {
         return $this->db
             ->where('pipeline_key', (string) $pipelineKey)
-            ->where('environment', (string) $environment)
+            ->where_in('environment', $this->environmentFilterValues($environment))
             ->get('job_pipelines')
             ->row();
     }
@@ -88,7 +98,7 @@ class Pipeline_model extends CI_Model
     {
         $this->db->from('job_pipelines')
             ->where('pipeline_key', $pipelineKey)
-            ->where('environment', $environment);
+            ->where_in('environment', $this->environmentFilterValues($environment));
         if ((int) $excludeId > 0) {
             $this->db->where('id !=', (int) $excludeId);
         }

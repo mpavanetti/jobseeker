@@ -1,15 +1,19 @@
-## Generic Settings
-This area is useful for setting up generic parameters to your ETL job, values that instead to be hardcoded, it can be dynamically stored into the generic setting joseeker table, and you can have up to 5 values to a key, and multiple keys in a job, think that these values can change in a time, so storing it dynamically is always a good idea.
+## Generic Settings (Legacy)
+Generic Settings is retained only for older ETL code that queries the `generic_settings` database table directly. JobSeeker does not inject these records into Jenkins, Python, Talend, shell, or container runtimes.
+
+Use [Context Settings](../contextsettings) for new runtime variables. Context Details provides one value per key, project, and environment; the Python SDK resolves those values through `get_context`, and Talend or shell jobs can use the same environment selected at job runtime.
+
+The five generic value columns have no defined environment mapping, so they cannot be migrated automatically without guessing. Convert any existing rows manually by creating one Context Details record for each environment-specific value.
 
 ### Table List
 here is the table records list
 ![Table](img/table.JPG)
 
-### Adding a new Setting
-Fill in a job name, a setting name as a key and up to 5 values, and add a description, then you can call these values in your job from the generic setttings table.
+### Existing Settings
+The legacy page remains available by URL so existing values can be inspected or maintained while custom consumers are migrated.
 
 ![Add](img/add.JPG)
 
 
-### Instructions
-![instr](img/instructions.JPG)
+### Replacement
+Create a stable key in Context Details for every project/environment pair that needs a distinct runtime value.

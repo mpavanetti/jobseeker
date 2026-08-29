@@ -817,20 +817,6 @@
       return true;
     }
 
-    function jobMatchesEnvironmentFilter(job) {
-      if (isAllEnvironmentFilter(jobEnvironmentFilter)) {
-        return true;
-      }
-
-      var environment = normalizeEnvironmentFilterValue(environmentTextForJob(job));
-
-      if (! isConfiguredEnvironment(environment)) {
-        return false;
-      }
-
-      return jobEnvironmentFilter === 'all' || environment === normalizeEnvironmentFilterValue(jobEnvironmentFilter);
-    }
-
     function renderJobEnvironment(job) {
       var info = environmentInfoForJob(job);
       return '<span class="execution-job-environment"><i class="fa fa-globe"></i> Environment ' + environmentHelper.label(info) + '</span>';
@@ -1242,7 +1228,7 @@
 
     function selectedJobList() {
       return Object.keys(selectedJobNames).filter(function(jobName) {
-        return jobsByName[jobName] && jobsByName[jobName].buildable !== false && jobMatchesEnvironmentFilter(jobsByName[jobName]) && jobMatchesStatusFilter(jobsByName[jobName]);
+        return jobsByName[jobName] && jobsByName[jobName].buildable !== false && jobMatchesStatusFilter(jobsByName[jobName]);
       });
     }
 
@@ -1257,10 +1243,6 @@
       $.each(visibleJobs, function(index, job) {
         var name = job.fullName || job.name || '';
         if (normalizedFilter && name.toLowerCase().indexOf(normalizedFilter) === -1) {
-          return;
-        }
-
-        if (! jobMatchesEnvironmentFilter(job)) {
           return;
         }
 

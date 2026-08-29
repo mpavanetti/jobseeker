@@ -36,6 +36,7 @@ metricsContext.normalizeRunContainerCpu(run, second);
 assert(second.cpuSampleAvailable === true && Math.abs(second.cpuPercent - 100) < 0.001, 'CPU usage should be calculated from consecutive raw Docker counters.');
 
 const generator = fs.readFileSync(path.join(root, 'application', 'controllers', 'JobCreation.php'), 'utf8');
+const creationView = fs.readFileSync(path.join(root, 'application', 'views', 'jobCreation.php'), 'utf8');
 const identityUses = (generator.match(/\$this->dockerJobRunIdentityOptions\(\)/g) || []).length;
 assert(identityUses === 3, 'Every primary Docker execution path must add JobSeeker identity options.');
 assert(generator.includes('com.jobseeker.kind=job'), 'Docker jobs must carry the managed job label.');
@@ -47,5 +48,10 @@ assert(generator.includes('--memory-swap "${JOBSEEKER_CONTAINER_MEMORY_MB}m"'), 
 assert((generator.match(/array_merge\(\$lines, \$this->dockerJobResourceLines\(\$runtimeOptions\)\)/g) || []).length === 3, 'Every primary Docker execution path must export resource limits.');
 assert(generator.includes("dockerJobIdentityLines('python')"), 'Python Docker jobs must identify their runtime.');
 assert(generator.includes("dockerJobIdentityLines('linux-shell')"), 'Inline shell Docker jobs must identify their runtime.');
+assert(creationView.includes('id="containerResourceSummary"'), 'Docker resource controls must show the effective per-run allocation.');
+assert((creationView.match(/class="btn btn-default btn-sm(?: active)?" data-cpu=/g) || []).length === 4, 'Docker resource controls must retain four allocation presets.');
+assert(creationView.includes("scheduleJobDraftCacheSave(250)"), 'Manual resource edits must be persisted to the job draft cache.');
+assert(creationView.includes('name="containerCpuLimit" min="0.1" max="64"'), 'CPU controls must expose backend validation bounds.');
+assert(creationView.includes('name="containerMemoryLimitMb" min="64" max="262144"'), 'Memory controls must expose backend validation bounds.');
 
 console.log('Job container metrics tests passed.');

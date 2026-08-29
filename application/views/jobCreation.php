@@ -206,6 +206,69 @@
     white-space: nowrap;
   }
 
+  .container-resource-panel {
+    background: #f7fafc;
+    border: 1px solid #d6e0e6;
+    border-left: 4px solid #00a65a;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+  }
+
+  .container-resource-header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .container-resource-header strong {
+    color: #36454f;
+    font-size: 14px;
+  }
+
+  .container-resource-summary {
+    background: #e8f5ee;
+    border: 1px solid #b9ddc8;
+    border-radius: 3px;
+    color: #26734d;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 7px;
+  }
+
+  .container-resource-panel .help-block {
+    font-size: 11px;
+    margin-bottom: 0;
+  }
+
+  .container-limit-presets {
+    display: grid;
+    gap: 5px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .container-limit-presets .btn {
+    overflow: hidden;
+    padding-left: 5px;
+    padding-right: 5px;
+    text-overflow: ellipsis;
+  }
+
+  .container-limit-presets .btn.active {
+    background: #3c8dbc;
+    border-color: #367fa9;
+    color: #fff;
+  }
+
+  .container-resource-note {
+    border-top: 1px solid #e2e8ec;
+    color: #667780;
+    display: block;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
   @media (max-width: 767px) {
     .data-assets-runtime-alert {
       flex-wrap: wrap;
@@ -213,6 +276,10 @@
 
     .data-assets-runtime-link {
       margin-left: 24px;
+    }
+
+    .container-limit-presets {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
@@ -2331,13 +2398,23 @@
                     </div>
                     <div class="row pythonContainerLimits" style="display: none;">
                       <div class="col-md-12">
-                        <div class="well well-sm" style="margin-bottom: 12px;">
-                          <div class="row">
-                            <div class="col-sm-4"><div class="form-group" style="margin-bottom: 6px;"><label for="containerCpuLimit"><i class="fa fa-microchip"></i> CPU limit</label><div class="input-group"><input type="number" class="form-control" id="containerCpuLimit" name="containerCpuLimit" min="0.1" max="64" step="0.1" value="1" inputmode="decimal"><span class="input-group-addon">cores</span></div></div></div>
-                            <div class="col-sm-4"><div class="form-group" style="margin-bottom: 6px;"><label for="containerMemoryLimitMb"><i class="fa fa-tasks"></i> Memory limit</label><div class="input-group"><input type="number" class="form-control" id="containerMemoryLimitMb" name="containerMemoryLimitMb" min="64" max="262144" step="64" value="512" inputmode="numeric"><span class="input-group-addon">MB</span></div></div></div>
-                            <div class="col-sm-4"><label>Presets</label><div class="btn-group btn-group-sm btn-group-justified container-limit-presets" role="group" aria-label="Container limit presets"><a href="#" class="btn btn-default" data-cpu="0.5" data-memory="256">Small</a><a href="#" class="btn btn-default" data-cpu="1" data-memory="512">Standard</a><a href="#" class="btn btn-default" data-cpu="2" data-memory="2048">Large</a></div></div>
+                        <div class="container-resource-panel">
+                          <div class="container-resource-header">
+                            <strong><i class="fa fa-tachometer"></i> Container resources</strong>
+                            <span id="containerResourceSummary" class="container-resource-summary" aria-live="polite">1 CPU / 512 MB</span>
                           </div>
-                          <small class="text-muted"><i class="fa fa-shield"></i> Enforced by Docker on the primary job container, including containers launched from Jenkins agents. Memory swap is capped at the same value.</small>
+                          <div class="row">
+                            <div class="col-sm-6"><div class="form-group"><label for="containerCpuLimit"><i class="fa fa-microchip"></i> CPU limit</label><div class="input-group"><input type="number" class="form-control" id="containerCpuLimit" name="containerCpuLimit" min="0.1" max="64" step="0.1" value="1" inputmode="decimal"><span class="input-group-addon">cores</span></div><span class="help-block">0.1 to 64 cores per run</span></div></div>
+                            <div class="col-sm-6"><div class="form-group"><label for="containerMemoryLimitMb"><i class="fa fa-tasks"></i> Memory limit</label><div class="input-group"><input type="number" class="form-control" id="containerMemoryLimitMb" name="containerMemoryLimitMb" min="64" max="262144" step="64" value="512" inputmode="numeric"><span class="input-group-addon">MB</span></div><span class="help-block">64 MB to 256 GB per run</span></div></div>
+                          </div>
+                          <label>Allocation preset</label>
+                          <div class="container-limit-presets" role="group" aria-label="Container limit presets">
+                            <button type="button" class="btn btn-default btn-sm" data-cpu="0.5" data-memory="256">Small</button>
+                            <button type="button" class="btn btn-default btn-sm active" data-cpu="1" data-memory="512">Standard</button>
+                            <button type="button" class="btn btn-default btn-sm" data-cpu="2" data-memory="2048">Compute</button>
+                            <button type="button" class="btn btn-default btn-sm" data-cpu="4" data-memory="4096">Large</button>
+                          </div>
+                          <small class="container-resource-note"><i class="fa fa-shield"></i> Docker enforces these limits on each job container; swap is capped at the memory limit.</small>
                         </div>
                       </div>
                     </div>
@@ -3257,15 +3334,30 @@
         updateJobCreationReview();
       });
 
-      $('.container-limit-presets a').on('click', function(event) {
-        event.preventDefault();
+      function syncContainerLimitPreset() {
+        var cpu = String($('#containerCpuLimit').val() || '1');
+        var memory = parseInt($('#containerMemoryLimitMb').val(), 10) || 512;
+        var memoryText = memory >= 1024 && memory % 1024 === 0 ? (memory / 1024) + ' GB' : memory + ' MB';
+        $('.container-limit-presets .btn').each(function() {
+          $(this).toggleClass('active', String($(this).data('cpu')) === cpu && Number($(this).data('memory')) === memory);
+        });
+        $('#containerResourceSummary').text(cpu + ' CPU / ' + memoryText);
+      }
+
+      $('.container-limit-presets button').on('click', function() {
         $('#containerCpuLimit').val($(this).data('cpu'));
         $('#containerMemoryLimitMb').val($(this).data('memory'));
+        syncContainerLimitPreset();
         updateJobCreationReview();
         scheduleJobDraftCacheSave(0);
       });
 
-      $('#containerCpuLimit, #containerMemoryLimitMb').on('input change', updateJobCreationReview);
+      $('#containerCpuLimit, #containerMemoryLimitMb').on('input change', function() {
+        syncContainerLimitPreset();
+        updateJobCreationReview();
+        scheduleJobDraftCacheSave(250);
+      });
+      syncContainerLimitPreset();
 
       $('#pythonUseDockerfile').on('change', function() {
         if ($(this).is(':checked')) {
@@ -5462,6 +5554,7 @@
         $('.pythonRuntimeForm').toggle(hasRuntime);
         $('.pythonContainerLimits').toggle(hasRuntime && isDockerRuntime);
         $('#containerCpuLimit, #containerMemoryLimitMb').prop('required', hasRuntime && isDockerRuntime);
+        syncContainerLimitPreset();
 
         if (! hasRuntime) {
           return;

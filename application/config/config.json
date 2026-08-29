@@ -10,7 +10,7 @@
             "default": 1,
             "DEV": 2
         },
-        "environment_agents_enabled": false,
+        "environment_agents_enabled": true,
         "environment_agent_labels": {
             "DEV": "jobseeker-env-dev",
             "QA": "jobseeker-env-qa",

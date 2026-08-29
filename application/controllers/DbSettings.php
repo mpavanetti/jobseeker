@@ -104,6 +104,19 @@ class DbSettings extends BaseController
         return in_array($environment, $available, TRUE) ? $environment : 'ALL';
     }
 
+    private function connectorMatchesSelectedEnvironment($connector)
+    {
+        if (! $connector) {
+            return FALSE;
+        }
+        $selectedEnvironment = $this->selectedGlobalEnvironment();
+        if ($selectedEnvironment === 'ALL') {
+            return TRUE;
+        }
+
+        return in_array($this->normalizeJobSeekerEnvironment($connector->environment), array($selectedEnvironment, 'ALL'), TRUE);
+    }
+
     private function normalizeConnectorKey($value)
     {
         $value = strtolower(trim((string) $value));
@@ -473,6 +486,10 @@ class DbSettings extends BaseController
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Connector not found.'), 404);
             return;
         }
+        if (! $this->connectorMatchesSelectedEnvironment($connector)) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'The connector is outside the selected environment.'), 409);
+            return;
+        }
 
         $secretReady = FALSE;
         $credentialStatus = 'Credential reference is invalid.';
@@ -526,6 +543,12 @@ class DbSettings extends BaseController
             }
 
             $id = (int) $this->input->post('userId');
+            $connector = $this->model->getSetting($id, TRUE);
+            if (! $this->connectorMatchesSelectedEnvironment($connector)) {
+                $this->output->set_status_header($connector ? 409 : 404);
+                echo(json_encode(array('status'=>FALSE, 'message'=>$connector ? 'The connector is outside the selected environment.' : 'Connector not found.')));
+                return;
+            }
             $result = $this->model->deleteSetting($id);
             
             if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }

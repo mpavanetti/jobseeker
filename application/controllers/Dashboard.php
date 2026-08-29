@@ -17,6 +17,9 @@ class Dashboard extends BaseController
     private function selectedEnvironmentFilter()
     {
         $environment = trim((string) $this->security->xss_clean($this->input->get('environment')));
+        if ($environment === '') {
+            $environment = $this->jobSeekerEnvironmentPreference();
+        }
 
         if ($environment === '' || $environment === '*' || strtolower($environment) === 'all') {
             return 'all';

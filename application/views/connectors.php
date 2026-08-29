@@ -312,7 +312,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     var icon = button.find('i');
     button.prop('disabled', true);
     icon.removeClass('fa-plug').addClass('fa-spinner fa-spin');
-    $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/testConnector', data:{id:button.data('id')}}).done(function(response) {
+    $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/testConnector?environment=' + encodeURIComponent(<?php echo json_encode($globalEnvironment); ?>), data:{id:button.data('id')}}).done(function(response) {
       toastr.success(response.message, 'Connector test');
     }).fail(function(xhr) {
       var response = xhr.responseJSON || {};
@@ -348,7 +348,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
   $(document).on('click', '.deleteConnector', function() {
     var button = $(this);
     alertify.confirm('Delete connector', 'Delete this connector from the ETL catalog?', function() {
-      $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/deleteSetting', data:{userId:button.data('id')}}).done(function(response) {
+      $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/deleteSetting?environment=' + encodeURIComponent(<?php echo json_encode($globalEnvironment); ?>), data:{userId:button.data('id')}}).done(function(response) {
         if (response.status === true) { button.closest('tr').remove(); alertify.success('Connector deleted.'); }
         else { alertify.error('Connector could not be deleted.'); }
       }).fail(function() { alertify.error('Connector could not be deleted.'); });

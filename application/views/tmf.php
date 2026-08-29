@@ -1131,7 +1131,7 @@ function tmfDeleteRequest(id) {
   return jQuery.ajax({
     type : "POST",
     dataType : "json",
-    url : baseURL + "tmf/delete",
+    url : baseURL + "tmf/delete?environment=" + encodeURIComponent(currentTmfEnvironment()),
     data : { userId : id, environment: currentTmfEnvironment() }
   });
 }

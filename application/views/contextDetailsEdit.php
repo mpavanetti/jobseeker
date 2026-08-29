@@ -55,7 +55,7 @@
           <a href="<?php echo base_url(); ?>Context/contextDetails" class="btn btn-default"><i class="fa fa-arrow-left"></i> Back to contexts</a>
         </div>
 
-        <form action="<?php echo base_url(); ?>Context/editContextUpdate" method="POST" id="contextEditForm">
+        <form action="<?php echo base_url(); ?>Context/editContextUpdate?environment=<?php echo rawurlencode(isset($selectedEnvironment) ? $selectedEnvironment : 'ALL'); ?>" method="POST" id="contextEditForm">
           <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
           <input type="hidden" name="ContextId" value="<?php echo (int) $context->Id; ?>">
           <div class="box-body context-card-body">

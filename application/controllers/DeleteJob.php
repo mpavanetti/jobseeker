@@ -20,6 +20,12 @@ class DeleteJob extends BaseController
         return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
     }
 
+    private function requestedEnvironment()
+    {
+        $environment = trim((string) $this->input->post('environment'));
+        return $environment !== '' ? $environment : $this->jobSeekerEnvironmentPreference();
+    }
+
     /**
      * Index Page for this controller.
      */
@@ -56,7 +62,7 @@ class DeleteJob extends BaseController
             return;
         }
 
-        $scope = $this->jobMatchesRequestedEnvironment($jobName, $this->input->post('environment'));
+        $scope = $this->jobMatchesRequestedEnvironment($jobName, $this->requestedEnvironment());
         if (! $scope['ok']) {
             $this->jsonDeleteResponse(array('exist' => false, 'error' => $scope['message']), $scope['status']);
             return;
@@ -107,7 +113,7 @@ class DeleteJob extends BaseController
             }
 
             $seenJobs[$jobName] = true;
-            $scope = $this->jobMatchesRequestedEnvironment($jobName, $this->input->post('environment'));
+            $scope = $this->jobMatchesRequestedEnvironment($jobName, $this->requestedEnvironment());
             if (! $scope['ok']) {
                 $results[] = array('job' => $jobName, 'exist' => false, 'systems' => array(), 'error' => $scope['message']);
                 continue;
@@ -146,7 +152,7 @@ class DeleteJob extends BaseController
         $rawJobs = $this->input->post('jobs');
         $rawJobs = is_array($rawJobs) ? $rawJobs : explode(',', (string) $rawJobs);
         $deleteRepositories = $this->input->post('delete_repositories') === '1';
-        $environment = $this->input->post('environment');
+        $environment = $this->requestedEnvironment();
         $results = array();
         $seen = array();
         $deleted = 0;

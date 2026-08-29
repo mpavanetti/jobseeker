@@ -815,20 +815,6 @@
       return true;
     }
 
-    function jobMatchesEnvironmentFilter(job) {
-      if (comparisonAcrossEnvironments || isAllEnvironmentFilter(jobEnvironmentFilter)) {
-        return true;
-      }
-
-      var environment = normalizeEnvironmentFilterValue(environmentTextForJob(job));
-
-      if (! isConfiguredEnvironment(environment)) {
-        return false;
-      }
-
-      return jobEnvironmentFilter === 'all' || environment === normalizeEnvironmentFilterValue(jobEnvironmentFilter);
-    }
-
     function jobComparisonIdentity(jobName) {
       var environments = configuredEnvironmentNames().concat(['DEV', 'QA', 'QAS', 'UAT', 'PREPROD', 'HML', 'PROD', 'PRD', 'PRODUCTION']);
       var environmentPattern = $.map(uniqueValues(environments), function(environment) {
@@ -1447,10 +1433,6 @@
           return;
         }
 
-        if (! jobMatchesEnvironmentFilter(job)) {
-          return;
-        }
-
         if (! jobMatchesStatusFilter(job)) {
           return;
         }
@@ -1478,14 +1460,14 @@
 
       $.each(visibleJobs, function(index, job) {
         var name = job.fullName || job.name || '';
-        if (selectedJobNames[name] && jobMatchesEnvironmentFilter(job) && jobMatchesStatusFilter(job)) {
+        if (selectedJobNames[name] && jobMatchesStatusFilter(job)) {
           selected.push(name);
           included[name] = true;
         }
       });
 
       $.each(Object.keys(selectedJobNames).sort(), function(index, name) {
-        if (! included[name] && jobsByName[name] && jobMatchesEnvironmentFilter(jobsByName[name]) && jobMatchesStatusFilter(jobsByName[name])) {
+        if (! included[name] && jobsByName[name] && jobMatchesStatusFilter(jobsByName[name])) {
           selected.push(name);
         }
       });

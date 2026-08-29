@@ -429,7 +429,7 @@ foreach($promotionJobs as $workload) {
               <select id="sourceJob" class="form-control" name="sourceJob" required>
                 <option value="">Select job or pipeline</option>
                 <?php foreach($promotionJobs as $job) { ?>
-                <option value="<?php echo html_escape($job['fullName']); ?>" data-color="<?php echo html_escape($job['color']); ?>" data-buildable="<?php echo $job['buildable'] ? '1' : '0'; ?>" data-workload-type="<?php echo html_escape($job['workloadType']); ?>" data-pipeline-id="<?php echo (int) $job['pipelineId']; ?>" data-pipeline-key="<?php echo html_escape($job['pipelineKey']); ?>" data-pipeline-version="<?php echo (int) $job['pipelineVersion']; ?>" data-pipeline-environment="<?php echo html_escape($job['pipelineEnvironment']); ?>" data-pipeline-node-count="<?php echo (int) $job['pipelineNodeCount']; ?>" data-pipeline-schedule="<?php echo html_escape($job['pipelineSchedule']); ?>"><?php echo $job['workloadType'] === 'pipeline' ? '[Pipeline] '.html_escape($job['displayName']).' (v'.(int) $job['pipelineVersion'].')' : '[Job] '.html_escape($job['displayName']); ?></option>
+                <option value="<?php echo html_escape($job['fullName']); ?>" data-color="<?php echo html_escape($job['color']); ?>" data-buildable="<?php echo $job['buildable'] ? '1' : '0'; ?>" data-workload-type="<?php echo html_escape($job['workloadType']); ?>" data-environment="<?php echo html_escape(isset($job['environment']) ? $job['environment'] : ''); ?>" data-pipeline-id="<?php echo (int) $job['pipelineId']; ?>" data-pipeline-key="<?php echo html_escape($job['pipelineKey']); ?>" data-pipeline-version="<?php echo (int) $job['pipelineVersion']; ?>" data-pipeline-environment="<?php echo html_escape($job['pipelineEnvironment']); ?>" data-pipeline-node-count="<?php echo (int) $job['pipelineNodeCount']; ?>" data-pipeline-schedule="<?php echo html_escape($job['pipelineSchedule']); ?>"><?php echo $job['workloadType'] === 'pipeline' ? '[Pipeline] '.html_escape($job['displayName']).' (v'.(int) $job['pipelineVersion'].')' : '[Job] '.html_escape($job['displayName']); ?></option>
                 <?php } ?>
               </select>
               <small id="sourceJobEnvironmentHint" class="promotion-source-environment"><i class="fa fa-globe"></i> Environment: <span class="label label-default">Select a job</span></small>
@@ -624,6 +624,8 @@ foreach($promotionJobs as $workload) {
     var $details = $('#jobPromotionDetails');
     var detectedSourceEnvironment = {environment: 'Unknown', source: 'Not detected', unknown: true};
     var sourceEnvironmentRequest = null;
+    var sourceJobsRequest = null;
+    var promotionJobsUrl = <?php echo json_encode(base_url().'Context/promotionJobs'); ?>;
     var sourceJobOptions = [];
     var sourceJobEnvironmentRequests = {};
     var sourceJobEnvironmentInfo = {};
@@ -648,6 +650,7 @@ foreach($promotionJobs as $workload) {
         color: $(this).data('color'),
         buildable: $(this).data('buildable'),
         workloadType: $(this).data('workload-type') || 'job',
+        environment: $(this).data('environment') || '',
         pipelineId: Number($(this).data('pipeline-id') || 0),
         pipelineKey: $(this).data('pipeline-key') || '',
         pipelineVersion: Number($(this).data('pipeline-version') || 0),
@@ -656,8 +659,9 @@ foreach($promotionJobs as $workload) {
         pipelineSchedule: $(this).data('pipeline-schedule') || ''
       };
       sourceJobOptions.push(workload);
-      if (workload.workloadType === 'pipeline' && workload.pipelineEnvironment) {
-        sourceJobEnvironmentInfo[workload.value] = {environment: workload.pipelineEnvironment, source: 'Pipeline record', unknown: false};
+      var workloadEnvironment = workload.pipelineEnvironment || workload.environment;
+      if (workloadEnvironment) {
+        sourceJobEnvironmentInfo[workload.value] = {environment: workloadEnvironment, source: workload.pipelineEnvironment ? 'Pipeline record' : 'Jenkins metadata', unknown: false};
       }
     });
 
@@ -732,27 +736,12 @@ foreach($promotionJobs as $workload) {
       return sourceJobEnvironmentInfo[jobName] || environmentHelper.detectFromJob({name: jobName, fullName: jobName});
     }
 
-    function sourceJobMatchesEnvironment(jobName) {
-      var environment = environmentHelper.normalize(environmentHelper.text(sourceJobEnvironment(jobName)));
-      var sourceFilter = activeSourceEnvironmentFilter();
-
-      if (! isConfiguredEnvironment(environment)) {
-        return false;
-      }
-
-      return ! sourceFilter || environment === sourceFilter;
-    }
-
     function renderSourceJobOptions() {
       var currentValue = $('#sourceJob').val() || '';
-      var keepCurrent = currentValue !== '' && sourceJobMatchesEnvironment(currentValue);
+      var keepCurrent = currentValue !== '' && sourceJobOptions.some(function(job) { return job.value === currentValue; });
 
       $('#sourceJob').empty().append($('<option>', {value: '', text: 'Select job or pipeline'}));
       $.each(sourceJobOptions, function(index, job) {
-        if (! sourceJobMatchesEnvironment(job.value)) {
-          return;
-        }
-
         $('#sourceJob').append($('<option>', {
           value: job.value,
           text: job.text
@@ -760,6 +749,7 @@ foreach($promotionJobs as $workload) {
           'data-color': job.color,
           'data-buildable': job.buildable,
           'data-workload-type': job.workloadType,
+          'data-environment': job.environment,
           'data-pipeline-id': job.pipelineId,
           'data-pipeline-key': job.pipelineKey,
           'data-pipeline-version': job.pipelineVersion,
@@ -773,6 +763,48 @@ foreach($promotionJobs as $workload) {
       if (! keepCurrent) {
         setDetectedSourceEnvironment({environment: 'Unknown', source: 'Not detected', unknown: true}, false);
       }
+    }
+
+    function loadSourceJobs() {
+      if (sourceJobsRequest && sourceJobsRequest.readyState !== 4) {
+        sourceJobsRequest.abort();
+      }
+      var environment = activeSourceEnvironmentFilter() || 'ALL';
+      sourceJobsRequest = $.ajax({
+        url: promotionJobsUrl,
+        method: 'GET',
+        dataType: 'json',
+        cache: false,
+        data: {environment: environment}
+      }).done(function(response) {
+        sourceJobOptions = $.map(response && response.jobs ? response.jobs : [], function(job) {
+          var workloadEnvironment = job.pipelineEnvironment || job.environment || '';
+          if (workloadEnvironment) {
+            sourceJobEnvironmentInfo[job.fullName] = {environment: workloadEnvironment, source: job.pipelineEnvironment ? 'Pipeline record' : 'Jenkins metadata', unknown: false};
+          }
+          return {
+            value: job.fullName,
+            text: job.workloadType === 'pipeline' ? '[Pipeline] ' + job.displayName + ' (v' + Number(job.pipelineVersion || 0) + ')' : '[Job] ' + job.displayName,
+            color: job.color || '',
+            buildable: job.buildable ? 1 : 0,
+            workloadType: job.workloadType || 'job',
+            environment: job.environment || '',
+            pipelineId: Number(job.pipelineId || 0),
+            pipelineKey: job.pipelineKey || '',
+            pipelineVersion: Number(job.pipelineVersion || 0),
+            pipelineEnvironment: job.pipelineEnvironment || '',
+            pipelineNodeCount: Number(job.pipelineNodeCount || 0),
+            pipelineSchedule: job.pipelineSchedule || ''
+          };
+        });
+        renderSourceJobOptions();
+        hydrateSourceJobEnvironments();
+        schedulePreview();
+      }).fail(function(xhr, textStatus) {
+        if (textStatus !== 'abort') {
+          toastr.error('Source workloads could not be loaded for ' + environment + '.', 'Environment Filter');
+        }
+      });
     }
 
     function applyGlobalSourceEnvironment() {
@@ -1205,14 +1237,14 @@ foreach($promotionJobs as $workload) {
     $('#sourceEnvironment, #targetEnvironment, #overwriteExisting, #includeDependencies, #promoteContexts, #promotionProject, #overwriteContexts, #createRollback').on('change', function() {
       syncContextControls();
       if (this.id === 'sourceEnvironment') {
-        renderSourceJobOptions();
+        loadSourceJobs();
       }
       schedulePreview();
     });
 
     $(document).on('jobseeker:environment-change', function() {
       applyGlobalSourceEnvironment();
-      renderSourceJobOptions();
+      loadSourceJobs();
       detectSourceJobEnvironment();
       schedulePreview();
     });
