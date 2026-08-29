@@ -1,1185 +1,157 @@
- <?php
-  $hasJobsAmount = !empty($jobsAmount);
-  $hasJobsStatusAmount = !empty($jobsStatusAmount);
-  $hasEnvironmentSummary = !empty($environmentSummary);
-  $dashboardEnvironmentLabel = (isset($selectedEnvironment) && $selectedEnvironment !== '' && strtolower((string) $selectedEnvironment) !== 'all') ? strtoupper((string) $selectedEnvironment) : 'All environments';
-  $dashboardTmfEnvironmentQuery = '';
-  if (isset($selectedEnvironment) && trim((string) $selectedEnvironment) !== '' && strtolower((string) $selectedEnvironment) !== 'all') {
-    $dashboardTmfEnvironmentQuery = '?environment='.rawurlencode((string) $selectedEnvironment);
+<?php
+$dashboardEnvironment = isset($selectedEnvironment) ? (string) $selectedEnvironment : 'all';
+$dashboardEnvironmentLabel = $dashboardEnvironment !== '' && strtolower($dashboardEnvironment) !== 'all' ? strtoupper($dashboardEnvironment) : 'All environments';
+$dashboardEnvironmentQuery = $dashboardEnvironment !== '' && strtolower($dashboardEnvironment) !== 'all' ? '?environment='.rawurlencode($dashboardEnvironment) : '';
+$dashboardCanViewExecutors = isset($role) && ($role == ROLE_ADMIN || $role == ROLE_MANAGER);
+$dashboardConfig = array(
+  'environment' => $dashboardEnvironment,
+  'environmentLabel' => $dashboardEnvironmentLabel,
+  'overviewUrl' => base_url('dashboard/overview'),
+  'jenkinsMetricsUrl' => base_url('jenkins/dashboardMetrics'),
+  'tmfUrl' => base_url('tmf'),
+  'dataAssetsUrl' => base_url('data-assets'),
+  'executorMonitorUrl' => base_url('jobExecution/executors')
+);
+?>
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.css">
+<style>
+  .dashboard-overview .box { border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .dashboard-overview .box-header .box-title { font-size: 17px; font-weight: 600; }
+  .dashboard-overview .box-header .box-subtitle { color: #777; display: block; font-size: 12px; margin: 5px 0 0 25px; }
+  .dashboard-scope { align-items: center; display: inline-flex; gap: 7px; margin-top: 6px; }
+  .dashboard-scope .label { font-size: 11px; padding: 4px 7px; }
+  .dashboard-updated { color: #777; font-size: 12px; margin-top: 8px; }
+  .dashboard-loading { padding: 70px 20px; text-align: center; }
+  .dashboard-loading i { color: #3c8dbc; font-size: 34px; }
+  .dashboard-loading p { color: #777; margin-top: 12px; }
+  .dashboard-kpis .small-box { min-height: 132px; }
+  .dashboard-kpis .small-box .inner h3 { font-size: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-kpis .small-box .inner p { font-weight: 600; }
+  .dashboard-kpis .small-box .metric-detail { display: block; font-size: 12px; font-weight: 400; min-height: 18px; opacity: .88; }
+  .dashboard-kpis .small-box .icon { font-size: 74px; top: 4px; }
+  .dashboard-jenkins-body { align-items: center; display: flex; gap: 24px; justify-content: space-between; }
+  .dashboard-jenkins-copy { flex: 1 1 260px; min-width: 220px; }
+  .dashboard-jenkins-copy h4 { color: #3c8dbc; font-weight: 600; margin: 0 0 5px; }
+  .dashboard-jenkins-copy p { color: #666; margin: 0; }
+  .dashboard-jenkins-grid { display: grid; flex: 1 1 640px; gap: 12px; grid-template-columns: repeat(4, minmax(120px, 1fr)); }
+  .dashboard-live-stat { background: #f7f9fb; border: 1px solid #dce4ea; border-radius: 3px; min-height: 76px; padding: 11px 13px; }
+  .dashboard-live-stat strong { color: #34495e; display: block; font-size: 23px; line-height: 1.15; }
+  .dashboard-live-stat span { color: #777; display: block; font-size: 11px; letter-spacing: .02em; margin-top: 3px; text-transform: uppercase; }
+  .dashboard-live-stat .progress { background: #e5e9ed; height: 4px; margin: 8px 0 0; }
+  .dashboard-live-stat.is-warning { border-color: #f39c12; }
+  .dashboard-live-stat.is-danger { border-color: #dd4b39; }
+  .dashboard-period-controls .btn { min-width: 50px; }
+  .dashboard-chart-wrap { height: 315px; position: relative; }
+  .dashboard-chart-wrap.dashboard-chart-small { height: 270px; }
+  .dashboard-empty { align-items: center; background: #f9fbfc; border: 1px dashed #cbd6de; color: #777; display: none; flex-direction: column; justify-content: center; min-height: 220px; padding: 30px; text-align: center; }
+  .dashboard-empty i { color: #9aaab5; font-size: 34px; margin-bottom: 9px; }
+  .dashboard-empty strong { color: #455a64; display: block; margin-bottom: 4px; }
+  .dashboard-compare .description-block { margin: 8px 0; }
+  .dashboard-compare .description-header { font-size: 20px; }
+  .dashboard-compare .description-text { color: #777; display: block; font-size: 11px; margin-top: 4px; }
+  .dashboard-table { margin-bottom: 0; table-layout: fixed; width: 100%; }
+  .dashboard-table th { background: #f7f9fb; color: #555; font-size: 11px; letter-spacing: .02em; text-transform: uppercase; }
+  .dashboard-table th, .dashboard-table td { overflow: hidden; text-overflow: ellipsis; vertical-align: middle !important; white-space: nowrap; }
+  .dashboard-table .dashboard-primary-cell { color: #34495e; font-weight: 600; }
+  .dashboard-table .dashboard-secondary-cell { color: #777; display: block; font-size: 11px; font-weight: 400; margin-top: 2px; }
+  .dashboard-status-label { display: inline-block; min-width: 67px; text-align: center; text-transform: capitalize; }
+  .dashboard-platform-summary { border-bottom: 1px solid #f0f0f0; margin-bottom: 15px; padding-bottom: 12px; }
+  .dashboard-platform-stat { border-right: 1px solid #eee; min-height: 58px; padding: 3px 12px; }
+  .dashboard-platform-summary > div:last-child .dashboard-platform-stat { border-right: 0; }
+  .dashboard-platform-stat strong { color: #34495e; display: block; font-size: 23px; }
+  .dashboard-platform-stat span { color: #777; font-size: 11px; text-transform: uppercase; }
+  .dashboard-platform-note { background: #f7fbfd; border-left: 3px solid #3c8dbc; color: #607d8b; font-size: 12px; margin: 0 0 15px; padding: 9px 12px; }
+  .dashboard-health-note { color: #777; font-size: 12px; margin: 8px 0 0; }
+  .dashboard-error { display: none; }
+  .dashboard-refresh-spin { animation: dashboard-spin 1s linear infinite; }
+  @keyframes dashboard-spin { to { transform: rotate(360deg); } }
+  @media (max-width: 991px) {
+    .dashboard-jenkins-body { align-items: stretch; flex-direction: column; }
+    .dashboard-jenkins-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); width: 100%; }
   }
- ?>
- <script>
-  $(document).ready(function(){
-    $('body').addClass('sidebar-collapse')
-  });
-</script>
-<link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.css">
-<style type="text/css">
-  .dashboard-jenkins-panel {
-    border: 1px solid #dbe3eb;
-    border-left: 4px solid #587c9f;
-    box-shadow: 0 1px 2px rgba(31, 45, 61, 0.06);
-  }
-
-  .dashboard-jenkins-panel .box-body {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    flex-wrap: wrap;
-  }
-
-  .dashboard-jenkins-title {
-    color: #2f4054;
-    font-weight: 600;
-    margin: 0 0 3px;
-  }
-
-  .dashboard-jenkins-detail {
-    color: #66727f;
-    margin: 0;
-  }
-
-  .dashboard-jenkins-stats {
-    display: flex;
-    gap: 18px;
-    flex-wrap: wrap;
-  }
-
-  .dashboard-jenkins-stat {
-    min-width: 108px;
-  }
-
-  .dashboard-jenkins-stat strong {
-    display: block;
-    color: #2f4054;
-    font-size: 24px;
-    line-height: 1.1;
-  }
-
-  .dashboard-jenkins-stat span {
-    color: #66727f;
-    font-size: 12px;
-    text-transform: uppercase;
-  }
-
-  .dashboard-status-row .small-box {
-    border: 1px solid #dbe3eb;
-    box-shadow: 0 1px 2px rgba(31, 45, 61, 0.06);
-    color: #2f4054 !important;
-  }
-
-  .dashboard-status-row .small-box .icon {
-    color: rgba(47, 64, 84, 0.16);
-  }
-
-  .dashboard-status-row .small-box-footer {
-    background: rgba(255, 255, 255, 0.55) !important;
-    color: #44627d !important;
-  }
-
-  .dashboard-status-row .bg-aqua {
-    background: #eaf3f8 !important;
-  }
-
-  .dashboard-status-row .bg-green {
-    background: #eaf4ef !important;
-  }
-
-  .dashboard-status-row .bg-yellow {
-    background: #f7f0e4 !important;
-  }
-
-  .dashboard-status-row .bg-red {
-    background: #f8e8e5 !important;
-  }
-
-  .dashboard-chart-panel canvas {
-    max-width: 100%;
-  }
-
-  .dashboard-equal-row {
-    align-items: stretch;
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  .dashboard-equal-row:before,
-  .dashboard-equal-row:after {
-    display: none;
-  }
-
-  .dashboard-equal-row > [class*="col-"] {
-    display: flex;
-    float: none;
-  }
-
-  .dashboard-equal-row .clearfix {
-    display: none !important;
-  }
-
-  .dashboard-card {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .dashboard-environment-scope {
-    align-items: center;
-    background: #f7fbff;
-    border: 1px solid #dbe8f4;
-    border-radius: 5px;
-    color: #2f4054;
-    display: inline-flex;
-    gap: 8px;
-    margin-top: 8px;
-    padding: 7px 10px;
-  }
-
-  .dashboard-environment-scope .label {
-    font-size: 12px;
-    padding: 4px 7px;
-  }
-
-  .dashboard-card > .box-body {
-    flex: 1 1 auto;
-  }
-
-  .dashboard-card > .box-footer {
-    margin-top: auto;
-  }
-
-  .dashboard-card canvas {
-    max-width: 100%;
-  }
-
-  .dashboard-status-row .small-box {
-    display: flex;
-    flex-direction: column;
-    min-height: 128px;
-    width: 100%;
-  }
-
-  .dashboard-status-row .small-box .inner {
-    flex: 1 1 auto;
-  }
-
-  .dashboard-status-row .small-box-footer {
-    margin-top: auto;
-  }
-
-  .dashboard-paired-row .dashboard-card > .box-body,
-  .dashboard-table-row .dashboard-card > .box-body {
-    min-height: 220px;
-  }
-
-  .dashboard-chart-card > .box-body {
-    min-height: 210px;
-  }
-
-  .dashboard-percent-card .chart-responsive {
-    margin: 0 auto;
-    height: 220px;
-    max-width: 320px;
-  }
-
-  .dashboard-info-row .info-box {
-    min-height: 92px;
-    width: 100%;
-  }
-
-  .dashboard-empty-panel {
-    background: #f7fafc;
-    border: 1px dashed #c8d4df;
-    border-radius: 4px;
-    color: #607080;
-    align-items: center;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    margin: 0;
-    min-height: 210px;
-    padding: 34px 20px;
-    text-align: center;
-  }
-
-  .dashboard-empty-panel-small {
-    min-height: 150px;
-    padding: 32px 20px;
-  }
-
-  .dashboard-paired-row .dashboard-empty-panel-small {
-    min-height: 210px;
-  }
-
-  .dashboard-table-row .dashboard-empty-panel-small {
-    min-height: 180px;
-  }
-
-  .dashboard-chart-card .dashboard-empty-panel-small {
-    min-height: 180px;
-  }
-
-  .dashboard-empty-panel i {
-    color: #8aa1b4;
-    font-size: 42px;
-    margin-bottom: 10px;
-  }
-
-  .dashboard-empty-panel h4 {
-    color: #2f4054;
-    font-weight: 600;
-    margin: 0 0 6px;
-  }
-
-  .dashboard-empty-panel p {
-    margin-bottom: 0;
-  }
-
-  .dashboard-table-card .dataTables_wrapper {
-    width: 100%;
-  }
-
-  .dashboard-table-card table {
-    table-layout: fixed;
-    width: 100% !important;
-  }
-
-  .dashboard-table-card th,
-  .dashboard-table-card td {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: middle !important;
-    white-space: nowrap;
-  }
-
-  .dashboard-table-card .dashboard-job-name {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  @media (max-width: 767px) {
+    .dashboard-overview .content-header h1 small { display: block; margin: 5px 0 0; }
+    .dashboard-kpis .small-box .inner h3 { font-size: 27px; }
+    .dashboard-jenkins-grid { grid-template-columns: 1fr 1fr; }
+    .dashboard-chart-wrap { height: 270px; }
+    .dashboard-platform-stat { border-bottom: 1px solid #eee; border-right: 0; margin-bottom: 8px; padding-bottom: 8px; }
+    .dashboard-table { table-layout: auto; }
   }
 </style>
-<div class="content-wrapper">
-    <!-- Content Header (Page header) -->
-    <section class="content-header">
-      <h1>
-        <i class="fa fa-home" aria-hidden="true"></i> Dashboard
-        <small>Control panel</small>
-      </h1>
-    </section>
 
-    <div id="loading">
-      <div class="dashboard-environment-scope">
-        <i class="fa fa-globe"></i>
-        <span>Metrics scoped to</span>
-        <span class="label label-primary"><?php echo html_escape($dashboardEnvironmentLabel); ?></span>
-      </div>
-      <div class="row" style="margin-top: 15px;">
-        <div class="container text-center">
-          <img class="img img-responsive" src="<?php echo base_url(); ?>assets/images/gifs/loading.gif" style="display: inline;">
-          <div class="col-lg-12 col-md-12 col-xs-12">
-            <img class="img img-responsive" src="<?php echo base_url(); ?>assets/images/gifs/dashboard.gif" style="display: inline;">
-          </div>    
-        </div>
-      </div>
+<div class="content-wrapper dashboard-overview">
+  <section class="content-header">
+    <h1><i class="fa fa-dashboard"></i> Operations Dashboard <small>Execution health, capacity and data workload signals</small></h1>
+    <div class="dashboard-scope">
+      <span class="text-muted">Viewing</span><span class="label label-primary"><?php echo html_escape($dashboardEnvironmentLabel); ?></span>
+      <span class="text-muted">Use the environment selector above to change scope.</span>
     </div>
-    
-    <section id="main" class="content" style="display: none;">
-      <div class="container">
+  </section>
 
-      <div id="dashboardEmptyState" class="callout callout-info" style="display: none;">
-        <h4><i class="fa fa-info-circle"></i> No dashboard records yet</h4>
-        <p>Run a job or import TMF data to populate dashboard metrics and charts.</p>
+  <section class="content">
+    <div id="dashboardError" class="callout callout-danger dashboard-error"><h4><i class="fa fa-exclamation-circle"></i> Dashboard metrics could not be loaded</h4><p id="dashboardErrorMessage">Refresh the page or check the application logs.</p></div>
+    <div id="dashboardLoading" class="box box-primary dashboard-loading"><i class="fa fa-circle-o-notch dashboard-refresh-spin"></i><p>Building a fresh operational snapshot for <?php echo html_escape($dashboardEnvironmentLabel); ?>...</p></div>
+
+    <div id="dashboardContent" style="display:none;">
+      <div class="row dashboard-kpis">
+        <div class="col-lg-3 col-sm-6 col-xs-12"><div class="small-box bg-aqua"><div class="inner"><h3 id="dashboardActive">0</h3><p>Active executions</p><span id="dashboardActiveDetail" class="metric-detail">TMF running state</span></div><div class="icon"><i class="fa fa-refresh"></i></div><a href="<?php echo base_url('tmf/fetchDataStatus/running').$dashboardEnvironmentQuery; ?>" class="small-box-footer">Inspect running <i class="fa fa-arrow-circle-right"></i></a></div></div>
+        <div class="col-lg-3 col-sm-6 col-xs-12"><div class="small-box bg-green"><div class="inner"><h3 id="dashboardReadyRate">--</h3><p>Ready rate · 30 days</p><span id="dashboardReadyDetail" class="metric-detail">Completed executions assessed</span></div><div class="icon"><i class="fa fa-check-circle"></i></div><a href="<?php echo base_url('tmf/fetchDataStatus/ready').$dashboardEnvironmentQuery; ?>" class="small-box-footer">Inspect ready <i class="fa fa-arrow-circle-right"></i></a></div></div>
+        <div class="col-lg-3 col-sm-6 col-xs-12"><div class="small-box bg-yellow"><div class="inner"><h3 id="dashboardAttention">0</h3><p>Needs attention · 30 days</p><span id="dashboardAttentionDetail" class="metric-detail">Warnings and errors</span></div><div class="icon"><i class="fa fa-warning"></i></div><a href="<?php echo base_url('tmf').$dashboardEnvironmentQuery; ?>" class="small-box-footer">Open transaction monitor <i class="fa fa-arrow-circle-right"></i></a></div></div>
+        <div class="col-lg-3 col-sm-6 col-xs-12"><div class="small-box bg-purple"><div class="inner"><h3 id="dashboardRecords">0</h3><p>Records processed · 30 days</p><span id="dashboardRecordsDetail" class="metric-detail">Across all reported executions</span></div><div class="icon"><i class="fa fa-database"></i></div><span class="small-box-footer" id="dashboardHistoryDetail">Telemetry history</span></div></div>
+      </div>
+
+      <div class="box box-primary">
+        <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-server text-blue"></i> Jenkins Capacity</h3><div class="box-tools pull-right"><?php if ($dashboardCanViewExecutors) { ?><a class="btn btn-box-tool" href="<?php echo base_url('jobExecution/executors'); ?>"><i class="fa fa-external-link"></i> Executor monitor</a><?php } ?><button id="dashboardRefresh" type="button" class="btn btn-box-tool" title="Refresh dashboard"><i class="fa fa-refresh"></i></button></div></div>
+        <div class="box-body dashboard-jenkins-body">
+          <div class="dashboard-jenkins-copy"><h4 id="dashboardJenkinsHeadline">Loading live Jenkins state...</h4><p id="dashboardJenkinsDetail">Executor, queue and agent metrics refresh every 30 seconds.</p><div id="dashboardUpdated" class="dashboard-updated"></div></div>
+          <div class="dashboard-jenkins-grid">
+            <div id="dashboardExecutorStat" class="dashboard-live-stat"><strong id="dashboardExecutors">--</strong><span>Busy / total executors</span><div class="progress"><div id="dashboardExecutorBar" class="progress-bar progress-bar-primary" style="width:0%"></div></div></div>
+            <div id="dashboardQueueStat" class="dashboard-live-stat"><strong id="dashboardQueue">--</strong><span>Queued builds</span></div>
+            <div id="dashboardAgentStat" class="dashboard-live-stat"><strong id="dashboardAgents">--</strong><span>Online / total agents</span></div>
+            <div id="dashboardSlotStat" class="dashboard-live-stat"><strong id="dashboardSlots">--</strong><span>Active / trigger limit</span></div>
+          </div>
+        </div>
       </div>
 
       <div class="row">
-        <div class="col-xs-12">
-          <div class="box box-solid dashboard-jenkins-panel dashboard-card">
-            <div class="box-body">
-              <div>
-                <h4 class="dashboard-jenkins-title"><i class="fa fa-server"></i> Jenkins Live</h4>
-                <p class="dashboard-jenkins-detail" id="dashboardJenkinsDetail">Loading Jenkins state...</p>
-              </div>
-              <div class="dashboard-jenkins-stats">
-                <div class="dashboard-jenkins-stat">
-                  <strong id="dashboardJenkinsCapacity">--</strong>
-                  <span>JobSeeker Slots</span>
-                </div>
-                <div class="dashboard-jenkins-stat">
-                  <strong id="dashboardJenkinsQueue">--</strong>
-                  <span>Slot Queue</span>
-                </div>
-              </div>
-            </div>
+        <div class="col-lg-8 col-xs-12">
+          <div class="box box-primary">
+            <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-line-chart text-blue"></i> Execution Health Trend</h3><span class="box-subtitle">One comparable timeline replaces the overlapping 30/90/180 growth cards.</span><div class="box-tools pull-right dashboard-period-controls"><div class="btn-group" data-toggle="buttons"><label class="btn btn-default btn-xs active"><input type="radio" name="dashboardTrendDays" value="30" checked>30d</label><label class="btn btn-default btn-xs"><input type="radio" name="dashboardTrendDays" value="90">90d</label><label class="btn btn-default btn-xs"><input type="radio" name="dashboardTrendDays" value="180">180d</label></div></div></div>
+            <div class="box-body"><div id="dashboardTrendWrap" class="dashboard-chart-wrap"><canvas id="dashboardTrendChart"></canvas></div><div id="dashboardTrendEmpty" class="dashboard-empty"><i class="fa fa-line-chart"></i><strong>No executions in this period</strong><span>Choose a longer range or run a job.</span></div><p class="dashboard-health-note"><i class="fa fa-info-circle"></i> Ready, warning, error and cancelled are terminal TMF outcomes. Running is shown as a live KPI instead of a historical success series.</p></div>
+            <div class="box-footer dashboard-compare"><div class="row">
+              <div class="col-sm-3 col-xs-6"><div class="description-block border-right"><span id="dashboardExecutionChange" class="description-percentage">--</span><h5 id="dashboardExecutionCurrent" class="description-header">0</h5><span class="description-text">Executions · current 30d</span></div></div>
+              <div class="col-sm-3 col-xs-6"><div class="description-block border-right"><span id="dashboardRateChange" class="description-percentage">--</span><h5 id="dashboardRateCurrent" class="description-header">--</h5><span class="description-text">Ready rate · current 30d</span></div></div>
+              <div class="col-sm-3 col-xs-6"><div class="description-block border-right"><span id="dashboardAttentionChange" class="description-percentage">--</span><h5 id="dashboardAttentionCurrent" class="description-header">0</h5><span class="description-text">Warning + error · current 30d</span></div></div>
+              <div class="col-sm-3 col-xs-6"><div class="description-block"><span id="dashboardDurationChange" class="description-percentage">--</span><h5 id="dashboardDurationCurrent" class="description-header">--</h5><span class="description-text">Average runtime · current 30d</span></div></div>
+            </div></div>
           </div>
         </div>
+        <div class="col-lg-4 col-xs-12"><div class="box box-primary"><div class="box-header with-border"><h3 class="box-title"><i class="fa fa-pie-chart text-blue"></i> TMF State Mix · 30 Days</h3></div><div class="box-body"><div id="dashboardStatusWrap" class="dashboard-chart-wrap dashboard-chart-small"><canvas id="dashboardStatusChart"></canvas></div><div id="dashboardStatusEmpty" class="dashboard-empty"><i class="fa fa-pie-chart"></i><strong>No states yet</strong><span>Status distribution will appear after executions report TMF state.</span></div></div></div></div>
       </div>
 
-        <div class="row dashboard-status-row dashboard-equal-row">
-            <div class="col-lg-3 col-xs-6">
-              <!-- small box -->
-              <div class="small-box bg-aqua running animated">
-
-                <div class="inner">
-                 <span id="running"><h3></h3></span>
-                  <p>Running Entries</p>
-                </div>
-                <div class="icon">
-                  <i class="fa fa-refresh"></i>
-                </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/running<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
-              </div>
-
-            </div><!-- ./col -->
-
-            <div class="col-lg-3 col-xs-6">
-              <!-- small box -->
-              <div class="small-box bg-green ready animated">
-                <div class="inner">
-                  <h3 id="ready"></h3>
-                  <p>Ready Entries</p>
-                </div>
-                <div class="icon">
-                  <i class="fa fa-check-square-o"></i>
-                </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/ready<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
-              </div>
-            </div><!-- ./col -->
-            <div class="col-lg-3 col-xs-6">
-              <!-- small box -->
-              <div class="small-box bg-yellow warning animated">
-                <div class="inner">
-                  <h3 id="warning"></h3>
-                  <p>Warning Entries</p>
-                </div>
-                <div class="icon">
-                  <i class="fa fa-warning"></i>
-                </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/warning<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
-              </div>
-            </div><!-- ./col -->
-            <div class="col-lg-3 col-xs-6">
-              <!-- small box -->
-              <div class="small-box bg-red error animated">
-                <div class="inner">
-                  <h3 id="error"></h3>
-                  <p>Error Entries</p>
-                </div>
-                <div class="icon">
-                  <i class="fa fa-thumbs-o-down"></i>
-                </div>
-                <a href="<?php echo base_url(); ?>tmf/fetchDataStatus/error<?php echo $dashboardTmfEnvironmentQuery; ?>" class="small-box-footer">More info <i class="fa fa-arrow-circle-right"></i></a>
-              </div>
-            </div><!-- ./col -->
-          </div>
-
-          <!-- Aqui entra os graficos estastítisco -->
-
-          <div class="row animated zoomIn" style="margin-top: 15px;">
-            <div class="col-lg-12 col-xs-12">
-              <div class="box box-primary dashboard-card dashboard-survey-card">
-            <div class="box-header with-border">
-              <h3 class="box-title"><b>Jobs survey report</b></h3>
-
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <div class="btn-group">
-                </div>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-              <div id="dashboardSurveyContent" class="row">
-                <div class="col-md-8">
-                  <p class="text-center">
-                    <strong id="date"></strong>
-                  </p>
-
-                  <div class="chart">
-                    <!-- Sales Chart Canvas -->
-                     <canvas id="chart" class="lineChart" style="height: 300px; width: 600px;" height="300" width="600"></canvas> 
-                  </div>
-                  <!-- /.chart-responsive -->
-                </div>
-                <!-- /.col -->
-                <div class="col-md-4">
-                  <p class="text-center">
-                    <strong>TMF status distribution</strong>
-                  </p>
-
-                  <div class="progress-group runningGraph animated">
-                    <span class="progress-text">Running Entries</span>
-                    <span class="progress-number" id="runningGraph"></span>
-
-                    <div class="progress sm">
-                      <div id="runningGraphBar" class="progress-bar progress-bar-aqua"></div>
-                    </div>
-                  </div>
-                  <!-- /.progress-group -->
-                  <div class="progress-group readyGraph animated ">
-                    <span class="progress-text">Ready Entries</span>
-                    <span class="progress-number" id="readyGraph"><b></b></span>
-
-                    <div class="progress sm">
-                      <div id="readyGraphBar" class="progress-bar progress-bar-green" style="width: 0%;"></div>
-                    </div>
-                  </div>
-                     <!-- /.progress-group -->
-                  <div class="progress-group warningGraph animated">
-                    <span class="progress-text">Warning Entries</span>
-                    <span class="progress-number" id="warningGraph"></span>
-
-                    <div class="progress sm">
-                      <div id="warningGraphBar" class="progress-bar progress-bar-yellow" style="width: 0%;"></div>
-                    </div>
-                  </div>
-                  <!-- /.progress-group -->
-                  <div class="progress-group errorGraph animated">
-                    <span class="progress-text">Error Entries</span>
-                    <span class="progress-number" id="errorGraph"></span>
-
-                    <div class="progress sm">
-                      <div id="errorGraphBar" class="progress-bar progress-bar-red"></div>
-                    </div>
-                  </div>
-                </div>
-                <!-- /.col -->
-              </div>
-              <div id="dashboardSurveyEmptyState" class="dashboard-empty-panel" style="display: none;">
-                <i class="fa fa-line-chart"></i>
-                <h4>No survey data yet</h4>
-                <p>Job trends and status progress will appear after TMF records are created.</p>
-              </div>
-              <!-- /.row -->
-            </div>
-            <!-- ./box-body -->
-            <div id="dashboardSurveyFooter" class="box-footer">
-              <div class="row">
-                <div class="col-sm-12 col-xs-12">
-                  <span class="text-center"><h5><b>Growth X Decline in 30 days (1 Month)</b></h5></span>
-                </div>
-                <hr>
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="readyGrowthDecline"> </span>
-                    
-                    <span class="description-text text-green">Ready </span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="errorGrowthDecline"> </span>
-                    
-                    <span class="description-text text-red">Error</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="warningGrowthDecline"></span>
-                    
-                    <span class="description-text text-yellow">Warning</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="runningGrowthDecline"> </span>
-                    
-                    <span class="description-text text-blue">Running Entries</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-              </div>
-              <!-- /.row -->
-              <hr>
-              <div class="row">
-                <div class="col-sm-12 col-xs-12">
-                  <span class="text-center"><h5><b>Growth X Decline in 90 days (3 Month)</b></h5></span>
-                </div>
-                <hr>
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="readyGrowthDeclineX90"> </span>
-                    
-                    <span class="description-text text-green">Ready </span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="errorGrowthDeclineX90"> </span>
-                    
-                    <span class="description-text text-red">Error</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="warningGrowthDeclineX90"></span>
-                    
-                    <span class="description-text text-yellow">Warning</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="runningGrowthDeclineX90"> </span>
-                    
-                    <span class="description-text text-blue">Running Entries</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-              </div>
-              <!-- /.row -->
-              <hr>
-              <div class="row">
-                <div class="col-sm-12 col-xs-12">
-                  <span class="text-center"><h5><b>Growth X Decline in 180 days (6 Month)</b></h5></span>
-                </div>
-                <hr>
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="readyGrowthDeclineX180"> </span>
-                    
-                    <span class="description-text text-green">Ready </span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="errorGrowthDeclineX180"> </span>
-                    
-                    <span class="description-text text-red">Error</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="warningGrowthDeclineX180"></span>
-                    
-                    <span class="description-text text-yellow">Warning</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-                <!-- /.col -->
-                <div class="col-sm-3 col-xs-6">
-                  <div class="description-block border-right">
-                    <span class="description-percentage" id="runningGrowthDeclineX180"> </span>
-                    
-                    <span class="description-text text-blue">Running Entries</span> Growth
-                  </div>
-                  <!-- /.description-block -->
-                </div>
-              </div>
-              <!-- /.row -->
-            </div>
-            <!-- /.box-footer -->
-          </div>
-            </div>
-          </div>
-
-              <div class="row dashboard-equal-row dashboard-paired-row">
-               <!-- Div last jobs -->
-            <div class="col-lg-6 col-md-6 col-xs-12 animated fadeInLeft">
-                <div class="box box-primary dashboard-card dashboard-recent-card">
-            <div class="box-header with-border">
-              <h3 class="box-title">Recently Added Jobs</h3>
-
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-              <ul id="dashboardRecentJobsList" class="products-list product-list-in-box">
-                 <?php
-                    if(!empty($lastJobs))
-                    {
-                        foreach($lastJobs as $record)
-                        {
-                    ?>
-                <!-- item -->
-                <li class="item">
-                  <div class="product-img">
-                    <?php 
-                      switch ($record->status) {
-                        case 'ready':
-                          echo '<img src="' . base_url() . 'assets/images/items/ready.png" alt="Ready">';
-                          break;
-
-                        case 'error':
-                          echo '<img src="' . base_url() . 'assets/images/items/error.png" alt="Error">';
-                          break;
-
-                          case 'warning':
-                          echo '<img src="' . base_url() . 'assets/images/items/warning.png" alt="Warning">';
-                          break;
-
-                          case 'running':
-                          echo '<img src="' . base_url() . 'assets/images/items/running.png" alt="Running">';
-                          break;
-
-                          case 'cancelled':
-                          case 'Cancelled':
-                          echo '<img src="' . base_url() . 'assets/images/items/404.png" alt="Cancelled">';
-                          break;
-                        
-                        default:
-                          echo '<img src="' . base_url() . 'assets/images/items/404.png" alt="Error 404">';
-                          break;
-                      }
-                    ?>
-                  </div>
-                  <div class="product-info">
-                    <a href="<?php echo base_url(); ?>tmf/fetchDataJobName/<?php echo rawurlencode($record->job_name); ?><?php echo $dashboardTmfEnvironmentQuery; ?>" class="product-title"><?php echo html_escape($record->job_name); ?>
-                    <?php 
-                      switch ($record->status) {
-                        case 'ready':
-                          echo '<span class="label label-success pull-right">Ready</span>';
-                          break;
-
-                        case 'error':
-                          echo '<span class="label label-danger pull-right">Error</span>';
-                          break;
-
-                          case 'warning':
-                          echo '<span class="label label-warning pull-right">Warning</span>';
-                          break;
-
-                          case 'running':
-                          echo '<span class="label label-primary pull-right">Running</span>';
-                          break;
-
-                          case 'cancelled':
-                          case 'Cancelled':
-                          echo '<span class="label label-default pull-right">Cancelled</span>';
-                          break;
-                        
-                        default:
-                          echo '<span class="label label-danger pull-right">404 Error</span>';
-                          break;
-                      }
-                    ?>
-                    </a>
-                    <span class="product-description"> <?php echo html_escape($record->event_text); ?> </span>
-                    <span class="product-description"><i class="fa fa-globe"></i> <?php echo trim((string) $record->environment) !== '' ? html_escape($record->environment) : '<span class="label label-default">Unknown</span>'; ?></span>
-                    <span class="product-description"> <?php if ($record->records_processed != 0) { echo (int) $record->records_processed.' Rows Were Affected.'; }?>
-                    </span>
-
-                  </div>
-                </li>
-                <!-- /.item -->
-                 <?php
-                        }
-                    }
-                    else
-                    {
-                 ?>
-                <li id="dashboardRecentJobsEmptyState" class="item">
-                  <div class="dashboard-empty-panel dashboard-empty-panel-small">
-                    <i class="fa fa-history"></i>
-                    <h4>No recent jobs</h4>
-                    <p>Recent TMF job activity will appear here.</p>
-                  </div>
-                </li>
-                 <?php
-                    }
-                 ?>
-             
-              </ul>
-            </div>
-            <!-- /.box-body -->
-            <div class="box-footer text-center">
-              <a href="<?php echo base_url(); ?>tmf" class="uppercase">View All Jobs</a>
-            </div>
-            <!-- /.box-footer -->
-          </div>
-            </div>
-            <!-- End Div last jobs -->
-
-            <!-- Div Graficos -->
-            <div class="col-lg-6 col-md-6 col-xs-12 animated fadeInRight">
-              <div class="box box-primary dashboard-card dashboard-percent-card">
-            <div class="box-header with-border">
-              <h3 class="box-title">TMF Status Percent Report</h3>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-              <div id="dashboardPercentContent" class="row">
-                <div class="col-md-8">
-                  <div class="chart-responsive">
-                    <canvas id="pieChart" height="220" width="320" style="width: 320px; height: 220px;"></canvas>
-                  </div>
-                  <!-- ./chart-responsive -->
-                </div>
-                <!-- /.col -->
-                <div class="col-md-4">
-                  <ul class="chart-legend clearfix">
-                    <li><i class="fa fa-circle-o text-green"></i> Ready</li>
-                    <li><i class="fa fa-circle-o text-red"></i> error</li>
-                    <li><i class="fa fa-circle-o text-yellow"></i> Warning</li>
-                    <li><i class="fa fa-circle-o text-aqua"></i> Running Entries</li>
-                    <li><i class="fa fa-circle-o text-muted"></i> Cancelled</li>
-                  </ul>
-                </div>
-                <div class="col-md-4">
-                  <ul class="chart-legend clearfix">
-                    <li id="totalJobs"> </li>
-                    <li>Represents 100%</li>
-                  </ul>
-                </div>
-                <!-- /.col -->
-              </div>
-              <div id="dashboardPercentEmptyState" class="dashboard-empty-panel" style="display: none;">
-                <i class="fa fa-pie-chart"></i>
-                <h4>No status distribution yet</h4>
-                <p>Percentages will appear here after TMF records are created.</p>
-              </div>
-              <!-- /.row -->
-            </div>
-            <!-- /.box-body -->
-            <div id="dashboardPercentFooter" class="box-footer" style="padding: 9px;">
-              <ul class="nav nav-pills nav-stacked">
-                <li><a href="#">Percent of <b class="text-green">Ready</b> from total
-                  <span class="pull-right" id="pecentTotalReady"> </span></a></li>
-
-                <li><a href="#">Percent of <b class="text-red">Error</b> from total
-                  <span class="pull-right" id="pecentTotalError"> </span></a></li>
-
-                  <li><a href="#">Percent of <b class="text-yellow">Warning</b> from total
-                  <span class="pull-right" id="pecentTotalWarning"> </span></a></li>
-
-                  <li><a href="#">Percent of <b class="text-blue">Running Entries</b> from total
-                  <span class="pull-right" id="pecentTotalRunning"> </span></a></li>
-               
-              </ul>
-            </div>
-            <!-- /.footer -->
-          </div>
-
-        </div>
-        <!-- End Div Graficos -->
+      <div class="box box-primary">
+        <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-globe text-blue"></i> Environment Execution Summary</h3><span class="box-subtitle">Comparable 30-day execution, quality, volume and runtime signals.</span></div>
+        <div class="box-body table-responsive no-padding"><table class="table table-hover dashboard-table"><thead><tr><th>Environment</th><th>Executions</th><th>Ready rate</th><th>Attention</th><th>Running</th><th>Records</th><th>Avg runtime</th><th>Last activity</th></tr></thead><tbody id="dashboardEnvironmentRows"></tbody></table><div id="dashboardEnvironmentEmpty" class="dashboard-empty"><i class="fa fa-globe"></i><strong>No environment activity in the last 30 days</strong></div></div>
       </div>
 
-      <div class="row dashboard-equal-row dashboard-table-row">
-        <div class="col-lg-6 col-md-6 col-xs-12">
-          <div class="box box-info dashboard-card dashboard-table-card">
-            <div class="box-header">
-              <h3 class="box-title">Available job execution amount</h3>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-              <div id="dashboardJobsAmountEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="<?php echo $hasJobsAmount ? 'display: none;' : ''; ?>">
-                <i class="fa fa-table"></i>
-                <h4>No job execution amounts</h4>
-                <p>Execution totals by job and dimension will appear here.</p>
-              </div>
-              <table id="dashboardJobsAmountTable" class="table table-bordered table-striped<?php echo $hasJobsAmount ? ' table-config' : ''; ?>" style="<?php echo $hasJobsAmount ? '' : 'display: none;'; ?>">
-                <thead>
-                <tr>
-                  <th>Job Name</th>
-                  <th>Dimension</th>
-                  <th>Environment</th>
-                  <th>Amount</th>
-                </tr>
-                </thead>
-                <tbody>
-                  <?php
-                    if(!empty($jobsAmount))
-                    {
-                        foreach($jobsAmount as $record)
-                        {
-                    ?>
-                    <tr>
-                      <td><span class="dashboard-job-name" title="<?php echo html_escape($record->JOB_NAME); ?>"><?php echo html_escape($record->JOB_NAME); ?></span></td>
-                        <td><?php echo html_escape($record->DIMENSION); ?></td>
-                        <td><?php echo $record->ENVIRONMENT === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($record->ENVIRONMENT); ?></td>
-                        <td><?php echo $record->AMOUNT ?></td>
-                    </tr>
-                    <?php
-                        }
-                    }
-                    ?>
-                </tbody>
-                <tfoot>
-                 <tr>
-                  <th>Job Name</th>
-                  <th>Dimension</th>
-                  <th>Environment</th>
-                  <th>Amount</th>
-                </tr>
-                </tfoot>
-              </table>
-            </div>
-            <!-- /.box-body -->
-          </div>
-          <!-- /.box -->
-        </div>
-
-        <div class="col-lg-6 col-md-6 col-xs-12">
-          <div class="box box-info dashboard-card dashboard-table-card">
-            <div class="box-header">
-              <h3 class="box-title">Available status amount per jobs</h3>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-              <div id="dashboardJobsStatusAmountEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="<?php echo $hasJobsStatusAmount ? 'display: none;' : ''; ?>">
-                <i class="fa fa-list-alt"></i>
-                <h4>No status totals</h4>
-                <p>Status totals by job and dimension will appear here.</p>
-              </div>
-              <table id="dashboardJobsStatusAmountTable" class="table table-bordered table-striped<?php echo $hasJobsStatusAmount ? ' table-config' : ''; ?>" style="<?php echo $hasJobsStatusAmount ? '' : 'display: none;'; ?>">
-                <thead>
-                <tr>
-                  <th>Job Name</th>
-                  <th>Dimension</th>
-                  <th>Environment</th>
-                  <th>Status</th>
-                  <th>Amount</th>
-                </tr>
-                </thead>
-                <tbody>
-                  <?php
-                    if(!empty($jobsStatusAmount))
-                    {
-                        foreach($jobsStatusAmount as $record)
-                        {
-                    ?>
-                    <tr>
-                      <td><span class="dashboard-job-name" title="<?php echo html_escape($record->JOB_NAME); ?>"><?php echo html_escape($record->JOB_NAME); ?></span></td>
-                        <td><?php echo html_escape($record->DIMENSION); ?></td>
-                        <td><?php echo $record->ENVIRONMENT === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($record->ENVIRONMENT); ?></td>
-                        <td><?php 
-                      switch (strtolower((string) $record->STATUS)) {
-                        case 'ready':
-                          echo '<span class="label label-success">Ready</span>';
-                          break;
-
-                        case 'error':
-                          echo '<span class="label label-danger">Error</span>';
-                          break;
-
-                          case 'warning':
-                          echo '<span class="label label-warning">Warning</span>';
-                          break;
-
-                          case 'running':
-                          echo '<span class="label label-primary">Running</span>';
-                          break;
-
-                          case 'cancelled':
-                          case 'Cancelled':
-                          echo '<span class="label label-default">Cancelled</span>';
-                          break;
-                        
-                        default:
-                          echo '<span class="label label-default">Unknown</span>';
-                          break;
-                      }
-                    ?></td>
-                        <td><?php echo $record->AMOUNT ?></td>
-                    </tr>
-                    <?php
-                        }
-                    }
-                    ?>
-                </tbody>
-                <tfoot>
-                 <tr>
-                  <th>Job Name</th>
-                  <th>Dimension</th>
-                  <th>Environment</th>
-                  <th>Status</th>
-                  <th>Amount</th>
-                </tr>
-                </tfoot>
-              </table>
-            </div>
-            <!-- /.box-body -->
-          </div>
-          <!-- /.box -->
-        </div>
+      <div class="row">
+        <div class="col-lg-6 col-xs-12"><div class="box box-primary"><div class="box-header with-border"><h3 class="box-title"><i class="fa fa-clock-o text-blue"></i> Recent Executions</h3></div><div class="box-body table-responsive no-padding"><table class="table table-hover dashboard-table"><thead><tr><th style="width:31%">Job</th><th>Environment</th><th>Status</th><th>Records</th><th>Runtime</th><th>Activity</th></tr></thead><tbody id="dashboardRecentRows"></tbody></table><div id="dashboardRecentEmpty" class="dashboard-empty"><i class="fa fa-clock-o"></i><strong>No recent executions</strong></div></div></div></div>
+        <div class="col-lg-6 col-xs-12"><div class="box box-primary"><div class="box-header with-border"><h3 class="box-title"><i class="fa fa-tasks text-blue"></i> Most Active Pipelines · 30 Days</h3></div><div class="box-body table-responsive no-padding"><table class="table table-hover dashboard-table"><thead><tr><th style="width:34%">Pipeline</th><th>Runs</th><th>Ready rate</th><th>Attention</th><th>Records</th><th>Avg runtime</th></tr></thead><tbody id="dashboardPipelineRows"></tbody></table><div id="dashboardPipelineEmpty" class="dashboard-empty"><i class="fa fa-tasks"></i><strong>No pipeline activity in this period</strong></div></div></div></div>
       </div>
 
-      <div class="row dashboard-equal-row dashboard-table-row">
-        <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-info dashboard-card dashboard-table-card">
-            <div class="box-header">
-              <h3 class="box-title">Environment execution summary</h3>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <div class="box-body">
-              <div id="dashboardEnvironmentSummaryEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="<?php echo $hasEnvironmentSummary ? 'display: none;' : ''; ?>">
-                <i class="fa fa-globe"></i>
-                <h4>No environment activity</h4>
-                <p>Environment totals will appear after TMF records include runtime context.</p>
-              </div>
-              <table id="dashboardEnvironmentSummaryTable" class="table table-bordered table-striped<?php echo $hasEnvironmentSummary ? ' table-config' : ''; ?>" style="<?php echo $hasEnvironmentSummary ? '' : 'display: none;'; ?>">
-                <thead>
-                <tr>
-                  <th>Environment</th>
-                  <th>Total Runs</th>
-                  <th>Ready</th>
-                  <th>Running</th>
-                  <th>Attention</th>
-                  <th>Last Activity</th>
-                </tr>
-                </thead>
-                <tbody>
-                  <?php
-                    if(!empty($environmentSummary))
-                    {
-                        foreach($environmentSummary as $record)
-                        {
-                          $environmentName = isset($record->ENVIRONMENT) ? (string) $record->ENVIRONMENT : 'Unknown';
-                    ?>
-                    <tr>
-                      <td><?php echo $environmentName === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($environmentName); ?></td>
-                      <td><?php echo number_format((int) $record->AMOUNT); ?></td>
-                      <td><span class="label label-success"><?php echo number_format((int) $record->READY); ?></span></td>
-                      <td><span class="label label-primary"><?php echo number_format((int) $record->RUNNING); ?></span></td>
-                      <td><span class="label label-<?php echo ((int) $record->ATTENTION) > 0 ? 'danger' : 'default'; ?>"><?php echo number_format((int) $record->ATTENTION); ?></span></td>
-                      <td><?php echo empty($record->LAST_ACTIVITY) ? '-' : html_escape(date('m-d-Y H:i:s', strtotime($record->LAST_ACTIVITY))); ?></td>
-                    </tr>
-                    <?php
-                        }
-                    }
-                    ?>
-                </tbody>
-              </table>
-            </div>
-          </div>
+      <div class="box box-primary">
+        <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-cubes text-blue"></i> Data Platform Workloads</h3><span class="box-subtitle">Execution subjects and governed data assets across modern and traditional data architectures.</span><div class="box-tools pull-right"><a href="<?php echo base_url('data-assets'); ?>" class="btn btn-box-tool"><i class="fa fa-external-link"></i> Data asset catalog</a></div></div>
+        <div class="box-body">
+          <p class="dashboard-platform-note"><i class="fa fa-info-circle"></i> Workloads are inferred from TMF job, dimension and task metadata. Categories include ingestion and landing zones, transformation, warehouses, lakes and lakehouses, semantic serving, quality/governance, and ML feature pipelines. They represent observed executions—not discovered physical tables.</p>
+          <div class="row dashboard-platform-summary"><div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardWorkloadExecutions">0</strong><span>Observed runs · 180d</span></div></div><div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardAssetActive">0</strong><span>Active catalog assets</span></div></div><div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardAssetInputs">0</strong><span>Input / reference assets</span></div></div><div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardAssetOutputs">0</strong><span>Output contracts</span></div></div></div>
+          <div class="row"><div class="col-lg-8 col-xs-12"><h5 class="text-center"><b>Execution subjects · last 180 days</b></h5><div id="dashboardWorkloadWrap" class="dashboard-chart-wrap"><canvas id="dashboardWorkloadChart"></canvas></div><div id="dashboardWorkloadEmpty" class="dashboard-empty"><i class="fa fa-cubes"></i><strong>No classifiable workloads yet</strong></div></div><div class="col-lg-4 col-xs-12"><h5 class="text-center"><b>Active assets by format</b></h5><div id="dashboardAssetWrap" class="dashboard-chart-wrap"><canvas id="dashboardAssetChart"></canvas></div><div id="dashboardAssetEmpty" class="dashboard-empty"><i class="fa fa-file-o"></i><strong>No active assets in this scope</strong><span>Publish an input or output contract to populate this chart.</span></div></div></div>
         </div>
       </div>
-
-      <div class="row" style="margin-top: 15px;">
-        <div class="col-lg-12 col-xs-12">
-          <div class="box box-solid" style="padding: 10px; box-shadow: 10px 10px 5px -4px rgba(0,0,0,0.75);">
-            <div class="text-center">
-              <h4><b>Data Warehouse and Data Marts</b></h4>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <div class="row dashboard-equal-row dashboard-info-row" style="margin-top: 15px;">
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
-            <span class="info-box-icon bg-aqua"><i class="fa fa-bar-chart"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Data Warehouses</span>
-              <small>Loads</small>
-              <span class="info-box-number" id="dwAmount"></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
-            <span class="info-box-icon bg-red"><i class="fa fa-database"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Dimensions Tables</span>
-              <small>Loads</small>
-              <span class="info-box-number" id="dimTableAmount"></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-
-        <!-- fix for small devices only -->
-        <div class="clearfix visible-sm-block"></div>
-
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
-            <span class="info-box-icon bg-green"><i class="fa fa-database"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Facts Tables</span>
-              <small>Loads</small>
-              <span class="info-box-number" id="factTableAmount"></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-        <div class="col-md-3 col-sm-6 col-xs-12">
-          <div class="info-box">
-            <span class="info-box-icon bg-yellow"><i class="fa fa-database"></i></span>
-
-            <div class="info-box-content">
-              <span class="info-box-text">Stagging Tables</span>
-              <small>Loads</small>
-              <span class="info-box-number" id="stgTableAmount"></span>
-            </div>
-            <!-- /.info-box-content -->
-          </div>
-          <!-- /.info-box -->
-        </div>
-        <!-- /.col -->
-      </div>
-
-      <div class="row" style="margin-top: 15px;">
-        <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary dashboard-card dashboard-chart-card">
-            <div class="box-header">
-              <h4><b>Data Warehouse and Data Marts Execution</b></h4>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <div class="box-body">
-              <div id="dashboardDwChartContent">
-                <canvas id="dwChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
-              </div>
-              <div id="dashboardDwChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
-                <i class="fa fa-bar-chart"></i>
-                <h4>No warehouse executions</h4>
-                <p>Warehouse and data mart execution charts will appear here.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top: 15px;">
-        <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary dashboard-card dashboard-chart-card">
-            <div class="box-header">
-              <h4><b>Dimension Tables Executions</b></h4>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <div class="box-body">
-              <div id="dashboardDmChartContent">
-                <canvas id="dmChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
-              </div>
-              <div id="dashboardDmChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
-                <i class="fa fa-database"></i>
-                <h4>No dimension executions</h4>
-                <p>Dimension table execution charts will appear here.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top: 15px;">
-        <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary dashboard-card dashboard-chart-card">
-            <div class="box-header">
-              <h4><b>Fact Tables Executions</b></h4>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <div class="box-body">
-              <div id="dashboardFactChartContent">
-                <canvas id="factChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
-              </div>
-              <div id="dashboardFactChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
-                <i class="fa fa-database"></i>
-                <h4>No fact executions</h4>
-                <p>Fact table execution charts will appear here.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top: 15px;">
-        <div class="col-lg-12 col-md-12 col-xs-12">
-          <div class="box box-primary dashboard-card dashboard-chart-card">
-            <div class="box-header">
-              <h4><b>Stg Tables Executions</b></h4>
-              <div class="box-tools pull-right">
-                <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i>
-                </button>
-                <button type="button" class="btn btn-box-tool" data-widget="remove"><i class="fa fa-times"></i></button>
-              </div>
-            </div>
-            <div class="box-body">
-              <div id="dashboardStgChartContent">
-                <canvas id="stgChart" style="height: 200px; width: 600px;" height="230" width="600"></canvas>
-              </div>
-              <div id="dashboardStgChartEmptyState" class="dashboard-empty-panel dashboard-empty-panel-small" style="display: none;">
-                <i class="fa fa-database"></i>
-                <h4>No staging executions</h4>
-                <p>Staging table execution charts will appear here.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-        
-    </section>
+    </div>
+  </section>
 </div>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.js"></script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
-<script>
-$(document).ready(function(){
-    if(window.matchMedia("(max-width: 767px)").matches){
-        // The viewport is less than 768 pixels wide
-        // alert("This is a mobile device.");
-        $('.table-config').removeClass('dataTable')
-        $('.table-config').addClass('dataTableMobile')
-        $('.lineChart').remove();
-       $('.chart').append('<canvas id="chart" class="lineChart" style="height: 300px; width: 300px;" height="300" width="300"></canvas>');
-    } else{
-        // The viewport is at least 768 pixels wide
-       // alert("This is a tablet or desktop.");
-       
-    }
-});
-</script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/dashboard.js?v=35"></script>
 
+<script src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
+<script src="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.js"></script>
+<script>window.jobseekerDashboardConfig = <?php echo json_encode($dashboardConfig, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;</script>
+<script src="<?php echo base_url(); ?>assets/js/dashboard.js?v=41"></script>

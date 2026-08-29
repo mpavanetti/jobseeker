@@ -122,6 +122,47 @@ class BaseController extends CI_Controller {
 		return array('status' => $statusCode, 'content_type' => $responseContentType, 'body' => $response, 'headers' => $responseHeaders);
 	}
 
+	protected function requestInternalHttp($baseUrl, $method, $path, $body = '', $timeout = 3) {
+		$baseUrl = rtrim(trim((string) $baseUrl), '/');
+		$method = strtoupper(trim((string) $method));
+		$path = '/'.ltrim((string) $path, '/');
+
+		if (! preg_match('#^https?://[a-z0-9._-]+(?::[0-9]{1,5})?$#i', $baseUrl)
+			|| ! in_array($method, array('GET', 'POST'), TRUE)
+			|| strpos($path, '..') !== FALSE
+			|| preg_match('/[\r\n]/', $path)) {
+			return array('status' => 400, 'body' => '', 'headers' => array());
+		}
+
+		$options = array(
+			'http' => array(
+				'method' => $method,
+				'header' => "Accept: application/json\r\nConnection: close",
+				'ignore_errors' => TRUE,
+				'timeout' => max(1, min(15, (int) $timeout))
+			)
+		);
+
+		if ($method === 'POST') {
+			$options['http']['header'] .= "\r\nContent-Type: application/json";
+			$options['http']['content'] = (string) $body;
+		}
+
+		$response = @file_get_contents($baseUrl.$path, FALSE, stream_context_create($options));
+		$responseHeaders = isset($http_response_header) ? $http_response_header : array();
+		$statusCode = $response === FALSE ? 502 : 200;
+
+		if (! empty($responseHeaders[0]) && preg_match('/\s(\d{3})(?:\s|$)/', $responseHeaders[0], $matches)) {
+			$statusCode = (int) $matches[1];
+		}
+
+		return array(
+			'status' => $statusCode,
+			'body' => $response === FALSE ? '' : $response,
+			'headers' => $responseHeaders
+		);
+	}
+
 	protected function normalizeJobSeekerEnvironment($environment) {
 		$value = strtoupper(trim((string) $environment));
 		if ($value === '') {
@@ -705,12 +746,14 @@ class BaseController extends CI_Controller {
 					$executorEnvironment = $nodeEnvironment;
 				}
 
-				if ($isIdle) {
-					$global['idleExecutors'] += 1;
-					$nodeIdleExecutors += 1;
-				} else {
-					$global['busyExecutors'] += 1;
-					$nodeBusyExecutors += 1;
+				if (! $isOffline) {
+					if ($isIdle) {
+						$global['idleExecutors'] += 1;
+						$nodeIdleExecutors += 1;
+					} else {
+						$global['busyExecutors'] += 1;
+						$nodeBusyExecutors += 1;
+					}
 				}
 
 				$executors[] = array(

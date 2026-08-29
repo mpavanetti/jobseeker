@@ -8,6 +8,13 @@ class Tmf_model extends CI_Model
         $this->db->select('tmf.*, tmf.job_name AS jenkins_job_name', FALSE);
     }
 
+    private function hideInternalJobs() {
+        $this->db->group_start();
+        $this->db->where('tmf.job_name IS NULL', null, false);
+        $this->db->or_where('LEFT(tmf.job_name, 12) <> '.$this->db->escape('__jobseeker_'), null, false);
+        $this->db->group_end();
+    }
+
     private function normalizeEnvironmentFilter($environment) {
         $environment = trim((string) $environment);
 
@@ -114,6 +121,7 @@ class Tmf_model extends CI_Model
 
         $this->selectTmfRows();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
 
         $status = (array) $status;
         $job_name = (array) $job_name;
@@ -194,6 +202,7 @@ class Tmf_model extends CI_Model
 
         $this->selectTmfRows();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
         $query = $this->db->get();
@@ -204,6 +213,7 @@ class Tmf_model extends CI_Model
 
         $this->selectTmfRows();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $this->db->where('id', $id);
         $query = $this->db->get();
         return $query->result();
@@ -251,6 +261,7 @@ class Tmf_model extends CI_Model
 
         $this->selectTmfRows();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $this->db->where('LOWER(status) =', strtolower((string) $status));
         $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
@@ -262,6 +273,7 @@ class Tmf_model extends CI_Model
 
         $this->selectTmfRows();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $this->db->where('job_name', $jobName);
         $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
@@ -274,6 +286,7 @@ class Tmf_model extends CI_Model
         $this->db->select('status');
         $this->db->distinct();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $this->db->where('status IS NOT NULL', null, false);
         $query = $this->db->get();
 
@@ -308,6 +321,7 @@ class Tmf_model extends CI_Model
         $this->db->select('job_name');
         $this->db->distinct();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $query = $this->db->get();
         return $query->result();
     }
@@ -317,13 +331,18 @@ class Tmf_model extends CI_Model
         $this->db->select('dimension');
         $this->db->distinct();
         $this->db->from('tmf');
+        $this->hideInternalJobs();
         $query = $this->db->get();
         return $query->result();
     }
 
     function listReprocess() {
-
-     $query = $this->db->query('SELECT DISTINCT(JOB_NAME),REPROCESS FROM tmf WHERE REPROCESS = 1');
+        $this->db->select('job_name,reprocess');
+        $this->db->distinct();
+        $this->db->from('tmf');
+        $this->db->where('reprocess', 1);
+        $this->hideInternalJobs();
+        $query = $this->db->get();
         return $query->result();
     }
 
@@ -339,6 +358,7 @@ class Tmf_model extends CI_Model
         $this->db->from('tmf_error');
         $this->db->where('tmf_id', $instanceId);
         $this->db->join('tmf', 'tmf_error.tmf_id = tmf.instance_id');
+        $this->hideInternalJobs();
         $query = $this->db->get();
         return $query->result();
     }

@@ -99,8 +99,8 @@
       <small>Live workers, queue, and environment slot capacity.</small>
     </h1>
     <ol class="breadcrumb">
-      <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
-      <li><a href="#">Job Management</a></li>
+      <li><a href="<?php echo base_url(); ?>dashboard"><i class="fa fa-home"></i> Home</a></li>
+      <li>Infrastructure Monitoring</li>
       <li class="active">Executor Monitor</li>
     </ol>
   </section>
