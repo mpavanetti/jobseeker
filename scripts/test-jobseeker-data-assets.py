@@ -2,10 +2,14 @@
 import json
 import importlib.util
 import os
+import shutil
+import sys
 import tempfile
 from pathlib import Path
 
 from jobseeker import DataAssetCatalog, JobSeeker, JobSeekerError
+
+sys.dont_write_bytecode = True
 
 
 def test_documented_transform():
@@ -48,8 +52,46 @@ def contract(key, direction, environment, job, relative_path, required=True):
     }
 
 
+def test_documented_csv_transform():
+    example_path = Path(__file__).resolve().parents[1] / "doc" / "Python" / "code" / "data_asset_job.py"
+    sample_path = example_path.with_name("customer_reference.csv")
+    spec = importlib.util.spec_from_file_location("jobseeker_data_asset_csv_example", example_path)
+    assert spec is not None and spec.loader is not None
+    example = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(example)
+
+    with tempfile.TemporaryDirectory(prefix="jobseeker-data-asset-transform-") as repository:
+        source_relative = "data-assets/dev/customer-transform/customer-reference/customers.csv"
+        target_relative = "data-assets/dev/customer-transform/customer-summary/summary.csv"
+        source_path = os.path.join(repository, source_relative)
+        os.makedirs(os.path.dirname(source_path))
+        shutil.copyfile(sample_path, source_path)
+
+        payload = {
+            "schema_version": 1,
+            "assets": [
+                contract("customer-reference", "input", "DEV", "customer-transform", source_relative),
+                contract("customer-summary", "output", "DEV", "customer-transform", target_relative, required=False),
+            ],
+        }
+        manifest_path = os.path.join(repository, "data-assets", "manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream)
+
+        catalog = DataAssetCatalog(environment="DEV", job="customer-transform", repository_root=repository)
+        source = catalog.resolve("customer-reference")
+        target = catalog.resolve("customer-summary", mode="output")
+        summary, active_count = example.summarize_active_customers(source.read())
+        target.write(summary)
+
+        assert active_count == 3
+        with open(target.path, "r", encoding="utf-8") as stream:
+            assert stream.read() == "country,active_customers\nUK,1\nUS,2\n"
+
+
 def main():
     test_documented_transform()
+    test_documented_csv_transform()
     with tempfile.TemporaryDirectory(prefix="jobseeker-data-assets-") as repository:
         data_directory = os.path.join(repository, "data-assets")
         os.makedirs(os.path.join(data_directory, "all", "customer-reference"))

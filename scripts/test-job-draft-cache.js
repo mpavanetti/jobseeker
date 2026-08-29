@@ -97,6 +97,13 @@ if (cache.read() !== null) {
   throw new Error('Expected the cache to clear after its final draft was created.');
 }
 
+const unnamedDraft = [{job_name: '', environment: 'DEV', description: 'Server-generated name'}];
+cache.save(unnamedDraft, 0);
+cache.removeByNames(['generated-job-name'], true);
+if (cache.read() !== null) {
+  throw new Error('Expected an unnamed submitted draft to be removed after the server reports its generated name.');
+}
+
 cache.save(drafts, 0);
 cache.clear();
 if (cache.read() !== null) {

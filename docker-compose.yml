@@ -12,6 +12,9 @@ x-jobseeker-jenkins-agent-base: &jobseeker-jenkins-agent-base
       condition: service_healthy
   networks:
     - internal
+  env_file:
+    - path: ./.env.connectors
+      required: false
 
 volumes:
   jobseeker-docker-cache: {}
@@ -69,8 +72,11 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      docker-monitor-proxy:
+        condition: service_healthy
     networks:
       - internal
+      - monitoring
     volumes:
       - ./application:/var/www/html/application
       - ./assets:/var/www/html/assets
@@ -86,6 +92,7 @@ services:
       - JOBSEEKER_DB_PASSWORD=${JOBSEEKER_DB_PASSWORD:-mysql}
       - JOBSEEKER_DB_NAME=${JOBSEEKER_DB_NAME:-jobseeker}
       - JOBSEEKER_ENCRYPTION_KEY=${JOBSEEKER_ENCRYPTION_KEY:-change-this-local-development-key-before-shared-use}
+      - JOBSEEKER_CONNECTOR_API_TOKEN=${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
       - JOBSEEKER_COOKIE_SECURE=${JOBSEEKER_COOKIE_SECURE:-false}
       - JOBSEEKER_JENKINS_INTERNAL_URL=http://jenkins:8080/
       - JOBSEEKER_JENKINS_PUBLIC_URL=${JOBSEEKER_JENKINS_PUBLIC_URL:-http://localhost:8080/}
@@ -96,6 +103,10 @@ services:
       - JOBSEEKER_OPENVSCODE_PUBLIC_URL=${JOBSEEKER_OPENVSCODE_PUBLIC_URL:-}
       - JOBSEEKER_OPENVSCODE_WORKSPACE=${JOBSEEKER_OPENVSCODE_WORKSPACE:-/home/workspace}
       - JOBSEEKER_OPENVSCODE_TOKEN=${JOBSEEKER_OPENVSCODE_TOKEN:-jobseeker-local-vscode}
+      - JOBSEEKER_OPENVSCODE_INTERNAL_URL=http://openvscode:3000
+      - JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES=${JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES:-30}
+      - JOBSEEKER_DOCKER_MONITOR_URL=http://docker-monitor-proxy:8080
+      - JOBSEEKER_DOCKER_RUNTIME_URL=http://docker-runtime:2375
       - JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION=${JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION:-3.13}
       - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
@@ -142,8 +153,6 @@ services:
 
   openvscode-data-init:
     image: alpine:3.20
-    profiles:
-      - openvscode
     command: sh -lc "mkdir -p /openvscode/data /openvscode/python && chown -R 1000:1000 /openvscode/data /openvscode/python"
     volumes:
       - openvscode-server-data:/openvscode
@@ -151,8 +160,7 @@ services:
       - internal
 
   openvscode:
-    profiles:
-      - openvscode
+    container_name: jobseeker-openvscode
     build:
       context: .
       dockerfile: docker/openvscode_image
@@ -162,14 +170,12 @@ services:
       openvscode-data-init:
         condition: service_completed_successfully
     entrypoint:
-      - /bin/sh
-      - -lc
-      - exec "$${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" --host 0.0.0.0 --connection-token "$${JOBSEEKER_OPENVSCODE_TOKEN}" "$$@"
-      - --
+      - /usr/local/bin/jobseeker-openvscode
     command:
       - /home/workspace/repository
     environment:
       - JOBSEEKER_OPENVSCODE_TOKEN=${JOBSEEKER_OPENVSCODE_TOKEN:-jobseeker-local-vscode}
+      - JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES=${JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES:-30}
       - UV_PYTHON_INSTALL_DIR=/home/workspace/.openvscode-server/python
     ports:
       - "${JOBSEEKER_OPENVSCODE_HOST:-127.0.0.1}:${JOBSEEKER_OPENVSCODE_PORT:-3000}:3000"
@@ -199,6 +205,20 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  docker-monitor-proxy:
+    image: nginx:alpine
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/monitor/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/_ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   docker-runtime:
     image: docker:27-dind
@@ -241,6 +261,9 @@ services:
       - ./repository:/php/repository
     networks:
         - internal
+    env_file:
+      - path: ./.env.connectors
+        required: false
     environment:
       - JENKINS_ADMIN_ID=${JENKINS_ADMIN_ID:-jobseeker}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-jobseeker}
@@ -251,6 +274,19 @@ services:
       - JOBSEEKER_DB_USER=${JOBSEEKER_DB_USER:-mysql}
       - JOBSEEKER_DB_PASSWORD=${JOBSEEKER_DB_PASSWORD:-mysql}
       - JOBSEEKER_DB_NAME=${JOBSEEKER_DB_NAME:-jobseeker}
+      - JOBSEEKER_CONNECTOR_API_URL=http://nginx:8080/connector-runtime
+      - JOBSEEKER_CONNECTOR_API_TOKEN=${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_FEDERATED_TOKEN_FILE=${AZURE_FEDERATED_TOKEN_FILE:-}
+      - AZURE_AUTHORITY_HOST=${AZURE_AUTHORITY_HOST:-}
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+      - AWS_ROLE_ARN=${AWS_ROLE_ARN:-}
+      - AWS_WEB_IDENTITY_TOKEN_FILE=${AWS_WEB_IDENTITY_TOKEN_FILE:-}
       - JOBSEEKER_SMTP_HOST=${JOBSEEKER_SMTP_HOST:-mailpit}
       - JOBSEEKER_SMTP_PORT=${JOBSEEKER_SMTP_PORT:-1025}
       - JOBSEEKER_SMTP_SSL=${JOBSEEKER_SMTP_SSL:-false}
@@ -277,6 +313,19 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
+      JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_FEDERATED_TOKEN_FILE: ${AZURE_FEDERATED_TOKEN_FILE:-}
+      AZURE_AUTHORITY_HOST: ${AZURE_AUTHORITY_HOST:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_WEB_IDENTITY_TOKEN_FILE: ${AWS_WEB_IDENTITY_TOKEN_FILE:-}
     volumes:
       - ./repository:/php/repository
       - jenkins-agent-dev-workdir:/home/jenkins/agent
@@ -294,6 +343,19 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
+      JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_FEDERATED_TOKEN_FILE: ${AZURE_FEDERATED_TOKEN_FILE:-}
+      AZURE_AUTHORITY_HOST: ${AZURE_AUTHORITY_HOST:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_WEB_IDENTITY_TOKEN_FILE: ${AWS_WEB_IDENTITY_TOKEN_FILE:-}
     volumes:
       - ./repository:/php/repository
       - jenkins-agent-qa-workdir:/home/jenkins/agent
@@ -311,6 +373,19 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
+      JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_FEDERATED_TOKEN_FILE: ${AZURE_FEDERATED_TOKEN_FILE:-}
+      AZURE_AUTHORITY_HOST: ${AZURE_AUTHORITY_HOST:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_WEB_IDENTITY_TOKEN_FILE: ${AWS_WEB_IDENTITY_TOKEN_FILE:-}
     volumes:
       - ./repository:/php/repository
       - jenkins-agent-uat-workdir:/home/jenkins/agent
@@ -328,6 +403,19 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
+      JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_FEDERATED_TOKEN_FILE: ${AZURE_FEDERATED_TOKEN_FILE:-}
+      AZURE_AUTHORITY_HOST: ${AZURE_AUTHORITY_HOST:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_WEB_IDENTITY_TOKEN_FILE: ${AWS_WEB_IDENTITY_TOKEN_FILE:-}
     volumes:
       - ./repository:/php/repository
       - jenkins-agent-prod-workdir:/home/jenkins/agent
@@ -335,3 +423,6 @@ services:
 networks:
   internal:
     driver: bridge
+  monitoring:
+    driver: bridge
+    internal: true

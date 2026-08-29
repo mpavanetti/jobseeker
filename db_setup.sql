@@ -58,25 +58,87 @@ CREATE TABLE IF NOT EXISTS `contextdetails` (
 -- Copiando estrutura para tabela jobseeker.database_settings
 CREATE TABLE IF NOT EXISTS `database_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `connector_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT '*',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
   `db_type` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
-  `login` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
-  `password` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
-  `address` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `auth_type` varchar(50) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'username_password',
+  `login` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `password` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `address` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
   `port` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
-  `schema` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `schema` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `creation_date` datetime(6) NOT NULL DEFAULT '0000-00-00 00:00:00.000000' ON UPDATE current_timestamp(6),
-  `description` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `description` varchar(2000) COLLATE utf8_unicode_ci NOT NULL,
+  `secret_backend` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'local',
+  `secret_reference` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `secret_encrypted` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
-  `additional_parameters` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
-  `oracle_ServiceName` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
-  `oracle_sid` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
-  PRIMARY KEY (`id`)
+  `additional_parameters` varchar(1000) COLLATE utf8_unicode_ci NOT NULL,
+  `oracle_ServiceName` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `oracle_sid` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `database_settings_scope` (`connector_key`,`environment`,`job_name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando dados para a tabela jobseeker.database_settings: ~0 rows (aproximadamente)
 /*!40000 ALTER TABLE `database_settings` DISABLE KEYS */;
 /*!40000 ALTER TABLE `database_settings` ENABLE KEYS */;
+
+CREATE TABLE IF NOT EXISTS `connector_access_log` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `connector_id` int(11) DEFAULT NULL,
+  `connector_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `secret_backend` varchar(30) COLLATE utf8_unicode_ci NOT NULL,
+  `status` varchar(20) COLLATE utf8_unicode_ci NOT NULL,
+  `accessed_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `connector_accessed_at` (`accessed_at`),
+  KEY `connector_access_scope` (`connector_key`,`environment`,`job_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `job_pipelines` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pipeline_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `group_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'General',
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `graph_json` longtext COLLATE utf8_unicode_ci NOT NULL,
+  `jenkins_job_name` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `sync_status` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'pending',
+  `sync_error` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `job_pipeline_scope` (`pipeline_key`,`environment`),
+  KEY `job_pipeline_environment` (`environment`),
+  KEY `job_pipeline_group` (`group_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `job_pipeline_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `pipeline_id` int(11) NOT NULL,
+  `jenkins_queue_id` bigint(20) unsigned DEFAULT NULL,
+  `jenkins_build_number` int(11) unsigned DEFAULT NULL,
+  `status` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'QUEUED',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `triggered_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `started_at` datetime NOT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `job_pipeline_run_pipeline` (`pipeline_id`,`id`),
+  KEY `job_pipeline_run_status` (`status`,`updated_at`),
+  CONSTRAINT `job_pipeline_runs_pipeline_fk` FOREIGN KEY (`pipeline_id`) REFERENCES `job_pipelines` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando estrutura para tabela jobseeker.email_settings
 CREATE TABLE IF NOT EXISTS `email_settings` (
@@ -445,7 +507,9 @@ CREATE TABLE IF NOT EXISTS `tmf` (
   `instance_id` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
   `start_time` datetime DEFAULT NULL,
   `msg` text COLLATE utf8_unicode_ci DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `tmf_dashboard_activity` (`last_activity`,`status`,`environment`),
+  KEY `tmf_dashboard_environment` (`environment`,`last_activity`,`status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1234 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando dados para a tabela jobseeker.tmf: ~0 rows (aproximadamente)

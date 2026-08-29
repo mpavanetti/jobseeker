@@ -348,11 +348,31 @@ class JobCreation extends BaseController
         return;
       }
 
+      $instanceIds = array();
+      if ($this->db->table_exists('tmf')) {
+        $rows = $this->db->select('instance_id')->from('tmf')->where('job_name', $jobName)->get()->result_array();
+        foreach ($rows as $row) {
+          if (! empty($row['instance_id'])) {
+            $instanceIds[] = (string) $row['instance_id'];
+          }
+        }
+      }
+
+      $this->db->trans_start();
       if ($this->db->table_exists('tmf_error')) {
-        $this->db->where('job_name', $jobName)->delete('tmf_error');
+        $this->db->group_start()->where('job_name', $jobName);
+        if (! empty($instanceIds)) {
+          $this->db->or_where_in('tmf_id', $instanceIds);
+        }
+        $this->db->group_end()->delete('tmf_error');
       }
       if ($this->db->table_exists('tmf')) {
         $this->db->where('job_name', $jobName)->delete('tmf');
+      }
+      $this->db->trans_complete();
+
+      if (! $this->db->trans_status()) {
+        log_message('error', 'Inline Python preview telemetry cleanup failed for reserved job '.$jobName.'.');
       }
     }
 
@@ -1186,6 +1206,99 @@ class JobCreation extends BaseController
 
       private function openVsCodeEnabled() {
         return $this->envFlag('JOBSEEKER_OPENVSCODE_ENABLED', TRUE);
+      }
+
+      private function openVsCodeIdleTimeoutMinutes() {
+        $value = trim((string) getenv('JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES'));
+        if ($value === '') {
+          return 30;
+        }
+
+        if (! preg_match('/^[0-9]{1,5}$/', $value)) {
+          return 30;
+        }
+
+        return min(1440, (int) $value);
+      }
+
+      private function openVsCodeRuntimeState($startIfStopped = FALSE) {
+        $idleTimeoutMinutes = $this->openVsCodeIdleTimeoutMinutes();
+        $monitorUrl = trim((string) getenv('JOBSEEKER_DOCKER_MONITOR_URL'));
+        if ($monitorUrl === '') {
+          $monitorUrl = 'http://docker-monitor-proxy:8080';
+        }
+
+        $inspect = $this->requestInternalHttp($monitorUrl, 'GET', '/containers/jobseeker-openvscode/json', '', 3);
+        if ($inspect['status'] === 404) {
+          return array(
+            'available' => FALSE,
+            'running' => FALSE,
+            'ready' => FALSE,
+            'starting' => FALSE,
+            'status' => 'not-created',
+            'idleShutdownMinutes' => $idleTimeoutMinutes,
+            'message' => 'OpenVSCode is not installed in this deployment. Recreate the application stack to enable the managed editor container.'
+          );
+        }
+
+        if ($inspect['status'] < 200 || $inspect['status'] >= 300) {
+          return array(
+            'available' => FALSE,
+            'running' => FALSE,
+            'ready' => FALSE,
+            'starting' => FALSE,
+            'status' => 'unavailable',
+            'idleShutdownMinutes' => $idleTimeoutMinutes,
+            'message' => 'The Docker control service is unavailable, so OpenVSCode could not be checked.'
+          );
+        }
+
+        $details = json_decode($inspect['body'], TRUE);
+        $running = is_array($details) && ! empty($details['State']['Running']);
+        $status = is_array($details) && isset($details['State']['Status']) ? (string) $details['State']['Status'] : ($running ? 'running' : 'stopped');
+        $started = FALSE;
+
+        if (! $running && $startIfStopped) {
+          $start = $this->requestInternalHttp($monitorUrl, 'POST', '/containers/jobseeker-openvscode/start', '{}', 5);
+          if (! in_array($start['status'], array(204, 304), TRUE)) {
+            return array(
+              'available' => TRUE,
+              'running' => FALSE,
+              'ready' => FALSE,
+              'starting' => FALSE,
+              'status' => $status,
+              'idleShutdownMinutes' => $idleTimeoutMinutes,
+              'message' => 'OpenVSCode is stopped and JobSeeker could not start its container.'
+            );
+          }
+          $running = TRUE;
+          $started = TRUE;
+          $status = 'starting';
+        }
+
+        $ready = FALSE;
+        if ($running) {
+          $internalUrl = trim((string) getenv('JOBSEEKER_OPENVSCODE_INTERNAL_URL'));
+          if ($internalUrl === '') {
+            $internalUrl = 'http://openvscode:3000';
+          }
+          $token = trim((string) getenv('JOBSEEKER_OPENVSCODE_TOKEN'));
+          $health = $this->requestInternalHttp($internalUrl, 'GET', '/?'.http_build_query(array('tkn' => $token), '', '&', PHP_QUERY_RFC3986), '', 2);
+          $ready = $health['status'] >= 200 && $health['status'] < 400;
+        }
+
+        return array(
+          'available' => TRUE,
+          'running' => $running,
+          'ready' => $ready,
+          'starting' => $running && ! $ready,
+          'started' => $started,
+          'status' => $ready ? 'ready' : $status,
+          'idleShutdownMinutes' => $idleTimeoutMinutes,
+          'message' => $ready
+            ? 'OpenVSCode is ready.'
+            : ($started ? 'OpenVSCode was started. Wait while the editor environment becomes available.' : 'OpenVSCode is starting. Wait while the editor environment becomes available.')
+        );
       }
 
       private function defaultDockerPythonVersion() {
@@ -2647,6 +2760,22 @@ class JobCreation extends BaseController
         echo json_encode(array('files' => $files, 'directories' => $directories));
       }
 
+      public function inlinePythonExternalStatus() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+
+        if (! $this->openVsCodeEnabled()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'OpenVSCode Server is disabled for this JobSeeker deployment.'), 404);
+          return;
+        }
+
+        $state = $this->openVsCodeRuntimeState(FALSE);
+        $state['ok'] = ! empty($state['available']);
+        $this->jsonJobCreationResponse($state, empty($state['available']) ? 503 : 200);
+      }
+
       public function inlinePythonExternalOpen() {
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
@@ -2712,6 +2841,15 @@ class JobCreation extends BaseController
 
         if ($this->input->post('pythonUseDockerfile') === '0') {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Enable Build from Dockerfile before opening this inline Python workspace in OpenVSCode.'), 400);
+          return;
+        }
+
+        $openVsCodeRuntime = $this->openVsCodeRuntimeState(TRUE);
+        if (empty($openVsCodeRuntime['available']) || empty($openVsCodeRuntime['running'])) {
+          $this->jsonJobCreationResponse(array(
+            'ok' => FALSE,
+            'message' => isset($openVsCodeRuntime['message']) ? $openVsCodeRuntime['message'] : 'OpenVSCode could not be started.'
+          ), 503);
           return;
         }
 
@@ -2801,7 +2939,13 @@ class JobCreation extends BaseController
         $snapshot['launchUrls'] = array('web' => $openVsCodeUrl);
         $snapshot['vscodeUrl'] = $openVsCodeUrl;
         $snapshot['projectFiles'] = $projectFiles;
-        $snapshot['message'] = 'Inline Python workspace is ready in OpenVSCode Server.';
+        $snapshot['openVsCodeReady'] = ! empty($openVsCodeRuntime['ready']);
+        $snapshot['openVsCodeStarting'] = ! empty($openVsCodeRuntime['starting']);
+        $snapshot['openVsCodeStatus'] = isset($openVsCodeRuntime['status']) ? $openVsCodeRuntime['status'] : 'unknown';
+        $snapshot['openVsCodeIdleShutdownMinutes'] = isset($openVsCodeRuntime['idleShutdownMinutes']) ? (int) $openVsCodeRuntime['idleShutdownMinutes'] : 0;
+        $snapshot['message'] = ! empty($openVsCodeRuntime['ready'])
+          ? 'Inline Python workspace is ready in OpenVSCode Server.'
+          : 'Inline Python workspace is ready. OpenVSCode is starting; wait while the editor environment becomes available.';
         $this->jsonJobCreationResponse($snapshot);
       }
 
@@ -2893,13 +3037,61 @@ class JobCreation extends BaseController
         );
       }
 
+      private function connectorRuntimeLines() {
+        return array(
+          'export JOBSEEKER_CONNECTORS_DIR="$WORKSPACE/.jobseeker-connectors"',
+          'rm -rf "$JOBSEEKER_CONNECTORS_DIR"',
+          'if [ -z "${JOBSEEKER_CONNECTOR_API_URL:-}" ] || [ -z "${JOBSEEKER_CONNECTOR_API_TOKEN:-}" ]; then echo "JobSeeker connector runtime is not configured on this Jenkins worker." >&2; exit 78; fi',
+          'command -v jobseeker-connector >/dev/null || { echo "The JobSeeker connector helper is not installed on this Jenkins worker." >&2; exit 127; }',
+          'umask 077',
+          'jobseeker-connector materialize --directory "$JOBSEEKER_CONNECTORS_DIR" --environment "${JOBSEEKER_ENVIRONMENT:-LOCAL}" --job "${JOBSEEKER_JOB_NAME:-job}" >/dev/null || { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; exit 1; }',
+          'if [ -f "$JOBSEEKER_CONNECTORS_DIR/.source-environment-variables" ]; then while IFS= read -r JOBSEEKER_SECRET_VARIABLE; do if [ -n "$JOBSEEKER_SECRET_VARIABLE" ]; then unset "$JOBSEEKER_SECRET_VARIABLE"; fi; done < "$JOBSEEKER_CONNECTORS_DIR/.source-environment-variables"; unset JOBSEEKER_SECRET_VARIABLE; fi',
+          'unset JOBSEEKER_CONNECTOR_API_URL JOBSEEKER_CONNECTOR_API_TOKEN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_FEDERATED_TOKEN_FILE AZURE_AUTHORITY_HOST AWS_REGION AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE',
+          'export JOBSEEKER_CONNECTOR_HELPER="$(command -v jobseeker-connector)"'
+        );
+      }
+
+      private function dockerConnectorSetupLines($dockerImage, $imageIsVariable = FALSE) {
+        $imageArgument = $imageIsVariable ? '"$JOBSEEKER_DOCKER_RUN_IMAGE"' : escapeshellarg($dockerImage);
+        return array(
+          'JOBSEEKER_CONNECTORS_VOLUME="$(printf "jobseeker-connectors-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"',
+          'docker volume create "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null',
+          'tar -C "$JOBSEEKER_CONNECTORS_DIR" -cf - . | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors" '.$imageArgument.' -c "cd /run/jobseeker-connectors && tar -xf - && find . -type d -exec chmod 0555 {} + && find . -type f ! -name jobseeker-connector -exec chmod 0444 {} + && chmod 0555 ./jobseeker-connector"'
+        );
+      }
+
+      private function dockerJobIdentityLines($runtime) {
+        return array(
+          'JOBSEEKER_CONTAINER_IDENTITY="${JOB_NAME:-job}-${BUILD_NUMBER:-0}"',
+          'JOBSEEKER_CONTAINER_SLUG="$(printf "%s" "${JOB_NAME:-job}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-72)"',
+          'if [ -z "$JOBSEEKER_CONTAINER_SLUG" ]; then JOBSEEKER_CONTAINER_SLUG="job"; fi',
+          'JOBSEEKER_CONTAINER_FINGERPRINT="$(printf "%s" "$JOBSEEKER_CONTAINER_IDENTITY" | cksum | awk \'{print $1}\')"',
+          'JOBSEEKER_CONTAINER_NAME="$(printf "jobseeker-job-%s-%s-%s" "$JOBSEEKER_CONTAINER_SLUG" "${BUILD_NUMBER:-0}" "$JOBSEEKER_CONTAINER_FINGERPRINT" | cut -c1-120)"',
+          'export JOBSEEKER_CONTAINER_NAME',
+          'export JOBSEEKER_CONTAINER_RUNTIME='.escapeshellarg($runtime)
+        );
+      }
+
+      private function dockerJobRunIdentityOptions() {
+        return array(
+          '  --name "$JOBSEEKER_CONTAINER_NAME" \\',
+          '  --label com.jobseeker.managed=true \\',
+          '  --label com.jobseeker.kind=job \\',
+          '  --label "com.jobseeker.job.name=${JOB_NAME:-${JOBSEEKER_JOB_NAME:-job}}" \\',
+          '  --label "com.jobseeker.build.number=${BUILD_NUMBER:-0}" \\',
+          '  --label "com.jobseeker.environment=${JOBSEEKER_ENVIRONMENT:-}" \\',
+          '  --label "com.jobseeker.runtime=${JOBSEEKER_CONTAINER_RUNTIME}" \\'
+        );
+      }
+
       private function buildLinuxCommandExecutionCommand($commandText, $runtimeOptions = array(), $repositoryRoot = '') {
         $commandText = str_replace(array("\r\n", "\r"), "\n", (string) $commandText);
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'alpine:3.20';
-        $runtimeLines = $this->dataAssetsRuntimeLines($repositoryRoot);
+        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
 
         if ($runtimeMode !== 'docker') {
+          $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
           $runtimeLines[] = $commandText;
           return implode("\n", $runtimeLines);
         }
@@ -2909,20 +3101,27 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
         $lines[] = 'export JOBSEEKER_LINUX_COMMAND_B64='.escapeshellarg(base64_encode($commandText));
         $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+        $lines = array_merge($lines, $this->dockerJobIdentityLines('linux-shell'));
         $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
         $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
         $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
-        $lines[] = 'jobseeker_asset_cleanup() { docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
+        $lines = array_merge($lines, $this->dockerConnectorSetupLines($dockerImage));
+        $lines[] = 'jobseeker_asset_cleanup() { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
         $lines[] = 'trap jobseeker_asset_cleanup EXIT';
         $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
         $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
         $lines[] = 'docker run --rm -i \\';
+        $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
         $lines[] = '  --network host \\';
         $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
+        $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
         $lines[] = '  -e "JOBSEEKER_LINUX_COMMAND_B64=$JOBSEEKER_LINUX_COMMAND_B64" \\';
         $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
         $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
+        $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
+        $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
         $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+        $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
@@ -2937,9 +3136,10 @@ class JobCreation extends BaseController
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : ($execution['scriptType'] === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
 
-        $runtimeLines = $this->dataAssetsRuntimeLines($repositoryRoot);
+        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
 
         if ($runtimeMode !== 'docker') {
+          $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
           $runtimeLines[] = 'sh '.escapeshellarg($execution['scriptPath']).($argumentString !== '' ? ' '.$argumentString : '');
           return implode("\n", $runtimeLines);
         }
@@ -2961,6 +3161,7 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
         $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
         $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+        $lines = array_merge($lines, $this->dockerJobIdentityLines($execution['scriptType'] === 'talend' ? 'talend' : 'linux-shell'));
         $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
         $lines[] = 'if [ "$JOBSEEKER_DOCKER_ENTRYPOINT" = "$JOBSEEKER_SCRIPT_PATH" ]; then JOBSEEKER_DOCKER_ENTRYPOINT="$(basename "$JOBSEEKER_SCRIPT_PATH")"; fi';
         $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-linux-docker-context"';
@@ -2971,17 +3172,23 @@ class JobCreation extends BaseController
         $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
         $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
         $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
-        $lines[] = 'jobseeker_linux_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
+        $lines = array_merge($lines, $this->dockerConnectorSetupLines($dockerImage));
+        $lines[] = 'jobseeker_linux_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
         $lines[] = 'trap jobseeker_linux_docker_cleanup EXIT';
         $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
         $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
         $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
+        $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
         $lines[] = '  --network host \\';
         $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
+        $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
         $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
         $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
         $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
+        $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
+        $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
         $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+        $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
@@ -2999,7 +3206,7 @@ class JobCreation extends BaseController
         $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
         $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $runTests = ! isset($runtimeOptions['runTests']) || (bool) $runtimeOptions['runTests'];
-        $lines = array_merge(array('set -e'), $this->dataAssetsRuntimeLines($repositoryRoot));
+        $lines = array_merge(array('set -e'), $this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
 
         if ($execution['mode'] === 'git') {
           $cloneCommand = 'git clone --depth 1';
@@ -3022,6 +3229,8 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_PYTHON_SDK="$JOBSEEKER_PYTHON_LIB/jobseeker-sdk"';
         $lines[] = 'export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"';
         $lines[] = 'export JOBSEEKER_VENV="$WORKSPACE/.venv"';
+        $lines[] = 'jobseeker_python_cleanup() { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; if [ -n "${JOBSEEKER_VENV:-}" ]; then rm -rf "$JOBSEEKER_VENV"; fi; }';
+        $lines[] = 'trap jobseeker_python_cleanup EXIT';
         $lines[] = 'export JOBSEEKER_PYTHON_RUNTIME='.escapeshellarg($runtimeMode);
         $lines[] = 'export JOBSEEKER_RUN_PYTEST='.escapeshellarg($runTests ? '1' : '0');
         $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
@@ -3098,12 +3307,14 @@ class JobCreation extends BaseController
             $lines[] = 'export JOBSEEKER_PYTHON_DOCKERFILE_B64='.escapeshellarg(base64_encode($dockerfileText));
           }
           $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
+          $lines = array_merge($lines, $this->dockerJobIdentityLines('python'));
           $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
           $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-python-docker-context"';
           $lines[] = 'JOBSEEKER_DOCKER_BUILT_IMAGE=""';
           $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME=""';
           $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME=""';
-          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT"; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DATA_ASSETS_VOLUME" ]; then docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
+          $lines[] = 'JOBSEEKER_CONNECTORS_VOLUME=""';
+          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; if [ -n "$JOBSEEKER_CONNECTORS_VOLUME" ]; then docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DATA_ASSETS_VOLUME" ]; then docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
           $lines[] = 'trap jobseeker_python_docker_cleanup EXIT';
           $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
           $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source" "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"';
@@ -3131,22 +3342,28 @@ class JobCreation extends BaseController
           $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
           $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
           $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
+          $lines = array_merge($lines, $this->dockerConnectorSetupLines('', TRUE));
           $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
           $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
           $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
+          $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
           $lines[] = '  --network host \\';
           $lines[] = '  -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" \\';
           $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
+          $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
           $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
           $lines[] = '  -e JOBSEEKER_EMAIL_METRICS_FILE=/jobseeker-email/jobseeker-email-metrics.properties \\';
           $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
           $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
+          $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
+          $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
           $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
           $lines[] = '  -e PYTHONUNBUFFERED \\';
-          $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID \\';
+          $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
           $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
           $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '').' || JOBSEEKER_DOCKER_STATUS=$?';
+          $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
           $lines[] = 'docker run --rm --user 0 --entrypoint cat -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email:ro" "$JOBSEEKER_DOCKER_RUN_IMAGE" /jobseeker-email/jobseeker-email-metrics.properties > "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" 2>/dev/null && mv "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" "$JOBSEEKER_EMAIL_METRICS_FILE" || rm -f "$JOBSEEKER_EMAIL_METRICS_FILE.tmp"';
           $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
           $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
@@ -3157,7 +3374,6 @@ class JobCreation extends BaseController
           $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
           $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
           $lines[] = '  "$JOBSEEKER_PYTHON" -m venv "$JOBSEEKER_VENV" || { echo "Unable to create Python virtual environment. Install python3-venv on this Jenkins agent or switch this job to Docker runtime."; exit 127; }';
-          $lines[] = '  trap \'rm -rf "$JOBSEEKER_VENV"\' EXIT';
           $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_VENV/bin/python"';
           $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check "$JOBSEEKER_PYTHON_SDK"';
           $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check -r "$JOBSEEKER_REQUIREMENTS"';
