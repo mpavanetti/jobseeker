@@ -353,16 +353,35 @@
   color: #fff;
 }
 
-.context-page .context-table-footer {
+.context-page .context-datatable-footer {
   align-items: center;
+  border-top: 1px solid #f4f4f4;
   display: flex;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 7px 10px;
 }
 
-.context-table-footer .dataTables_paginate {
+.context-datatable-footer .dataTables_info {
+  color: #777;
+  font-size: 12px;
+  padding-top: 0;
+}
+
+.context-datatable-footer .dataTables_paginate {
   margin: 0 !important;
+}
+
+.context-page div.dataTables_wrapper div.context-datatable-footer div.dataTables_paginate ul.pagination {
+  margin: 0;
+  vertical-align: middle;
+}
+
+.context-datatable-footer .pagination > li > a,
+.context-datatable-footer .pagination > li > span {
+  min-width: 34px;
+  padding: 6px 10px;
+  text-align: center;
 }
 
 .context-empty-filter {
@@ -418,7 +437,7 @@
   .context-page-heading,
   .context-page .context-card-header,
   .context-page .context-form-footer,
-  .context-page .context-table-footer {
+  .context-page .context-datatable-footer {
     align-items: flex-start;
     flex-direction: column;
     gap: 10px;
@@ -449,5 +468,9 @@
   .context-edit-meta {
     flex-direction: column;
     gap: 8px;
+  }
+
+  .context-datatable-footer .dataTables_paginate {
+    align-self: flex-end;
   }
 }

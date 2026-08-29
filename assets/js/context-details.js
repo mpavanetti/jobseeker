@@ -78,7 +78,7 @@
 
     var table = $table.DataTable({
       autoWidth: false,
-      dom: 'rtp',
+      dom: 'rt<"context-datatable-footer"ip>',
       order: [[6, 'desc']],
       pageLength: 20,
       lengthMenu: [10, 20, 50, 100],
@@ -92,6 +92,7 @@
       drawCallback: function() {
         var api = this.api();
         var info = api.page.info();
+        var $container = $(api.table().container());
         var environments = {};
         var activeCount = 0;
         var encryptedCount = 0;
@@ -107,17 +108,13 @@
         });
 
         $('#contextVisibleCount').text(info.recordsDisplay);
-        $('#contextTotalCount').text(info.recordsTotal);
         $('#contextActiveCount').text(activeCount);
         $('#contextEncryptedCount').text(encryptedCount);
         $('#contextEnvironmentCount').text(Object.keys(environments).length);
-        $('#contextTableInfo').text(info.recordsDisplay === info.recordsTotal
+        $container.find('.dataTables_info').text(info.recordsDisplay === info.recordsTotal
           ? info.recordsTotal + ' context' + (info.recordsTotal === 1 ? '' : 's')
           : info.recordsDisplay + ' of ' + info.recordsTotal + ' contexts');
-        var $pagination = $(api.table().container()).find('.dataTables_paginate');
-        if ($pagination.length) {
-          $('#contextTablePagination').append($pagination);
-        }
+        $container.find('.dataTables_paginate').toggle(info.pages > 1);
       }
     });
 
