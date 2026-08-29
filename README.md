@@ -1,322 +1,248 @@
 # JobSeeker
 
-Jenkins ETL scheduler and data pipeline monitoring portal.
+Self-hosted operations and orchestration for Jenkins-backed data jobs.
 
-JobSeeker is a self-hosted operations portal for Jenkins-backed ETL and batch jobs.
+JobSeeker gives data teams one place to create, schedule, run, promote, and monitor ETL and batch workloads. It adds environment-aware controls, visual pipelines, runtime configuration, observability, and governed analytics around Jenkins without replacing Jenkins as the execution engine.
 
-It gives data teams one place to create and trigger Jenkins jobs, schedule recurring runs, monitor execution status, inspect logs, query Transaction Monitoring Framework (TMF) history, and manage runtime configuration for Talend, Python, Bash, and other workloads.
+JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible workloads.
 
-## Highlights
+> **Project status:** beta. Use the default configuration for local evaluation only, and review the security guidance before deploying to a shared environment.
 
-- Create, update, schedule, trigger, stop, inspect, and delete Jenkins jobs from a controlled web UI.
-- Bind Jenkins jobs to runtime environments, then filter and inspect that environment across creation, listing, viewing, execution, deletion, TMF, and dashboards. A global environment selector in the top bar keeps those views aligned.
-- Schedule jobs with guided single-run, repetitive, tag-based, or custom Jenkins cron expressions.
-- Promote Jenkins jobs between environments with dependency discovery, context-variable promotion, artifact folder copy, dry-run previews, and rollback checkpoints.
-- Monitor running, queued, successful, failed, disabled, and not-built jobs with Jenkins build history, console output, environment badges, worker-node visibility, and focused environment filters.
-- Query TMF records by job, status, environment, date/time range, dimension, event text, and reprocess flag.
-- Run Python jobs with the bundled `jobseeker` SDK for TMF logging, context lookup, Data Asset discovery, progress updates, and Jenkins-agent or Docker execution.
-- Publish environment-aware Data Assets that unify uploaded datasets, declared inputs, and generated outputs behind stable `jobseeker://` URIs for Python, shell, Talend, and Docker jobs.
-- Track processed records, warnings, errors, messages, hostnames, users, and execution timing.
-- Manage database settings, generic key-value settings, SMTP settings, email templates, versioned data files, projects, environments, and context variables.
-- Publish embedded Power BI, Tableau, Qlik Sense, or iframe dashboards with user and group access control.
-- Manage users, roles, uploads, runtime settings, and operational dashboards from the same portal.
+## Capabilities
 
-## Architecture
+### Job operations
 
-JobSeeker is a CodeIgniter 3 PHP application backed by MariaDB and Jenkins.
+- Create and manage Jenkins jobs through guided forms for Python, Talend, Linux shell, and Windows command workloads.
+- Save multiple browser-cached job drafts, compare their configuration, duplicate them, and chain drafts before creating jobs.
+- Run jobs immediately or schedule one-time, recurring, tag-based, and custom Jenkins cron triggers.
+- Send templated email notifications for successful, failed, and aborted builds.
+- Inspect queue state, build history, worker assignment, grouped console output, Python test stages, and Docker resource usage.
 
-The Docker stack includes:
+### Visual pipelines
 
-- Nginx for the web server.
-- PHP-FPM for the application runtime.
-- MariaDB for JobSeeker metadata, TMF logs, users, settings, and contexts.
-- Jenkins for job execution, scheduling, build history, console output, and job control.
+- Build validated directed acyclic graphs by dragging existing Jenkins jobs onto a canvas.
+- Run independent jobs in parallel and model sequential, fan-in, recovery, `SUCCESS`, `FAILURE`, and `ALWAYS` paths.
+- Schedule pipelines, monitor each node live, inspect node console output, and stop active runs.
+- Synchronize pipeline definitions with Jenkins and deploy them between environments.
 
-In Docker, JobSeeker sends Jenkins API requests through an authenticated server-side proxy. The browser does not need Jenkins API credentials, and local Docker usage does not require manual Jenkins CORS setup.
+### Environments and promotion
 
-## Project Status
+- Keep job creation, execution, monitoring, TMF, pipelines, and analytics aligned through a global environment selector.
+- Promote jobs and pipelines with dependency discovery, context-variable handling, artifact copying, and dry-run previews.
+- Compare environments, inspect promotion history, and restore rollback checkpoints.
+- Route workloads to optional environment-specific Jenkins agents and apply per-environment trigger limits.
 
-Latest branch: `master` beta release.
+### Data runtime
 
-## Default Access
+- Use the bundled Python `jobseeker` SDK for TMF logging, context lookup, progress reporting, Data Asset discovery, and connector access.
+- Publish environment-aware Data Assets behind stable `jobseeker://` URIs for Python, shell, Talend, and Docker jobs.
+- Resolve named ETL connectors by environment and job scope from encrypted local values, worker variables, Azure Key Vault, or AWS Secrets Manager.
+- Open inline Docker Python jobs as full projects in the bundled OpenVSCode Server with Poetry, uv, Ruff, mypy, BasedPyright, pytest, coverage, and debugpy.
+- Gate Python execution with pytest and keep test output separate from application output in the Jenkins console.
 
-### JobSeeker users
+### Monitoring and analytics
 
-Role | Login | Password | Description
---- | --- | --- | ---
-System Administrator | admin@example.com | 123456 | Full administration access
-Developer | developer@example.com | 123456 | Job, file, ETL, dashboard, and monitoring access
-Key User | keyuser@example.com | 123456 | Monitoring, dashboard, and log analysis access
+- Monitor running, queued, successful, failed, disabled, and not-built Jenkins jobs from operational dashboards.
+- Query Transaction Monitoring Framework (TMF) history by job, status, environment, time range, dimension, event, and reprocessing state.
+- Track processed records, completion, warnings, errors, messages, runtime, host, and user metadata.
+- Build private or shared dashboards in Insight Studio using governed application datasets or approved database tables.
+- Publish sandboxed Power BI, Tableau, Qlik, Superset, Metabase, Grafana, and other external BI reports with user and group access rules.
 
-### Jenkins user
+### Administration
 
-Login | Password
---- | ---
-jobseeker | jobseeker
+- Manage users, roles, projects, environments, context variables, uploads, SMTP, email templates, and runtime settings.
+- Monitor Jenkins executors, environment slots, worker nodes, Docker containers, images, volumes, and job resource usage.
 
-Change the default users and passwords before using JobSeeker in a shared or production environment.
+## Quick Start
 
-## Quick Start With Docker
+### Requirements
 
-Make sure Docker and Docker Compose are installed.
+- Git
+- Docker Engine
+- Docker Compose v2
 
-Clone the repository and start the full stack:
+Clone the repository, create a local environment file, and start the stack:
+
 ```bash
 git clone https://github.com/mpavanetti/jobseeker.git
 cd jobseeker
-
-docker compose up -d --build
-```
-
-For local overrides, copy the environment template first:
-
-```bash
 cp .env.example .env
-```
-
-Open JobSeeker at http://localhost/ and Jenkins at http://localhost:8080/login.
-
-The Docker stack configures the database connection, session encryption key, and internal Jenkins API endpoint through [docker-compose.yml](docker-compose.yml).
-
-For a conservative local VM profile, set real values before starting the stack:
-```bash
-export JOBSEEKER_ENCRYPTION_KEY="replace-with-a-long-random-secret"
-export JOBSEEKER_DB_PASSWORD="replace-with-a-database-password"
-export JOBSEEKER_MYSQL_ROOT_PASSWORD="replace-with-a-root-password"
-export JENKINS_ADMIN_PASSWORD="replace-with-a-jenkins-password-or-token"
-export JENKINS_NUM_EXECUTORS="1"
-export JOBSEEKER_JENKINS_PUBLIC_URL="http://localhost:8080/"
-export JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS="1"
-export JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS="DEV=2,QA=1"
-export JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED="false"
-
 docker compose up -d --build
 ```
 
-Jenkins controller parallelism is controlled by `JENKINS_NUM_EXECUTORS`. The local `.env.example` template uses 1 controller executor so a 4-core development VM has CPU headroom for the application, database, Jenkins controller, and lightweight DEV/QA agents. Increase it for larger shared environments.
+The first start builds the application and Jenkins images, restores frontend assets, initializes MariaDB, and waits for the services to become healthy.
 
-JobSeeker also gates build triggers by runtime environment before they reach Jenkins. `JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS` sets the per-environment default, and `JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` can override individual environments with comma-separated values such as `DEV=2,QA=1,PROD=2`. This prevents JobSeeker-triggered DEV jobs from consuming the configured PROD capacity.
+Service | Default URL
+--- | ---
+JobSeeker | http://localhost/
+Jenkins | http://localhost:8080/login
+Mailpit | http://localhost:8025/
+OpenVSCode Server | http://localhost:3000/ (normally opened from a job's **Code** action)
 
-Executors and slots are not CPU reservations. A Jenkins executor is permission for Jenkins to run one build concurrently on that node. A JobSeeker slot is an application-side trigger gate. If a VM has 4 CPU threads, setting 3 controller executors plus 5 agent executors means Jenkins may try to run 8 builds concurrently, but Docker/Linux will time-slice them unless you also set container CPU limits. For CPU-heavy ETL, keep online executors near the CPU capacity you actually want to spend.
+Use `JOBSEEKER_HTTP_PORT`, `JENKINS_HTTP_PORT`, `JOBSEEKER_MAILPIT_HTTP_PORT`, or `JOBSEEKER_OPENVSCODE_PORT` in `.env` when a default port is already in use.
 
-Increasing `JENKINS_NUM_EXECUTORS` adds more parallel worker capacity inside the current Jenkins container; it does not automatically start more worker containers.
+### Default access
 
-### Optional Jenkins Environment Agents
+JobSeeker role | Login | Password
+--- | --- | ---
+System Administrator | `admin@example.com` | `123456`
+Developer | `developer@example.com` | `123456`
+Key User | `keyuser@example.com` | `123456`
 
-For a lightweight Airflow-worker-style layout, JobSeeker includes optional Jenkins inbound agents per environment. The default stack does not start them. On a small local VM, start only the environments you plan to run, usually DEV and QA:
+Jenkins login | Password
+--- | ---
+`jobseeker` | `jobseeker`
 
-Set routing in `.env` first:
-
-```bash
-JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true
-```
-
-Then start the local DEV/QA workers and recreate PHP so the routing flag is loaded:
-
-```bash
-docker compose --profile jenkins-agents up -d --build --force-recreate php jenkins-agent-dev jenkins-agent-qa
-```
-
-For a shared environment where DEV, QA, UAT, and PROD should all have active workers, start the full profile:
-
-```bash
-docker compose --profile jenkins-agents up -d --build
-```
-
-If UAT/PROD agents were previously started but you want the lighter local profile, stop them:
-
-```bash
-docker compose stop jenkins-agent-uat jenkins-agent-prod
-```
-
-The profile starts these worker services by default:
-
-Service | Environment | Default label | Executors
---- | --- | --- | ---
-`jenkins-agent-dev` | DEV | `jobseeker-env-dev` | `JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS` or 2
-`jenkins-agent-qa` | QA | `jobseeker-env-qa` | `JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS` or 1
-`jenkins-agent-uat` | UAT | `jobseeker-env-uat` | `JOBSEEKER_JENKINS_UAT_AGENT_EXECUTORS` or 1
-`jenkins-agent-prod` | PROD | `jobseeker-env-prod` | `JOBSEEKER_JENKINS_PROD_AGENT_EXECUTORS` or 1
-
-When `JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true`, jobs created or promoted by JobSeeker are assigned to the configured environment label through Jenkins `assignedNode`. Existing unpinned jobs are also reconciled to the selected environment label before they are triggered through JobSeeker. Direct Jenkins UI/API triggers bypass that safety check and use the current Jenkins job configuration.
-
-To enable agent routing in a local `.env`, set:
-
-```bash
-JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true
-```
-
-Then recreate the PHP app container so the setting is loaded:
-
-```bash
-docker compose up -d --force-recreate php
-```
-
-For a 4-core local development VM, a practical starting point is:
-
-```bash
-JENKINS_NUM_EXECUTORS=1
-JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS=DEV=2,QA=1
-JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS=2
-JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS=1
-```
-
-To disable routing, set the same variable to `false` and recreate `php`. The agent containers can still be online, but JobSeeker will stop writing `assignedNode` labels for newly created or promoted jobs.
-
-`JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS` can override the routing map with comma-separated values such as `DEV=jobseeker-env-dev,QA=jobseeker-env-qa,PROD=jobseeker-env-prod`. The agent container labels can also include aliases, but the routing label must be present on the matching Jenkins node.
-
-Agents use the internal Jenkins TCP agent port by default through `JOBSEEKER_JENKINS_AGENT_TUNNEL=jenkins:50000`. Set `JOBSEEKER_JENKINS_AGENT_WEB_SOCKET=true` if you prefer WebSocket agents and your Jenkins root URL is reachable from the worker containers.
-
-Per-agent parallelism is configured with the agent executor variables, for example:
-
-```bash
-JOBSEEKER_JENKINS_DEV_AGENT_EXECUTORS=2
-JOBSEEKER_JENKINS_QA_AGENT_EXECUTORS=1
-```
-
-After changing an agent executor count, recreate that agent service:
-
-```bash
-docker compose --profile jenkins-agents up -d --force-recreate jenkins-agent-dev
-```
-
-The Executor Monitor page shows environment trigger slots, online worker nodes, worker executor capacity, queue state, and live executor usage. It also includes an Agent Setup Helper that recommends controller executors, per-environment agent executors, JobSeeker slot limits, and the matching `.env` values for either local Docker/VM deployments or a Kubernetes worker-pod path. Completed build history shows the Jenkins `builtOn` node so you can see where a job ran; the exact executor/core number is only available while the build is live in the Executor Monitor.
-
-To tell where a job ran:
-
-- While it is running, open Executor Monitor and check Live Executor Details. The row shows the Jenkins node and executor number, such as `jobseeker-dev-agent #0`.
-- After it finishes, use Job List, Job View, or Full Job Build List. The Worker/Last Worker field comes from Jenkins `builtOn`.
-- In Jenkins itself, the build page also exposes `builtOn`; a blank value means it ran on the built-in controller node.
-
-Docker Compose is the recommended installation path because it starts the application, database, and Jenkins execution engine together.
-
-### Runtime Stack
-
-- PHP-FPM 8.3 with the required MySQL and ZIP extensions.
-- Nginx 1.29 Alpine serving the CodeIgniter application.
-- MariaDB 10.7 for JobSeeker and TMF data.
-- Jenkins 2.568.2 LTS with pinned plugins, Docker CLI access, the JobSeeker Python SDK runtime, and optional inbound agent workers.
-
-Frontend assets are managed with npm in [package.json](package.json) and [package-lock.json](package-lock.json). The application still serves legacy AdminLTE 2, Bootstrap 3, and jQuery-era paths under `assets/bower_components`, but that directory is generated and is not committed.
-
-Docker Compose restores those assets automatically through the `assets` service before Nginx starts. To refresh them manually, run:
-
-```bash
-docker compose run --rm assets
-```
-
-Generated runtime cache files under `application/cache`, including job creation timestamps and promotion rollback checkpoints, are local artifacts and are ignored by Git.
-
-### Inline Python workspace
-
-Docker inline Python jobs can be opened as full projects in the bundled OpenVSCode Server. The workspace includes pinned Python, Poetry, uv, Ruff, mypy, BasedPyright, pytest/coverage, and debugpy tooling, plus Git/SSH and native build tools for packages that compile extensions. The selected stable Python minor is installed on demand and reused, while project dependencies are isolated in `.venv`.
-
-Generated workspaces include `pyproject.toml`, `poetry.lock`, `.dockerignore`, pytest configuration and a smoke test, Ruff/mypy configuration, launch profiles, and VS Code tasks for setup, checks, tests, and coverage. The bootstrap task recreates an incompatible or prerelease virtual environment and installs the complete development dependency group. The lock file and editor/Docker project files are durable and participate in environment promotion; virtual environments and caches do not.
-
-The generated Dockerfile installs locked project and test dependencies at image-build time, runs the job as an unprivileged user, and marks the image so Jenkins does not resolve the same dependencies again when the container starts. Custom Dockerfiles retain the runtime fallback; a custom image that already installs its project dependencies can opt out of that fallback with `JOBSEEKER_DEPENDENCIES_PREINSTALLED=1`.
-
-Docker Python jobs enable **Run pytest before Python execution** by default. Jenkins discovers `test_*.py` and `*_test.py`, runs pytest as a blocking gate, and presents **Python tests** and **Python execution** as separate console sections. A failed test prevents the entry point from starting. The setting is stored per job and can be disabled when a deployment should run without tests; projects with no discovered tests continue normally.
-
-Start or rebuild the editor with:
-
-```bash
-docker compose --profile openvscode up -d --build openvscode
-```
-
-The default Compose configuration binds the editor to localhost and protects it with `OPENVSCODE_SERVER_TOKEN`. Use a strong token and an HTTPS reverse proxy before exposing it beyond the local machine.
-
-## Environment Promotion
-
-The Context Settings menu contains projects, environments, context variables, and the Environment Promotion workbench.
-
-Environment promotion is Jenkins-job based: JobSeeker reads the source job configuration, detects its current environment, rewrites environment-bound parameters and downstream links for the target environment, optionally promotes dependencies and context variables, and can copy matching artifact folders. Preview mode shows the planned job, context, artifact, and rollback impact before writing changes.
-
-Inline Python promotion copies durable workspace content, including `poetry.lock`, Docker files, `.env.example`, tests, and `.vscode` project files. It leaves behind disposable local environments, tool caches, `.env` secrets, coverage reports, and build output. The promoted workspace recreates the required environments and caches when it is opened or run.
-
-The Jenkins-agent inline Python preview creates `$WORKSPACE/.venv` only when `requirements.txt` contains dependencies, installs the job requirements there, runs with that interpreter, and removes the virtual environment when the run exits.
-
-Jobs created through JobSeeker now require a runtime environment. Existing Jenkins jobs without a detectable environment remain visible as `Unknown` so older jobs can still be listed, inspected, filtered, and cleaned up safely. Use the top-bar environment selector to keep job lists, run/view/delete filters, TMF queries, and new job creation focused on the same environment.
+> **Important:** change all default passwords, `JOBSEEKER_ENCRYPTION_KEY`, `JOBSEEKER_CONNECTOR_API_TOKEN`, and `JOBSEEKER_OPENVSCODE_TOKEN` before shared or production use. Terminate TLS at a trusted reverse proxy and set secure cookie options for HTTPS deployments.
 
 ## Demo Data
 
-After the Docker stack is running, seed Jenkins and MariaDB with representative demo data:
+Populate Jenkins and MariaDB with representative jobs, build states, TMF history, connected reports, and Insight Studio dashboards:
 
 ```bash
 ./seed_demo_data.sh
 ```
 
-The seed creates Jenkins jobs with successful, failed, disabled, not-built, running, and queued states. It also creates Python SDK sample jobs for Jenkins-agent and Docker execution, then inserts TMF rows across past dates, statuses, dimensions, environments, warnings, and errors.
+The seed includes successful, failed, running, queued, disabled, and not-built jobs, plus Python SDK examples for Jenkins-agent and Docker execution.
 
-Remove the demo dataset with:
+Remove the seeded dataset with:
 
 ```bash
 ./seed_demo_data.sh --cleanup
 ```
 
-Useful overrides:
+Customize a demo run with environment variables:
 
 ```bash
 DEMO_PREFIX=showcase DEMO_SLEEP_SECONDS=1200 DEMO_BLOCKER_COUNT=5 ./seed_demo_data.sh
 ```
 
-## Documentation and Use Cases
+## Configuration
 
-### Product Documentation
+[.env.example](.env.example) documents the complete local configuration. The most important settings are:
 
-1. [Data Visualization](doc/jobseeker/DataVisualization)
-2. [Transaction Monitoring Framework](doc/jobseeker/TransactionMonitoring)
-3. [ETL Helpers and Runtime Configuration](doc/jobseeker/ETL)
-4. [Job Management](doc/jobseeker/JobManagement)
-5. [Jenkins Setup Notes](doc/Jenkins)
+Variable | Purpose
+--- | ---
+`JOBSEEKER_ENCRYPTION_KEY` | Encrypts application-managed secrets and governed data-source credentials.
+`JOBSEEKER_DB_PASSWORD` / `JOBSEEKER_MYSQL_ROOT_PASSWORD` | Protect the application and root database accounts.
+`JENKINS_ADMIN_PASSWORD` | Configures the Jenkins account used by JobSeeker's server-side proxy.
+`JOBSEEKER_CONNECTOR_API_TOKEN` | Authenticates build workers when resolving scoped connectors.
+`JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS` | Sets the default application-side concurrent trigger limit per environment.
+`JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` | Overrides limits by environment, for example `DEV=2,QA=1,PROD=2`.
+`JOBSEEKER_OPENVSCODE_TOKEN` | Protects the browser-based Python workspace.
+`JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES` | Stops an unused editor automatically; use `0` to keep it running.
 
-The visualization workspace includes a native drag-and-drop Insight Studio backed by six built-in operational datasets, governed MySQL/MariaDB or PostgreSQL table connections, and sandboxed external BI reports. It supports global filters, searchable fields, presentation mode, portable JSON templates, and private or team-shared dashboards. Database credentials are encrypted at rest; no arbitrary SQL or credentials are exposed to the browser.
+Connector values for local workers can be placed in an ignored `.env.connectors` file based on [.env.connectors.example](.env.connectors.example).
 
-### Example Implementations
+### Optional environment agents
 
-1. [Talend Data Integration Use Case](doc/Talend)
-2. [Python ETL Use Case](doc/Python)
+The default stack runs jobs on the Jenkins controller. To route jobs to environment-specific inbound agents, enable routing in `.env`:
+
+```bash
+JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=true
+```
+
+Then start the required workers. A small local setup usually needs only DEV and QA:
+
+```bash
+docker compose --profile jenkins-agents up -d --build \
+  jenkins-agent-dev jenkins-agent-qa
+docker compose up -d --force-recreate php
+```
+
+Jenkins executors control how many builds a node can run. JobSeeker environment slots control how many JobSeeker-triggered builds can enter Jenkins for each environment. Neither setting reserves CPU or memory, so size both for the available host capacity.
+
+## Architecture
+
+JobSeeker is a CodeIgniter 3 application backed by MariaDB and Jenkins.
+
+Component | Responsibility
+--- | ---
+Nginx | Serves the web application and routes PHP requests.
+PHP-FPM | Runs JobSeeker, authorization, configuration, orchestration, and API proxy logic.
+MariaDB | Stores users, settings, contexts, pipeline definitions, TMF records, and analytics metadata.
+Jenkins | Schedules and executes jobs and pipelines, and retains build history and console output.
+Docker runtime | Builds and runs isolated Docker workloads without exposing its daemon directly to the application.
+OpenVSCode Server | Provides full project workspaces for inline Docker Python jobs.
+Mailpit | Captures local email notifications during development and evaluation.
+
+Browser requests to Jenkins pass through an authenticated server-side proxy. Jenkins credentials and connector secrets are not sent to the browser. Pipeline definitions compile to hidden Jenkins Pipeline jobs, so Jenkins remains the durable scheduler and execution engine.
+
+## Security Model
+
+- Role-based access controls protect administrative and job-management actions.
+- CSRF validation covers application mutations and proxied Jenkins mutations.
+- Connector secrets are resolved only when a build starts, scoped by environment and job, materialized in protected temporary files, and removed after execution.
+- Insight Studio resolves datasets and fields through server-side allowlists; it does not expose arbitrary SQL or database credentials to the browser.
+- Connected BI reports are rebuilt into restricted iframe elements with sandbox and referrer controls.
+
+The bundled defaults are intended for local development. Production deployments still require unique secrets, HTTPS, network policy, backups, least-privilege external accounts, and an appropriate Jenkins worker topology.
+
+## Documentation
+
+Topic | Guide
+--- | ---
+Documentation index | [doc/README.md](doc/README.md)
+Job management | [doc/jobseeker/JobManagement/README.md](doc/jobseeker/JobManagement/README.md)
+Visual pipelines | [doc/jobseeker/ETL/pipelines/README.md](doc/jobseeker/ETL/pipelines/README.md)
+Data Assets | [doc/jobseeker/ETL/data-assets/README.md](doc/jobseeker/ETL/data-assets/README.md)
+ETL connectors | [doc/jobseeker/ETL/connectors/README.md](doc/jobseeker/ETL/connectors/README.md)
+Transaction Monitoring Framework | [doc/jobseeker/TransactionMonitoring/README.md](doc/jobseeker/TransactionMonitoring/README.md)
+Insight Studio and connected BI | [doc/jobseeker/DataVisualization/README.md](doc/jobseeker/DataVisualization/README.md)
+Python ETL | [doc/Python/README.MD](doc/Python/README.MD)
+Talend ETL | [doc/Talend/README.md](doc/Talend/README.md)
+Jenkins notes | [doc/Jenkins/README.md](doc/Jenkins/README.md)
 
 ## Screenshots
 
-Dashboard with Jenkins and TMF status:
+### Operations dashboard
 
 ![JobSeeker Dashboard](doc/img/JobSeekerDashboard.png)
 
-Transaction Monitoring records:
+### Transaction monitoring
 
 ![JobSeeker TMF](doc/img/JobSeekerTMF.png)
 
-Job creation and available jobs:
+### Pipelines
+
+![JobSeeker Job Creation](doc/img/JobSeekerPipeline.png)
+
+### Job creation
 
 ![JobSeeker Job Creation](doc/img/JobSeekerJobCreation.png)
 
-Job build list:
+### Job and build monitoring
 
 ![JobSeeker Job List](doc/img/JobSeekerJobList.png)
 
-Job execution workspace:
+### Job execution
 
 ![JobSeeker Job Execution](doc/img/JobSeekerJobExecution.png)
 
-## Videos
+## Video Demos
 
-English JobSeeker demonstration:
+[![English JobSeeker demonstration](doc/img/youtube1.JPG)](https://www.youtube.com/watch?v=p9Qusad2Kc0&t)
 
-[![English JobSeeker Demonstration Video](doc/img/youtube1.JPG)](https://www.youtube.com/watch?v=p9Qusad2Kc0&t)
+[![Brazilian Portuguese JobSeeker demonstration](doc/img/youtube2.JPG)](https://www.youtube.com/watch?v=Pms98qTvfA0)
 
-Brazilian Portuguese JobSeeker demonstration:
+## Development Checks
 
-[![Portuguese JobSeeker Demonstration Video](doc/img/youtube2.JPG)](https://www.youtube.com/watch?v=Pms98qTvfA0)
+Validate Compose configuration and run the focused JavaScript regression suite:
 
-## Credits
+```bash
+docker compose config --quiet
+npm ci
+npm test
+```
 
-Matheus Pavanetti
-(maintainer@example.com)
+Docker Compose restores generated frontend assets automatically. To refresh them manually:
 
-## Contributors
+```bash
+docker compose run --rm assets
+```
 
-New contributors are always welcome.
+Issues and pull requests with reproducible details are welcome.
 
-## Notes
+## Maintainer
 
-JobSeeker is currently beta software. Please report bugs with enough detail to reproduce the issue.
+[Matheus Pavanetti](https://www.linkedin.com/in/matheuspavanetti/)
