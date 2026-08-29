@@ -65,6 +65,7 @@ $route['docker-monitoring/snapshot'] = 'DockerMonitoring/snapshot';
 $route['docker-monitoring/storage'] = 'DockerMonitoring/storage';
 $route['docker-monitoring/reclaim-cache'] = 'DockerMonitoring/pruneCache';
 $route['docker-monitoring/jobs'] = 'DockerMonitoring/jobs';
+$route['delete-job/jobs'] = 'DeleteJob/deleteJobs';
 $route['jenkins/proxy'] = 'JenkinsProxy/proxy';
 $route['jenkins/environmentSlots'] = 'JenkinsProxy/environmentSlots';
 $route['jenkins/executorMonitor'] = 'JenkinsProxy/executorMonitor';

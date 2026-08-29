@@ -105,7 +105,6 @@
 
   function filterRows() {
     var query = $.trim($('#assetSearch').val() || '').toLowerCase();
-    var environment = $('#assetEnvironmentFilter').val();
     var direction = $('#assetDirectionFilter').val();
     var format = $('#assetFormatFilter').val();
     var visible = 0;
@@ -115,7 +114,6 @@
       var role = String($row.data('direction'));
       var roleMatches = !direction || role === direction || (direction === 'input' && role === 'input_output') || (direction === 'output' && role === 'input_output');
       var show = (!query || String($row.data('search')).indexOf(query) !== -1) &&
-        (!environment || String($row.data('environment')) === environment) &&
         roleMatches && (!format || String($row.data('format')) === format);
       $row.toggle(show);
       if (show) visible += 1;
@@ -215,9 +213,14 @@
     });
 
     $('#assetSearch').on('input', filterRows);
-    $('#assetEnvironmentFilter, #assetDirectionFilter, #assetFormatFilter').on('change', filterRows);
+    $('#assetEnvironmentFilter').on('change', function () {
+      var baseUrl = window.JobSeekerDataAssets && window.JobSeekerDataAssets.baseUrl ? window.JobSeekerDataAssets.baseUrl : window.location.pathname;
+      window.location.href = baseUrl + '?environment=' + encodeURIComponent($(this).val() || 'ALL');
+    });
+    $('#assetDirectionFilter, #assetFormatFilter').on('change', filterRows);
     $('#clearAssetFilters').on('click', function () {
-      $('#assetSearch, #assetEnvironmentFilter, #assetDirectionFilter, #assetFormatFilter').val('');
+      $('#assetSearch, #assetDirectionFilter, #assetFormatFilter').val('');
+      $('#assetEnvironmentFilter').val(window.JobSeekerDataAssets && window.JobSeekerDataAssets.initialEnvironment ? window.JobSeekerDataAssets.initialEnvironment : 'ALL');
       filterRows();
     });
   });

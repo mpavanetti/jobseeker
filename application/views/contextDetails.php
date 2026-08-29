@@ -301,7 +301,9 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
 
 <script>
 window.contextDetailsConfig = {
-  deleteUrl: <?php echo json_encode(base_url().'Context/deleteContext'); ?>
+  deleteUrl: <?php echo json_encode(base_url().'Context/deleteContext'); ?>,
+  baseUrl: <?php echo json_encode(base_url().'Context/contextDetails'); ?>,
+  selectedEnvironment: <?php echo json_encode(isset($selectedEnvironment) ? $selectedEnvironment : 'ALL'); ?>
 };
 </script>
 <script src="<?php echo base_url(); ?>assets/js/context-details.js?v=1"></script>

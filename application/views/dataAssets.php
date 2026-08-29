@@ -210,7 +210,7 @@ rows = asset.read()</pre>
         <div class="box-body data-assets-toolbar">
           <div class="row">
             <div class="col-md-5"><div class="input-group"><span class="input-group-addon"><i class="fa fa-search"></i></span><input id="assetSearch" class="form-control" placeholder="Search key, name, job, path or description"></div></div>
-            <div class="col-md-2"><select id="assetEnvironmentFilter" class="form-control"><option value="">All environments</option><option value="ALL">ALL fallback</option><?php foreach ($environments as $environment) { ?><option value="<?php echo html_escape(strtoupper($environment->Environment)); ?>"><?php echo html_escape(strtoupper($environment->Environment)); ?></option><?php } ?></select></div>
+            <div class="col-md-2"><select id="assetEnvironmentFilter" class="form-control"><option value="ALL">All environments</option><?php foreach ($environments as $environment) { ?><option value="<?php echo html_escape(strtoupper($environment->Environment)); ?>"><?php echo html_escape(strtoupper($environment->Environment)); ?> + ALL fallback</option><?php } ?></select></div>
             <div class="col-md-2"><select id="assetDirectionFilter" class="form-control"><option value="">All roles</option><option value="input">Inputs</option><option value="output">Outputs</option><option value="input_output">Input + output</option></select></div>
             <div class="col-md-2"><select id="assetFormatFilter" class="form-control"><option value="">All formats</option><?php foreach ($formats as $key => $format) { ?><option value="<?php echo html_escape($key); ?>"><?php echo html_escape($format['label']); ?></option><?php } ?></select></div>
             <div class="col-md-1"><button id="clearAssetFilters" type="button" class="btn btn-default btn-block" title="Clear filters"><i class="fa fa-eraser"></i></button></div>
@@ -269,5 +269,5 @@ rows = asset.read()</pre>
 </div>
 
 <script id="dataAssetsPayload" type="application/json"><?php echo json_encode($assetPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?></script>
-<script>window.JobSeekerDataAssets = { initialDirection: <?php echo json_encode($initialDirection); ?>, initialEnvironment: <?php echo json_encode($initialEnvironment === 'ALL' && trim((string) $this->input->get('environment')) === '' ? '' : $initialEnvironment); ?> };</script>
+<script>window.JobSeekerDataAssets = { initialDirection: <?php echo json_encode($initialDirection); ?>, initialEnvironment: <?php echo json_encode($initialEnvironment); ?>, baseUrl: <?php echo json_encode(base_url().'data-assets'); ?> };</script>
 <script src="<?php echo base_url(); ?>assets/js/data-assets.js?v=2"></script>

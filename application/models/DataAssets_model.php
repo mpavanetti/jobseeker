@@ -151,10 +151,14 @@ class DataAssets_model extends CI_Model
         );
     }
 
-    public function listAssets()
+    public function listAssets($environment = 'ALL')
     {
+        $this->db->from('data_assets');
+        $environment = strtoupper(trim((string) $environment));
+        if ($environment !== '' && $environment !== '*' && $environment !== 'ALL') {
+            $this->db->where_in('environment', array($environment, 'ALL'));
+        }
         return $this->db
-            ->from('data_assets')
             ->order_by('is_active', 'DESC')
             ->order_by('environment', 'ASC')
             ->order_by('name', 'ASC')
@@ -223,15 +227,15 @@ class DataAssets_model extends CI_Model
             ->result();
     }
 
-    public function statistics()
+    public function statistics($environment = 'ALL')
     {
-        $row = $this->db->query("SELECT
-            COUNT(*) AS total,
-            SUM(is_active = 1) AS active,
-            SUM(direction IN ('input','input_output')) AS inputs,
-            SUM(direction IN ('output','input_output')) AS outputs,
-            SUM(version > 0) AS uploaded
-            FROM data_assets")->row();
+        $this->db->select("COUNT(*) AS total, SUM(is_active = 1) AS active, SUM(direction IN ('input','input_output')) AS inputs, SUM(direction IN ('output','input_output')) AS outputs, SUM(version > 0) AS uploaded", FALSE);
+        $this->db->from('data_assets');
+        $environment = strtoupper(trim((string) $environment));
+        if ($environment !== '' && $environment !== '*' && $environment !== 'ALL') {
+            $this->db->where_in('environment', array($environment, 'ALL'));
+        }
+        $row = $this->db->get()->row();
 
         return $row ?: (object) array('total' => 0, 'active' => 0, 'inputs' => 0, 'outputs' => 0, 'uploaded' => 0);
     }

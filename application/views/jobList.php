@@ -526,7 +526,7 @@ pre {
   var bulkTriggerInProgress = false;
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
   var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
-  var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
+  var deleteJobsUrl = <?php echo json_encode(base_url() . 'delete-job/jobs'); ?>;
   var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
   var jobExecutionUrl = <?php echo json_encode(base_url() . 'jobExecution'); ?>;
   var environmentHelper = window.JobSeekerEnvironment || {
@@ -542,19 +542,12 @@ pre {
     }).join('/');
   }
 
-  function deleteJenkinsJob(jobName, jenkinsUrl) {
+  function deleteJenkinsJob(jobName, environment, deleteRepository) {
     return $.ajax({
-      url: jenkinsUrl + jenkinsJobPath(jobName) + '/doDelete',
-      method: 'POST'
-    });
-  }
-
-  function deleteJobRepositories(jobNames) {
-    return $.ajax({
-      url: deleteRepositoriesUrl,
+      url: deleteJobsUrl,
       method: 'POST',
       dataType: 'json',
-      data: {jobs: jobNames}
+      data: {jobs: [jobName], environment: environment, delete_repositories: deleteRepository ? '1' : '0'}
     });
   }
 
@@ -970,30 +963,12 @@ pre {
     return isAllEnvironmentFilter(jobEnvironmentFilter) ? 'all' : normalizeEnvironmentFilterValue(jobEnvironmentFilter);
   }
 
-  function rowMatchesEnvironmentFilter(row) {
-    if (isAllEnvironmentFilter(jobEnvironmentFilter)) {
-      return true;
-    }
-
-    var environment = normalizeEnvironmentFilterValue(environmentTextForRow(row));
-
-    if (! isConfiguredEnvironment(environment)) {
-      return false;
-    }
-
-    return jobEnvironmentFilter === 'all' || environment === normalizeEnvironmentFilterValue(jobEnvironmentFilter);
-  }
-
   function renderEnvironment(row) {
     var info = environmentInfoForRow(row);
     return '<span class="environment-cell">' + environmentHelper.label(info) + '<small>' + escapeHtml(info.source || 'Not detected') + '</small></span>';
   }
 
   function rowMatchesMonitorFilter(row, filter) {
-    if (! rowMatchesEnvironmentFilter(row)) {
-      return false;
-    }
-
     if (filter === 'running') {
       return isJobRunning(row);
     }
@@ -1019,7 +994,8 @@ pre {
 
   function updateMonitorFilterCounts(jobs) {
     updateEnvironmentFilterOptions(jobs);
-    var environmentJobs = (jobs || []).filter(rowMatchesEnvironmentFilter);
+    // The availableJobs endpoint already returned the selected environment.
+    var environmentJobs = jobs || [];
 
     $('#monitor-filter-all').text(environmentJobs.length);
     $('#monitor-filter-healthy').text(environmentJobs.filter(isJobHealthy).length);
@@ -1051,7 +1027,7 @@ pre {
 
   function updateMonitorSummary(jobs) {
     jobs = jobs || [];
-    var environmentJobs = jobs.filter(rowMatchesEnvironmentFilter);
+    var environmentJobs = jobs;
     var running = environmentJobs.filter(isJobRunning).length;
     var queued = environmentJobs.filter(function(job) { return job && job.inQueue === true; }).length;
     var attention = environmentJobs.filter(isJobAttention).length;
@@ -1494,7 +1470,7 @@ pre {
       var row = rowData || (settings.aoData && settings.aoData[dataIndex] ? settings.aoData[dataIndex]._aData : null);
 
       if (settings.nTable.id !== 'listTable') {
-        return rowMatchesEnvironmentFilter(row);
+        return true;
       }
 
       return rowMatchesMonitorFilter(row, jobMonitorFilter);
@@ -1968,28 +1944,23 @@ pre {
         var deleteRepository = $('#deleteBuildListRepository').is(':checked');
         $('.overlay').show();
 
-        deleteJenkinsJob(job, jenkins_url).done(function() {
-          toastr.success('Jenkins job deleted successfully.', 'Job Deleted');
-          delete jobScheduleCache[job];
-
-          if (! deleteRepository) {
-            reloadJobTables();
+        deleteJenkinsJob(job, environment, deleteRepository).done(function(data) {
+          var result = data && data.results && data.results.length ? data.results[0] : null;
+          if (! result || ! result.deleted) {
+            toastr.error(result && result.error ? result.error : 'The backend did not delete this job.', 'Delete Failed');
             $('.overlay').hide();
             return;
           }
-
-          deleteJobRepositories([job]).done(function(data) {
-            reportRepositoryDeleteResults(data);
-          }).fail(function() {
-            console.error(arguments);
-            toastr.error('The Jenkins job was deleted, but repository cleanup failed.', 'Repository Delete Failed');
-          }).always(function() {
-            reloadJobTables();
-            $('.overlay').hide();
-          });
-        }).fail(function() {
-          console.error(arguments);
-          toastr.error('The Jenkins job could not be deleted.', 'Delete Failed');
+          toastr.success('Jenkins job deleted successfully.', 'Job Deleted');
+          delete jobScheduleCache[job];
+          if (deleteRepository) {
+            reportRepositoryDeleteResults({results: [{exist: !!(result.systems && result.systems.length), systems: result.systems || [], error: result.error || ''}]});
+          }
+          reloadJobTables();
+          $('.overlay').hide();
+        }).fail(function(xhr) {
+          var message = xhr && xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'The Jenkins job could not be deleted.';
+          toastr.error(message, 'Delete Failed');
           $('.overlay').hide();
         });
     }, 

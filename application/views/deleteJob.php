@@ -250,6 +250,7 @@ $(document).ready(function(){
 
     var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
     var deleteRepositoriesUrl = <?php echo json_encode(base_url() . 'DeleteJob/deleteRepositories'); ?>;
+    var deleteJobsUrl = <?php echo json_encode(base_url() . 'delete-job/jobs'); ?>;
     var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
     var jobsByName = {};
     var allDeleteJobs = [];
@@ -447,20 +448,6 @@ $(document).ready(function(){
       return true;
     }
 
-    function jobNameMatchesDeleteEnvironment(jobName) {
-      if (isAllDeleteEnvironmentFilter(deleteEnvironmentFilter)) {
-        return true;
-      }
-
-      var environment = normalizeDeleteEnvironment(environmentTextForJobName(jobName));
-
-      if (! isConfiguredDeleteEnvironment(environment)) {
-        return false;
-      }
-
-      return deleteEnvironmentFilter === 'all' || environment === normalizeDeleteEnvironment(deleteEnvironmentFilter);
-    }
-
     function environmentSummaryHtml(jobNames) {
       var counts = {};
 
@@ -527,7 +514,9 @@ $(document).ready(function(){
           return false;
         }
 
-        return jobNameMatchesDeleteEnvironment(name) && jobNameMatchesDeleteStatus(name);
+        // Environment scoping is performed by the backend availableJobs
+        // endpoint. The browser only applies the non-security status filter.
+        return jobNameMatchesDeleteStatus(name);
       }).sort();
     }
 
@@ -648,38 +637,16 @@ $(document).ready(function(){
       });
     }
 
-    function deleteJenkinsJob(jobName) {
+    function deleteJenkinsJobs(jobNames, deleteRepositoriesAfterJobs) {
       return $.ajax({
-        url: jenkins_url + jenkinsJobPath(jobName) + '/doDelete',
-        method: 'POST'
-      });
-    }
-
-    function deleteJenkinsJobs(jobNames) {
-      var results = [];
-      var chain = $.Deferred().resolve().promise();
-
-      $.each(jobNames, function(index, jobName) {
-        chain = chain.then(function() {
-          var step = $.Deferred();
-          deleteJenkinsJob(jobName).done(function() {
-            results.push({job: jobName, deleted: true});
-          }).fail(function(request) {
-            results.push({
-              job: jobName,
-              deleted: false,
-              error: request && request.responseText ? request.responseText : 'Unable to delete Jenkins job.'
-            });
-          }).always(function() {
-            step.resolve();
-          });
-
-          return step.promise();
-        });
-      });
-
-      return chain.then(function() {
-        return results;
+        url: deleteJobsUrl,
+        method: 'POST',
+        dataType: 'json',
+        data: {
+          jobs: jobNames,
+          environment: deleteEnvironmentRequestValue(),
+          delete_repositories: deleteRepositoriesAfterJobs ? '1' : '0'
+        }
       });
     }
 
@@ -688,7 +655,7 @@ $(document).ready(function(){
         url: deleteRepositoriesUrl,
         method: 'POST',
         dataType: 'json',
-        data: {jobs: jobNames}
+        data: {jobs: jobNames, environment: deleteEnvironmentRequestValue()}
       });
     }
 
@@ -784,22 +751,19 @@ $(document).ready(function(){
       alertify.confirm('Delete Job Confirmation Required', '<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Delete ' + jobs.length + ' selected Jenkins job(s) permanently?</b></p>' + repositoryWarning + optionListHtml(jobs) + '</div></div></div>',
         function(){
           setDeleteBusy(true);
-          deleteJenkinsJobs(jobs).done(function(results) {
+          deleteJenkinsJobs(jobs, deleteRepositoriesAfterJobs).done(function(data) {
+            var results = data && data.results ? data.results : [];
             reportJenkinsDeleteResults(results);
-
-            if (! deleteRepositoriesAfterJobs) {
-              setDeleteBusy(false);
-              return;
+            if (deleteRepositoriesAfterJobs) {
+              reportRepositoryDeleteResults({results: $.map(results, function(result) {
+                return {job: result.job, exist: !!(result.systems && result.systems.length), systems: result.systems || [], error: result.error || ''};
+              })});
             }
-
-            deleteRepositories(jobs).done(function(data) {
-              reportRepositoryDeleteResults(data);
-            }).fail(function() {
-              console.error(arguments);
-              toastr.error('Some repositories could not be deleted.', 'Repository Delete Failed');
-            }).always(function() {
-              setDeleteBusy(false);
-            });
+          }).fail(function(xhr) {
+            var message = xhr && xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'The backend rejected the delete request.';
+            toastr.error(message, 'Delete Failed');
+          }).always(function() {
+            setDeleteBusy(false);
           });
         },
         function(){

@@ -130,7 +130,6 @@
       var $filter = $('#contextEnvironmentFilter');
       var selectedValue = matchingEnvironmentValue($filter, environment);
       $filter.val(selectedValue);
-      exactColumnFilter(2, selectedValue === 'all' ? '' : selectedValue);
       $('#contextScopeLabel').text(selectedValue === 'all' ? 'All environments' : selectedValue);
 
       var $formEnvironment = $('#environmentName');
@@ -144,8 +143,8 @@
     });
     $('#contextEnvironmentFilter').on('change', function() {
       var value = $(this).val() || 'all';
-      exactColumnFilter(2, value === 'all' ? '' : value);
-      $('#contextScopeLabel').text(value === 'all' ? 'All environments' : value);
+      var baseUrl = window.contextDetailsConfig && window.contextDetailsConfig.baseUrl ? window.contextDetailsConfig.baseUrl : window.location.pathname;
+      window.location.href = baseUrl + '?environment=' + encodeURIComponent(value);
     });
     $('#contextProjectFilter').on('change', function() {
       exactColumnFilter(3, $(this).val());
@@ -160,18 +159,14 @@
       $('#contextSearch').val('');
       $('#contextProjectFilter, #contextStatusFilter, #contextEncryptionFilter').val('');
       table.search('').columns().search('').draw();
-      applyEnvironment(window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected
-        ? window.JobSeekerGlobalEnvironment.selected()
-        : (window.jobseekerDashboardEnvironment || 'all'));
+      applyEnvironment(window.contextDetailsConfig && window.contextDetailsConfig.selectedEnvironment ? window.contextDetailsConfig.selectedEnvironment : 'all');
     });
 
     $(document).on('jobseeker:environment-change', function(event, environment) {
       applyEnvironment(environment);
     });
 
-    applyEnvironment(window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected
-      ? window.JobSeekerGlobalEnvironment.selected()
-      : (window.jobseekerDashboardEnvironment || 'all'));
+    applyEnvironment(window.contextDetailsConfig && window.contextDetailsConfig.selectedEnvironment ? window.contextDetailsConfig.selectedEnvironment : 'all');
 
     $('#contextPageLength').on('change', function() {
       table.page.len(parseInt($(this).val(), 10) || 20).draw();
@@ -196,7 +191,10 @@
             type: 'POST',
             dataType: 'json',
             url: endpoint,
-            data: { userId: contextId }
+            data: {
+              userId: contextId,
+              environment: window.contextDetailsConfig && window.contextDetailsConfig.selectedEnvironment ? window.contextDetailsConfig.selectedEnvironment : 'ALL'
+            }
           }).done(function(response) {
             if (response.status === true) {
               if (window.JobSeekerContextTable) {
