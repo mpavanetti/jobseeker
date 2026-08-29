@@ -11,248 +11,506 @@ class DbSettings extends BaseController
     public function __construct()
     {
         parent::__construct();
-        $this->load->helper('url','form');
-        $this->load->model('dbSettings_model','model');
+        $this->load->helper(array('url', 'form'));
+        $this->load->model('DbSettings_model', 'model');
         $this->load->library('session');
-        $this->isLoggedIn();  
-        date_default_timezone_set('America/Sao_Paulo'); 
+        $this->isLoggedIn();
     }
 
-    /**
-     * Index Page for this controller.
-     */
+    private function canManageConnectors()
+    {
+        return ! $this->isManager();
+    }
+
+    private function connectorTypes()
+    {
+        return array(
+            'mysql' => 'MySQL / MariaDB',
+            'pgsql' => 'PostgreSQL',
+            'sqlserver' => 'SQL Server',
+            'oracle_service' => 'Oracle service name',
+            'oracle_sid' => 'Oracle SID',
+            'mongodb' => 'MongoDB',
+            'redis' => 'Redis',
+            'snowflake' => 'Snowflake',
+            'databricks' => 'Databricks SQL',
+            'kafka' => 'Apache Kafka',
+            'rabbitmq' => 'RabbitMQ',
+            'elasticsearch' => 'Elasticsearch / OpenSearch',
+            'sftp' => 'SFTP / SSH',
+            'http_api' => 'HTTP API',
+            'aws_s3' => 'AWS S3',
+            'azure_blob' => 'Azure Blob Storage',
+            'azure_data_lake' => 'Azure Data Lake',
+            'gcs' => 'Google Cloud Storage',
+            'generic_secret' => 'Generic credential'
+        );
+    }
+
+    private function authenticationTypes()
+    {
+        return array(
+            'username_password' => 'Username and password',
+            'token' => 'Bearer / access token',
+            'api_key' => 'API key',
+            'sas_token' => 'Azure SAS token',
+            'connection_string' => 'Connection string',
+            'managed_identity' => 'Azure managed identity',
+            'workload_identity' => 'Workload identity',
+            'service_principal' => 'Azure service principal',
+            'iam_role' => 'AWS IAM role',
+            'web_identity' => 'AWS web identity',
+            'access_key' => 'AWS access key',
+            'ssh_key' => 'SSH private key',
+            'none' => 'No credential',
+            'custom' => 'Custom fields'
+        );
+    }
+
+    private function connectorNeedsEndpoint($type)
+    {
+        return ! in_array($type, array('aws_s3', 'azure_blob', 'azure_data_lake', 'gcs', 'generic_secret'), TRUE);
+    }
+
+    private function secretBackends()
+    {
+        return array(
+            'local' => 'Encrypted in JobSeeker',
+            'environment' => 'Environment variables',
+            'azure_key_vault' => 'Azure Key Vault',
+            'aws_secrets_manager' => 'AWS Secrets Manager'
+        );
+    }
+
+    private function environments()
+    {
+        if (! $this->db->table_exists('environment')) {
+            return array();
+        }
+        return $this->db->select('Environment')->from('environment')->where('IsActive', 1)->order_by('Environment', 'ASC')->get()->result();
+    }
+
+    private function selectedGlobalEnvironment()
+    {
+        $value = trim((string) $this->input->get('environment', TRUE));
+        if ($value === '') {
+            $value = trim((string) $this->input->cookie('jobseeker_global_environment', TRUE));
+        }
+        $environment = $this->normalizeJobSeekerEnvironment($value);
+        if ($environment === '' || $environment === '*' || $environment === 'ALL') {
+            return 'ALL';
+        }
+        $available = array_map(function($row) { return $this->normalizeJobSeekerEnvironment($row->Environment); }, $this->environments());
+        return in_array($environment, $available, TRUE) ? $environment : 'ALL';
+    }
+
+    private function normalizeConnectorKey($value)
+    {
+        $value = strtolower(trim((string) $value));
+        $value = preg_replace('/[^a-z0-9]+/', '-', $value);
+        return trim($value, '-');
+    }
+
+    private function normalizeJobName($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '' || $value === '*' || strtoupper($value) === 'ALL') {
+            return '*';
+        }
+        return preg_match('/^[A-Za-z0-9._\-\/ ]{1,200}$/', $value) ? $value : FALSE;
+    }
+
+    private function fieldMappings($inputName, $valuePattern = NULL)
+    {
+        $raw = str_replace("\r", '', (string) $this->input->post($inputName));
+        if ($raw === '') {
+            return array();
+        }
+        if (strlen($raw) > 32768) {
+            return FALSE;
+        }
+
+        $mappings = array();
+        foreach (explode("\n", $raw) as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            $parts = explode('=', $line, 2);
+            $name = strtolower(trim($parts[0]));
+            $value = isset($parts[1]) ? $parts[1] : '';
+            if (! preg_match('/^[a-z][a-z0-9_-]{0,63}$/', $name) || $value === '' || strlen($value) > 4096
+                || strpos($value, "\0") !== FALSE || ($valuePattern !== NULL && ! preg_match($valuePattern, $value))) {
+                return FALSE;
+            }
+            $mappings[$name] = $value;
+            if (count($mappings) > 32) {
+                return FALSE;
+            }
+        }
+        return $mappings;
+    }
+
+    private function secretReference($backend)
+    {
+        if ($backend === 'environment') {
+            $mappings = $this->fieldMappings('environment_mappings', '/^[A-Za-z_][A-Za-z0-9_]*$/');
+            if (empty($mappings)) {
+                $usernameVariable = trim((string) $this->input->post('username_env'));
+                $passwordVariable = trim((string) $this->input->post('password_env'));
+                if ($usernameVariable !== '') {
+                    $mappings['username'] = $usernameVariable;
+                }
+                if ($passwordVariable !== '') {
+                    $mappings['password'] = $passwordVariable;
+                }
+            }
+            if ($mappings === FALSE || empty($mappings)) {
+                return FALSE;
+            }
+            return array('variables' => $mappings);
+        }
+
+        if ($backend === 'azure_key_vault') {
+            $vaultUrl = rtrim(strtolower(trim((string) $this->input->post('vault_url'))), '/');
+            $authMode = strtolower(trim((string) $this->input->post('azure_auth_mode')));
+            $clientId = trim((string) $this->input->post('managed_identity_client_id'));
+            $mappings = $this->fieldMappings('azure_secret_mappings', '/^[A-Za-z0-9-]{1,127}$/');
+            if (empty($mappings)) {
+                $usernameSecret = trim((string) $this->input->post('username_secret'));
+                $passwordSecret = trim((string) $this->input->post('password_secret'));
+                if ($usernameSecret !== '') {
+                    $mappings['username'] = $usernameSecret;
+                }
+                if ($passwordSecret !== '') {
+                    $mappings['password'] = $passwordSecret;
+                }
+            }
+            if (! preg_match('#^https://[a-z0-9-]{3,63}\.vault\.azure\.net$#', $vaultUrl)
+                || ! in_array($authMode, array('default', 'managed_identity', 'workload_identity', 'environment'), TRUE)
+                || $mappings === FALSE || empty($mappings)
+                || ($clientId !== '' && ! preg_match('/^[A-Fa-f0-9-]{36}$/', $clientId))) {
+                return FALSE;
+            }
+            return array(
+                'vault_url' => $vaultUrl,
+                'auth_mode' => $authMode,
+                'secrets' => $mappings,
+                'managed_identity_client_id' => $clientId
+            );
+        }
+
+        if ($backend === 'aws_secrets_manager') {
+            $region = strtolower(trim((string) $this->input->post('aws_region')));
+            $secretId = trim((string) $this->input->post('aws_secret_id'));
+            $authMode = strtolower(trim((string) $this->input->post('aws_auth_mode')));
+            $profileName = trim((string) $this->input->post('aws_profile_name'));
+            $mappings = $this->fieldMappings('aws_field_mappings', '/^[A-Za-z0-9_.-]{1,128}$/');
+            if (empty($mappings)) {
+                $usernameField = trim((string) $this->input->post('aws_username_field'));
+                $passwordField = trim((string) $this->input->post('aws_password_field'));
+                if ($usernameField !== '') {
+                    $mappings['username'] = $usernameField;
+                }
+                if ($passwordField !== '') {
+                    $mappings['password'] = $passwordField;
+                }
+            }
+            if (! preg_match('/^[a-z]{2}(?:-gov)?-[a-z]+-[0-9]$/', $region)
+                || $secretId === '' || strlen($secretId) > 512 || preg_match('/[\x00-\x1F\x7F]/', $secretId)
+                || ! in_array($authMode, array('default', 'iam_role', 'web_identity', 'environment', 'profile'), TRUE)
+                || ($authMode === 'profile' && ! preg_match('/^[A-Za-z0-9_.-]{1,128}$/', $profileName))
+                || $mappings === FALSE || empty($mappings)) {
+                return FALSE;
+            }
+            return array(
+                'region' => $region,
+                'secret_id' => $secretId,
+                'auth_mode' => $authMode,
+                'profile_name' => $profileName,
+                'fields' => $mappings
+            );
+        }
+
+        return array();
+    }
+
+    private function saveConnector($id)
+    {
+        if (! $this->canManageConnectors()) {
+            $this->loadThis();
+            return;
+        }
+        if ($this->input->method(TRUE) !== 'POST') {
+            $this->output->set_status_header(405);
+            return;
+        }
+
+        $existing = $id > 0 ? $this->model->getSetting($id, TRUE) : NULL;
+        if ($id > 0 && ! $existing) {
+            $this->session->set_flashdata('error', 'The connector no longer exists.');
+            redirect('dbSettings');
+        }
+
+        $connectorKey = $this->normalizeConnectorKey($this->input->post('connector_key'));
+        $environment = $existing ? (string) $existing->environment : $this->selectedGlobalEnvironment();
+        $jobName = $this->normalizeJobName($this->input->post('job_name'));
+        $dbType = strtolower(trim((string) $this->input->post('db_type')));
+        $authType = strtolower(trim((string) $this->input->post('auth_type')));
+        $backend = strtolower(trim((string) $this->input->post('secret_backend')));
+        $address = trim((string) $this->input->post('address'));
+        $port = (int) $this->input->post('port');
+        $database = trim((string) $this->input->post('schema'));
+        $description = trim((string) $this->input->post('description'));
+        $additionalParameters = trim((string) $this->input->post('additional_parameters'));
+
+        if ($connectorKey === '' || strlen($connectorKey) > 128 || $jobName === FALSE
+            || ! isset($this->connectorTypes()[$dbType]) || ! isset($this->authenticationTypes()[$authType]) || ! isset($this->secretBackends()[$backend])
+            || ($this->connectorNeedsEndpoint($dbType) && $address === '') || strlen($address) > 255 || preg_match('/[\x00-\x1F\x7F]/', $address)
+            || $port < 0 || $port > 65535 || strlen($database) > 200
+            || strlen($description) > 2000 || strlen($additionalParameters) > 1000) {
+            $this->session->set_flashdata('error', 'Check the connector key, scope, database details, and secret backend.');
+            redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+        }
+        if (($dbType === 'oracle_service' && trim((string) $this->input->post('oracle_ServiceName')) === '')
+            || ($dbType === 'oracle_sid' && trim((string) $this->input->post('oracle_sid')) === '')) {
+            $this->session->set_flashdata('error', 'Provide the required Oracle service name or SID.');
+            redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+        }
+        $availableEnvironments = array_map(function($row) { return strtoupper($row->Environment); }, $this->environments());
+        if ($environment !== 'ALL' && ! in_array($environment, $availableEnvironments, TRUE)) {
+            $this->session->set_flashdata('error', 'Select an environment configured in Context Settings.');
+            redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+        }
+        if ($this->model->scopeExists($connectorKey, $environment, $jobName, $id)) {
+            $this->session->set_flashdata('error', 'That connector key already exists for the selected environment and job scope.');
+            redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+        }
+
+        $reference = $this->secretReference($backend);
+        if ($reference === FALSE) {
+            $this->session->set_flashdata('error', 'The selected secret backend configuration is invalid.');
+            redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+        }
+
+        $encryptedSecret = NULL;
+        if ($backend === 'local') {
+            $username = (string) $this->input->post('login');
+            $password = (string) $this->input->post('password');
+            if (strlen($username) > 500 || strlen($password) > 2000) {
+                $this->session->set_flashdata('error', 'The local username or password is too long.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            }
+            $additionalSecrets = $this->fieldMappings('local_secret_fields');
+            if ($additionalSecrets === FALSE) {
+                $this->session->set_flashdata('error', 'Additional local secrets must use field=value lines with safe field names.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            }
+            $secretValues = $additionalSecrets;
+            if ($username !== '') {
+                $secretValues['username'] = $username;
+            }
+            if ($password !== '') {
+                $secretValues['password'] = $password;
+            }
+            if (empty($secretValues) && $existing && $existing->secret_backend === 'local') {
+                $encryptedSecret = $existing->secret_encrypted;
+            } else if ($authType === 'username_password' && ($username === '' || $password === '')) {
+                $this->session->set_flashdata('error', 'Username/password authentication requires both values.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            } else {
+                $encryptedSecret = $this->model->encryptSecretValues($secretValues);
+            }
+            if ($encryptedSecret === FALSE || $encryptedSecret === NULL) {
+                $this->session->set_flashdata('error', 'The local connector secret could not be encrypted.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            }
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $data = array(
+            'connector_key' => $connectorKey,
+            'job_name' => $jobName,
+            'environment' => $environment,
+            'db_type' => $dbType,
+            'auth_type' => $authType,
+            'login' => '',
+            'password' => '',
+            'address' => $address,
+            'port' => (string) $port,
+            'schema' => $database,
+            'description' => $description,
+            'secret_backend' => $backend,
+            'secret_reference' => json_encode($reference),
+            'secret_encrypted' => $encryptedSecret,
+            'is_active' => $this->input->post('is_active') === '0' ? 0 : 1,
+            'additional_parameters' => $additionalParameters,
+            'oracle_ServiceName' => $dbType === 'oracle_service' ? trim((string) $this->input->post('oracle_ServiceName')) : '',
+            'oracle_sid' => $dbType === 'oracle_sid' ? trim((string) $this->input->post('oracle_sid')) : '',
+            'updated_at' => $now,
+            'owner' => $this->name
+        );
+        if (! $existing) {
+            $data['creation_date'] = $now;
+        }
+
+        $savedId = $this->model->saveSetting($data, $id);
+        $this->session->set_flashdata($savedId > 0 ? 'success' : 'error', $savedId > 0 ? 'Connector saved.' : 'Connector could not be saved.');
+        redirect('dbSettings');
+    }
+
     public function index()
     {
+        if (! $this->canManageConnectors()) {
+            $this->loadThis();
+            return;
+        }
 
-        $this->global['pageTitle'] = 'Job Seeker : Database Settings';
+        $editId = (int) $this->input->get('edit');
+        $editing = $editId > 0 ? $this->model->getSetting($editId) : NULL;
+        if ($editing) {
+            $editing->secret_reference_values = json_decode((string) $editing->secret_reference, TRUE) ?: array();
+        }
 
-        $data["settings"] = $this->model->listSettings();
-        $data["role"] = $this->isManager();
-        
-        $this->loadViews("dbSettings", $this->global, $data, NULL);
+        $this->global['pageTitle'] = 'Job Seeker : Connectors';
+        $selectedEnvironment = $this->selectedGlobalEnvironment();
+        $data = array(
+            'settings' => $this->model->listSettings($selectedEnvironment),
+            'editing' => $editing,
+            'showForm' => $this->input->get('create') === '1' || $editing !== NULL,
+            'connectorTypes' => $this->connectorTypes(),
+            'authenticationTypes' => $this->authenticationTypes(),
+            'secretBackends' => $this->secretBackends(),
+            'environments' => $this->environments(),
+            'selectedEnvironment' => $selectedEnvironment
+        );
+        $this->loadViews('connectors', $this->global, $data, NULL);
     }
 
     public function addDbSetting()
     {
-
-     if($this->isManager() == TRUE)
-            {
-                $this->loadThis();
-            }
-            else
-            {
-            
-            $this->global['pageTitle'] = 'Job Seeker : Add New Db Setting';
-
-            $this->loadViews("addDbSetting", $this->global, NULL, NULL);
-        }
+        redirect('dbSettings?create=1&environment='.rawurlencode($this->selectedGlobalEnvironment()));
     }
 
 
     /**
-     * Edit Input Component 
+    * Edit Input Component
      */
     function EditSettingsFetchData($id = NULL)
     {
-        if($this->isManager() == TRUE )
-        {
-            $this->loadThis();
-        }
-        else
-        {
-            if($id == null)
-            {
-                redirect('dbSettings');
-            }
-            
-            $data['fetch'] = $this->model->EditSettingsFetchData($id);
-            
-            $this->global['pageTitle'] = 'Job Seeker : Edit Data';
-            
-            $this->loadViews("editDbSetting", $this->global, $data, NULL);
-        }
+        redirect('dbSettings'.((int) $id > 0 ? '?edit='.(int) $id.'&environment='.rawurlencode($this->selectedGlobalEnvironment()) : ''));
     }
 
 
     public function InsertDbSettings() {
-
-        if($this->isManager() == TRUE)
-            {
-                $this->loadThis();
-            }
-            else
-            {
-            
-            $this->load->library('form_validation');
-            
-            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('db_type','Database Type','trim|required|max_length[30]');
-            $this->form_validation->set_rules('login','Login','trim|required|max_length[200]');
-            $this->form_validation->set_rules('password','Password','trim|required|max_length[200]');
-            $this->form_validation->set_rules('address','Database Address','trim|required|max_length[200]');
-            $this->form_validation->set_rules('port','Database Port','trim|required|max_length[200]');
-            $this->form_validation->set_rules('schema','Database Schema','trim|required|max_length[200]');
-            $this->form_validation->set_rules('description','Database Description','trim|required|max_length[200]');
-            $this->form_validation->set_rules('additional_parameters','Additional Parameters','trim|max_length[200]');
-            $this->form_validation->set_rules('oracle_ServiceName','Oracle Service Name','trim|max_length[200]');
-            $this->form_validation->set_rules('oracle_sid','Oracle SID','trim|max_length[200]');
-
-            if($this->form_validation->run() == FALSE)
-            {
-                $this->addDbSetting();
-            }
-            else
-            {
-
-                $job_name = $this->security->xss_clean($this->input->post('job_name'));
-                $db_type = $this->security->xss_clean($this->input->post('db_type'));
-                $login = $this->security->xss_clean($this->input->post('login'));
-                $password = $this->security->xss_clean($this->input->post('password'));
-                $address = $this->security->xss_clean($this->input->post('address'));
-                $port = $this->security->xss_clean($this->input->post('port'));
-                $schema = $this->security->xss_clean($this->input->post('schema'));
-                $description = $this->security->xss_clean($this->input->post('description')); 
-                $additional_parameters = $this->security->xss_clean($this->input->post('additional_parameters'));
-                $oracle_ServiceName = $this->security->xss_clean($this->input->post('oracle_ServiceName'));
-                $oracle_sid = $this->security->xss_clean($this->input->post('oracle_sid'));
-
-
-                // Check if the data is alredy on table
-                 $validateSetting = $this->model->validateSetting($job_name, $db_type, $login, $address, $port, $schema);
-
-
-                 $Info = array(
-                    'job_name'=>$job_name, 
-                    'db_type'=>$db_type, 
-                    'login' => $login,
-                    'password' => $password,
-                    'address' => $address,
-                    'port' => $port,
-                    'schema' => $schema,
-                    'description'=> $description,
-                    'additional_parameters' => $additional_parameters,
-                    'oracle_ServiceName' => $oracle_ServiceName,
-                    'oracle_sid' => $oracle_sid,
-                    'creation_date'=>date('Y-m-d H:i:s'),
-                    'owner'=>$this->name
-                 );
-
-                 if($validateSetting > 0){
-
-                    $this->session->set_flashdata('error', 'This row seems already created, please try changing the input names.');
-                } else {
-                
-                $result = $this->model->insertDbSetting($Info);
-                
-                if($result > 0)
-                {
-                    $this->session->set_flashdata('success', 'New Database Setting has successfully created and now is available to be used.');
-                }
-                else
-                {
-                    $this->session->set_flashdata('error', 'Database Setting creation failed !');
-                }
-
-             }
-
-              redirect('dbSettings/addDbSetting');
-
-            }
-           
-        }
-
-
+        $this->saveConnector(0);
     }
 
     public function UpdateDbSettings() {
+        $this->saveConnector((int) $this->input->post('id'));
+    }
 
-        if($this->isManager() == TRUE)
-            {
-                $this->loadThis();
-            }
-            else
-            {
-            
-            $this->load->library('form_validation');
+    private function jsonResponse($payload, $status = 200)
+    {
+        $this->output
+            ->set_status_header($status)
+            ->set_header('Cache-Control: no-store, max-age=0')
+            ->set_content_type('application/json')
+            ->set_output(json_encode($payload));
+    }
 
-            $this->form_validation->set_rules('id','Id','trim|required|max_length[30]');
-            
-            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('db_type','Database Type','trim|required|max_length[30]');
-            $this->form_validation->set_rules('login','Login','trim|required|max_length[200]');
-            $this->form_validation->set_rules('password','Password','trim|required|max_length[200]');
-            $this->form_validation->set_rules('address','Database Address','trim|required|max_length[200]');
-            $this->form_validation->set_rules('port','Database Port','trim|required|max_length[200]');
-            $this->form_validation->set_rules('schema','Database Schema','trim|required|max_length[200]');
-            $this->form_validation->set_rules('description','Database Description','trim|required|max_length[200]');
-            $this->form_validation->set_rules('additional_parameters','Additional Parameters','trim|max_length[200]');
-            $this->form_validation->set_rules('oracle_ServiceName','Oracle Service Name','trim|max_length[200]');
-            $this->form_validation->set_rules('oracle_sid','Oracle SID','trim|max_length[200]');
-
-            if($this->form_validation->run() == FALSE)
-            {
-                $this->addDbSetting();
-            }
-            else
-            {
-                $id = $this->security->xss_clean($this->input->post('id'));
-                $job_name = $this->security->xss_clean($this->input->post('job_name'));
-                $db_type = $this->security->xss_clean($this->input->post('db_type'));
-                $login = $this->security->xss_clean($this->input->post('login'));
-                $password = $this->security->xss_clean($this->input->post('password'));
-                $address = $this->security->xss_clean($this->input->post('address'));
-                $port = $this->security->xss_clean($this->input->post('port'));
-                $schema = $this->security->xss_clean($this->input->post('schema'));
-                $description = $this->security->xss_clean($this->input->post('description')); 
-                $additional_parameters = $this->security->xss_clean($this->input->post('additional_parameters'));
-                $oracle_ServiceName = $this->security->xss_clean($this->input->post('oracle_ServiceName'));
-                $oracle_sid = $this->security->xss_clean($this->input->post('oracle_sid'));
-
-
-
-                 $Info = array(
-                    'job_name'=>$job_name, 
-                    'db_type'=>$db_type, 
-                    'login' => $login,
-                    'password' => $password,
-                    'address' => $address,
-                    'port' => $port,
-                    'schema' => $schema,
-                    'description'=> $description,
-                    'additional_parameters' => $additional_parameters,
-                    'oracle_ServiceName' => $oracle_ServiceName,
-                    'oracle_sid' => $oracle_sid,
-                    'creation_date'=>date('Y-m-d H:i:s'),
-                    'owner'=>$this->name
-                 );
-
-               
-                
-                $result = $this->model->updateDbSetting($Info, $id);
-                
-                if($result > 0)
-                {
-                    $this->session->set_flashdata('success', 'New Database Setting has been successfully updated and now is available to be used.');
-                }
-                else
-                {
-                    $this->session->set_flashdata('error', 'Database Setting creation failed !');
-                }
-
-             
-
-              redirect('dbSettings');
-
-            }
-           
+    private function connectorTestEndpoint($connector)
+    {
+        $endpoint = trim((string) $connector->address);
+        $port = (int) $connector->port;
+        if ($endpoint === '') {
+            return array('status' => 'skipped', 'reachable' => NULL);
         }
 
+        $endpoint = trim(explode(',', $endpoint, 2)[0]);
+        $url = strpos($endpoint, '://') === FALSE ? 'tcp://'.$endpoint : $endpoint;
+        $parts = parse_url($url);
+        $host = is_array($parts) && isset($parts['host']) ? $parts['host'] : '';
+        if ($port < 1 && is_array($parts) && isset($parts['port'])) {
+            $port = (int) $parts['port'];
+        }
+        if ($port < 1 && is_array($parts) && isset($parts['scheme'])) {
+            $port = strtolower($parts['scheme']) === 'http' ? 80 : (strtolower($parts['scheme']) === 'https' ? 443 : 0);
+        }
+        if ($host === '' || $port < 1 || $port > 65535) {
+            return array('status' => 'not_configured', 'reachable' => NULL);
+        }
+        $resolvedHost = gethostbyname($host);
+        if (strpos($resolvedHost, '169.254.') === 0 || stripos($host, 'fe80:') === 0) {
+            return array('status' => 'blocked', 'reachable' => FALSE);
+        }
+
+        $errorNumber = 0;
+        $errorMessage = '';
+        $socket = @fsockopen($host, $port, $errorNumber, $errorMessage, 3);
+        if ($socket === FALSE) {
+            return array('status' => 'unreachable', 'reachable' => FALSE);
+        }
+        fclose($socket);
+        return array('status' => 'reachable', 'reachable' => TRUE);
+    }
+
+    public function testConnector()
+    {
+        if (! $this->canManageConnectors()) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+            return;
+        }
+        if ($this->input->method(TRUE) !== 'POST') {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Method not allowed.'), 405);
+            return;
+        }
+
+        $connector = $this->model->getSetting((int) $this->input->post('id'), TRUE);
+        if (! $connector) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Connector not found.'), 404);
+            return;
+        }
+
+        $secretReady = FALSE;
+        $credentialStatus = 'Credential reference is invalid.';
+        if ($connector->secret_backend === 'local') {
+            $values = $this->model->decryptLocalSecret($connector->secret_encrypted);
+            $secretReady = is_array($values) && ($connector->auth_type === 'none' || ! empty($values));
+            $credentialStatus = $secretReady ? 'Encrypted values are readable.' : 'Encrypted values could not be read.';
+            unset($values);
+        } else {
+            $reference = json_decode((string) $connector->secret_reference, TRUE);
+            $secretReady = is_array($reference) && ! empty($reference);
+            $credentialStatus = $secretReady
+                ? 'Reference is valid. Authentication is resolved by the Jenkins worker at run time.'
+                : 'The external secret reference is incomplete.';
+        }
+
+        $network = $this->connectorTestEndpoint($connector);
+        $ok = $secretReady && $network['reachable'] !== FALSE;
+        $this->model->logRuntimeAccess((array) $connector, $connector->environment, $connector->job_name, $ok ? 'test_passed' : 'test_failed');
+
+        if ($network['status'] === 'reachable') {
+            $networkStatus = 'Endpoint accepted a TCP connection.';
+        } else if ($network['status'] === 'blocked') {
+            $networkStatus = 'TCP check blocked for a link-local address.';
+        } else if ($network['status'] === 'unreachable') {
+            $networkStatus = 'Endpoint did not accept a TCP connection within 3 seconds.';
+        } else {
+            $networkStatus = 'TCP check skipped because no complete endpoint and port were configured.';
+        }
+        $this->jsonResponse(array(
+            'ok' => $ok,
+            'secretReady' => $secretReady,
+            'network' => $network['status'],
+            'message' => $credentialStatus.' '.$networkStatus
+        ), $ok ? 200 : 422);
     }
 
 
     public function deleteSetting() {
 
-        if($this->isManager() == TRUE)
+        if (! $this->canManageConnectors())
         {
             echo(json_encode(array('status'=>'access')));
         }
@@ -264,10 +522,7 @@ class DbSettings extends BaseController
                 return;
             }
 
-            $id = $this->input->post('userId');
-            /*
-            $userInfo = array('isDeleted'=> 1,'updatedBy'=>$this->vendorId, 'field' => $id,'updatedDtm'=>date('Y-m-d H:i:s')); Future Release Not working */
-            
+            $id = (int) $this->input->post('userId');
             $result = $this->model->deleteSetting($id);
             
             if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }

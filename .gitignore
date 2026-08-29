@@ -1,5 +1,6 @@
 .htaccess/
 .env
+.env.connectors
 node_modules/
 assets/bower_components/
 repository/
