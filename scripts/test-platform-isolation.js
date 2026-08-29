@@ -27,6 +27,7 @@ const connectorController = fs.readFileSync('application/controllers/DbSettings.
 const connectorModel = fs.readFileSync('application/models/DbSettings_model.php', 'utf8');
 const pipelineModel = fs.readFileSync('application/models/Pipeline_model.php', 'utf8');
 const visualizationModel = fs.readFileSync('application/models/Visualization_model.php', 'utf8');
+const contextView = fs.readFileSync('application/views/contextDetails.php', 'utf8');
 const contextScript = fs.readFileSync('assets/js/context-details.js', 'utf8');
 const assetScript = fs.readFileSync('assets/js/data-assets.js', 'utf8');
 const runtimeConfig = fs.readFileSync('application/config/config.json', 'utf8');
@@ -71,6 +72,9 @@ assert(connectorModel.includes("array_merge($this->environmentFilterValues($envi
 assert(pipelineModel.includes("where_in('environment', $this->environmentFilterValues($environment))"), 'Pipeline lists must be filtered in the backend.');
 assert(visualizationModel.includes('applyStudioEnvironmentFilter'), 'Insight Studio queries must apply environment filters in the backend.');
 assert(contextScript.includes("window.location.href = baseUrl + '?environment='"), 'Context environment changes must reload backend-filtered rows.');
+assert(contextScript.includes('dom: \'rt<"context-datatable-footer"ip>\''), 'Context pagination must remain inside the DataTables wrapper.');
+assert(contextScript.includes(".find('.dataTables_paginate').toggle(info.pages > 1)"), 'Context pagination must be hidden when the filtered result has one page.');
+assert(!contextScript.includes('append($pagination)') && !contextView.includes('contextTablePagination'), 'Context pagination must not be detached from DataTables event handling.');
 assert(assetScript.includes("window.location.href = baseUrl + '?environment='"), 'Data Asset environment changes must reload backend-filtered rows.');
 assert(jobCreationController.includes('$this->jenkinsOnlineEnvironmentAgentCapacity($environment)'), 'New jobs must target only online matching environment agents.');
 assert(JSON.parse(runtimeConfig).jenkins.environment_agents_enabled === true, 'Environment-agent routing must default to enabled in runtime config.');

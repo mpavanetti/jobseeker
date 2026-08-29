@@ -33,7 +33,7 @@ foreach ((array) $listEnvironments as $environmentRecord) {
 $filterEnvironmentNames = array_keys($filterEnvironmentNames);
 sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
 ?>
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=6">
 
 <div class="content-wrapper context-page">
   <section class="content-header">
@@ -290,10 +290,6 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
             </tbody>
           </table>
         </div>
-        <div class="box-footer context-table-footer">
-          <span id="contextTableInfo" class="context-empty-filter"><span id="contextTotalCount"><?php echo count($contextRows); ?></span> contexts</span>
-          <div id="contextTablePagination"></div>
-        </div>
       </div>
     </div>
   </section>
@@ -306,4 +302,4 @@ window.contextDetailsConfig = {
   selectedEnvironment: <?php echo json_encode(isset($selectedEnvironment) ? $selectedEnvironment : 'ALL'); ?>
 };
 </script>
-<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=1"></script>
+<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=4"></script>
