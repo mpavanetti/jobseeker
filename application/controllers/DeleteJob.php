@@ -56,6 +56,12 @@ class DeleteJob extends BaseController
             return;
         }
 
+        $scope = $this->jobMatchesRequestedEnvironment($jobName, $this->input->post('environment'));
+        if (! $scope['ok']) {
+            $this->jsonDeleteResponse(array('exist' => false, 'error' => $scope['message']), $scope['status']);
+            return;
+        }
+
         $deletedSystems = $this->deleteRepositoryForJob($jobName);
         $this->jsonDeleteResponse(array('job' => $jobName, 'exist' => ! empty($deletedSystems), 'systems' => $deletedSystems));
     }
@@ -101,6 +107,11 @@ class DeleteJob extends BaseController
             }
 
             $seenJobs[$jobName] = true;
+            $scope = $this->jobMatchesRequestedEnvironment($jobName, $this->input->post('environment'));
+            if (! $scope['ok']) {
+                $results[] = array('job' => $jobName, 'exist' => false, 'systems' => array(), 'error' => $scope['message']);
+                continue;
+            }
             $deletedSystems = $this->deleteRepositoryForJob($jobName);
             if (! empty($deletedSystems)) {
                 $deletedCount++;
@@ -115,6 +126,88 @@ class DeleteJob extends BaseController
         }
 
         $this->jsonDeleteResponse(array('deleted' => $deletedCount, 'requested' => count($seenJobs), 'results' => $results));
+    }
+
+    /**
+     * Delete Jenkins jobs through JobSeeker so the selected environment is
+     * re-checked server-side immediately before a destructive operation.
+     */
+    public function deleteJobs()
+    {
+        if (! $this->canManageJobs()) {
+            $this->jsonDeleteResponse(array('deleted' => 0, 'results' => array(), 'error' => 'Access denied.'), 403);
+            return;
+        }
+        if ($this->input->method(TRUE) !== 'POST') {
+            $this->jsonDeleteResponse(array('deleted' => 0, 'results' => array(), 'error' => 'Delete requests must use POST.'), 405);
+            return;
+        }
+
+        $rawJobs = $this->input->post('jobs');
+        $rawJobs = is_array($rawJobs) ? $rawJobs : explode(',', (string) $rawJobs);
+        $deleteRepositories = $this->input->post('delete_repositories') === '1';
+        $environment = $this->input->post('environment');
+        $results = array();
+        $seen = array();
+        $deleted = 0;
+
+        foreach ($rawJobs as $rawJob) {
+            $jobName = $this->normaliseJobName($rawJob);
+            if ($jobName === FALSE || isset($seen[$jobName])) {
+                if ($jobName === FALSE) {
+                    $results[] = array('job' => (string) $rawJob, 'deleted' => FALSE, 'systems' => array(), 'error' => 'Invalid job name.');
+                }
+                continue;
+            }
+            $seen[$jobName] = TRUE;
+            $scope = $this->jobMatchesRequestedEnvironment($jobName, $environment);
+            if (! $scope['ok']) {
+                $results[] = array('job' => $jobName, 'deleted' => FALSE, 'systems' => array(), 'error' => $scope['message']);
+                continue;
+            }
+
+            $response = $this->requestJenkins('POST', $this->jenkinsJobPath($jobName).'/doDelete');
+            $ok = in_array((int) $response['status'], array(200, 201, 302, 303), TRUE);
+            $systems = $ok && $deleteRepositories ? $this->deleteRepositoryForJob($jobName) : array();
+            if ($ok) {
+                $deleted++;
+            }
+            $results[] = array(
+                'job' => $jobName,
+                'deleted' => $ok,
+                'systems' => $systems,
+                'environment' => $scope['environment'],
+                'error' => $ok ? '' : 'Jenkins rejected the delete request (HTTP '.(int) $response['status'].').'
+            );
+        }
+
+        $status = empty($results) ? 400 : 200;
+        $this->jsonDeleteResponse(array('deleted' => $deleted, 'requested' => count($seen), 'results' => $results), $status);
+    }
+
+    private function jenkinsJobPath($jobName)
+    {
+        return implode('/', array_map(function($segment) {
+            return 'job/'.rawurlencode($segment);
+        }, explode('/', trim((string) $jobName, '/'))));
+    }
+
+    private function jobMatchesRequestedEnvironment($jobName, $requestedEnvironment)
+    {
+        $requested = $this->normalizeJobSeekerEnvironment($requestedEnvironment);
+        if ($requested === '' || $requested === '*' || $requested === 'ALL') {
+            return array('ok' => TRUE, 'status' => 200, 'environment' => $this->jenkinsEnvironmentFromJobConfig($jobName), 'message' => '');
+        }
+
+        $actual = $this->normalizeJobSeekerEnvironment($this->jenkinsEnvironmentFromJobConfig($jobName));
+        if ($actual === '') {
+            return array('ok' => FALSE, 'status' => 409, 'environment' => '', 'message' => 'The Jenkins job environment could not be verified in the backend. Reload the list before deleting.');
+        }
+        if ($actual !== $requested) {
+            return array('ok' => FALSE, 'status' => 409, 'environment' => $actual, 'message' => 'The job belongs to '.$actual.', not the selected '.$requested.' environment.');
+        }
+
+        return array('ok' => TRUE, 'status' => 200, 'environment' => $actual, 'message' => '');
     }
 
     private function normaliseJobName($jobName)

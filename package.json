@@ -4,9 +4,10 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
-    "test": "npm run test:console-groups && npm run test:draft-cache && npm run test:inline-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:pipelines && npm run test:dashboard",
+    "test": "npm run test:console-groups && npm run test:draft-cache && npm run test:platform-isolation && npm run test:inline-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:pipelines && npm run test:dashboard",
     "test:console-groups": "node scripts/test-job-console-groups.js",
     "test:draft-cache": "node scripts/test-job-draft-cache.js",
+    "test:platform-isolation": "node scripts/test-platform-isolation.js",
     "test:inline-editor": "node scripts/test-python-inline-editor.js",
     "test:docker-monitor": "node scripts/test-docker-monitor.js",
     "test:job-container-metrics": "node scripts/test-job-container-metrics.js",

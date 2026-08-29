@@ -50,7 +50,7 @@ class Tmf_model extends CI_Model
         return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
     }
 
-    private function applyEnvironmentFilter($environment) {
+    private function applyEnvironmentFilter($environment, $column = 'tmf.environment') {
         $environment = $this->normalizeEnvironmentFilter($environment);
 
         if ($environment === '') {
@@ -59,8 +59,8 @@ class Tmf_model extends CI_Model
 
         if ($environment === '__UNKNOWN__') {
             $this->db->group_start();
-            $this->db->where('environment IS NULL', null, false);
-            $this->db->or_where('TRIM(environment) =', '');
+            $this->db->where($column.' IS NULL', null, false);
+            $this->db->or_where('TRIM('.$column.') =', '');
             $this->db->group_end();
             return;
         }
@@ -69,9 +69,9 @@ class Tmf_model extends CI_Model
         $this->db->group_start();
         foreach ($values as $index => $value) {
             if ($index === 0) {
-                $this->db->where('UPPER(TRIM(environment)) =', $value);
+                $this->db->where('UPPER(TRIM('.$column.')) =', $value);
             } else {
-                $this->db->or_where('UPPER(TRIM(environment)) =', $value);
+                $this->db->or_where('UPPER(TRIM('.$column.')) =', $value);
             }
         }
         $this->db->group_end();
@@ -127,11 +127,16 @@ class Tmf_model extends CI_Model
         $job_name = (array) $job_name;
         $dimension = (array) $dimension;
         $environment = (array) $environment;
-        $includeUnknownEnvironment = in_array('__UNKNOWN__', $environment, TRUE);
-        $environment = array_values(array_filter($environment, function($value) {
-            $value = trim((string) $value);
-            return $value !== '' && $value !== '__UNKNOWN__';
-        }));
+        $includeAllEnvironments = in_array('*', $environment, TRUE) || in_array('all', array_map('strtolower', array_map('strval', $environment)), TRUE);
+        $includeUnknownEnvironment = in_array('__UNKNOWN__', $environment, TRUE) || in_array('unknown', array_map('strtolower', array_map('strval', $environment)), TRUE);
+        $environmentValues = array();
+        foreach ($environment as $environmentName) {
+            foreach ($this->environmentFilterValues($environmentName) as $value) {
+                if (! in_array($value, $environmentValues, TRUE)) {
+                    $environmentValues[] = $value;
+                }
+            }
+        }
 
     // Check Status
      if (!empty($status) && !in_array('*', $status, TRUE)) {
@@ -153,24 +158,33 @@ class Tmf_model extends CI_Model
         }
 
         // Check Environment
-                  if (!empty($environment) && !in_array('*', $environment, TRUE)) {
+                  if (! $includeAllEnvironments && (! empty($environmentValues) || $includeUnknownEnvironment)) {
                       $this->db->group_start();
-                      $this->db->where_in('environment',$environment);
+                      if (! empty($environmentValues)) {
+                          $this->db->group_start();
+                          foreach ($environmentValues as $index => $environmentValue) {
+                              if ($index === 0) {
+                                  $this->db->where('UPPER(TRIM(tmf.environment)) =', $environmentValue);
+                              } else {
+                                  $this->db->or_where('UPPER(TRIM(tmf.environment)) =', $environmentValue);
+                              }
+                          }
+                          $this->db->group_end();
+                      }
 
                       if ($includeUnknownEnvironment) {
-                       $this->db->or_group_start();
-                       $this->db->where('environment IS NULL', null, false);
-                       $this->db->or_where('TRIM(environment) =', '');
+                       if (! empty($environmentValues)) {
+                           $this->db->or_group_start();
+                       } else {
+                           $this->db->group_start();
+                       }
+                       $this->db->where('tmf.environment IS NULL', null, false);
+                       $this->db->or_where('TRIM(tmf.environment) =', '');
                        $this->db->group_end();
                       }
 
                       $this->db->group_end();
-                  } elseif ($includeUnknownEnvironment && !in_array('*', $environment, TRUE)) {
-                      $this->db->group_start();
-                      $this->db->where('environment IS NULL', null, false);
-                      $this->db->or_where('TRIM(environment) =', '');
-                      $this->db->group_end();
-             }
+                  }
 
         // Check Event Text
         if(trim((string) $eventText) !== ""){
@@ -209,21 +223,23 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
-    function listId($id) {
+    function listId($id, $environment = '') {
 
         $this->selectTmfRows();
         $this->db->from('tmf');
         $this->hideInternalJobs();
         $this->db->where('id', $id);
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->result();
     }
 
-    function deletePolicy($id, $staleThresholdSeconds = 900) {
+    function deletePolicy($id, $environment = '', $staleThresholdSeconds = 900) {
 
         $this->db->select('id,status,environment,last_activity');
         $this->db->from('tmf');
         $this->db->where('id', (int) $id);
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         $row = $query->row();
 
@@ -281,12 +297,13 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
-    function listStatus() {
+    function listStatus($environment = '') {
 
         $this->db->select('status');
         $this->db->distinct();
         $this->db->from('tmf');
         $this->hideInternalJobs();
+        $this->applyEnvironmentFilter($environment);
         $this->db->where('status IS NOT NULL', null, false);
         $query = $this->db->get();
 
@@ -316,32 +333,35 @@ class Tmf_model extends CI_Model
         return $result;
     }
 
-    function listJobName() {
+    function listJobName($environment = '') {
 
         $this->db->select('job_name');
         $this->db->distinct();
         $this->db->from('tmf');
         $this->hideInternalJobs();
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->result();
     }
 
-    function listDimension() {
+    function listDimension($environment = '') {
 
         $this->db->select('dimension');
         $this->db->distinct();
         $this->db->from('tmf');
         $this->hideInternalJobs();
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->result();
     }
 
-    function listReprocess() {
+    function listReprocess($environment = '') {
         $this->db->select('job_name,reprocess');
         $this->db->distinct();
         $this->db->from('tmf');
         $this->db->where('reprocess', 1);
         $this->hideInternalJobs();
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->result();
     }
@@ -352,13 +372,14 @@ class Tmf_model extends CI_Model
         return $query->result();
     }
 
-    function getError($instanceId) {
+    function getError($instanceId, $environment = '') {
 
         $this->db->select('tmf_error.*');
         $this->db->from('tmf_error');
         $this->db->where('tmf_id', $instanceId);
         $this->db->join('tmf', 'tmf_error.tmf_id = tmf.instance_id');
         $this->hideInternalJobs();
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->result();
     }
@@ -370,18 +391,20 @@ class Tmf_model extends CI_Model
         $this->db->update('tmf');
     }
 
-    function updateStatus($id,$status) {
+    function updateStatus($id,$status,$environment = '') {
 
         $this->db->set('status', $status);
         $this->db->where('id', $id);
+        $this->applyEnvironmentFilter($environment, 'environment');
         $this->db->update('tmf');
     }
 
 
-    function delete($id)
+    function delete($id, $environment = '')
     {
         
         $this->db->where('id', $id);
+        $this->applyEnvironmentFilter($environment, 'environment');
         $this->db->delete('tmf');
 
         

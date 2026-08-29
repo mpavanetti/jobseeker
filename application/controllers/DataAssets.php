@@ -216,15 +216,21 @@ class DataAssets extends BaseController
 
         $this->refreshStoredMetadata();
         $this->writeManifest();
+        $requestedEnvironment = trim((string) $this->input->get('environment', TRUE));
+        if ($requestedEnvironment === '') {
+            $requestedEnvironment = $this->jobSeekerEnvironmentPreference();
+        }
+        $selectedEnvironment = $this->normalizeEnvironment($requestedEnvironment);
         $this->global['pageTitle'] = 'Job Seeker : Data Assets';
         $data = array(
-            'assets' => $this->model->listAssets(),
-            'statistics' => $this->model->statistics(),
+            'assets' => $this->model->listAssets($selectedEnvironment),
+            'statistics' => $this->model->statistics($selectedEnvironment),
             'environments' => $this->model->environments(),
             'formats' => $this->formats,
             'initialDirection' => in_array($this->input->get('direction'), array('input', 'output'), TRUE) ? $this->input->get('direction') : '',
-            'initialEnvironment' => $this->normalizeEnvironment($this->input->get('environment'))
+            'initialEnvironment' => $selectedEnvironment
         );
+        $this->global['selectedEnvironment'] = $selectedEnvironment;
         $this->loadViews('dataAssets', $this->global, $data, NULL);
     }
 

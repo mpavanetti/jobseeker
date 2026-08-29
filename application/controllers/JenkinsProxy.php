@@ -51,6 +51,17 @@ class JenkinsProxy extends BaseController
         $path = $this->input->get('path');
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : NULL;
 
+        if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE) && preg_match('#(?:^|/)doDelete(?:\?.*)?$#i', (string) $path)) {
+            $this->output
+                ->set_status_header(403)
+                ->set_content_type('application/json', 'utf-8')
+                ->set_output(json_encode(array(
+                    'ok' => FALSE,
+                    'message' => 'Jenkins job deletion must use the environment-scoped JobSeeker endpoint.'
+                )));
+            return;
+        }
+
         $response = NULL;
         if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE)) {
             $response = $this->requestJenkinsBuild($path, $this->input->raw_input_stream, $contentType);

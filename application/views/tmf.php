@@ -1132,7 +1132,7 @@ function tmfDeleteRequest(id) {
     type : "POST",
     dataType : "json",
     url : baseURL + "tmf/delete",
-    data : { userId : id }
+    data : { userId : id, environment: currentTmfEnvironment() }
   });
 }
 
@@ -1305,7 +1305,7 @@ $("#table6").on('click','.cancel',function(){
                   success: function(){
                    toastr.success("Your Stop Request has been sent to server.", "Request Sent")
                           $.ajax({
-                           url: '<?php echo base_url(); ?>' + 'Tmf/updateStatus/' + id + '/Cancelled',
+                           url: '<?php echo base_url(); ?>' + 'Tmf/updateStatus/' + id + '/Cancelled?environment=' + encodeURIComponent(currentTmfEnvironment()),
                            method: 'POST',
                            async: false,
                            beforeSend: function() {
@@ -1345,7 +1345,7 @@ $(document).on('click', '#table6 .msgSelect', function(event){
 
    $.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>Tmf/listId/' + encodeURIComponent(id),
+            url:  '<?php echo base_url(); ?>Tmf/listId/' + encodeURIComponent(id) + '?environment=' + encodeURIComponent(currentTmfEnvironment()),
             dataType: "json", 
             beforeSend: function() {
              //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
@@ -1381,7 +1381,7 @@ $(document).on('click', '#table6 .btnSelect', function(event){
 
          $.ajax({
             contentType: "application/json",
-            url:  '<?php echo base_url(); ?>Tmf/getError/' + encodeURIComponent(instanceId),
+            url:  '<?php echo base_url(); ?>Tmf/getError/' + encodeURIComponent(instanceId) + '?environment=' + encodeURIComponent(currentTmfEnvironment()),
             dataType: "json", 
             beforeSend: function() {
              //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");

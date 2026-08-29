@@ -83,13 +83,22 @@ public function contextDetails() {
 
     $this->global['pageTitle'] = 'Job Seeker : ContextDetails Config';
     $user = $this->global['name'];
+    $selectedEnvironment = $this->normalizeJobSeekerEnvironment($this->input->get('environment', TRUE));
+    if ($selectedEnvironment === '') {
+      $selectedEnvironment = $this->normalizeJobSeekerEnvironment($this->jobSeekerEnvironmentPreference());
+    }
+    if ($selectedEnvironment === '*' || $selectedEnvironment === 'ALL') {
+      $selectedEnvironment = 'ALL';
+    }
 
     $data["user"] = $user;
-    $data["list"] = $this->model->listContexts();
+    $data["list"] = $this->model->listContexts($selectedEnvironment);
     $data["listProjects"] = $this->model->listProjects();
     $data["listEnvironments"] = $this->model->listEnvironments();
-    $data["contexts"] = $this->model->listAvailableContexts();
-    $data["activeContexts"] = $this->model->listActiveContexts();
+    $data["contexts"] = $this->model->listAvailableContexts($selectedEnvironment);
+    $data["activeContexts"] = $this->model->listActiveContexts($selectedEnvironment);
+    $data["selectedEnvironment"] = $selectedEnvironment;
+    $this->global['selectedEnvironment'] = $selectedEnvironment;
     $data["role"] = $this->isManager();
 
     $this->loadViews("contextDetails", $this->global, $data, NULL);
@@ -2275,6 +2284,16 @@ public function addContext() {
       }
 
       $id = $this->input->post('userId');
+      $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->input->post('environment'));
+      if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL') {
+        $contextRows = $this->model->listContextId($id);
+        $actualEnvironment = empty($contextRows) ? '' : $this->normalizeJobSeekerEnvironment($contextRows[0]->Environment);
+        if ($actualEnvironment === '' || $actualEnvironment !== $requestedEnvironment) {
+          $this->output->set_status_header(409);
+          echo(json_encode(array('status'=>FALSE, 'message'=>'The context does not belong to the selected environment.')));
+          return;
+        }
+      }
 
       $result = $this->model->deleteContext($id);
 

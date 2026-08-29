@@ -12,12 +12,15 @@ class Context_model extends CI_Model
         return $query->result();
     }
 
-    function listContexts() {
+    function listContexts($environment = '') {
 
         $this->db->select('env.Environment,pd.ProjectName,cd.*');
         $this->db->from('contextdetails cd');
         $this->db->join('environment env','env.id=cd.environmentFK');
         $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
+        if (trim((string) $environment) !== '' && strtoupper(trim((string) $environment)) !== 'ALL') {
+            $this->db->where('UPPER(TRIM(env.Environment)) =', strtoupper(trim((string) $environment)));
+        }
         $query = $this->db->get();
         return $query->result();
     }
@@ -50,11 +53,15 @@ class Context_model extends CI_Model
         return $query->num_rows();
     }
 
-    function listAvailableContexts() {
+    function listAvailableContexts($environment = '') {
 
         $this->db->distinct();
         $this->db->select('ContextKey');
-        $this->db->from('contextdetails');
+        $this->db->from('contextdetails cd');
+        if (trim((string) $environment) !== '' && strtoupper(trim((string) $environment)) !== 'ALL') {
+            $this->db->join('environment env', 'env.id=cd.EnvironmentFK');
+            $this->db->where('UPPER(TRIM(env.Environment)) =', strtoupper(trim((string) $environment)));
+        }
         $query = $this->db->get();
         return $query->num_rows();
     }
@@ -77,11 +84,15 @@ class Context_model extends CI_Model
         return $query->num_rows();
     }
 
-    function listActiveContexts() {
+    function listActiveContexts($environment = '') {
 
         $this->db->select('IsActive');
-        $this->db->from('contextdetails');
-        $this->db->where('IsActive', '1');
+        $this->db->from('contextdetails cd');
+        $this->db->where('cd.IsActive', '1');
+        if (trim((string) $environment) !== '' && strtoupper(trim((string) $environment)) !== 'ALL') {
+            $this->db->join('environment env', 'env.id=cd.EnvironmentFK');
+            $this->db->where('UPPER(TRIM(env.Environment)) =', strtoupper(trim((string) $environment)));
+        }
         $query = $this->db->get();
         return $query->num_rows();
     }

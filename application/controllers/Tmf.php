@@ -36,7 +36,12 @@ class Tmf extends BaseController
 
     private function selectedEnvironmentFilter()
     {
-        return $this->normalizeEnvironmentSelectionValue($this->input->get('environment'));
+        $environment = trim((string) $this->input->get('environment', TRUE));
+        if ($environment === '') {
+            $environment = $this->jobSeekerEnvironmentPreference();
+        }
+
+        return $this->normalizeEnvironmentSelectionValue($environment);
     }
 
     private function selectedEnvironmentFromSelection($environment)
@@ -71,13 +76,14 @@ class Tmf extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
+          $selectedEnvironment = $this->selectedEnvironmentFilter();
 
-          $data["listStatus"] = $this->model->listStatus();
-          $data["listJobName"] = $this->model->listJobName();
-          $data["listDimension"] = $this->model->listDimension();
-          $data["listReprocess"] = $this->model->listReprocess();
+          $data["listStatus"] = $this->model->listStatus($selectedEnvironment);
+          $data["listJobName"] = $this->model->listJobName($selectedEnvironment);
+          $data["listDimension"] = $this->model->listDimension($selectedEnvironment);
+          $data["listReprocess"] = $this->model->listReprocess($selectedEnvironment);
           $data["listEnvironment"] = $this->model->listEnvironment();
-          $data["selectedEnvironment"] = $this->selectedEnvironmentFilter();
+          $data["selectedEnvironment"] = $selectedEnvironment;
           $this->global['selectedEnvironment'] = $data["selectedEnvironment"];
 
 
@@ -112,10 +118,17 @@ class Tmf extends BaseController
                 $eventText = substr($eventText, 0, 200);
             }
             $environment = $this->input->post('environment');
+            $globalEnvironment = $this->selectedEnvironmentFilter();
+            if ($globalEnvironment !== 'all') {
+                // The global environment is an authoritative backend scope;
+                // form values may narrow an all-environment view but cannot
+                // broaden a concrete environment selected in the header.
+                $environment = array($globalEnvironment);
+            }
 
             $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment);
             $data["role"] = $this->role;
-            $data["selectedEnvironment"] = $this->selectedEnvironmentFromSelection($environment);
+            $data["selectedEnvironment"] = $globalEnvironment !== 'all' ? $globalEnvironment : $this->selectedEnvironmentFromSelection($environment);
 
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
             $this->global['selectedEnvironment'] = $data["selectedEnvironment"];
@@ -147,10 +160,10 @@ class Tmf extends BaseController
 
     }
 
-     function getError($instanceId)
+    function getError($instanceId)
     {
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
-        $errorList["data"] = $this->model->getError($instanceId);
+        $errorList["data"] = $this->model->getError($instanceId, $this->selectedEnvironmentFilter());
 
 
           echo json_encode($errorList, JSON_PRETTY_PRINT);
@@ -159,7 +172,7 @@ class Tmf extends BaseController
      function listId($id)
     {
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
-        $list["data"] = $this->model->listId($id);
+        $list["data"] = $this->model->listId($id, $this->selectedEnvironmentFilter());
 
 
           echo json_encode($list, JSON_PRETTY_PRINT);
@@ -176,7 +189,7 @@ class Tmf extends BaseController
      function updateStatus($id,$status)
     {
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
-        $errorList["data"] = $this->model->updateStatus($id,$status);
+        $errorList["data"] = $this->model->updateStatus($id,$status,$this->selectedEnvironmentFilter());
 
         echo "Ok";
 
@@ -206,7 +219,8 @@ class Tmf extends BaseController
             return;
         }
 
-        $deletePolicy = $this->model->deletePolicy($id);
+        $environment = $this->normalizeEnvironmentSelectionValue($this->input->post('environment'));
+        $deletePolicy = $this->model->deletePolicy($id, $environment);
         if (empty($deletePolicy['exists'])) {
             echo(json_encode(array('status'=>FALSE, 'id' => $id)));
             return;
@@ -221,7 +235,7 @@ class Tmf extends BaseController
             return;
         }
 
-        $result = $this->model->delete($id);
+        $result = $this->model->delete($id, $environment);
 
         if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
         else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }

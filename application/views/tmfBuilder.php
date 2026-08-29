@@ -240,7 +240,7 @@
             <h3><i class="fa fa-filter"></i> Query Filters</h3>
               <span><?php echo count($listStatus); ?> statuses &middot; <?php echo count($listJobName); ?> jobs &middot; <?php echo count($listEnvironment); ?> configured or observed environments</span>
           </div>
-           <form action="<?php echo base_url() ?>Tmf/fetchData" method="POST" id="searchList">
+           <form action="<?php echo base_url() ?>Tmf/fetchData<?php echo $tmfBuilderDataEnvironmentQuery; ?>" method="POST" id="searchList">
             <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
             <div class="row">
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
