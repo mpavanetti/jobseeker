@@ -635,10 +635,28 @@ class JobCreation extends BaseController
     }
 
     private function recordJobCreationDate($jobName, $createdAt) {
-      $dates = $this->readJobCreationDates();
-      $dates[$jobName] = $createdAt;
+      $handle = fopen($this->jobCreationDatesPath(), 'c+');
+      if ($handle === FALSE || ! flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+          fclose($handle);
+        }
+        return FALSE;
+      }
 
-      return file_put_contents($this->jobCreationDatesPath(), json_encode($dates, JSON_PRETTY_PRINT), LOCK_EX) !== FALSE;
+      rewind($handle);
+      $dates = json_decode(stream_get_contents($handle), TRUE);
+      if (! is_array($dates)) {
+        $dates = array();
+      }
+      $dates[$jobName] = $createdAt;
+      $payload = json_encode($dates, JSON_PRETTY_PRINT);
+      rewind($handle);
+      $written = $payload !== FALSE && ftruncate($handle, 0) && fwrite($handle, $payload) !== FALSE;
+      fflush($handle);
+      flock($handle, LOCK_UN);
+      fclose($handle);
+
+      return $written;
     }
 
     private function generateJobName() {
@@ -1372,6 +1390,32 @@ class JobCreation extends BaseController
 
       private function cleanLinuxDockerImage($dockerImage, $scriptType = '') {
         return $this->cleanDockerImage($dockerImage, $scriptType === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
+      }
+
+      private function cleanContainerCpuLimit($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+          return '1';
+        }
+        if (! preg_match('/^(?:[0-9]+(?:\.[0-9]{1,2})?|\.[0-9]{1,2})$/', $value)) {
+          return FALSE;
+        }
+        $number = (float) $value;
+        if ($number < 0.10 || $number > 64) {
+          return FALSE;
+        }
+        return rtrim(rtrim(number_format($number, 2, '.', ''), '0'), '.');
+      }
+
+      private function cleanContainerMemoryLimit($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+          return 512;
+        }
+        if (! ctype_digit($value) || (int) $value < 64 || (int) $value > 262144) {
+          return FALSE;
+        }
+        return (int) $value;
       }
 
       private function repositoryRealPath($repositoryRoot) {
@@ -3075,12 +3119,24 @@ class JobCreation extends BaseController
       private function dockerJobRunIdentityOptions() {
         return array(
           '  --name "$JOBSEEKER_CONTAINER_NAME" \\',
+          '  --cpus "$JOBSEEKER_CONTAINER_CPUS" \\',
+          '  --memory "${JOBSEEKER_CONTAINER_MEMORY_MB}m" \\',
+          '  --memory-swap "${JOBSEEKER_CONTAINER_MEMORY_MB}m" \\',
           '  --label com.jobseeker.managed=true \\',
           '  --label com.jobseeker.kind=job \\',
           '  --label "com.jobseeker.job.name=${JOB_NAME:-${JOBSEEKER_JOB_NAME:-job}}" \\',
           '  --label "com.jobseeker.build.number=${BUILD_NUMBER:-0}" \\',
           '  --label "com.jobseeker.environment=${JOBSEEKER_ENVIRONMENT:-}" \\',
           '  --label "com.jobseeker.runtime=${JOBSEEKER_CONTAINER_RUNTIME}" \\'
+        );
+      }
+
+      private function dockerJobResourceLines($runtimeOptions) {
+        $cpu = isset($runtimeOptions['cpuLimit']) ? $runtimeOptions['cpuLimit'] : '1';
+        $memory = isset($runtimeOptions['memoryLimitMb']) ? (int) $runtimeOptions['memoryLimitMb'] : 512;
+        return array(
+          'export JOBSEEKER_CONTAINER_CPUS='.escapeshellarg($cpu),
+          'export JOBSEEKER_CONTAINER_MEMORY_MB='.escapeshellarg($memory)
         );
       }
 
@@ -3099,6 +3155,7 @@ class JobCreation extends BaseController
         $lines = array_merge(array('set -e'), $runtimeLines);
         $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
         $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
+        $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
         $lines[] = 'export JOBSEEKER_LINUX_COMMAND_B64='.escapeshellarg(base64_encode($commandText));
         $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
         $lines = array_merge($lines, $this->dockerJobIdentityLines('linux-shell'));
@@ -3160,6 +3217,7 @@ class JobCreation extends BaseController
         $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
         $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
         $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
+        $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
         $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
         $lines = array_merge($lines, $this->dockerJobIdentityLines($execution['scriptType'] === 'talend' ? 'talend' : 'linux-shell'));
         $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
@@ -3295,6 +3353,7 @@ class JobCreation extends BaseController
           $dockerScript = implode("\n", $dockerScriptLines);
 
           $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
+          $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
           $lines[] = 'echo "Preparing Python Docker build context..."';
           $lines[] = 'JOBSEEKER_RESTORE_XTRACE=0; case "$-" in *x*) JOBSEEKER_RESTORE_XTRACE=1; set +x ;; esac';
           if (trim($requirementsText) !== '') {
@@ -3587,6 +3646,8 @@ class JobCreation extends BaseController
                 $pythonInlineFiles = NULL;
                 $pythonRuntimeMode = $this->selectedPythonRuntimeMode($this->input->post('pythonRuntimeMode'));
                 $linuxRuntimeMode = $this->selectedLinuxRuntimeMode($this->input->post('pythonRuntimeMode'));
+                $containerCpuLimit = $this->cleanContainerCpuLimit($this->input->post('containerCpuLimit'));
+                $containerMemoryLimitMb = $this->cleanContainerMemoryLimit($this->input->post('containerMemoryLimitMb'));
                 $pythonExecutable = $this->cleanPythonExecutable($this->input->post('pythonVersion'));
                 $pythonEntryPoint = $this->cleanPythonEntryPoint($pythonEntryPointRaw, FALSE);
                 $postedDockerImage = $this->input->post('pythonDockerImage');
@@ -3622,6 +3683,11 @@ class JobCreation extends BaseController
                   redirect('JobCreation');
                 }
 
+                if (($pythonRuntimeMode === 'docker' || $linuxRuntimeMode === 'docker') && ($containerCpuLimit === FALSE || $containerMemoryLimitMb === FALSE)) {
+                  $this->session->set_flashdata('error', 'Container limits are invalid. CPU must be between 0.10 and 64 cores and memory must be between 64 and 262144 MB.');
+                  redirect('JobCreation');
+                }
+
                 $pythonDockerImage = $this->cleanPythonDockerImage($postedDockerImage, $pythonExecutable);
                 if ($pythonRuntimeMode === 'docker' && $pythonDockerImage === FALSE && $linuxUsesPythonRuntime) {
                   $this->session->set_flashdata('error', 'Please select a valid Python Docker image.');
@@ -3647,7 +3713,9 @@ class JobCreation extends BaseController
                   'requirementsText' => ($usesInlinePythonSource && $pythonRuntimeMode !== 'docker') ? $pythonRequirementsText : '',
                   'pyprojectText' => ($usesInlinePythonSource && $pythonRuntimeMode === 'docker') ? $pythonPyprojectText : '',
                   'dockerfileText' => ($usesInlinePythonSource && $pythonRuntimeMode === 'docker' && $pythonUseDockerfile) ? $pythonDockerfileText : '',
-                  'runTests' => $pythonRunTests
+                  'runTests' => $pythonRunTests,
+                  'cpuLimit' => $containerCpuLimit,
+                  'memoryLimitMb' => $containerMemoryLimitMb
                 );
 
                 $linuxDockerImage = $this->cleanLinuxDockerImage($postedDockerImage, $linuxExecutionStrategy == 'script' ? $linuxScriptType : '');
@@ -3658,7 +3726,9 @@ class JobCreation extends BaseController
 
                 $linuxRuntimeOptions = array(
                   'mode' => $linuxRuntimeMode,
-                  'dockerImage' => $linuxDockerImage
+                  'dockerImage' => $linuxDockerImage,
+                  'cpuLimit' => $containerCpuLimit,
+                  'memoryLimitMb' => $containerMemoryLimitMb
                 );
 
                 if ($pythonEntryPoint === FALSE) {
