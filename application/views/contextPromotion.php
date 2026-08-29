@@ -34,12 +34,16 @@ if(!empty($listProjects))
 $promotionJobs = !empty($jenkinsJobs) ? $jenkinsJobs : array();
 $promotionHistory = !empty($promotionHistory) && is_array($promotionHistory) ? $promotionHistory : array();
 $rollbackId = $this->session->flashdata('rollback_id');
+$pipelineWorkloadCount = 0;
+$jobWorkloadCount = 0;
+foreach($promotionJobs as $workload) {
+  if (isset($workload['workloadType']) && $workload['workloadType'] === 'pipeline') {
+    $pipelineWorkloadCount++;
+  } else {
+    $jobWorkloadCount++;
+  }
+}
 ?>
-<script>
-  $(document).ready(function(){
-    $('body').addClass('sidebar-collapse')
-  });
-</script>
 <style>
   .job-promotion-page .content {
     padding: 18px;
@@ -329,13 +333,13 @@ $rollbackId = $this->session->flashdata('rollback_id');
 <div class="content-wrapper job-promotion-page">
   <section class="content-header">
     <h1>
-      <i class="fa fa-level-up"></i> Environment Promotion
-      <small>Promote Jenkins jobs between runtime environments</small>
+      <i class="fa fa-level-up"></i> Environment Deployment
+      <small>Deploy jobs and pipelines between runtime environments</small>
     </h1>
     <ol class="breadcrumb">
       <li><a href="#"><i class="fa fa-dashboard"></i> Extract, Transform, Load</a></li>
       <li><a href="#">Context Settings</a></li>
-      <li><a href="#">Environment Promotion</a></li>
+      <li><a href="#">Environment Deployment</a></li>
     </ol>
   </section>
 
@@ -369,7 +373,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
             <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
             <input type="hidden" name="rollbackId" value="<?php echo html_escape($rollbackId); ?>" />
             <strong>Rollback ready:</strong> restore Jenkins jobs, artifacts, and copied contexts from checkpoint <?php echo html_escape($rollbackId); ?>.
-            <button type="submit" class="btn btn-xs btn-info pull-right" onclick="return confirm('Rollback this environment promotion?');"><i class="fa fa-undo"></i> Rollback Promotion</button>
+            <button type="submit" class="btn btn-xs btn-info pull-right" onclick="return confirm('Rollback this environment deployment?');"><i class="fa fa-undo"></i> Rollback Deployment</button>
           </form>
           <?php } ?>
           <?php if(!empty($jenkinsError)) { ?>
@@ -383,7 +387,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
       </div>
 
       <ul class="nav nav-tabs promotion-tabs" role="tablist">
-        <li class="active"><a href="#promotionWorkspace" data-toggle="tab"><i class="fa fa-level-up"></i> Promote</a></li>
+        <li class="active"><a href="#promotionWorkspace" data-toggle="tab"><i class="fa fa-level-up"></i> Deploy</a></li>
         <li><a href="#promotionHistory" data-toggle="tab"><i class="fa fa-history"></i> History <span class="badge"><?php echo count($promotionHistory); ?></span></a></li>
       </ul>
       <div class="tab-content">
@@ -391,20 +395,20 @@ $rollbackId = $this->session->flashdata('rollback_id');
       <div class="row" style="margin-top: 15px;">
         <div class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
           <div class="promotion-summary-card">
-            <span class="promotion-summary-label">Jenkins Jobs</span>
+            <span class="promotion-summary-label">Deployable Workloads</span>
             <span class="promotion-summary-value"><?php echo number_format(count($promotionJobs)); ?></span>
           </div>
         </div>
         <div class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
           <div class="promotion-summary-card">
-            <span class="promotion-summary-label">Environments</span>
-            <span class="promotion-summary-value"><?php echo number_format(count($environmentOptions)); ?></span>
+            <span class="promotion-summary-label">Managed Pipelines</span>
+            <span class="promotion-summary-value"><?php echo number_format($pipelineWorkloadCount); ?></span>
           </div>
         </div>
         <div class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
           <div class="promotion-summary-card">
-            <span class="promotion-summary-label">Active Environments</span>
-            <span class="promotion-summary-value"><?php echo number_format($activeEnvironmentCount); ?></span>
+            <span class="promotion-summary-label">Jenkins Jobs</span>
+            <span class="promotion-summary-value"><?php echo number_format($jobWorkloadCount); ?></span>
           </div>
         </div>
         <div class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
@@ -417,15 +421,15 @@ $rollbackId = $this->session->flashdata('rollback_id');
 
       <div class="promotion-grid animated fadeIn">
         <div class="promotion-workbench">
-          <h3 class="promotion-section-title"><i class="fa fa-code-fork"></i> Promote Job</h3>
+          <h3 class="promotion-section-title"><i class="fa fa-code-fork"></i> Deploy Workload</h3>
           <form action="<?php echo base_url() ?>Context/promoteJob" method="POST" id="jobPromotionForm">
             <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>" />
             <div class="form-group">
-              <label>Source Jenkins Job</label>
+              <label>Source Workload</label>
               <select id="sourceJob" class="form-control" name="sourceJob" required>
-                <option value="">Select job</option>
+                <option value="">Select job or pipeline</option>
                 <?php foreach($promotionJobs as $job) { ?>
-                <option value="<?php echo html_escape($job['fullName']); ?>" data-color="<?php echo html_escape($job['color']); ?>" data-buildable="<?php echo $job['buildable'] ? '1' : '0'; ?>"><?php echo html_escape($job['fullName']); ?></option>
+                <option value="<?php echo html_escape($job['fullName']); ?>" data-color="<?php echo html_escape($job['color']); ?>" data-buildable="<?php echo $job['buildable'] ? '1' : '0'; ?>" data-workload-type="<?php echo html_escape($job['workloadType']); ?>" data-pipeline-id="<?php echo (int) $job['pipelineId']; ?>" data-pipeline-key="<?php echo html_escape($job['pipelineKey']); ?>" data-pipeline-version="<?php echo (int) $job['pipelineVersion']; ?>" data-pipeline-environment="<?php echo html_escape($job['pipelineEnvironment']); ?>" data-pipeline-node-count="<?php echo (int) $job['pipelineNodeCount']; ?>" data-pipeline-schedule="<?php echo html_escape($job['pipelineSchedule']); ?>"><?php echo $job['workloadType'] === 'pipeline' ? '[Pipeline] '.html_escape($job['displayName']).' (v'.(int) $job['pipelineVersion'].')' : '[Job] '.html_escape($job['displayName']); ?></option>
                 <?php } ?>
               </select>
               <small id="sourceJobEnvironmentHint" class="promotion-source-environment"><i class="fa fa-globe"></i> Environment: <span class="label label-default">Select a job</span></small>
@@ -433,7 +437,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
 
             <div class="promotion-flow">
               <div class="form-group">
-                <label>Promote From</label>
+                <label>Deploy From</label>
                 <select id="sourceEnvironment" class="form-control" name="sourceEnvironment" required>
                   <option value="">Source environment</option>
                   <?php foreach($environmentOptions as $env) { ?>
@@ -443,7 +447,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
               </div>
               <div class="promotion-flow-icon"><i class="fa fa-long-arrow-right"></i></div>
               <div class="form-group">
-                <label>Promote To</label>
+                <label>Deploy To</label>
                 <select id="targetEnvironment" class="form-control" name="targetEnvironment" required>
                   <option value="">Target environment</option>
                   <?php foreach($environmentOptions as $env) { ?>
@@ -453,17 +457,17 @@ $rollbackId = $this->session->flashdata('rollback_id');
               </div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="targetJobGroup">
               <label>Target Jenkins Job</label>
               <input type="text" id="targetJobName" name="targetJobName" class="form-control" maxlength="255" placeholder="Target job name" autocomplete="off">
             </div>
 
-            <div class="promotion-option-panel">
+            <div class="promotion-option-panel" id="jobDeploymentOptions">
               <div class="checkbox">
                 <label><input type="checkbox" id="includeDependencies" name="includeDependencies" value="1" checked> Include downstream Jenkins dependencies</label>
               </div>
               <div class="checkbox">
-                <label><input type="checkbox" id="promoteContexts" name="promoteContexts" value="1"> Promote context keys for a project</label>
+                <label><input type="checkbox" id="promoteContexts" name="promoteContexts" value="1"> Deploy context keys for a project</label>
               </div>
               <div class="form-group" id="contextProjectGroup" style="display: none;">
                 <label>Context Project</label>
@@ -484,16 +488,16 @@ $rollbackId = $this->session->flashdata('rollback_id');
 
             <div class="promotion-option-row">
               <div class="checkbox" style="margin: 0;">
-                <label><input type="checkbox" id="overwriteExisting" name="overwriteExisting" value="1"> Overwrite existing target job and artifacts</label>
+                <label><input type="checkbox" id="overwriteExisting" name="overwriteExisting" value="1"> <span id="overwriteExistingLabel">Overwrite existing target job and artifacts</span></label>
               </div>
-              <button type="submit" class="btn btn-primary" disabled><i class="fa fa-level-up"></i> Promote Job</button>
+              <button type="submit" class="btn btn-primary" disabled><i class="fa fa-level-up"></i> Deploy Workload</button>
             </div>
           </form>
         </div>
 
         <div class="promotion-preview-panel">
-          <h3 class="promotion-section-title"><i class="fa fa-search"></i> Promotion Preview</h3>
-          <div class="promotion-preview-status" id="jobPromotionPreview">Select a source job and environments to inspect the Jenkins config changes.</div>
+          <h3 class="promotion-section-title"><i class="fa fa-search"></i> Deployment Preview</h3>
+          <div class="promotion-preview-status" id="jobPromotionPreview">Select a source workload and environments to inspect the deployment.</div>
           <div class="promotion-preview-kpis" id="jobPromotionKpis" style="display: none;"></div>
           <div id="jobPromotionDetails"></div>
         </div>
@@ -501,13 +505,14 @@ $rollbackId = $this->session->flashdata('rollback_id');
 
       <div class="promotion-inventory-card box box-primary">
         <div class="box-header">
-          <h3 class="box-title"><b>Promotable Jenkins Jobs</b></h3>
+          <h3 class="box-title"><b>Deployable Workloads</b></h3>
         </div>
         <div class="box-body table-responsive">
           <table id="promotionInventoryTable" class="table table-bordered table-striped" style="width: 100%;">
             <thead>
               <tr>
-                <th>Job</th>
+                <th>Workload</th>
+                <th>Type</th>
                 <th>Environment</th>
                 <th>Status</th>
                 <th>Buildable</th>
@@ -531,7 +536,8 @@ $rollbackId = $this->session->flashdata('rollback_id');
                 }
               ?>
               <tr data-promotion-job="<?php echo html_escape($job['fullName']); ?>">
-                <td><b><?php echo html_escape($job['fullName']); ?></b></td>
+                <td><b><?php echo html_escape($job['displayName']); ?></b><?php if($job['workloadType'] === 'pipeline') { ?><small class="text-muted" style="display:block;"><?php echo html_escape($job['fullName']); ?></small><?php } ?></td>
+                <td><span class="label label-<?php echo $job['workloadType'] === 'pipeline' ? 'info' : 'default'; ?>"><?php echo $job['workloadType'] === 'pipeline' ? 'Pipeline' : 'Job'; ?></span></td>
                 <td><span class="promotion-inventory-environment"><span class="label label-default">Detecting</span></span></td>
                 <td><span class="label label-<?php echo $statusClass; ?>"><?php echo html_escape($color !== '' ? $color : 'unknown'); ?></span></td>
                 <td><?php echo $job['buildable'] ? '<span class="label label-success">Yes</span>' : '<span class="label label-default">No</span>'; ?></td>
@@ -547,7 +553,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
       <div class="tab-pane promotion-history-panel" id="promotionHistory">
         <div class="box box-primary">
           <div class="box-header with-border">
-            <h3 class="box-title"><b>Promotion History</b></h3>
+            <h3 class="box-title"><b>Deployment History</b></h3>
           </div>
           <div class="box-body table-responsive">
             <table id="promotionHistoryTable" class="table table-bordered table-striped" style="width: 100%;">
@@ -574,7 +580,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
                   <td class="promotion-history-detail">
                     <b><?php echo html_escape(isset($history['source_job']) ? $history['source_job'] : ''); ?></b><br>
                     <i class="fa fa-long-arrow-right"></i> <?php echo html_escape(isset($history['target_job']) ? $history['target_job'] : ''); ?>
-                    <?php if(count($historyJobs) > 1) { ?><details><summary><?php echo count($historyJobs); ?> promoted jobs</summary><?php foreach($historyJobs as $job) { ?><div><?php echo html_escape(isset($job['source_job']) ? $job['source_job'] : ''); ?> &rarr; <?php echo html_escape(isset($job['target_job']) ? $job['target_job'] : ''); ?></div><?php } ?></details><?php } ?>
+                    <?php if(count($historyJobs) > 1) { ?><details><summary><?php echo count($historyJobs); ?> deployed jobs</summary><?php foreach($historyJobs as $job) { ?><div><?php echo html_escape(isset($job['source_job']) ? $job['source_job'] : ''); ?> &rarr; <?php echo html_escape(isset($job['target_job']) ? $job['target_job'] : ''); ?></div><?php } ?></details><?php } ?>
                   </td>
                   <td class="promotion-history-detail">
                     <div>Dependencies: <b><?php echo !empty($historyParameters['include_dependencies']) ? 'Yes' : 'No'; ?></b>; overwrite: <b><?php echo !empty($historyParameters['overwrite_existing']) ? 'Yes' : 'No'; ?></b></div>
@@ -597,7 +603,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
               <?php } ?>
               </tbody>
             </table>
-            <?php if(empty($promotionHistory)) { ?><p class="text-muted text-center" style="padding: 24px;">No promotions have been recorded yet.</p><?php } ?>
+            <?php if(empty($promotionHistory)) { ?><p class="text-muted text-center" style="padding: 24px;">No deployments have been recorded yet.</p><?php } ?>
           </div>
         </div>
       </div>
@@ -636,12 +642,23 @@ $rollbackId = $this->session->flashdata('rollback_id');
     }
 
     $('#sourceJob option[value!=""]').each(function() {
-      sourceJobOptions.push({
+      var workload = {
         value: $(this).val(),
         text: $(this).text(),
         color: $(this).data('color'),
-        buildable: $(this).data('buildable')
-      });
+        buildable: $(this).data('buildable'),
+        workloadType: $(this).data('workload-type') || 'job',
+        pipelineId: Number($(this).data('pipeline-id') || 0),
+        pipelineKey: $(this).data('pipeline-key') || '',
+        pipelineVersion: Number($(this).data('pipeline-version') || 0),
+        pipelineEnvironment: $(this).data('pipeline-environment') || '',
+        pipelineNodeCount: Number($(this).data('pipeline-node-count') || 0),
+        pipelineSchedule: $(this).data('pipeline-schedule') || ''
+      };
+      sourceJobOptions.push(workload);
+      if (workload.workloadType === 'pipeline' && workload.pipelineEnvironment) {
+        sourceJobEnvironmentInfo[workload.value] = {environment: workload.pipelineEnvironment, source: 'Pipeline record', unknown: false};
+      }
     });
 
     $('#sourceEnvironment option[data-name]').each(function() {
@@ -730,7 +747,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
       var currentValue = $('#sourceJob').val() || '';
       var keepCurrent = currentValue !== '' && sourceJobMatchesEnvironment(currentValue);
 
-      $('#sourceJob').empty().append($('<option>', {value: '', text: 'Select job'}));
+      $('#sourceJob').empty().append($('<option>', {value: '', text: 'Select job or pipeline'}));
       $.each(sourceJobOptions, function(index, job) {
         if (! sourceJobMatchesEnvironment(job.value)) {
           return;
@@ -739,7 +756,17 @@ $rollbackId = $this->session->flashdata('rollback_id');
         $('#sourceJob').append($('<option>', {
           value: job.value,
           text: job.text
-        }).attr('data-color', job.color).attr('data-buildable', job.buildable));
+        }).attr({
+          'data-color': job.color,
+          'data-buildable': job.buildable,
+          'data-workload-type': job.workloadType,
+          'data-pipeline-id': job.pipelineId,
+          'data-pipeline-key': job.pipelineKey,
+          'data-pipeline-version': job.pipelineVersion,
+          'data-pipeline-environment': job.pipelineEnvironment,
+          'data-pipeline-node-count': job.pipelineNodeCount,
+          'data-pipeline-schedule': job.pipelineSchedule
+        }));
       });
 
       $('#sourceJob').val(keepCurrent ? currentValue : '').trigger('change.select2');
@@ -848,6 +875,12 @@ $rollbackId = $this->session->flashdata('rollback_id');
         return;
       }
 
+      if (($('#sourceJob option:selected').data('workload-type') || 'job') === 'pipeline') {
+        setDetectedSourceEnvironment(sourceJobEnvironment(sourceJob), true);
+        schedulePreview();
+        return;
+      }
+
       setDetectedSourceEnvironment(environmentHelper.detectFromJob({name: sourceJob, fullName: sourceJob}), true);
       $('#sourceJobEnvironmentHint').append(' <span class="text-muted">Checking Jenkins config...</span>');
 
@@ -940,9 +973,31 @@ $rollbackId = $this->session->flashdata('rollback_id');
     }
 
     function syncTargetSuggestion() {
-      if (!targetWasEdited) {
+      if (($('#sourceJob option:selected').data('workload-type') || 'job') === 'pipeline') {
+        $('#targetJobName').val('');
+      } else if (!targetWasEdited) {
         $('#targetJobName').val(suggestTargetJobName());
       }
+    }
+
+    function selectedWorkload() {
+      var $option = $('#sourceJob option:selected');
+      return {
+        type: $option.data('workload-type') || 'job',
+        pipelineId: Number($option.data('pipeline-id') || 0),
+        version: Number($option.data('pipeline-version') || 0),
+        nodeCount: Number($option.data('pipeline-node-count') || 0),
+        schedule: $option.data('pipeline-schedule') || '',
+        label: $.trim($option.text().replace(/^\[(Job|Pipeline)\]\s*/, '').replace(/\s+\(v\d+\)$/, '')),
+        jenkinsJob: $option.val() || ''
+      };
+    }
+
+    function syncWorkloadControls() {
+      var pipeline = selectedWorkload().type === 'pipeline';
+      $('#targetJobGroup, #jobDeploymentOptions').toggle(!pipeline);
+      $('#overwriteExistingLabel').text(pipeline ? 'Overwrite existing target pipeline' : 'Overwrite existing target job and artifacts');
+      $submitButton.html('<i class="fa fa-level-up"></i> ' + (pipeline ? 'Deploy Pipeline' : 'Deploy Job'));
     }
 
     function setPreviewIdle(message) {
@@ -965,7 +1020,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
       var commandPreview = [];
       var jobTable = '';
 
-      $preview.html('<span class="label label-success">Ready</span> <strong>' + htmlEscape(response.target_job) + '</strong> passed promotion checks. ' + htmlEscape(targetState) + '. Rollback is ' + (response.rollback_enabled ? 'enabled' : 'disabled') + '.');
+      $preview.html('<span class="label label-success">Ready</span> <strong>' + htmlEscape(response.target_job) + '</strong> passed deployment checks. ' + htmlEscape(targetState) + '. Rollback is ' + (response.rollback_enabled ? 'enabled' : 'disabled') + '.');
 
       $kpis.html(
         kpi('Jobs', response.job_count || 0) +
@@ -976,7 +1031,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
       ).show();
 
       if (response.jobs && response.jobs.length) {
-        jobTable = '<div class="table-responsive promotion-preview-table"><table class="table table-condensed table-bordered"><thead><tr><th>Source Job</th><th>Target Job</th><th>Action</th><th>Detected</th><th>Promotion</th><th>Config Changes</th><th>Artifacts</th></tr></thead><tbody>';
+        jobTable = '<div class="table-responsive promotion-preview-table"><table class="table table-condensed table-bordered"><thead><tr><th>Source Job</th><th>Target Job</th><th>Action</th><th>Detected</th><th>Deployment</th><th>Config Changes</th><th>Artifacts</th></tr></thead><tbody>';
         $.each(response.jobs, function(index, job) {
           var detected = job.detected_environment || {environment: '', source: 'Not detected'};
           jobItems.push('<li><span class="label label-' + (job.target_exists ? 'warning' : 'success') + '">' + (job.target_exists ? 'update' : 'create') + '</span> ' + htmlEscape(job.source_job) + ' to ' + htmlEscape(job.target_job) + '</li>');
@@ -1022,6 +1077,23 @@ $rollbackId = $this->session->flashdata('rollback_id');
       $submitButton.prop('disabled', false);
     }
 
+    function renderPipelinePreview(workload) {
+      var targetEnvironment = selectedEnvironmentName('#targetEnvironment');
+      $preview.html('<span class="label label-success">Ready</span> <strong>' + htmlEscape(workload.label) + '</strong> will be deployed as a managed pipeline in ' + htmlEscape(targetEnvironment) + '.');
+      $kpis.html(
+        kpi('Type', 'Pipeline') +
+        kpi('Version', 'v' + workload.version) +
+        kpi('Jobs', workload.nodeCount) +
+        kpi('Schedule', workload.schedule || 'Manual')
+      ).show();
+      $details.html('<ul class="promotion-preview-list">' +
+        '<li><span class="label label-info">pipeline</span> ' + htmlEscape(workload.jenkinsJob) + '</li>' +
+        '<li><span class="label label-primary">route</span> ' + htmlEscape(selectedEnvironmentName('#sourceEnvironment')) + ' to ' + htmlEscape(targetEnvironment) + '</li>' +
+        '<li><span class="label label-default">graph</span> Target jobs and environment mappings are validated before deployment.</li>' +
+      '</ul>');
+      $submitButton.prop('disabled', false);
+    }
+
     function requestPreview() {
       var sourceJob = $('#sourceJob').val();
       var sourceEnvironment = $('#sourceEnvironment').val();
@@ -1029,9 +1101,10 @@ $rollbackId = $this->session->flashdata('rollback_id');
       var targetJobName = $.trim($('#targetJobName').val());
       var promoteContexts = $('#promoteContexts').is(':checked');
       var promotionProject = $('#promotionProject').val();
+      var workload = selectedWorkload();
 
       if (!sourceJob || !sourceEnvironment || !targetEnvironment) {
-        setPreviewIdle('Select a source job and environments to inspect the Jenkins config changes.');
+        setPreviewIdle('Select a source workload and environments to inspect the deployment.');
         return;
       }
 
@@ -1046,6 +1119,11 @@ $rollbackId = $this->session->flashdata('rollback_id');
         return;
       }
 
+      if (workload.type === 'pipeline') {
+        renderPipelinePreview(workload);
+        return;
+      }
+
       if (!targetJobName) {
         setPreviewIdle('<span class="label label-warning">Waiting</span> Target Jenkins job name is required.');
         return;
@@ -1057,7 +1135,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
       }
 
       if (promoteContexts && !promotionProject) {
-        setPreviewIdle('<span class="label label-warning">Waiting</span> Select a context project or turn context promotion off.');
+        setPreviewIdle('<span class="label label-warning">Waiting</span> Select a context project or turn context deployment off.');
         return;
       }
 
@@ -1090,13 +1168,13 @@ $rollbackId = $this->session->flashdata('rollback_id');
         if (response && response.ok) {
           renderPreview(response);
         } else {
-          setPreviewIdle('<span class="label label-danger">Blocked</span> ' + htmlEscape(response && response.message ? response.message : 'Promotion preview failed.'));
+          setPreviewIdle('<span class="label label-danger">Blocked</span> ' + htmlEscape(response && response.message ? response.message : 'Deployment preview failed.'));
         }
       }).fail(function(xhr, status) {
         if (status === 'abort') {
           return;
         }
-        setPreviewIdle('<span class="label label-danger">Error</span> Promotion preview request failed.');
+        setPreviewIdle('<span class="label label-danger">Error</span> Deployment preview request failed.');
       });
     }
 
@@ -1120,6 +1198,7 @@ $rollbackId = $this->session->flashdata('rollback_id');
     $('#sourceJob').on('change', function() {
       targetWasEdited = false;
       syncContextControls();
+      syncWorkloadControls();
       detectSourceJobEnvironment();
     });
 
@@ -1151,19 +1230,46 @@ $rollbackId = $this->session->flashdata('rollback_id');
         return false;
       }
 
-      return confirm('Promote this environment package to the target environment?');
+      var workload = selectedWorkload();
+      if (workload.type === 'pipeline') {
+        event.preventDefault();
+        if (!confirm('Deploy this pipeline to the target environment?')) {
+          return false;
+        }
+        $submitButton.prop('disabled', true);
+        $.ajax({
+          url: '<?php echo base_url(); ?>pipelines/deploy?environment=' + encodeURIComponent(selectedEnvironmentName('#sourceEnvironment')),
+          method: 'POST',
+          dataType: 'json',
+          data: {
+            id: workload.pipelineId,
+            target_environment: selectedEnvironmentName('#targetEnvironment'),
+            overwrite: $('#overwriteExisting').is(':checked') ? '1' : '0'
+          }
+        }).done(function(response) {
+          window.location.href = '<?php echo base_url(); ?>pipelines?id=' + encodeURIComponent(response.id) + '&environment=' + encodeURIComponent(response.environment);
+        }).fail(function(xhr) {
+          var response = xhr.responseJSON || {};
+          setPreviewIdle('<span class="label label-danger">Blocked</span> ' + htmlEscape(response.message || 'Pipeline deployment failed.'));
+          $submitButton.prop('disabled', false);
+        });
+        return false;
+      }
+
+      return confirm('Deploy this job package to the target environment?');
     });
 
     applyGlobalSourceEnvironment();
     renderSourceJobOptions();
     hydrateSourceJobEnvironments();
     syncContextControls();
+    syncWorkloadControls();
     hydrateInventoryEnvironments();
     if ($.fn.dataTable && ! $.fn.dataTable.isDataTable('#promotionInventoryTable')) {
       var promotionInventoryTable = $('#promotionInventoryTable').DataTable({
         scrollX: true,
         autoWidth: false,
-        order: [[1, 'desc']],
+        order: [[2, 'desc']],
         lengthMenu: [10, 20, 50, 100, 200, 500],
         columnDefs: [
           { width: 220, targets: 0 }

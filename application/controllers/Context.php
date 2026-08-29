@@ -104,11 +104,11 @@ public function promotion() {
   }
   else
   {
-    $this->global['pageTitle'] = 'Job Seeker : Environment Promotion';
+    $this->global['pageTitle'] = 'Job Seeker : Environment Deployment';
     $data["listEnvironments"] = $this->model->listEnvironments();
     $data["listProjects"] = $this->model->listProjects();
     $jenkinsJobs = $this->listPromotionJenkinsJobs();
-    $data["jenkinsJobs"] = $jenkinsJobs['jobs'];
+    $data["jenkinsJobs"] = $this->annotatePromotionWorkloads($jenkinsJobs['jobs']);
     $data["jenkinsError"] = $jenkinsJobs['error'];
     $data["jenkinsStatus"] = $jenkinsJobs['status'];
     $data["promotionHistory"] = $this->listPromotionHistory();
@@ -120,7 +120,7 @@ public function promotion() {
 
 public function promoteContext() {
 
-  $this->session->set_flashdata('error', 'Context variable promotion was replaced by Jenkins job promotion. Select a source job and target environment below.');
+  $this->session->set_flashdata('error', 'Context variable deployment was replaced by workload deployment. Select a source job or pipeline and target environment below.');
   redirect('Context/promotion');
 }
 
@@ -181,7 +181,7 @@ public function promoteJob() {
         $action = $result['target_exists'] ? 'updated' : 'created';
         $contextSummary = !empty($result['context_promotion']['enabled']) ? ' Contexts: '.$result['context_promotion']['result']['created'].' created, '.$result['context_promotion']['result']['updated'].' updated, '.$result['context_promotion']['result']['skipped'].' skipped.' : '';
         $rollbackSummary = !empty($result['rollback_id']) ? ' Rollback checkpoint: '.$result['rollback_id'].'.' : '';
-        $this->session->set_flashdata('success', 'Promoted '.$result['job_count'].' Jenkins job(s) from '.$input['source_environment']->Environment.' to '.$input['target_environment']->Environment.'. Root target '.$input['target_job'].' '.$action.'. Command updates: '.$result['command_updates'].', parameter updates: '.$result['parameter_updates'].', artifact folders copied: '.count($result['artifacts']['copied']).'.'.$contextSummary.$rollbackSummary);
+        $this->session->set_flashdata('success', 'Deployed '.$result['job_count'].' Jenkins job(s) from '.$input['source_environment']->Environment.' to '.$input['target_environment']->Environment.'. Root target '.$input['target_job'].' '.$action.'. Command updates: '.$result['command_updates'].', parameter updates: '.$result['parameter_updates'].', artifact folders copied: '.count($result['artifacts']['copied']).'.'.$contextSummary.$rollbackSummary);
         if (!empty($result['rollback_id'])) {
           $this->session->set_flashdata('rollback_id', $result['rollback_id']);
         }
@@ -234,6 +234,51 @@ private function listPromotionJenkinsJobs() {
   return array('jobs' => $jobs, 'error' => '', 'status' => 200);
 }
 
+private function annotatePromotionWorkloads($jobs) {
+  $this->load->model('Pipeline_model', 'promotionPipelines');
+  $pipelinesByJob = array();
+  foreach ($this->promotionPipelines->listPipelines() as $pipeline) {
+    if (!empty($pipeline->jenkins_job_name)) {
+      $pipelinesByJob[$pipeline->jenkins_job_name] = $pipeline;
+    }
+  }
+
+  foreach ($jobs as &$job) {
+    $job['workloadType'] = 'job';
+    $job['displayName'] = $job['fullName'];
+    $job['pipelineId'] = 0;
+    $job['pipelineKey'] = '';
+    $job['pipelineVersion'] = 0;
+    $job['pipelineEnvironment'] = '';
+    $job['pipelineNodeCount'] = 0;
+    $job['pipelineSchedule'] = '';
+
+    if (!isset($pipelinesByJob[$job['fullName']])) {
+      continue;
+    }
+
+    $pipeline = $pipelinesByJob[$job['fullName']];
+    $graph = json_decode((string) $pipeline->graph_json, TRUE);
+    $job['workloadType'] = 'pipeline';
+    $job['displayName'] = $pipeline->name;
+    $job['pipelineId'] = (int) $pipeline->id;
+    $job['pipelineKey'] = $pipeline->pipeline_key;
+    $job['pipelineVersion'] = (int) $pipeline->version;
+    $job['pipelineEnvironment'] = $pipeline->environment;
+    $job['pipelineNodeCount'] = isset($graph['nodes']) && is_array($graph['nodes']) ? count($graph['nodes']) : 0;
+    $job['pipelineSchedule'] = !empty($pipeline->schedule_enabled) ? (string) $pipeline->schedule_cron : '';
+  }
+  unset($job);
+
+  usort($jobs, function($left, $right) {
+    if ($left['workloadType'] !== $right['workloadType']) {
+      return $left['workloadType'] === 'pipeline' ? -1 : 1;
+    }
+    return strcasecmp($left['displayName'], $right['displayName']);
+  });
+  return $jobs;
+}
+
 private function flattenPromotionJenkinsJobs($jobs) {
   $flatJobs = array();
 
@@ -281,29 +326,29 @@ private function readJobPromotionInput($targetRequired) {
   }
 
   if ($sourceEnvironmentId <= 0 || $targetEnvironmentId <= 0) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Select a source environment and a target environment.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Select a source environment and a target environment.');
   }
 
   if ($sourceEnvironmentId == $targetEnvironmentId) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Source and target environments must be different.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Source and target environments must be different.');
   }
 
   $sourceEnvironment = $this->model->getEnvironment($sourceEnvironmentId);
   $targetEnvironment = $this->model->getEnvironment($targetEnvironmentId);
 
   if (empty($sourceEnvironment) || empty($targetEnvironment)) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Environment was not found.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Environment was not found.');
   }
 
   $contextProject = NULL;
   if ($promoteContexts) {
     if ($contextProjectId <= 0) {
-      return array('ok' => FALSE, 'message' => 'Promotion failed. Select a context project when context promotion is enabled.');
+      return array('ok' => FALSE, 'message' => 'Deployment failed. Select a context project when context deployment is enabled.');
     }
 
     $contextProject = $this->model->getProject($contextProjectId);
     if (empty($contextProject)) {
-      return array('ok' => FALSE, 'message' => 'Promotion failed. Context project was not found.');
+      return array('ok' => FALSE, 'message' => 'Deployment failed. Context project was not found.');
     }
   }
 
@@ -318,7 +363,7 @@ private function readJobPromotionInput($targetRequired) {
   }
 
   if ($sourceJobClean['name'] === $targetJobClean['name']) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Target job must be a separate Jenkins job so the source environment remains unchanged.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Target job must be a separate Jenkins job so the source environment remains unchanged.');
   }
 
   return array(
@@ -378,7 +423,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
   }
 
   if ($previewOnly) {
-    return $this->promotionResultPayload(TRUE, 'Promotion preview is ready.', $input, $preparedJobs, $totals, $allArtifacts, $commandPreviews, $contextPlan, '');
+    return $this->promotionResultPayload(TRUE, 'Deployment preview is ready.', $input, $preparedJobs, $totals, $allArtifacts, $commandPreviews, $contextPlan, '');
   }
 
   $rollbackId = '';
@@ -393,7 +438,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
   foreach ($preparedJobs as $prepared) {
     $artifactCopy = $this->copyPromotionArtifacts($prepared['source_job'], $prepared['target_job'], $input['overwrite'], FALSE);
     if (! empty($artifactCopy['errors'])) {
-      return $this->promotionFailureWithAutomaticRollback('Promotion failed while copying artifacts for '.$prepared['source_job'].': '.implode(' ', $artifactCopy['errors']).'.', $rollbackId);
+      return $this->promotionFailureWithAutomaticRollback('Deployment failed while copying artifacts for '.$prepared['source_job'].': '.implode(' ', $artifactCopy['errors']).'.', $rollbackId);
     }
 
     $allArtifacts['copied'] = array_merge($allArtifacts['copied'], $artifactCopy['copied']);
@@ -401,7 +446,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
 
     $save = $this->savePreparedPromotionJob($prepared);
     if (! $save['ok']) {
-      return $this->promotionFailureWithAutomaticRollback('Promotion failed. Jenkins refused to save '.$prepared['target_job'].'. HTTP '.$save['status'].'.', $rollbackId);
+      return $this->promotionFailureWithAutomaticRollback('Deployment failed. Jenkins refused to save '.$prepared['target_job'].'. HTTP '.$save['status'].'.', $rollbackId);
     }
   }
 
@@ -409,7 +454,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
     $contextPlan['result'] = $this->model->promoteContexts($input['context_project_id'], (int) $input['source_environment']->Id, (int) $input['target_environment']->Id, $input['user'], $input['overwrite_contexts']);
   }
 
-  return $this->promotionResultPayload(TRUE, 'Promotion completed.', $input, $preparedJobs, $totals, $allArtifacts, $commandPreviews, $contextPlan, $rollbackId);
+  return $this->promotionResultPayload(TRUE, 'Deployment completed.', $input, $preparedJobs, $totals, $allArtifacts, $commandPreviews, $contextPlan, $rollbackId);
 }
 
 private function promotionFailureWithAutomaticRollback($message, $rollbackId) {
@@ -419,7 +464,7 @@ private function promotionFailureWithAutomaticRollback($message, $rollbackId) {
 
   $rollback = $this->performPromotionRollback($rollbackId);
   if (! empty($rollback['ok'])) {
-    return array('ok' => FALSE, 'message' => $message.' The promotion checkpoint was rolled back automatically.', 'rollback_id' => $rollbackId, 'rolled_back' => TRUE);
+    return array('ok' => FALSE, 'message' => $message.' The deployment checkpoint was rolled back automatically.', 'rollback_id' => $rollbackId, 'rolled_back' => TRUE);
   }
 
   return array('ok' => FALSE, 'message' => $message.' Automatic rollback also reported an error: '.$rollback['message'].' Checkpoint: '.$rollbackId.'.', 'rollback_id' => $rollbackId, 'rolled_back' => FALSE);
@@ -430,12 +475,12 @@ private function prepareSingleJobPromotion($input, $requireEnvironmentBinding) {
   $sourceResponse = $this->requestJenkins('GET', $sourcePath . '/config.xml');
 
   if ((int) $sourceResponse['status'] !== 200) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Source Jenkins job '.$input['source_job'].' config could not be loaded. HTTP '.$sourceResponse['status'].'.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Source Jenkins job '.$input['source_job'].' config could not be loaded. HTTP '.$sourceResponse['status'].'.');
   }
 
   $detectedEnvironment = $this->detectPromotionEnvironment($sourceResponse['body'], $input['source_job']);
   if ($requireEnvironmentBinding && ! empty($detectedEnvironment['environment']) && ! $this->promotionEnvironmentsEquivalent($detectedEnvironment['environment'], $input['source_environment']->Environment)) {
-    return array('ok' => FALSE, 'message' => 'Promotion stopped. Source Jenkins job '.$input['source_job'].' appears to run in '.$detectedEnvironment['environment'].' from '.$detectedEnvironment['source'].', not '.$input['source_environment']->Environment.'. Select the detected source environment before promoting.');
+    return array('ok' => FALSE, 'message' => 'Deployment stopped. Source Jenkins job '.$input['source_job'].' appears to run in '.$detectedEnvironment['environment'].' from '.$detectedEnvironment['source'].', not '.$input['source_environment']->Environment.'. Select the detected source environment before deploying.');
   }
 
   $jobNameMap = isset($input['job_name_map']) ? $input['job_name_map'] : array();
@@ -445,7 +490,7 @@ private function prepareSingleJobPromotion($input, $requireEnvironmentBinding) {
   }
 
   if ($requireEnvironmentBinding && ($transform['command_updates'] + $transform['parameter_updates']) < 1) {
-    return array('ok' => FALSE, 'message' => 'Promotion stopped. JobSeeker could not find '.$input['source_environment']->Environment.' in a Jenkins environment parameter, --context argument, environment assignment, or Python environment argument inside '.$input['source_job'].'.');
+    return array('ok' => FALSE, 'message' => 'Deployment stopped. JobSeeker could not find '.$input['source_environment']->Environment.' in a Jenkins environment parameter, --context argument, environment assignment, or Python environment argument inside '.$input['source_job'].'.');
   }
 
   $targetPath = $this->jenkinsJobPath($input['target_job']);
@@ -453,16 +498,16 @@ private function prepareSingleJobPromotion($input, $requireEnvironmentBinding) {
   $targetExists = (int) $targetResponse['status'] === 200;
 
   if (! $targetExists && (int) $targetResponse['status'] !== 404) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Target Jenkins job '.$input['target_job'].' state could not be checked. HTTP '.$targetResponse['status'].'.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Target Jenkins job '.$input['target_job'].' state could not be checked. HTTP '.$targetResponse['status'].'.');
   }
 
   if ($targetExists && ! $input['overwrite']) {
-    return array('ok' => FALSE, 'message' => 'Promotion stopped. Target Jenkins job '.$input['target_job'].' already exists. Enable overwrite to update it.', 'target_exists' => TRUE);
+    return array('ok' => FALSE, 'message' => 'Deployment stopped. Target Jenkins job '.$input['target_job'].' already exists. Enable overwrite to update it.', 'target_exists' => TRUE);
   }
 
   $artifacts = $this->copyPromotionArtifacts($input['source_job'], $input['target_job'], $input['overwrite'], TRUE);
   if (! empty($artifacts['errors'])) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed while preparing artifacts for '.$input['source_job'].': '.implode(' ', $artifacts['errors']).'.', 'artifacts' => $artifacts);
+    return array('ok' => FALSE, 'message' => 'Deployment failed while preparing artifacts for '.$input['source_job'].': '.implode(' ', $artifacts['errors']).'.', 'artifacts' => $artifacts);
   }
 
   return array(
@@ -491,7 +536,7 @@ private function buildJobPromotionPlan($input) {
 
   while (! empty($queue)) {
     if (count($jobs) >= $maxJobs) {
-      return array('ok' => FALSE, 'message' => 'Promotion stopped. Dependency graph is larger than '.$maxJobs.' jobs.');
+      return array('ok' => FALSE, 'message' => 'Deployment stopped. Dependency graph is larger than '.$maxJobs.' jobs.');
     }
 
     $current = array_shift($queue);
@@ -503,7 +548,7 @@ private function buildJobPromotionPlan($input) {
     }
 
     if (isset($seenTargets[$targetJob]) && $seenTargets[$targetJob] !== $sourceJob) {
-      return array('ok' => FALSE, 'message' => 'Promotion stopped. Multiple source jobs map to target job '.$targetJob.'. Choose clearer environment naming or promote the dependency separately.');
+      return array('ok' => FALSE, 'message' => 'Deployment stopped. Multiple source jobs map to target job '.$targetJob.'. Choose clearer environment naming or deploy the dependency separately.');
     }
 
     $seenSources[$sourceJob] = TRUE;
@@ -517,13 +562,13 @@ private function buildJobPromotionPlan($input) {
 
     $sourceResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($sourceJob) . '/config.xml');
     if ((int) $sourceResponse['status'] !== 200) {
-      return array('ok' => FALSE, 'message' => 'Promotion failed. Dependency scan could not load '.$sourceJob.'. HTTP '.$sourceResponse['status'].'.');
+      return array('ok' => FALSE, 'message' => 'Deployment failed. Dependency scan could not load '.$sourceJob.'. HTTP '.$sourceResponse['status'].'.');
     }
 
     foreach ($this->extractDownstreamJobNames($sourceResponse['body']) as $downstreamJob) {
       $clean = $this->cleanPromotionJobName($downstreamJob);
       if (! $clean['ok']) {
-        return array('ok' => FALSE, 'message' => 'Promotion stopped. Downstream job name '.$downstreamJob.' is not safe to promote.');
+        return array('ok' => FALSE, 'message' => 'Deployment stopped. Downstream job name '.$downstreamJob.' is not safe to deploy.');
       }
 
       if (isset($seenSources[$clean['name']])) {
@@ -663,13 +708,13 @@ private function promotionResultPayload($ok, $message, $input, $preparedJobs, $t
 private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
   $root = $this->promotionRollbackRoot();
   if ($root === FALSE) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Rollback folder could not be prepared.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Rollback folder could not be prepared.');
   }
 
   $rollbackId = date('YmdHis').'-'.substr(sha1(uniqid('', TRUE)), 0, 10);
   $rollbackDirectory = $root.DIRECTORY_SEPARATOR.$rollbackId;
   if (! $this->ensureDirectory($rollbackDirectory)) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Rollback checkpoint folder could not be created.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Rollback checkpoint folder could not be created.');
   }
 
   $bundle = array(
@@ -710,7 +755,7 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
     if ($prepared['target_exists']) {
       $configResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($prepared['target_job']) . '/config.xml');
       if ((int) $configResponse['status'] !== 200) {
-        return array('ok' => FALSE, 'message' => 'Promotion failed. Existing target job '.$prepared['target_job'].' could not be backed up. HTTP '.$configResponse['status'].'.');
+        return array('ok' => FALSE, 'message' => 'Deployment failed. Existing target job '.$prepared['target_job'].' could not be backed up. HTTP '.$configResponse['status'].'.');
       }
       $jobSnapshot['config_xml'] = $configResponse['body'];
     }
@@ -720,7 +765,7 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
     foreach ($prepared['artifacts']['planned'] as $artifact) {
       $targetPath = $this->promotionArtifactAbsolutePath($artifact['target']);
       if ($targetPath === FALSE) {
-        return array('ok' => FALSE, 'message' => 'Promotion failed. Artifact rollback path is invalid for '.$artifact['target'].'.');
+        return array('ok' => FALSE, 'message' => 'Deployment failed. Artifact rollback path is invalid for '.$artifact['target'].'.');
       }
 
       $artifactSnapshot = array('label' => $artifact['label'], 'source' => isset($artifact['source']) ? $artifact['source'] : '', 'target' => $artifact['target'], 'existed' => is_dir($targetPath), 'backup_path' => '');
@@ -728,7 +773,7 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
         $backupRelativePath = 'artifacts/'.count($bundle['artifacts']);
         $backupPath = $rollbackDirectory.DIRECTORY_SEPARATOR.$backupRelativePath;
         if (! $this->copyDirectoryTree($targetPath, $backupPath, TRUE)) {
-          return array('ok' => FALSE, 'message' => 'Promotion failed. Artifact folder '.$artifact['target'].' could not be backed up for rollback.');
+          return array('ok' => FALSE, 'message' => 'Deployment failed. Artifact folder '.$artifact['target'].' could not be backed up for rollback.');
         }
         $artifactSnapshot['backup_path'] = $backupRelativePath;
       }
@@ -739,7 +784,7 @@ private function createPromotionRollback($input, $preparedJobs, $contextPlan) {
 
   $filePath = $this->promotionRollbackFilePath($rollbackId);
   if ($filePath === FALSE || file_put_contents($filePath, json_encode($bundle, JSON_PRETTY_PRINT), LOCK_EX) === FALSE) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Rollback checkpoint could not be written.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Rollback checkpoint could not be written.');
   }
 
   return array('ok' => TRUE, 'id' => $rollbackId);
@@ -778,7 +823,7 @@ private function performPromotionRollback($rollbackId) {
     } else {
       $response = $this->requestJenkins('POST', $this->jenkinsJobPath($targetJob) . '/doDelete');
       if (! $this->isSuccessfulJenkinsStatus($response['status']) && (int) $response['status'] !== 404) {
-        $errors[] = 'Could not delete promoted job '.$targetJob.' (HTTP '.$response['status'].').';
+        $errors[] = 'Could not delete deployed job '.$targetJob.' (HTTP '.$response['status'].').';
         continue;
       }
       $deletedJobs++;
@@ -1030,7 +1075,7 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
   libxml_use_internal_errors($previousErrors);
 
   if (! $loaded || ! $dom->documentElement) {
-    return array('ok' => FALSE, 'message' => 'Promotion failed. Source Jenkins config.xml is not valid XML.');
+    return array('ok' => FALSE, 'message' => 'Deployment failed. Source Jenkins config.xml is not valid XML.');
   }
 
   $xpath = new DOMXPath($dom);
@@ -1919,7 +1964,7 @@ private function suggestPromotedJobName($sourceJobName, $sourceEnvironment, $tar
   $targetToken = trim($targetToken, '.-_');
 
   if ($targetToken === '') {
-    $targetToken = 'promoted';
+    $targetToken = 'deployed';
   }
 
   return $sourceJobName.'-'.$targetToken;
