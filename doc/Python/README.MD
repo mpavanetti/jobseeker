@@ -1,6 +1,6 @@
 # JobSeeker Python SDK
 
-JobSeeker ships a small Python SDK that lets Python jobs write to the Transaction Monitoring Framework (TMF), read context values, resolve Data Assets, update progress, and report failures with very little boilerplate.
+JobSeeker ships a small Python SDK that lets Python jobs write to the Transaction Monitoring Framework (TMF), read context values, resolve Data Assets and connectors, update progress, and report failures with very little boilerplate.
 
 Jobs created from the Job Creation screen receive the SDK as a preinstalled runtime package, so new jobs can import it directly:
 
@@ -67,6 +67,28 @@ if source is not None:
 See the complete [code/data_asset_job.py](code/data_asset_job.py) example and the [Data Assets guide](../jobseeker/ETL/data-assets/README.md).
 
 The example transforms the bundled four-row CSV into a `customer-summary` output containing active-customer counts for the UK and US. Opening Data Assets after the run discovers the generated file and publishes its size, SHA-256 checksum, and next revision automatically.
+
+## Resolving ETL connectors
+
+Connectors are named connection contracts scoped by environment and job. Configure a `warehouse` key in **Extract Transform Load > Connectors**, then resolve it without hardcoding endpoint or credential values:
+
+```python
+import psycopg
+
+with JobSeeker(environment="PROD", job="load-orders") as js:
+    warehouse = js.connector("warehouse")
+    connection = psycopg.connect(
+        host=warehouse.host,
+        port=warehouse.port,
+        dbname=warehouse.database,
+        user=warehouse.username,
+        password=warehouse.password,
+    )
+```
+
+Use `get_connector("warehouse")` for code that does not need a `JobSeeker` client. Arbitrary authentication fields are available through `connector.value("api_key", required=True)`, `connector.value("sas_token", required=True)`, or their configured names. Runtime jobs receive only connectors matching their global environment/job scope. Encrypted local values and secrets retrieved from Azure Key Vault, AWS Secrets Manager, or worker environment mappings are materialized immediately before execution and deleted during cleanup. The ETL job remains responsible for creating and configuring its database driver or service client.
+
+See the [ETL Connectors guide](../jobseeker/ETL/connectors/README.md) for shell/Talend usage and deployment authentication.
 
 ## Success Email Metrics
 

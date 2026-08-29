@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+import base64
 import functools
 import getpass
 import inspect
@@ -10,9 +11,13 @@ import json
 import logging
 import os
 import signal
+import shutil
 import socket
 import sys
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
@@ -446,6 +451,400 @@ class DataAssetCatalog:
 
 
 @dataclass(frozen=True)
+class Connector:
+    """A named, scoped connection with secrets loaded from protected runtime files."""
+
+    key: str
+    type: str
+    environment: str
+    job: str
+    config: Mapping[str, Any]
+    secrets: Mapping[str, str]
+    description: str = ""
+
+    def value(self, name: str, default: Any = None, required: bool = False) -> Any:
+        value = self.secrets.get(name, self.config.get(name, default))
+        if required and (value is None or value == ""):
+            raise JobSeekerError("Connector %s has no value for %s." % (self.key, name))
+        return value
+
+    @property
+    def host(self) -> str:
+        return str(self.value("host", ""))
+
+    @property
+    def port(self) -> int:
+        return _coerce_int(self.value("port", 0), 0)
+
+    @property
+    def database(self) -> str:
+        return str(self.value("database", ""))
+
+    @property
+    def username(self) -> str:
+        return str(self.value("username", ""))
+
+    @property
+    def password(self) -> str:
+        return str(self.value("password", ""))
+
+    def as_dict(self, include_secrets: bool = False) -> Dict[str, Any]:
+        values = {
+            "key": self.key,
+            "type": self.type,
+            "environment": self.environment,
+            "job": self.job,
+            "description": self.description,
+            "config": dict(self.config),
+        }
+        if include_secrets:
+            values["secrets"] = dict(self.secrets)
+        return values
+
+    def environment_variables(self) -> Dict[str, str]:
+        values = dict(self.config)
+        values.update(self.secrets)
+        result = {
+            "JOBSEEKER_CONNECTOR_KEY": self.key,
+            "JOBSEEKER_CONNECTOR_TYPE": self.type,
+        }
+        for name, value in values.items():
+            normalized = "".join(character if character.isalnum() else "_" for character in str(name)).upper()
+            if normalized:
+                result["JOBSEEKER_CONNECTOR_" + normalized] = str(value)
+        return result
+
+
+class ConnectorCatalog:
+    """Resolve connectors materialized for the current build and scope."""
+
+    def __init__(self, directory: Optional[str] = None):
+        self.directory = os.path.abspath(directory or _env("JOBSEEKER_CONNECTORS_DIR", ".jobseeker-connectors"))
+        self.manifest_path = os.path.join(self.directory, "connectors.json")
+        self._connectors: Optional[Dict[str, Connector]] = None
+
+    def _safe_secret_path(self, relative_path: str) -> str:
+        root = os.path.realpath(self.directory)
+        candidate = os.path.realpath(os.path.join(root, relative_path))
+        try:
+            within_root = os.path.commonpath((root, candidate)) == root
+        except ValueError:
+            within_root = False
+        if not within_root:
+            raise JobSeekerError("Connector secret path escapes the runtime directory.")
+        return candidate
+
+    def _load(self) -> Dict[str, Connector]:
+        if self._connectors is not None:
+            return self._connectors
+        try:
+            with open(self.manifest_path, "r", encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except FileNotFoundError as error:
+            raise JobSeekerError(
+                "Connector catalog was not materialized at %s. Check the job runtime connector configuration."
+                % self.manifest_path
+            ) from error
+        except (OSError, ValueError) as error:
+            raise JobSeekerError("Connector catalog is unreadable: %s" % error) from error
+
+        self._connectors = {}
+        for item in payload.get("connectors", []) if isinstance(payload, dict) else []:
+            if not isinstance(item, dict) or not item.get("key"):
+                continue
+            secrets = {}
+            for name, relative_path in dict(item.get("secret_files") or {}).items():
+                try:
+                    with open(self._safe_secret_path(str(relative_path)), "r", encoding="utf-8") as stream:
+                        secrets[str(name)] = stream.read()
+                except OSError as error:
+                    raise JobSeekerError("Secret %s for connector %s is unreadable." % (name, item["key"])) from error
+            connector = Connector(
+                key=str(item["key"]),
+                type=str(item.get("type", "generic")),
+                environment=str(item.get("environment", "ALL")),
+                job=str(item.get("job", "*")),
+                config=dict(item.get("config") or {}),
+                secrets=secrets,
+                description=str(item.get("description") or ""),
+            )
+            self._connectors[connector.key] = connector
+        return self._connectors
+
+    def refresh(self) -> "ConnectorCatalog":
+        self._connectors = None
+        return self
+
+    def list(self) -> List[Connector]:
+        return list(self._load().values())
+
+    def resolve(self, key: str, required: bool = True) -> Optional[Connector]:
+        connector = self._load().get(key)
+        if connector is None and required:
+            available = ", ".join(sorted(self._load())) or "none"
+            raise JobSeekerError("Connector %s is not available to this job. Available connector key(s): %s." % (key, available))
+        return connector
+
+
+def _connector_secret_values(item: Mapping[str, Any]) -> Dict[str, str]:
+    secret = dict(item.get("secret") or {})
+    backend = str(secret.get("backend") or "local")
+    if backend == "local":
+        return {str(name): str(value) for name, value in dict(secret.get("values") or {}).items()}
+    reference = dict(secret.get("reference") or {})
+    if backend == "environment":
+        values = {}
+        variables = dict(reference.get("variables") or {})
+        if not variables:
+            variables = {
+                name: reference.get(name + "_env")
+                for name in ("username", "password")
+                if reference.get(name + "_env")
+            }
+        for name, variable_value in variables.items():
+            variable = str(variable_value or "")
+            value = os.environ.get(variable) if variable else None
+            if value is None:
+                raise JobSeekerError("Connector %s requires environment variable %s." % (item.get("key"), variable or "<missing>"))
+            values[str(name)] = value
+        return values
+    if backend == "azure_key_vault":
+        try:
+            from azure.identity import (  # type: ignore
+                DefaultAzureCredential,
+                EnvironmentCredential,
+                ManagedIdentityCredential,
+                WorkloadIdentityCredential,
+            )
+            from azure.keyvault.secrets import SecretClient  # type: ignore
+        except ImportError as error:
+            raise JobSeekerDependencyError(
+                "Azure Key Vault connectors require azure-identity and azure-keyvault-secrets on the Jenkins worker."
+            ) from error
+        vault_url = str(reference.get("vault_url") or "")
+        client_id = str(reference.get("managed_identity_client_id") or "")
+        auth_mode = str(reference.get("auth_mode") or "default")
+        if auth_mode == "managed_identity":
+            credential = ManagedIdentityCredential(client_id=client_id or None)
+        elif auth_mode == "workload_identity":
+            credential = WorkloadIdentityCredential(client_id=client_id or None)
+        elif auth_mode == "environment":
+            credential = EnvironmentCredential()
+        else:
+            credential_options = {"managed_identity_client_id": client_id} if client_id else {}
+            credential = DefaultAzureCredential(**credential_options)
+        client = SecretClient(vault_url=vault_url, credential=credential)
+        try:
+            secret_names = dict(reference.get("secrets") or {})
+            if not secret_names:
+                secret_names = {
+                    name: reference.get(name + "_secret")
+                    for name in ("username", "password")
+                    if reference.get(name + "_secret")
+                }
+            return {str(name): str(client.get_secret(str(secret_name)).value) for name, secret_name in secret_names.items()}
+        finally:
+            close_client = getattr(client, "close", None)
+            if callable(close_client):
+                close_client()
+            close_credential = getattr(credential, "close", None)
+            if callable(close_credential):
+                close_credential()
+    if backend == "aws_secrets_manager":
+        try:
+            import boto3  # type: ignore
+        except ImportError as error:
+            raise JobSeekerDependencyError(
+                "AWS Secrets Manager connectors require boto3 on the Jenkins worker."
+            ) from error
+        region = str(reference.get("region") or "")
+        auth_mode = str(reference.get("auth_mode") or "default")
+        if auth_mode == "profile":
+            session = boto3.Session(profile_name=str(reference.get("profile_name") or ""), region_name=region)
+            client = session.client("secretsmanager")
+        else:
+            client = boto3.client("secretsmanager", region_name=region)
+        try:
+            response = client.get_secret_value(SecretId=str(reference.get("secret_id") or ""))
+            if response.get("SecretString") is not None:
+                payload = str(response["SecretString"])
+            else:
+                payload = base64.b64decode(response.get("SecretBinary") or b"").decode("utf-8")
+            values = json.loads(payload)
+            if not isinstance(values, dict):
+                raise ValueError("secret payload is not an object")
+            fields = dict(reference.get("fields") or {})
+            if not fields:
+                fields = {
+                    "username": str(reference.get("username_field") or "username"),
+                    "password": str(reference.get("password_field") or "password"),
+                }
+            resolved = {}
+            for name, field_path in fields.items():
+                current: Any = values
+                for segment in str(field_path).split("."):
+                    if not isinstance(current, dict) or segment not in current:
+                        raise ValueError("configured fields are missing")
+                    current = current[segment]
+                resolved[str(name)] = str(current)
+            return resolved
+        except (ValueError, TypeError, UnicodeError) as error:
+            raise JobSeekerError("AWS secret for connector %s is not a valid credential object." % item.get("key")) from error
+        finally:
+            close_client = getattr(client, "close", None)
+            if callable(close_client):
+                close_client()
+    raise JobSeekerError("Connector %s uses unsupported secret backend %s." % (item.get("key"), backend))
+
+
+def materialize_connectors(
+    directory: Optional[str] = None,
+    environment: Optional[str] = None,
+    job: Optional[str] = None,
+    api_url: Optional[str] = None,
+    api_token: Optional[str] = None,
+) -> str:
+    """Fetch the scoped catalog and write build-only secret files with mode 0600."""
+
+    target_directory = os.path.abspath(directory or _env("JOBSEEKER_CONNECTORS_DIR", ".jobseeker-connectors"))
+    endpoint = api_url or _env("JOBSEEKER_CONNECTOR_API_URL")
+    token = api_token or _env("JOBSEEKER_CONNECTOR_API_TOKEN")
+    target_environment = (environment or _env("JOBSEEKER_ENVIRONMENT", "LOCAL")).upper()
+    target_job = job or _safe_job_name(None)
+    if not endpoint or not token:
+        raise JobSeekerError("Connector materialization requires JOBSEEKER_CONNECTOR_API_URL and JOBSEEKER_CONNECTOR_API_TOKEN.")
+
+    request = urllib.request.Request(
+        endpoint,
+        data=urllib.parse.urlencode({"environment": target_environment, "job_name": target_job}).encode("utf-8"),
+        headers={"Authorization": "Bearer " + token, "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, ValueError) as error:
+        raise JobSeekerError("Connector catalog request failed: %s" % error) from error
+
+    if os.path.islink(target_directory):
+        os.unlink(target_directory)
+    elif os.path.lexists(target_directory):
+        shutil.rmtree(target_directory)
+    os.makedirs(target_directory, mode=0o700)
+    os.chmod(target_directory, 0o700)
+    manifest = {
+        "schema_version": 1,
+        "generated_at": payload.get("generated_at"),
+        "environment": target_environment,
+        "job": target_job,
+        "connectors": [],
+    }
+
+    def write_value(path: str, value: Any, file_mode: int = 0o600) -> None:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, file_mode)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(str(value))
+
+    consumed_environment_variables = set()
+    for item in payload.get("connectors", []):
+        if not isinstance(item, dict) or not item.get("key"):
+            continue
+        key = str(item["key"])
+        if not all(character.isalnum() or character in "-_" for character in key):
+            raise JobSeekerError("Connector key contains unsafe characters: %s" % key)
+        connector_directory = os.path.join(target_directory, key)
+        os.makedirs(connector_directory, mode=0o700)
+        os.chmod(connector_directory, 0o700)
+        config = dict(item.get("config") or {})
+        config["type"] = item.get("type", "generic")
+        for name, value in config.items():
+            normalized_name = str(name)
+            if not normalized_name or not all(character.isalnum() or character in "-_" for character in normalized_name):
+                raise JobSeekerError("Connector field contains unsafe characters: %s" % normalized_name)
+            write_value(os.path.join(connector_directory, normalized_name), value)
+        secret_definition = dict(item.get("secret") or {})
+        secret_reference = dict(secret_definition.get("reference") or {})
+        if secret_definition.get("backend") == "environment":
+            source_variables = dict(secret_reference.get("variables") or {})
+            if not source_variables:
+                source_variables = {
+                    name: secret_reference.get(name + "_env")
+                    for name in ("username", "password")
+                    if secret_reference.get(name + "_env")
+                }
+            for variable in source_variables.values():
+                variable_name = str(variable or "")
+                if not variable_name or not variable_name.replace("_", "a").isalnum() or variable_name[0].isdigit():
+                    raise JobSeekerError("Connector environment variable name is invalid.")
+                consumed_environment_variables.add(variable_name)
+        secret_files = {}
+        for name, value in _connector_secret_values(item).items():
+            if not name or not all(character.isalnum() or character in "-_" for character in name):
+                raise JobSeekerError("Connector secret field contains unsafe characters: %s" % name)
+            secret_path = os.path.join(connector_directory, name)
+            write_value(secret_path, value)
+            secret_files[name] = key + "/" + name
+        manifest["connectors"].append({
+            "key": key,
+            "type": item.get("type", "generic"),
+            "environment": item.get("environment", "ALL"),
+            "job": item.get("job", "*"),
+            "description": item.get("description", ""),
+            "config": dict(item.get("config") or {}),
+            "secret_files": secret_files,
+        })
+
+    manifest_path = os.path.join(target_directory, "connectors.json")
+    descriptor = os.open(manifest_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump(manifest, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+
+        source_variables_path = os.path.join(target_directory, ".source-environment-variables")
+        write_value(source_variables_path, "\n".join(sorted(consumed_environment_variables)) + ("\n" if consumed_environment_variables else ""))
+
+        helper_path = os.path.join(target_directory, "jobseeker-connector")
+        helper = """#!/bin/sh
+set -eu
+root=${JOBSEEKER_CONNECTORS_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+command_name=${1:-}
+case "$command_name" in
+    list)
+        for directory in "$root"/*; do [ -d "$directory" ] && basename "$directory"; done
+        ;;
+    get)
+        key=${2:-}; field=${3:-}
+        case "$key" in ''|*[!A-Za-z0-9_-]*) echo "Invalid connector key." >&2; exit 2;; esac
+        case "$field" in ''|*[!A-Za-z0-9_-]*) echo "Invalid connector field." >&2; exit 2;; esac
+        [ -f "$root/$key/$field" ] || { echo "Connector field not found: $key/$field" >&2; exit 2; }
+        cat "$root/$key/$field"
+        ;;
+    exec)
+        key=${2:-}; shift 2
+        [ "${1:-}" = "--" ] && shift
+        case "$key" in ''|*[!A-Za-z0-9_-]*) echo "Invalid connector key." >&2; exit 2;; esac
+        [ -d "$root/$key" ] || { echo "Connector not found: $key" >&2; exit 2; }
+        [ "$#" -gt 0 ] || { echo "Connector exec requires a command after --." >&2; exit 2; }
+        export JOBSEEKER_CONNECTOR_KEY="$key"
+        for value_file in "$root/$key"/*; do
+            [ -f "$value_file" ] || continue
+            field=$(basename "$value_file" | tr '[:lower:]-' '[:upper:]_')
+            value=$(cat "$value_file")
+            export "JOBSEEKER_CONNECTOR_${field}=$value"
+        done
+        exec "$@"
+        ;;
+    *)
+        echo "Usage: jobseeker-connector {list|get KEY FIELD|exec KEY -- COMMAND...}" >&2
+        exit 2
+        ;;
+esac
+"""
+        write_value(helper_path, helper, 0o700)
+    return manifest_path
+
+
+@dataclass(frozen=True)
 class DatabaseConfig:
     host: str = "mariadb"
     port: int = 3306
@@ -796,6 +1195,7 @@ class JobSeeker:
         self._active_tasks: List[Any] = []
         self._signal_handlers_installed = False
         self._data_asset_catalog: Optional[DataAssetCatalog] = None
+        self._connector_catalog: Optional[ConnectorCatalog] = None
 
         if install_signal_handlers:
             self.registerSignalHandlers()
@@ -828,6 +1228,17 @@ class JobSeeker:
         )
 
     dataset = asset
+
+    @property
+    def connectors(self) -> ConnectorCatalog:
+        if self._connector_catalog is None:
+            self._connector_catalog = ConnectorCatalog()
+        return self._connector_catalog
+
+    def connector(self, key: str, required: bool = True) -> Optional[Connector]:
+        """Resolve a named connector materialized for this job's runtime scope."""
+
+        return self.connectors.resolve(key, required=required)
 
     def _base_payload(self, instance_id: Optional[str] = None) -> Dict[str, Any]:
         return {
@@ -1144,6 +1555,9 @@ class TmfTask:
 
     dataset = asset
 
+    def connector(self, key: str, required: bool = True) -> Optional[Connector]:
+        return self.client.connector(key, required=required)
+
     def progress(
         self,
         processed: Optional[int] = None,
@@ -1274,6 +1688,14 @@ def get_asset(
     return catalog.resolve(key, mode=mode, required=required)
 
 
+def get_connector(
+    key: str,
+    required: bool = True,
+    directory: Optional[str] = None,
+) -> Optional[Connector]:
+    return ConnectorCatalog(directory=directory).resolve(key, required=required)
+
+
 def asset_cli() -> None:
     """Resolve an asset path for shell jobs: jobseeker-asset ASSET_KEY."""
 
@@ -1300,9 +1722,66 @@ def asset_cli() -> None:
         parser.exit(2, "jobseeker-asset: %s\n" % error)
 
 
+def connector_cli() -> None:
+    """Materialize or consume build-scoped connectors without logging secrets."""
+
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Use JobSeeker runtime connectors.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    materialize_parser = commands.add_parser("materialize", help="Fetch and materialize connectors for this build")
+    materialize_parser.add_argument("--directory", default=None)
+    materialize_parser.add_argument("--environment", default=None)
+    materialize_parser.add_argument("--job", default=None)
+
+    list_parser = commands.add_parser("list", help="List available connector metadata")
+    list_parser.add_argument("--directory", default=None)
+
+    get_parser = commands.add_parser("get", help="Print one connector field")
+    get_parser.add_argument("key")
+    get_parser.add_argument("field")
+    get_parser.add_argument("--directory", default=None)
+
+    exec_parser = commands.add_parser("exec", help="Run a command with one connector in environment variables")
+    exec_parser.add_argument("key")
+    exec_parser.add_argument("--directory", default=None)
+    exec_parser.add_argument("program", nargs=argparse.REMAINDER)
+
+    arguments = parser.parse_args()
+    try:
+        if arguments.command == "materialize":
+            print(materialize_connectors(directory=arguments.directory, environment=arguments.environment, job=arguments.job))
+            return
+
+        catalog = ConnectorCatalog(directory=arguments.directory)
+        if arguments.command == "list":
+            print(json.dumps([item.as_dict() for item in catalog.list()], indent=2, sort_keys=True))
+            return
+
+        connector = catalog.resolve(arguments.key)
+        if connector is None:
+            raise JobSeekerError("Connector was not found: %s" % arguments.key)
+        if arguments.command == "get":
+            print(connector.value(arguments.field, required=True))
+            return
+
+        program = list(arguments.program)
+        if program and program[0] == "--":
+            program.pop(0)
+        if not program:
+            raise JobSeekerError("connector exec requires a command after --.")
+        environment_values = dict(os.environ)
+        environment_values.update(connector.environment_variables())
+        os.execvpe(program[0], program, environment_values)
+    except JobSeekerError as error:
+        parser.exit(2, "jobseeker-connector: %s\n" % error)
+
+
 __all__ = [
     "ApiConfig",
     "ApiTransport",
+    "Connector",
+    "ConnectorCatalog",
     "DataAsset",
     "DataAssetCatalog",
     "DatabaseConfig",
@@ -1314,7 +1793,9 @@ __all__ = [
     "TmfTransport",
     "client",
     "get_asset",
+    "get_connector",
     "get_context",
     "jobSeeker",
+    "materialize_connectors",
     "task",
 ]
