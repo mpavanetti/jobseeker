@@ -111,7 +111,7 @@ function data_asset_uri($asset) {
             <button id="closeAssetEditor" type="button" class="btn btn-box-tool" title="Close"><i class="fa fa-times"></i></button>
           </div>
         </div>
-        <?php echo form_open_multipart('data-assets/save', array('id' => 'dataAssetForm')); ?>
+        <?php echo form_open_multipart('data-assets/save?environment='.rawurlencode($initialEnvironment), array('id' => 'dataAssetForm')); ?>
           <input type="hidden" id="assetId" name="asset_id" value="0">
           <div class="box-body">
             <?php echo validation_errors('<div class="alert alert-danger">', '</div>'); ?>
@@ -139,7 +139,7 @@ function data_asset_uri($asset) {
                 <div class="data-assets-section-title"><span>2</span><div><strong>Runtime scope</strong><small>Exact environment and job matches win; ALL and Shared are fallbacks.</small></div></div>
                 <div class="row">
                   <div class="col-md-6">
-                    <div class="form-group"><label for="assetEnvironment">Environment</label><select id="assetEnvironment" name="environment" class="form-control"><option value="ALL">ALL — fallback for every environment</option><?php foreach ($environments as $environment) { ?><option value="<?php echo html_escape(strtoupper($environment->Environment)); ?>"><?php echo html_escape(strtoupper($environment->Environment)); ?></option><?php } ?></select></div>
+                    <div class="form-group"><label for="assetEnvironment">Environment</label><select id="assetEnvironment" name="environment" class="form-control"><option value="ALL">ALL — fallback for every environment</option><?php foreach ($environments as $environment) { $assetEnvironmentName = strtoupper($environment->Environment); ?><option value="<?php echo html_escape($assetEnvironmentName); ?>"><?php echo html_escape($assetEnvironmentName); ?></option><?php } ?></select></div>
                   </div>
                   <div class="col-md-6">
                     <div class="form-group"><label for="assetJobName">Job scope</label><input id="assetJobName" name="job_name" class="form-control" maxlength="200" placeholder="* (shared by all jobs)"><p class="help-block">Use <code>*</code> for a reusable catalog asset.</p></div>
@@ -230,7 +230,7 @@ rows = asset.read()</pre>
                 <td><strong><?php echo html_escape($asset->environment); ?></strong><small><?php echo $asset->job_name === '*' ? '<i class="fa fa-share-alt"></i> Shared by all jobs' : '<i class="fa fa-cube"></i> '.html_escape($asset->job_name); ?></small><?php if (!(int) $asset->is_active) { ?><span class="label label-default">Inactive</span><?php } ?></td>
                 <td><code title="<?php echo html_escape($asset->storage_path); ?>"><?php echo html_escape($asset->file_name); ?></code><small><?php echo html_escape($asset->storage_path); ?></small></td>
                 <td><strong>v<?php echo (int) $asset->version; ?></strong><small><?php echo html_escape(data_asset_size($asset->file_size)); ?></small><?php if ($asset->checksum) { ?><small title="SHA-256 <?php echo html_escape($asset->checksum); ?>"><i class="fa fa-shield"></i> <?php echo html_escape(substr($asset->checksum, 0, 10)); ?>&hellip;</small><?php } else { ?><small class="text-muted"><?php echo $isAvailable ? 'Write target ready' : 'Awaiting file'; ?></small><?php } ?></td>
-                <td class="text-right data-asset-actions"><button type="button" class="btn btn-default btn-sm edit-data-asset" data-id="<?php echo (int) $asset->id; ?>" title="Edit or replace file"><i class="fa fa-pencil"></i></button><?php if ((int) $asset->version > 0) { ?><button type="button" class="btn btn-default btn-sm preview-data-asset" data-url="<?php echo base_url().'data-assets/preview/'.(int) $asset->id; ?>" data-name="<?php echo html_escape($asset->name); ?>" title="Preview current file"><i class="fa fa-eye"></i></button><a class="btn btn-default btn-sm" href="<?php echo base_url().'data-assets/download/'.(int) $asset->id; ?>" title="Download current file"><i class="fa fa-download"></i></a><?php } ?><button type="button" class="btn btn-danger btn-sm delete-data-asset" data-id="<?php echo (int) $asset->id; ?>" data-name="<?php echo html_escape($asset->name); ?>" data-managed="<?php echo empty($asset->legacy_source) ? '1' : '0'; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
+                <td class="text-right data-asset-actions"><button type="button" class="btn btn-default btn-sm edit-data-asset" data-id="<?php echo (int) $asset->id; ?>" title="Edit or replace file"><i class="fa fa-pencil"></i></button><?php if ((int) $asset->version > 0) { ?><button type="button" class="btn btn-default btn-sm preview-data-asset" data-url="<?php echo base_url().'data-assets/preview/'.(int) $asset->id.'?environment='.rawurlencode($initialEnvironment); ?>" data-name="<?php echo html_escape($asset->name); ?>" title="Preview current file"><i class="fa fa-eye"></i></button><a class="btn btn-default btn-sm" href="<?php echo base_url().'data-assets/download/'.(int) $asset->id.'?environment='.rawurlencode($initialEnvironment); ?>" title="Download current file"><i class="fa fa-download"></i></a><?php } ?><button type="button" class="btn btn-danger btn-sm delete-data-asset" data-id="<?php echo (int) $asset->id; ?>" data-name="<?php echo html_escape($asset->name); ?>" data-managed="<?php echo empty($asset->legacy_source) ? '1' : '0'; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
               </tr>
             <?php } ?>
             </tbody>
@@ -259,7 +259,7 @@ rows = asset.read()</pre>
 
 <div class="modal fade" id="deleteAssetModal" tabindex="-1" role="dialog" aria-labelledby="deleteAssetTitle">
   <div class="modal-dialog modal-sm" role="document"><div class="modal-content">
-    <?php echo form_open('data-assets/delete', array('id' => 'deleteAssetForm')); ?>
+    <?php echo form_open('data-assets/delete?environment='.rawurlencode($initialEnvironment), array('id' => 'deleteAssetForm')); ?>
       <input id="deleteAssetId" type="hidden" name="asset_id">
       <div class="modal-header"><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button><h4 id="deleteAssetTitle" class="modal-title"><i class="fa fa-trash"></i> Delete data asset</h4></div>
       <div class="modal-body"><p>Delete <strong id="deleteAssetName"></strong> from the runtime catalog?</p><label id="deleteAssetFileOption" class="delete-file-option"><input type="checkbox" name="delete_file" value="1"> Also delete its stored file</label><p class="help-block">Deleting the registration immediately removes it from runtime discovery.</p></div>

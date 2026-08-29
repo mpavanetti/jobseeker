@@ -23,6 +23,12 @@ class JenkinsProxy extends BaseController
             ->set_output(json_encode(array('ok' => FALSE, 'message' => 'Access denied.')));
     }
 
+    private function requestedEnvironment()
+    {
+        $environment = trim((string) $this->input->get('environment', TRUE));
+        return $environment !== '' ? $environment : $this->jobSeekerEnvironmentPreference();
+    }
+
     public function proxy()
     {
         $method = $this->input->method(TRUE);
@@ -85,8 +91,9 @@ class JenkinsProxy extends BaseController
 
     public function environmentSlots()
     {
-        $status = $this->jenkinsEnvironmentSlotStatus($this->input->get('environment'));
-        $this->includeConfiguredContextEnvironments($status);
+        $requestedEnvironment = $this->requestedEnvironment();
+        $status = $this->jenkinsEnvironmentSlotStatus($requestedEnvironment);
+        $this->includeConfiguredContextEnvironments($status, $requestedEnvironment);
 
         $this->output
             ->set_status_header(isset($status['status']) ? (int) $status['status'] : 200)
@@ -101,8 +108,9 @@ class JenkinsProxy extends BaseController
             return;
         }
 
-        $status = $this->jenkinsExecutorMonitorStatus($this->input->get('environment'));
-        $this->includeConfiguredContextEnvironments($status);
+        $requestedEnvironment = $this->requestedEnvironment();
+        $status = $this->jenkinsExecutorMonitorStatus($requestedEnvironment);
+        $this->includeConfiguredContextEnvironments($status, $requestedEnvironment);
 
         $this->output
             ->set_status_header(isset($status['status']) ? (int) $status['status'] : 200)
@@ -112,9 +120,9 @@ class JenkinsProxy extends BaseController
 
     public function dashboardMetrics()
     {
-        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->input->get('environment'));
+        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->requestedEnvironment());
         $status = $this->jenkinsExecutorMonitorStatus($requestedEnvironment);
-        $this->includeConfiguredContextEnvironments($status);
+        $this->includeConfiguredContextEnvironments($status, $requestedEnvironment);
 
         if (! isset($status['ok']) || ! $status['ok']) {
             $this->output
@@ -131,7 +139,7 @@ class JenkinsProxy extends BaseController
         $global = isset($status['global']) && is_array($status['global']) ? $status['global'] : array();
         $environmentRows = isset($status['environments']) && is_array($status['environments']) ? $status['environments'] : array();
         $slotRows = array();
-        if ($requestedEnvironment !== '') {
+        if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL') {
             $slotRows[] = isset($environmentRows[$requestedEnvironment]) ? $environmentRows[$requestedEnvironment] : array();
         } else {
             $slotRows = array_values($environmentRows);
@@ -181,8 +189,9 @@ class JenkinsProxy extends BaseController
     public function runningBuilds()
     {
         $limit = $this->runningBuildLimit($this->input->get('limit'));
-        $status = $this->jenkinsRunningBuildsStatus($this->input->get('environment'), $limit);
-        $this->includeConfiguredRunningBuildEnvironments($status);
+        $requestedEnvironment = $this->requestedEnvironment();
+        $status = $this->jenkinsRunningBuildsStatus($requestedEnvironment, $limit);
+        $this->includeConfiguredRunningBuildEnvironments($status, $requestedEnvironment);
 
         $this->output
             ->set_status_header(isset($status['status']) ? (int) $status['status'] : 200)
@@ -423,7 +432,7 @@ class JenkinsProxy extends BaseController
         return array('builds' => $limitedBuilds, 'environments' => $environments);
     }
 
-    private function includeConfiguredRunningBuildEnvironments(&$status)
+    private function includeConfiguredRunningBuildEnvironments(&$status, $requestedEnvironment = '')
     {
         if (! isset($status['ok']) || ! $status['ok'] || ! isset($status['environments']) || ! is_array($status['environments'])) {
             return;
@@ -431,12 +440,16 @@ class JenkinsProxy extends BaseController
 
         $this->load->model('Context_model', 'contextModel');
         $environments = $this->contextModel->listEnvironments();
+        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($requestedEnvironment);
 
         foreach (is_array($environments) ? $environments : array() as $record) {
             $environmentName = isset($record->Environment) ? $record->Environment : '';
             $environment = $this->normalizeJobSeekerEnvironment($environmentName);
 
             if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN') {
+                continue;
+            }
+            if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL' && $environment !== $requestedEnvironment) {
                 continue;
             }
 
@@ -448,7 +461,7 @@ class JenkinsProxy extends BaseController
         ksort($status['environments']);
     }
 
-    private function includeConfiguredContextEnvironments(&$status)
+    private function includeConfiguredContextEnvironments(&$status, $requestedEnvironment = '')
     {
         if (! isset($status['ok']) || ! $status['ok'] || ! isset($status['environments']) || ! is_array($status['environments'])) {
             return;
@@ -456,12 +469,16 @@ class JenkinsProxy extends BaseController
 
         $this->load->model('Context_model', 'contextModel');
         $environments = $this->contextModel->listEnvironments();
+        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($requestedEnvironment);
 
         foreach (is_array($environments) ? $environments : array() as $record) {
             $environmentName = isset($record->Environment) ? $record->Environment : '';
             $environment = $this->normalizeJobSeekerEnvironment($environmentName);
 
             if ($environment === '' || $environment === '0' || $environment === 'ALL' || $environment === 'UNKNOWN') {
+                continue;
+            }
+            if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL' && $environment !== $requestedEnvironment) {
                 continue;
             }
 
@@ -476,12 +493,13 @@ class JenkinsProxy extends BaseController
                     'agentNodes' => 0,
                     'onlineAgentNodes' => 0,
                     'agentExecutors' => 0,
+                    'onlineAgentExecutors' => 0,
                     'busyAgentExecutors' => 0,
                     'availableAgentExecutors' => 0,
                     'offlineAgentNodes' => 0
                 );
             } else {
-                foreach (array('agentNodes', 'onlineAgentNodes', 'agentExecutors', 'busyAgentExecutors', 'availableAgentExecutors', 'offlineAgentNodes') as $field) {
+                foreach (array('agentNodes', 'onlineAgentNodes', 'agentExecutors', 'onlineAgentExecutors', 'busyAgentExecutors', 'availableAgentExecutors', 'offlineAgentNodes') as $field) {
                     if (! isset($status['environments'][$environment][$field])) {
                         $status['environments'][$environment][$field] = 0;
                     }

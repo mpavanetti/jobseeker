@@ -4,6 +4,31 @@
 class Context_model extends CI_Model
 {
 
+    private function environmentFilterValues($environment) {
+        $environment = strtoupper(trim((string) $environment));
+        $aliases = array(
+            'QA' => array('QA', 'QAS'), 'QAS' => array('QA', 'QAS'),
+            'PROD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRODUCTION' => array('PROD', 'PRD', 'PRODUCTION'),
+            'HML' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOG' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOGATION' => array('HML', 'HOMOLOG', 'HOMOLOGATION')
+        );
+        return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
+    }
+
+    private function applyEnvironmentFilter($environment, $column = 'env.Environment') {
+        $environment = strtoupper(trim((string) $environment));
+        if ($environment !== '' && $environment !== 'ALL') {
+            $this->db->group_start();
+            foreach ($this->environmentFilterValues($environment) as $index => $value) {
+                if ($index === 0) {
+                    $this->db->where('UPPER(TRIM('.$column.')) =', $value);
+                } else {
+                    $this->db->or_where('UPPER(TRIM('.$column.')) =', $value);
+                }
+            }
+            $this->db->group_end();
+        }
+    }
+
     function listProjects() {
 
         $this->db->select('*');
@@ -16,11 +41,9 @@ class Context_model extends CI_Model
 
         $this->db->select('env.Environment,pd.ProjectName,cd.*');
         $this->db->from('contextdetails cd');
-        $this->db->join('environment env','env.id=cd.environmentFK');
-        $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
-        if (trim((string) $environment) !== '' && strtoupper(trim((string) $environment)) !== 'ALL') {
-            $this->db->where('UPPER(TRIM(env.Environment)) =', strtoupper(trim((string) $environment)));
-        }
+        $this->db->join('environment env','env.id=cd.EnvironmentFK');
+        $this->db->join('projectdetails pd', 'pd.id=cd.ProjectDetailsFK');
+        $this->applyEnvironmentFilter($environment);
         $query = $this->db->get();
         return $query->result();
     }
@@ -29,8 +52,8 @@ class Context_model extends CI_Model
 
         $this->db->select('env.Environment,pd.ProjectName,cd.*');
         $this->db->from('contextdetails cd');
-        $this->db->join('environment env','env.id=cd.environmentFK');
-        $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
+        $this->db->join('environment env','env.id=cd.EnvironmentFK');
+        $this->db->join('projectdetails pd', 'pd.id=cd.ProjectDetailsFK');
         $this->db->where('cd.Id', $Id);
         $query = $this->db->get();
         return $query->result();
@@ -60,7 +83,7 @@ class Context_model extends CI_Model
         $this->db->from('contextdetails cd');
         if (trim((string) $environment) !== '' && strtoupper(trim((string) $environment)) !== 'ALL') {
             $this->db->join('environment env', 'env.id=cd.EnvironmentFK');
-            $this->db->where('UPPER(TRIM(env.Environment)) =', strtoupper(trim((string) $environment)));
+            $this->applyEnvironmentFilter($environment);
         }
         $query = $this->db->get();
         return $query->num_rows();
@@ -86,12 +109,12 @@ class Context_model extends CI_Model
 
     function listActiveContexts($environment = '') {
 
-        $this->db->select('IsActive');
+        $this->db->select('cd.IsActive');
         $this->db->from('contextdetails cd');
         $this->db->where('cd.IsActive', '1');
         if (trim((string) $environment) !== '' && strtoupper(trim((string) $environment)) !== 'ALL') {
             $this->db->join('environment env', 'env.id=cd.EnvironmentFK');
-            $this->db->where('UPPER(TRIM(env.Environment)) =', strtoupper(trim((string) $environment)));
+            $this->applyEnvironmentFilter($environment);
         }
         $query = $this->db->get();
         return $query->num_rows();
@@ -170,8 +193,8 @@ class Context_model extends CI_Model
 
         $this->db->select('env.Environment,pd.ProjectName,cd.ContextKey');
         $this->db->from('contextdetails cd');
-        $this->db->join('environment env','env.id=cd.environmentFK');
-        $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
+        $this->db->join('environment env','env.id=cd.EnvironmentFK');
+        $this->db->join('projectdetails pd', 'pd.id=cd.ProjectDetailsFK');
         $this->db->where('cd.ContextKey', $contextKey);
         $this->db->where('pd.ProjectName', $projectName);
         $this->db->where('env.Environment', $environmentName);
@@ -184,8 +207,8 @@ class Context_model extends CI_Model
 
         $this->db->select('cd.Id');
         $this->db->from('contextdetails cd');
-        $this->db->join('environment env', 'env.id=cd.environmentFK');
-        $this->db->join('projectdetails pd', 'pd.id=cd.projectdetailsFK');
+        $this->db->join('environment env', 'env.id=cd.EnvironmentFK');
+        $this->db->join('projectdetails pd', 'pd.id=cd.ProjectDetailsFK');
         $this->db->where('cd.ContextKey', $contextKey);
         $this->db->where('pd.ProjectName', $projectName);
         $this->db->where('env.Environment', $environmentName);

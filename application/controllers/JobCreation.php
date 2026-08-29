@@ -162,11 +162,13 @@ class JobCreation extends BaseController
     }
 
     private function appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment) {
-      $agentLabel = $this->jenkinsEnvironmentAgentLabel($environment);
-      if ($agentLabel === '') {
+      $agentCapacity = $this->jenkinsOnlineEnvironmentAgentCapacity($environment);
+      if ((int) $agentCapacity['executors'] < 1) {
+        log_message('debug', 'No online Jenkins agent executors found for '.$this->normalizeJobSeekerEnvironment($environment).'; the new job will remain controller-routable.');
         return;
       }
 
+      $agentLabel = $agentCapacity['label'];
       $this->appendTextElement($dom, $root, 'assignedNode', $agentLabel);
       $this->appendTextElement($dom, $root, 'canRoam', 'false');
     }
@@ -3032,7 +3034,11 @@ class JobCreation extends BaseController
           return;
         }
 
-        $environmentFilter = $this->normalizeJobSeekerEnvironment($this->input->get('environment'));
+        $requestedEnvironment = trim((string) $this->input->get('environment', TRUE));
+        if ($requestedEnvironment === '') {
+          $requestedEnvironment = $this->jobSeekerEnvironmentPreference();
+        }
+        $environmentFilter = $this->normalizeJobSeekerEnvironment($requestedEnvironment);
         $response = $this->requestJenkins('GET', 'api/json?tree='.$this->availableJobsTree(3));
         $this->output->set_status_header((int) $response['status']);
         $this->output->set_content_type('application/json');

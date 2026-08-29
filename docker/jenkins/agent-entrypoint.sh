@@ -26,14 +26,6 @@ xml_escape() {
   printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
 }
 
-url_encode_agent_name() {
-  JENKINS_AGENT_NAME="$JENKINS_AGENT_NAME" python3 - <<'PY'
-import os
-import urllib.parse
-print(urllib.parse.quote(os.environ['JENKINS_AGENT_NAME'], safe=''))
-PY
-}
-
 auth="$JENKINS_USER:$JENKINS_TOKEN"
 mkdir -p "$JENKINS_AGENT_WORKDIR"
 
@@ -78,30 +70,25 @@ else
   jenkins_cli create-node "$JENKINS_AGENT_NAME" < "$node_xml"
 fi
 
-agent_path="$(url_encode_agent_name)"
-agent_secret=""
-for endpoint in "computer/${agent_path}/jenkins-agent.jnlp" "computer/${agent_path}/slave-agent.jnlp"; do
-  jnlp="$(curl -fsS -u "$auth" "${JENKINS_URL}${endpoint}" 2>/dev/null || true)"
-  agent_secret="$(printf '%s' "$jnlp" | tr '<' '\n<' | sed -n 's/^argument>\([^<][^<]*\).*/\1/p' | head -n1)"
-  if [ -n "$agent_secret" ]; then
-    break
-  fi
-done
+agent_secret="$(
+  printf '%s\n' \
+    'import jenkins.model.Jenkins' \
+    'def computer = Jenkins.get().getComputer(args[0])' \
+    'println(computer == null ? "" : computer.getJnlpMac())' \
+    | jenkins_cli groovy = "$JENKINS_AGENT_NAME" \
+    | tail -n1
+)"
 
 if [ -z "$agent_secret" ]; then
   echo "Unable to discover inbound agent secret for ${JENKINS_AGENT_NAME}." >&2
   exit 1
 fi
 
-export JENKINS_URL JENKINS_AGENT_NAME JENKINS_AGENT_WORKDIR
-export JENKINS_SECRET="$agent_secret"
-
 if [ "$JENKINS_AGENT_WEB_SOCKET" = "true" ]; then
-  export JENKINS_WEB_SOCKET=true
-  unset JENKINS_TUNNEL
+  set -- -url "$JENKINS_URL" -secret "$agent_secret" -name "$JENKINS_AGENT_NAME" -workDir "$JENKINS_AGENT_WORKDIR" -webSocket
 else
-  unset JENKINS_WEB_SOCKET
-  export JENKINS_TUNNEL="$JENKINS_AGENT_TUNNEL"
+  set -- -url "$JENKINS_URL" -secret "$agent_secret" -name "$JENKINS_AGENT_NAME" -workDir "$JENKINS_AGENT_WORKDIR" -tunnel "$JENKINS_AGENT_TUNNEL"
 fi
 
-exec jenkins-agent
+unset JENKINS_URL JENKINS_AGENT_NAME JENKINS_AGENT_WORKDIR JENKINS_WEB_SOCKET JENKINS_TUNNEL JENKINS_SECRET
+exec jenkins-agent "$@"

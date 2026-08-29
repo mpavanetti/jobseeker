@@ -106,7 +106,7 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
             </div>
           </div>
         </div>
-        <form action="<?php echo base_url(); ?>Context/addContext" method="POST" id="contextCreateForm">
+        <form action="<?php echo base_url(); ?>Context/addContext?environment=<?php echo rawurlencode($selectedEnvironment); ?>" method="POST" id="contextCreateForm">
           <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
           <div class="box-body context-card-body">
             <div class="context-form-grid">
@@ -281,7 +281,7 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
                   <td><?php echo html_escape($owner); ?><?php if (!empty($record->ModifiedBy)) { ?><span class="context-row-meta">Last editor</span><?php } ?></td>
                   <?php if ($role != 1) { ?>
                     <td class="text-nowrap">
-                      <a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editContext/'.(int) $record->Id; ?>" title="Edit <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-pencil"></i></a>
+                      <a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editContext/'.(int) $record->Id.'?environment='.rawurlencode($selectedEnvironment); ?>" title="Edit <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-pencil"></i></a>
                       <button class="btn btn-sm btn-danger delete-context" type="button" data-context-id="<?php echo (int) $record->Id; ?>" data-context-key="<?php echo html_escape($record->ContextKey); ?>" title="Delete <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-trash"></i></button>
                     </td>
                   <?php } ?>
@@ -301,7 +301,7 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
 
 <script>
 window.contextDetailsConfig = {
-  deleteUrl: <?php echo json_encode(base_url().'Context/deleteContext'); ?>,
+  deleteUrl: <?php echo json_encode(base_url().'Context/deleteContext?environment='.rawurlencode($selectedEnvironment)); ?>,
   baseUrl: <?php echo json_encode(base_url().'Context/contextDetails'); ?>,
   selectedEnvironment: <?php echo json_encode(isset($selectedEnvironment) ? $selectedEnvironment : 'ALL'); ?>
 };

@@ -219,7 +219,7 @@ class Tmf extends BaseController
             return;
         }
 
-        $environment = $this->normalizeEnvironmentSelectionValue($this->input->post('environment'));
+        $environment = $this->selectedEnvironmentFilter();
         $deletePolicy = $this->model->deletePolicy($id, $environment);
         if (empty($deletePolicy['exists'])) {
             echo(json_encode(array('status'=>FALSE, 'id' => $id)));

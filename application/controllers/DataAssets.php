@@ -48,6 +48,25 @@ class DataAssets extends BaseController
         return $value === '' || $value === '*' ? 'ALL' : $value;
     }
 
+    private function selectedEnvironment()
+    {
+        $environment = trim((string) $this->input->get('environment', TRUE));
+        if ($environment === '') {
+            $environment = $this->jobSeekerEnvironmentPreference();
+        }
+        $environment = $this->normalizeJobSeekerEnvironment($environment);
+        return $environment === '' || $environment === '*' ? 'ALL' : $environment;
+    }
+
+    private function assetMatchesSelectedEnvironment($asset)
+    {
+        if (! $asset) {
+            return FALSE;
+        }
+        $selectedEnvironment = $this->selectedEnvironment();
+        return $selectedEnvironment === 'ALL' || in_array($this->normalizeJobSeekerEnvironment($asset->environment), array($selectedEnvironment, 'ALL'), TRUE);
+    }
+
     private function normalizeJobName($value)
     {
         $value = trim((string) $value);
@@ -216,16 +235,18 @@ class DataAssets extends BaseController
 
         $this->refreshStoredMetadata();
         $this->writeManifest();
-        $requestedEnvironment = trim((string) $this->input->get('environment', TRUE));
-        if ($requestedEnvironment === '') {
-            $requestedEnvironment = $this->jobSeekerEnvironmentPreference();
-        }
-        $selectedEnvironment = $this->normalizeEnvironment($requestedEnvironment);
+        $selectedEnvironment = $this->selectedEnvironment();
         $this->global['pageTitle'] = 'Job Seeker : Data Assets';
+        $environments = $this->model->environments();
+        if ($selectedEnvironment !== 'ALL') {
+            $environments = array_values(array_filter($environments, function($row) use ($selectedEnvironment) {
+                return $this->normalizeJobSeekerEnvironment($row->Environment) === $selectedEnvironment;
+            }));
+        }
         $data = array(
             'assets' => $this->model->listAssets($selectedEnvironment),
             'statistics' => $this->model->statistics($selectedEnvironment),
-            'environments' => $this->model->environments(),
+            'environments' => $environments,
             'formats' => $this->formats,
             'initialDirection' => in_array($this->input->get('direction'), array('input', 'output'), TRUE) ? $this->input->get('direction') : '',
             'initialEnvironment' => $selectedEnvironment
@@ -251,12 +272,17 @@ class DataAssets extends BaseController
             $this->session->set_flashdata('error', 'The selected data asset no longer exists.');
             redirect('data-assets');
         }
+        if ($existing && ! $this->assetMatchesSelectedEnvironment($existing)) {
+            $this->session->set_flashdata('error', 'The selected data asset is outside the current environment.');
+            redirect('data-assets');
+        }
 
         $assetKey = $this->normalizeAssetKey($this->input->post('asset_key'));
         $name = trim((string) $this->input->post('name'));
         $direction = trim((string) $this->input->post('direction'));
         $format = strtolower(trim((string) $this->input->post('format')));
         $environment = $this->normalizeEnvironment($this->input->post('environment'));
+        $selectedEnvironment = $this->selectedEnvironment();
         $jobName = $this->normalizeJobName($this->input->post('job_name'));
         $description = trim((string) $this->input->post('description'));
         $fileName = $this->normalizedFileName($this->input->post('file_name'));
@@ -272,6 +298,10 @@ class DataAssets extends BaseController
         }
         if ($jobName === FALSE || strlen($description) > 2000) {
             $this->session->set_flashdata('error', 'The job scope or description is invalid.');
+            redirect('data-assets');
+        }
+        if ($selectedEnvironment !== 'ALL' && ! in_array($this->normalizeJobSeekerEnvironment($environment), array($selectedEnvironment, 'ALL'), TRUE)) {
+            $this->session->set_flashdata('error', 'The data asset environment is outside the current backend scope.');
             redirect('data-assets');
         }
         if ($environment !== 'ALL') {
@@ -416,6 +446,10 @@ class DataAssets extends BaseController
             $this->session->set_flashdata('error', 'The selected data asset no longer exists.');
             redirect('data-assets');
         }
+        if (! $this->assetMatchesSelectedEnvironment($asset)) {
+            $this->session->set_flashdata('error', 'The selected data asset is outside the current environment.');
+            redirect('data-assets');
+        }
 
         if ($this->input->post('delete_file') === '1' && empty($asset->legacy_source) && strpos($asset->storage_path, 'data-assets/') === 0) {
             $absolutePath = $this->absoluteStoragePath($asset->storage_path);
@@ -438,6 +472,10 @@ class DataAssets extends BaseController
         }
         $asset = $this->model->getAsset((int) $id);
         if (! $asset) {
+            show_404();
+            return;
+        }
+        if (! $this->assetMatchesSelectedEnvironment($asset)) {
             show_404();
             return;
         }
@@ -545,6 +583,10 @@ class DataAssets extends BaseController
         $asset = $this->model->getAsset((int) $id);
         if (! $asset) {
             $this->previewResponse(array('ok' => FALSE, 'message' => 'The selected data asset no longer exists.'), 404);
+            return;
+        }
+        if (! $this->assetMatchesSelectedEnvironment($asset)) {
+            $this->previewResponse(array('ok' => FALSE, 'message' => 'The data asset is outside the selected environment.'), 404);
             return;
         }
         $absolutePath = $this->absoluteStoragePath($asset->storage_path);

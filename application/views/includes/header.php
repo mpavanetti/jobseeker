@@ -1158,12 +1158,6 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </a>
             </li> -->
             <li>
-              <a href="<?php echo base_url(); ?>GenericSettings" >
-                <i class="fa fa-cogs"></i>
-                <span>Generic Settings</span>
-              </a>
-            </li>
-            <li>
               <a href="<?php echo base_url(); ?>EmailSettings" >
                 <i class="fa fa-envelope"></i>
                 <span>Email Settings</span>

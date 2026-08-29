@@ -2,6 +2,16 @@
 
 class DbSettings_model extends CI_Model
 {
+    private function environmentFilterValues($environment)
+    {
+        $environment = strtoupper(trim((string) $environment));
+        $aliases = array(
+            'QA' => array('QA', 'QAS'), 'QAS' => array('QA', 'QAS'),
+            'PROD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRD' => array('PROD', 'PRD', 'PRODUCTION'), 'PRODUCTION' => array('PROD', 'PRD', 'PRODUCTION'),
+            'HML' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOG' => array('HML', 'HOMOLOG', 'HOMOLOGATION'), 'HOMOLOGATION' => array('HML', 'HOMOLOG', 'HOMOLOGATION')
+        );
+        return isset($aliases[$environment]) ? $aliases[$environment] : array($environment);
+    }
     public function __construct()
     {
         parent::__construct();
@@ -137,7 +147,7 @@ class DbSettings_model extends CI_Model
             ->select('id,connector_key,job_name,environment,db_type,auth_type,address,port,`schema`,description,secret_backend,secret_reference,is_active,creation_date,updated_at,owner,additional_parameters,oracle_ServiceName,oracle_sid')
             ->from('database_settings');
         if ($environment !== 'ALL') {
-            $this->db->where_in('environment', array($environment, 'ALL'));
+            $this->db->where_in('environment', array_merge($this->environmentFilterValues($environment), array('ALL')));
         }
         return $this->db
             ->order_by('is_active', 'DESC')
