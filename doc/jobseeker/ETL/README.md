@@ -7,6 +7,8 @@ For example, a file named `customers.csv` can be registered as `customer-referen
  ### Available Options
 
 1. [Data Assets](data-assets) — uploaded datasets, runtime inputs, generated outputs, format metadata, versioning, and checksums.
+2. [Connectors](connectors) — globally scoped credentials and endpoint metadata for databases, APIs, storage, queues, streaming, SFTP, and custom ETL clients.
+3. [Pipelines](pipelines) — grouped drag-and-drop Jenkins workflows with sequential, parallel, conditional, recovery, and fan-in execution.
 2. [Database Settings](dbsettings)
 3. [Generic Settings](genericsettings)
 4. [Email Settings](emailsettings)
