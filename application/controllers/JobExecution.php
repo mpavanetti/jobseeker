@@ -41,6 +41,11 @@ class JobExecution extends BaseController
 
     public function executors()
     {
+        if ($this->role != ROLE_ADMIN && $this->role != ROLE_MANAGER) {
+            redirect('/dashboard');
+            return;
+        }
+
         $this->global['pageTitle'] = 'Job Seeker : Jenkins Executors';
         $this->loadViews("jenkinsExecutors", $this->global, array(), NULL);
     }

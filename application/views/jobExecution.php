@@ -235,6 +235,63 @@
     white-space: nowrap;
   }
 
+  .execution-runtime-metrics {
+    background: #f8fbfd;
+    border: 1px solid #c9e2ef;
+    border-left: 3px solid #00a7d0;
+    border-radius: 3px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+  }
+
+  .execution-runtime-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .execution-runtime-identity {
+    color: #777;
+    font-size: 11px;
+    margin-left: 7px;
+  }
+
+  .execution-runtime-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+
+  .execution-runtime-metric {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 3px;
+    min-width: 0;
+    padding: 7px 9px;
+  }
+
+  .execution-runtime-metric > span {
+    color: #777;
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  .execution-runtime-metric > strong {
+    display: block;
+    font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .execution-runtime-metric small { color: #777; display: block; min-height: 16px; }
+  .execution-runtime-metric .progress { height: 4px; margin: 4px 0; }
+  .execution-runtime-trend { display: block; height: 20px; margin-top: 3px; width: 100%; }
+
   .execution-console {
     background: #111827;
     border: 0;
@@ -262,6 +319,8 @@
     .execution-meta {
       grid-template-columns: repeat(2, minmax(140px, 1fr));
     }
+
+    .execution-runtime-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
   }
 
   @media (min-width: 1200px) {
@@ -279,6 +338,8 @@
     .execution-meta {
       grid-template-columns: 1fr;
     }
+
+    .execution-runtime-grid { grid-template-columns: 1fr; }
 
     #executionTabContent.execution-compare-grid {
       grid-template-columns: 1fr !important;
@@ -487,6 +548,7 @@
     var jenkinsUrl = window.jobseekerJenkinsUrl || <?php echo json_encode(isset($jenkins_url) ? $jenkins_url : ''); ?>;
     var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
     var runningBuildsUrl = window.jobseekerRunningBuildsUrl || <?php echo json_encode(base_url() . 'jenkins/runningBuilds'); ?>;
+    var containerMetricsUrl = <?php echo json_encode(base_url() . 'docker-monitoring/jobs'); ?>;
     var jobsByName = {};
     var visibleJobs = [];
     var selectedJobNames = {};
@@ -498,6 +560,9 @@
     var buildPollDelay = 2000;
     var queuePollDelay = 2000;
     var consolePollDelay = 1200;
+    var containerMetricsPollDelay = 2500;
+    var containerMetricsTimer = null;
+    var containerMetricsRequest = null;
     var consoleViewMode = 'tabs';
     var triggerSelectedBusy = false;
     var initialResumeBuild = {
@@ -840,6 +905,182 @@
       }).join(':');
     }
 
+    function formatBytes(value) {
+      value = Number(value) || 0;
+      if (value <= 0) { return '0 B'; }
+      var units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+      var index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+      return (value / Math.pow(1024, index)).toFixed(index > 1 ? 1 : 0) + ' ' + units[index];
+    }
+
+    function clampPercent(value) {
+      return Math.max(0, Math.min(100, Number(value) || 0));
+    }
+
+    function containerRuntimeName(value) {
+      value = String(value || 'container').toLowerCase();
+      if (value === 'python') { return 'Python'; }
+      if (value === 'talend') { return 'Talend / ETL'; }
+      if (value === 'linux-shell') { return 'Linux Shell'; }
+      return 'Container';
+    }
+
+    function initializeContainerTracking(run) {
+      run.containerMetrics = null;
+      run.containerPresent = false;
+      run.containerMisses = 0;
+      run.containerMetricsError = '';
+      run.containerCpuSample = null;
+      run.containerPeaks = { cpu: 0, memory: 0, pids: 0 };
+      run.containerSamples = { cpu: [], memory: [] };
+    }
+
+    function drawMetricTrend(element, values, color, minimumScale) {
+      var svg = element && element.length ? element[0] : null;
+      if (! svg) { return; }
+      while (svg.firstChild) { svg.removeChild(svg.firstChild); }
+      var samples = values && values.length ? values : [0];
+      var scale = Math.max(Number(minimumScale) || 100, Math.max.apply(Math, samples));
+      var points = $.map(samples, function(value, index) {
+        var x = samples.length === 1 ? 100 : index / (samples.length - 1) * 100;
+        var y = 18 - Math.min(scale, Math.max(0, Number(value) || 0)) / scale * 16;
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      }).join(' ');
+      var line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.setAttribute('points', points);
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', color);
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.appendChild(line);
+    }
+
+    function updateContainerMetricsUI(run) {
+      var pane = $('#pane-' + run.id);
+      var panel = pane.find('.execution-runtime-metrics');
+      var metrics = run.containerMetrics;
+      if (! metrics) {
+        panel.hide();
+        return;
+      }
+
+      panel.show();
+      var state = pane.find('.run-container-state').removeClass('label-info label-success label-warning label-default');
+      if (run.containerMetricsError) {
+        state.addClass('label-warning').text('Metrics delayed');
+      } else if (run.containerPresent) {
+        state.addClass('label-success').text('Live · ' + containerMetricsPollDelay / 1000 + 's');
+      } else {
+        state.addClass('label-default').text('Container finished');
+      }
+
+      pane.find('.run-container-identity').text(containerRuntimeName(metrics.jobRuntime) + ' · ' + metrics.name + ' · ' + metrics.image + ' · ' + metrics.id);
+      pane.find('.run-container-cpu').text(metrics.cpuSampleAvailable === false ? 'Sampling…' : (Number(metrics.cpuPercent) || 0).toFixed(1) + '%');
+      pane.find('.run-container-cpu-bar').css('width', clampPercent(metrics.cpuPercent) + '%').toggleClass('progress-bar-red', Number(metrics.cpuPercent) >= 90).toggleClass('progress-bar-aqua', Number(metrics.cpuPercent) < 90);
+      pane.find('.run-container-cpu-detail').text((metrics.cpuSampleAvailable === false ? 'Waiting for second sample' : 'Peak ' + run.containerPeaks.cpu.toFixed(1) + '%') + (Number(metrics.cpuLimitCores) > 0 ? ' · limit ' + metrics.cpuLimitCores + ' cores' : ' · no CPU limit'));
+      drawMetricTrend(pane.find('.run-container-cpu-trend'), run.containerSamples.cpu, '#3c8dbc', 100);
+
+      pane.find('.run-container-memory').text(formatBytes(metrics.memoryBytes));
+      pane.find('.run-container-memory-bar').css('width', clampPercent(metrics.memoryPercent) + '%').toggleClass('progress-bar-red', Number(metrics.memoryPercent) >= 85).toggleClass('progress-bar-green', Number(metrics.memoryPercent) < 85);
+      var memoryLimit = Number(metrics.configuredMemoryLimitBytes) || 0;
+      pane.find('.run-container-memory-detail').text((Number(metrics.memoryPercent) || 0).toFixed(1) + '% ' + (memoryLimit > 0 ? 'of ' + formatBytes(memoryLimit) : 'of engine memory') + ' · peak ' + formatBytes(run.containerPeaks.memory));
+      drawMetricTrend(pane.find('.run-container-memory-trend'), run.containerSamples.memory, '#00a65a', 100);
+
+      pane.find('.run-container-network').text(formatBytes(metrics.networkRxBytes) + ' ↓');
+      pane.find('.run-container-network-detail').text(formatBytes(metrics.networkTxBytes) + ' ↑ · cumulative');
+      pane.find('.run-container-block').text(formatBytes(metrics.blockReadBytes) + ' read');
+      pane.find('.run-container-block-detail').text(formatBytes(metrics.blockWriteBytes) + ' written · cumulative');
+      pane.find('.run-container-pids').text(Number(metrics.pids) || 0);
+      pane.find('.run-container-pids-detail').text('Peak ' + run.containerPeaks.pids + (metrics.startedAt ? ' · started ' + formatTime(Date.parse(metrics.startedAt)) : ''));
+    }
+
+    function runsNeedContainerMetrics() {
+      return executionOrder.some(function(id) {
+        var run = executions[id];
+        return run && run.buildNumber && ! isTerminal(run);
+      });
+    }
+
+    function normalizeRunContainerCpu(run, metrics) {
+      var current = {
+        container: Number(metrics.cpuTotalUsage) || 0,
+        system: Number(metrics.systemCpuUsage) || 0,
+        cpus: Math.max(1, Number(metrics.onlineCpus) || 1)
+      };
+      var previous = run.containerCpuSample;
+      if (previous && current.container > previous.container && current.system > previous.system) {
+        metrics.cpuPercent = Math.max(0, (current.container - previous.container) / (current.system - previous.system) * current.cpus * 100);
+        metrics.cpuSampleAvailable = true;
+      } else if (metrics.cpuSampleAvailable !== true) {
+        metrics.cpuPercent = 0;
+        metrics.cpuSampleAvailable = false;
+      }
+      run.containerCpuSample = current;
+    }
+
+    function scheduleContainerMetrics(delay) {
+      if (containerMetricsTimer) {
+        clearTimeout(containerMetricsTimer);
+        containerMetricsTimer = null;
+      }
+      if (runsNeedContainerMetrics()) {
+        containerMetricsTimer = setTimeout(pollContainerMetrics, typeof delay === 'number' ? delay : containerMetricsPollDelay);
+      }
+    }
+
+    function pollContainerMetrics() {
+      if (containerMetricsRequest || document.hidden || ! runsNeedContainerMetrics()) {
+        scheduleContainerMetrics();
+        return;
+      }
+
+      containerMetricsRequest = $.ajax({ url: containerMetricsUrl, dataType: 'json', cache: false, timeout: 10000 })
+        .done(function(payload) {
+          var byBuild = {};
+          $.each(payload && payload.jobs || [], function(index, metrics) {
+            byBuild[String(metrics.jobName || '') + '\n' + String(metrics.buildNumber || '')] = metrics;
+          });
+          $.each(executionOrder, function(index, id) {
+            var run = executions[id];
+            if (! run || ! run.buildNumber || isTerminal(run)) { return; }
+            var metrics = byBuild[String(run.jobName) + '\n' + String(run.buildNumber)];
+            run.containerMetricsError = '';
+            if (metrics) {
+              normalizeRunContainerCpu(run, metrics);
+              run.containerMetrics = metrics;
+              run.containerPresent = true;
+              run.containerMisses = 0;
+              var cpu = Number(metrics.cpuPercent) || 0;
+              var memory = Number(metrics.memoryPercent) || 0;
+              run.containerPeaks.cpu = Math.max(run.containerPeaks.cpu, cpu);
+              run.containerPeaks.memory = Math.max(run.containerPeaks.memory, Number(metrics.memoryBytes) || 0);
+              run.containerPeaks.pids = Math.max(run.containerPeaks.pids, Number(metrics.pids) || 0);
+              run.containerSamples.cpu.push(cpu);
+              run.containerSamples.memory.push(memory);
+              if (run.containerSamples.cpu.length > 40) { run.containerSamples.cpu.shift(); }
+              if (run.containerSamples.memory.length > 40) { run.containerSamples.memory.shift(); }
+            } else if (run.containerMetrics) {
+              run.containerMisses += 1;
+              if (run.containerMisses >= 2) { run.containerPresent = false; }
+            }
+            updateContainerMetricsUI(run);
+          });
+        })
+        .fail(function(xhr) {
+          $.each(executionOrder, function(index, id) {
+            var run = executions[id];
+            if (run && run.containerMetrics && ! isTerminal(run)) {
+              run.containerMetricsError = responseMessage(xhr, 'Container metrics unavailable.');
+              updateContainerMetricsUI(run);
+            }
+          });
+        })
+        .always(function() {
+          containerMetricsRequest = null;
+          scheduleContainerMetrics();
+        });
+    }
+
     function isTerminal(run) {
       return run.finished || $.inArray(run.status, ['SUCCESS', 'FAILURE', 'ABORTED', 'NOT_BUILT', 'Trigger Failed', 'Cancelled', 'Error']) !== -1;
     }
@@ -1122,6 +1363,8 @@
         consoleRequestInFlight: false
       };
 
+      initializeContainerTracking(run);
+
       executions[run.id] = run;
       executionOrder.unshift(run.id);
       createExecutionTab(run);
@@ -1229,6 +1472,8 @@
         consoleRequestInFlight: false
       };
 
+      initializeContainerTracking(run);
+
       executions[run.id] = run;
       executionOrder.unshift(run.id);
       createExecutionTab(run);
@@ -1236,6 +1481,7 @@
       updateExecutionUI(run);
       pollBuildInfo(run);
       pollConsole(run);
+      scheduleContainerMetrics(100);
 
       if (window.JobSeekerRunningJobs && window.JobSeekerRunningJobs.refresh) {
         window.JobSeekerRunningJobs.refresh();
@@ -1325,6 +1571,19 @@
             '<div class="execution-meta-item"><span>Started</span><strong class="run-started"></strong></div>' +
             '<div class="execution-meta-item"><span>Duration</span><strong class="run-duration"></strong></div>' +
             '<div class="execution-meta-item"><span>Console</span><strong class="run-console-size"></strong></div>' +
+          '</div>' +
+          '<div class="execution-runtime-metrics" style="display:none;">' +
+            '<div class="execution-runtime-header">' +
+              '<div><strong><i class="fa fa-cube"></i> Docker Runtime</strong><span class="execution-runtime-identity run-container-identity"></span></div>' +
+              '<span class="label label-info run-container-state">Live metrics</span>' +
+            '</div>' +
+            '<div class="execution-runtime-grid">' +
+              '<div class="execution-runtime-metric"><span>CPU</span><strong class="run-container-cpu">—</strong><div class="progress"><div class="progress-bar progress-bar-aqua run-container-cpu-bar" style="width:0%"></div></div><small class="run-container-cpu-detail"></small><svg class="execution-runtime-trend run-container-cpu-trend" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"></svg></div>' +
+              '<div class="execution-runtime-metric"><span>Memory</span><strong class="run-container-memory">—</strong><div class="progress"><div class="progress-bar progress-bar-green run-container-memory-bar" style="width:0%"></div></div><small class="run-container-memory-detail"></small><svg class="execution-runtime-trend run-container-memory-trend" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true"></svg></div>' +
+              '<div class="execution-runtime-metric"><span>Network I/O</span><strong class="run-container-network">—</strong><small class="run-container-network-detail"></small></div>' +
+              '<div class="execution-runtime-metric"><span>Block I/O</span><strong class="run-container-block">—</strong><small class="run-container-block-detail"></small></div>' +
+              '<div class="execution-runtime-metric"><span>Processes</span><strong class="run-container-pids">—</strong><small class="run-container-pids-detail"></small></div>' +
+            '</div>' +
           '</div>' +
           '<div class="execution-console job-console-host" id="console-' + run.id + '"><div class="job-console-empty">Waiting for Jenkins to start this build...</div></div>' +
         '</div>'
@@ -1649,6 +1908,7 @@
       updateExecutionUI(run);
       pollBuildInfo(run);
       pollConsole(run);
+      scheduleContainerMetrics(100);
 
       if (window.JobSeekerRunningJobs && window.JobSeekerRunningJobs.refresh) {
         window.JobSeekerRunningJobs.refresh();
@@ -1680,6 +1940,10 @@
           } else {
             run.status = run.result || 'SUCCESS';
             run.finished = true;
+            if (run.containerMetrics) {
+              run.containerPresent = false;
+              updateContainerMetricsUI(run);
+            }
             clearRunTimer(run, 'buildInfo');
             pollConsole(run);
             loadJobs();
@@ -1805,6 +2069,7 @@
       executionOrder = executionOrder.filter(function(id) {
         return id !== run.id;
       });
+      scheduleContainerMetrics();
 
       var wasActive = $('#tab-' + run.id).hasClass('active');
       $('#tab-' + run.id).remove();
@@ -1981,6 +2246,12 @@
 
     $('#consoleCompareColumns').on('change', function() {
       updateConsoleViewLayout();
+    });
+
+    $(document).on('visibilitychange', function() {
+      if (! document.hidden && runsNeedContainerMetrics()) {
+        scheduleContainerMetrics(100);
+      }
     });
 
     $(document).on('click', '.execution-row-link', function(event) {

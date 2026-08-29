@@ -365,6 +365,39 @@ pre {
   white-space: nowrap;
 }
 
+.tmf-results-page .modal-dialog {
+  max-width: calc(100vw - 30px);
+  width: 760px;
+}
+
+.tmf-results-page .modal-body {
+  max-height: calc(100vh - 190px);
+  overflow: auto;
+}
+
+.tmf-results-page .modal-body table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.tmf-results-page .modal-body table th:first-child,
+.tmf-results-page .modal-body table td:first-child {
+  width: 125px;
+}
+
+.tmf-results-page .modal-body td,
+.tmf-results-page .job-message-content {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tmf-results-page .job-message-content {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 767px) {
   .tmf-results-toolbar {
     align-items: flex-start;
@@ -595,7 +628,7 @@ pre {
 </div> 
 
 <div class="modal modal-danger fade" id="modal-danger" style="display: none;">
-          <div class="modal-dialog">
+          <div class="modal-dialog modal-lg">
             <div class="modal-content">
               <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
@@ -619,7 +652,7 @@ pre {
 </div>
 
 <div class="modal modal-primary fade" id="modal-msg" style="display: none;">
-          <div class="modal-dialog">
+          <div class="modal-dialog modal-lg">
             <div class="modal-content">
               <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">

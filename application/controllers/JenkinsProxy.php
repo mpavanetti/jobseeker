@@ -10,6 +10,19 @@ class JenkinsProxy extends BaseController
         $this->isLoggedIn();
     }
 
+    private function canViewExecutorMonitoring()
+    {
+        return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+    }
+
+    private function denyExecutorMonitoring()
+    {
+        $this->output
+            ->set_status_header(403)
+            ->set_content_type('application/json', 'utf-8')
+            ->set_output(json_encode(array('ok' => FALSE, 'message' => 'Access denied.')));
+    }
+
     public function proxy()
     {
         $method = $this->input->method(TRUE);
@@ -72,6 +85,11 @@ class JenkinsProxy extends BaseController
 
     public function executorMonitor()
     {
+        if (! $this->canViewExecutorMonitoring()) {
+            $this->denyExecutorMonitoring();
+            return;
+        }
+
         $status = $this->jenkinsExecutorMonitorStatus($this->input->get('environment'));
         $this->includeConfiguredContextEnvironments($status);
 
@@ -79,6 +97,74 @@ class JenkinsProxy extends BaseController
             ->set_status_header(isset($status['status']) ? (int) $status['status'] : 200)
             ->set_content_type('application/json')
             ->set_output(json_encode($status));
+    }
+
+    public function dashboardMetrics()
+    {
+        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->input->get('environment'));
+        $status = $this->jenkinsExecutorMonitorStatus($requestedEnvironment);
+        $this->includeConfiguredContextEnvironments($status);
+
+        if (! isset($status['ok']) || ! $status['ok']) {
+            $this->output
+                ->set_status_header(isset($status['status']) ? (int) $status['status'] : 503)
+                ->set_header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0')
+                ->set_content_type('application/json', 'utf-8')
+                ->set_output(json_encode(array(
+                    'ok' => FALSE,
+                    'message' => isset($status['message']) ? $status['message'] : 'Unable to load Jenkins capacity metrics.'
+                )));
+            return;
+        }
+
+        $global = isset($status['global']) && is_array($status['global']) ? $status['global'] : array();
+        $environmentRows = isset($status['environments']) && is_array($status['environments']) ? $status['environments'] : array();
+        $slotRows = array();
+        if ($requestedEnvironment !== '') {
+            $slotRows[] = isset($environmentRows[$requestedEnvironment]) ? $environmentRows[$requestedEnvironment] : array();
+        } else {
+            $slotRows = array_values($environmentRows);
+        }
+
+        $slots = array('active' => 0, 'running' => 0, 'queued' => 0, 'limit' => 0, 'available' => 0);
+        foreach ($slotRows as $row) {
+            foreach (array('active', 'running', 'queued', 'limit') as $field) {
+                $slots[$field] += isset($row[$field]) ? (int) $row[$field] : 0;
+            }
+            if (isset($row['available']) && $row['available'] !== NULL) {
+                $slots['available'] += (int) $row['available'];
+            }
+        }
+
+        $totalExecutors = isset($global['totalExecutors']) ? (int) $global['totalExecutors'] : 0;
+        $busyExecutors = isset($global['busyExecutors']) ? (int) $global['busyExecutors'] : 0;
+        $payload = array(
+            'ok' => TRUE,
+            'generatedAt' => date('c'),
+            'scope' => $requestedEnvironment === '' ? 'all' : $requestedEnvironment,
+            'executors' => array(
+                'total' => $totalExecutors,
+                'busy' => $busyExecutors,
+                'idle' => isset($global['idleExecutors']) ? (int) $global['idleExecutors'] : max(0, $totalExecutors - $busyExecutors),
+                'utilization' => $totalExecutors > 0 ? round(($busyExecutors / $totalExecutors) * 100, 1) : NULL
+            ),
+            'nodes' => array(
+                'online' => isset($global['onlineNodes']) ? (int) $global['onlineNodes'] : 0,
+                'offline' => isset($global['offlineNodes']) ? (int) $global['offlineNodes'] : 0,
+                'agents' => isset($global['agentNodes']) ? (int) $global['agentNodes'] : 0,
+                'onlineAgents' => isset($global['onlineAgentNodes']) ? (int) $global['onlineAgentNodes'] : 0
+            ),
+            'queueDepth' => isset($status['queue']) && is_array($status['queue']) ? count($status['queue']) : 0,
+            'slots' => $slots,
+            'environmentAgentsEnabled' => isset($status['environmentAgentsEnabled']) && $status['environmentAgentsEnabled'] === TRUE
+        );
+
+        $this->output
+            ->set_status_header(200)
+            ->set_header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0')
+            ->set_header('Pragma: no-cache')
+            ->set_content_type('application/json', 'utf-8')
+            ->set_output(json_encode($payload));
     }
 
     public function runningBuilds()
@@ -95,6 +181,11 @@ class JenkinsProxy extends BaseController
 
     public function agentSetupHelper()
     {
+        if (! $this->canViewExecutorMonitoring()) {
+            $this->denyExecutorMonitoring();
+            return;
+        }
+
         $status = $this->jenkinsExecutorMonitorStatus('');
         $this->includeConfiguredContextEnvironments($status);
 
