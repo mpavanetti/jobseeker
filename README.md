@@ -16,6 +16,7 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 - Save multiple browser-cached job drafts, compare their configuration, duplicate them, and chain drafts before creating jobs.
 - Run jobs immediately or schedule one-time, recurring, tag-based, and custom Jenkins cron triggers.
 - Send templated email notifications for successful, failed, and aborted builds.
+- Map the connectors and data assets a job's code uses, check their catalog status, and run a real connection test at creation.
 - Inspect queue state, build history, worker assignment, grouped console output, Python test stages, and Docker resource usage.
 
 ### Visual pipelines
