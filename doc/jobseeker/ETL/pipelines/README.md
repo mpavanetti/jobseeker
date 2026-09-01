@@ -52,4 +52,6 @@ JobSeeker stores pipeline definitions, canvas positions, groups, versions, synch
 
 The server validates node IDs, Jenkins job names, conditions, duplicate connections, graph size, and cycles. A pipeline can reference only runnable Jenkins jobs detected in its global environment. Save, run, stop, and delete operations require an administrator or manager session and CSRF protection.
 
+The optional pipeline schedule is validated with the same `JenkinsCronSchedule` grammar Job Creation uses, so it rejects the Quartz-only `?`, `L`, `W` and `#` tokens that a Jenkins timer trigger would refuse and reports the specific field at fault. While editing, the schedule field shows the resolved spec plus Jenkins' own previous and next fire times.
+
 Generated orchestrators are hidden from normal job creation palettes and regular JobSeeker job lists. Deleting a pipeline removes its generated Jenkins job and cascades its local run records; it does not delete the child jobs.
