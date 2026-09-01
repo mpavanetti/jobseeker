@@ -349,6 +349,39 @@ $encryptionKey = getenv('JOBSEEKER_ENCRYPTION_KEY');
 if (ENVIRONMENT === 'production' && empty($encryptionKey)) {
 	show_error('JOBSEEKER_ENCRYPTION_KEY must be set in production.', 500);
 }
+// Surface (without breaking the documented local-evaluation stack, which also
+// runs with ENVIRONMENT=production) the case where application secrets are still
+// the shipped placeholders or too short to be safe for a shared deployment.
+$jobseekerWeakSecrets = array(
+	'JOBSEEKER_ENCRYPTION_KEY' => array(
+		'value' => (string) $encryptionKey,
+		'placeholders' => array(
+			'replace-with-a-long-random-secret',
+			'change-this-local-development-key-before-shared-use',
+			'jobseeker-local-development-encryption-key',
+		),
+		'minLength' => 32,
+	),
+	'JOBSEEKER_CONNECTOR_API_TOKEN' => array(
+		'value' => (string) getenv('JOBSEEKER_CONNECTOR_API_TOKEN'),
+		'placeholders' => array(
+			'change-this-local-connector-token-before-shared-use',
+			'jobseeker-local-connector-token',
+		),
+		'minLength' => 24,
+	),
+);
+foreach ($jobseekerWeakSecrets as $jobseekerSecretName => $jobseekerSecretMeta) {
+	$jobseekerSecretValue = $jobseekerSecretMeta['value'];
+	if ($jobseekerSecretValue === '') {
+		continue;
+	}
+	if (in_array($jobseekerSecretValue, $jobseekerSecretMeta['placeholders'], TRUE)) {
+		log_message('error', $jobseekerSecretName.' is still set to a shipped placeholder value. Set a unique secret before any shared or production use.');
+	} else if (strlen($jobseekerSecretValue) < $jobseekerSecretMeta['minLength']) {
+		log_message('error', $jobseekerSecretName.' is shorter than the recommended '.$jobseekerSecretMeta['minLength'].' characters. Use a longer random secret before any shared or production use.');
+	}
+}
 $config['encryption_key'] = $encryptionKey ?: 'jobseeker-local-development-encryption-key';
 
 /*
