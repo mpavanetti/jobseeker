@@ -549,6 +549,19 @@ $config['compress_output'] = FALSE;
 $config['time_reference'] = 'local';
 
 /*
+| Application timezone. Set once here so every controller, model and view
+| formats timestamps consistently (dashboards, TMF, analytics, email). Override
+| with JOBSEEKER_TIMEZONE; defaults to America/Sao_Paulo for backwards
+| compatibility with existing deployments.
+*/
+$jobseekerTimezone = getenv('JOBSEEKER_TIMEZONE');
+if (! is_string($jobseekerTimezone) || $jobseekerTimezone === '' || ! in_array($jobseekerTimezone, timezone_identifiers_list(), TRUE)) {
+	$jobseekerTimezone = 'America/Sao_Paulo';
+}
+date_default_timezone_set($jobseekerTimezone);
+$config['jobseeker_timezone'] = $jobseekerTimezone;
+
+/*
 |--------------------------------------------------------------------------
 | Rewrite PHP Short Tags
 |--------------------------------------------------------------------------

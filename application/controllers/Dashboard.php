@@ -4,6 +4,9 @@ require APPPATH . '/libraries/BaseController.php';
 
 class Dashboard extends BaseController
 {
+    /** Seconds to serve a cached /dashboard/overview payload before recomputing. */
+    const OVERVIEW_CACHE_TTL = 20;
+
     public function __construct()
     {
         parent::__construct();
@@ -11,7 +14,6 @@ class Dashboard extends BaseController
         $this->load->model('Dashboard_model', 'model');
         $this->load->library('session');
         $this->isLoggedIn();
-        date_default_timezone_set('America/Sao_Paulo');
     }
 
     private function selectedEnvironmentFilter()
@@ -45,9 +47,25 @@ class Dashboard extends BaseController
 
     public function overview()
     {
+        $environment = $this->selectedEnvironmentFilter();
+        $fresh = in_array((string) $this->input->get('fresh'), array('1', 'true', 'yes'), TRUE);
+
+        $this->load->driver('cache', array('adapter' => 'file'));
+        $cacheKey = 'dashboard_overview_' . preg_replace('/[^A-Za-z0-9_]/', '_', $environment);
+
+        $data = $fresh ? FALSE : $this->cache->get($cacheKey);
+        $fromCache = ($data !== FALSE);
+
+        if (! $fromCache) {
+            $data = $this->model->overview($environment);
+            $this->cache->save($cacheKey, $data, self::OVERVIEW_CACHE_TTL);
+        }
+
         $payload = array(
             'ok' => TRUE,
-            'data' => $this->model->overview($this->selectedEnvironmentFilter())
+            'fromCache' => $fromCache,
+            'cacheTtl' => self::OVERVIEW_CACHE_TTL,
+            'data' => $data
         );
 
         $this->output

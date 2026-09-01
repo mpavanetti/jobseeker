@@ -331,11 +331,12 @@
     });
   }
 
-  function loadOverview() {
+  function loadOverview(fresh) {
     if (state.loading) return $.Deferred().reject().promise();
     state.loading = true;
     $('#dashboardRefresh i').addClass('dashboard-refresh-spin');
-    return request(config.overviewUrl).done(function(payload) {
+    var url = fresh ? config.overviewUrl + (config.overviewUrl.indexOf('?') === -1 ? '?' : '&') + 'fresh=1' : config.overviewUrl;
+    return request(url).done(function(payload) {
       if (!payload || payload.ok !== true || !payload.data) {
         $('#dashboardLoading').hide();
         $('#dashboardErrorMessage').text('The dashboard returned an invalid response.');
@@ -364,8 +365,8 @@
     });
   }
 
-  function refreshAll() {
-    loadOverview();
+  function refreshAll(fresh) {
+    loadOverview(fresh === true);
     loadJenkins();
   }
 
@@ -376,7 +377,7 @@
       state.trendDays = Math.max(30, Math.min(180, number(this.value) || 30));
       renderTrend();
     });
-    $('#dashboardRefresh').on('click', refreshAll);
+    $('#dashboardRefresh').on('click', function() { refreshAll(true); });
     window.jobseekerDashboardJenkinsTimer = window.jobseekerDashboardJenkinsTimer || window.setInterval(loadJenkins, 30000);
   });
 
