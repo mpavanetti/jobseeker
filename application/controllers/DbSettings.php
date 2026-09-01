@@ -1,10 +1,13 @@
 <?php if(!defined('BASEPATH')) exit('No direct script access allowed');
 
 require APPPATH . '/libraries/BaseController.php';
+require APPPATH . '/controllers/concerns/JenkinsRunnerTrait.php';
 
 
 class DbSettings extends BaseController
 {
+    use JenkinsRunnerTrait;
+
     /**
      * This is default constructor of the class
      */
@@ -307,6 +310,8 @@ class DbSettings extends BaseController
 
         $encryptedSecret = NULL;
         if ($backend === 'local') {
+            $clearLocalSecrets = $existing && $existing->secret_backend === 'local'
+                && (string) $this->input->post('clear_local_secrets') === '1';
             $username = (string) $this->input->post('login');
             $password = (string) $this->input->post('password');
             if (strlen($username) > 500 || strlen($password) > 2000) {
@@ -318,21 +323,30 @@ class DbSettings extends BaseController
                 $this->session->set_flashdata('error', 'Additional local secrets must use field=value lines with safe field names.');
                 redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
             }
-            $secretValues = $additionalSecrets;
+            $secretValues = array();
+            if ($existing && $existing->secret_backend === 'local' && ! $clearLocalSecrets) {
+                $secretValues = $this->model->decryptLocalSecret($existing->secret_encrypted);
+                if ($secretValues === FALSE) {
+                    $this->session->set_flashdata('error', 'The existing local connector secret could not be read.');
+                    redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+                }
+            }
+            $secretValues = array_merge($secretValues, $additionalSecrets);
             if ($username !== '') {
                 $secretValues['username'] = $username;
             }
             if ($password !== '') {
                 $secretValues['password'] = $password;
             }
-            if (empty($secretValues) && $existing && $existing->secret_backend === 'local') {
-                $encryptedSecret = $existing->secret_encrypted;
-            } else if ($authType === 'username_password' && ($username === '' || $password === '')) {
-                $this->session->set_flashdata('error', 'Username/password authentication requires both values.');
+            if ($authType === 'username_password'
+                && (! isset($secretValues['username']) || (string) $secretValues['username'] === ''
+                    || ! isset($secretValues['password']) || (string) $secretValues['password'] === '')) {
+                $this->session->set_flashdata('error', $clearLocalSecrets
+                    ? 'Username/password authentication cannot clear its required values. Provide both values or select another authentication type.'
+                    : 'Username/password authentication requires both values.');
                 redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
-            } else {
-                $encryptedSecret = $this->model->encryptSecretValues($secretValues);
             }
+            $encryptedSecret = $this->model->encryptSecretValues($secretValues);
             if ($encryptedSecret === FALSE || $encryptedSecret === NULL) {
                 $this->session->set_flashdata('error', 'The local connector secret could not be encrypted.');
                 redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
@@ -491,6 +505,44 @@ class DbSettings extends BaseController
             return;
         }
 
+        $mode = strtolower(trim((string) ($this->input->post('mode') ?: $this->input->get('mode'))));
+        if ($mode === 'quick') {
+            $this->quickConnectorProbe($connector);
+            return;
+        }
+        $this->liveConnectorTest($connector);
+    }
+
+    /**
+     * Full protocol handshake on a Jenkins worker. Delegates the run to the
+     * shared JenkinsRunnerTrait helper so Job Creation can reuse it.
+     */
+    private function liveConnectorTest($connector)
+    {
+        $environment = $this->connectionTestEnvironment($connector->environment);
+        $result = $this->runConnectorConnectionTest((string) $connector->connector_key, $environment, (string) $connector->job_name);
+        $this->model->logRuntimeAccess((array) $connector, $connector->environment, $connector->job_name, $result['ok'] ? 'test_passed' : 'test_failed');
+
+        $httpStatus = isset($result['httpStatus']) ? (int) $result['httpStatus'] : ($result['ok'] ? 200 : 422);
+        unset($result['httpStatus']);
+        if (($result['connectorType'] ?? '') === '') {
+            $result['connectorType'] = (string) $connector->db_type;
+        }
+        $this->jsonResponse($result, $httpStatus);
+    }
+
+    private function connectionTestEnvironment($connectorEnvironment)
+    {
+        $environment = $this->normalizeJobSeekerEnvironment((string) $connectorEnvironment);
+        if ($environment === '' || $environment === 'ALL' || $environment === '*') {
+            $active = array_map(function($row) { return strtoupper($row->Environment); }, $this->environments());
+            $environment = ! empty($active) ? $active[0] : 'DEV';
+        }
+        return $environment;
+    }
+
+    private function quickConnectorProbe($connector)
+    {
         $secretReady = FALSE;
         $credentialStatus = 'Credential reference is invalid.';
         if ($connector->secret_backend === 'local') {
@@ -507,7 +559,9 @@ class DbSettings extends BaseController
         }
 
         $network = $this->connectorTestEndpoint($connector);
-        $ok = $secretReady && $network['reachable'] !== FALSE;
+        $networkReady = $network['reachable'] === TRUE
+            || ($network['status'] === 'skipped' && ! $this->connectorNeedsEndpoint((string) $connector->db_type));
+        $ok = $secretReady && $networkReady;
         $this->model->logRuntimeAccess((array) $connector, $connector->environment, $connector->job_name, $ok ? 'test_passed' : 'test_failed');
 
         if ($network['status'] === 'reachable') {
@@ -516,8 +570,10 @@ class DbSettings extends BaseController
             $networkStatus = 'TCP check blocked for a link-local address.';
         } else if ($network['status'] === 'unreachable') {
             $networkStatus = 'Endpoint did not accept a TCP connection within 3 seconds.';
+        } else if ($network['status'] === 'not_configured') {
+            $networkStatus = 'TCP check failed because the configured endpoint or port is incomplete.';
         } else {
-            $networkStatus = 'TCP check skipped because no complete endpoint and port were configured.';
+            $networkStatus = 'TCP check skipped because this connector type does not require an endpoint.';
         }
         $this->jsonResponse(array(
             'ok' => $ok,
