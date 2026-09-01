@@ -110,6 +110,14 @@ services:
       - JOBSEEKER_DOCKER_MONITOR_URL=http://docker-monitor-proxy:8080
       - JOBSEEKER_DOCKER_RUNTIME_URL=http://docker-runtime:2375
       - JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION=${JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION:-3.13}
+      # Data Engineering (Spark clusters / ML runtimes)
+      - JOBSEEKER_COMPUTE_DRIVER=${JOBSEEKER_COMPUTE_DRIVER:-docker}
+      - JOBSEEKER_COMPUTE_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_SPARK_BIND_SOURCE=/jobseeker/spark
+      - JOBSEEKER_ML_BIND_SOURCE=/jobseeker/ml
+      - JOBSEEKER_SPARK_MAX_WORKERS=${JOBSEEKER_SPARK_MAX_WORKERS:-8}
+      - JOBSEEKER_COMPUTE_RUN_TIMEOUT_SECONDS=${JOBSEEKER_COMPUTE_RUN_TIMEOUT_SECONDS:-1800}
+      - JOBSEEKER_COMPUTE_MAX_CONCURRENT_RUNS=${JOBSEEKER_COMPUTE_MAX_CONCURRENT_RUNS:-3}
       - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
       - JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS=${JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS:-1}
@@ -230,6 +238,10 @@ services:
       - DOCKER_TLS_CERTDIR=
     volumes:
       - jobseeker-docker-cache:/var/lib/docker
+      # Spark / ML job source, visible to the DinD daemon so ephemeral job
+      # containers can bind-mount it at /workspace (read-only).
+      - ./repository/spark:/jobseeker/spark:ro
+      - ./repository/ml:/jobseeker/ml:ro
     networks:
       - internal
     healthcheck:
@@ -238,6 +250,42 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # Build the JobSeeker Spark / ML runtime images into the DinD engine.
+  #   docker compose --profile runtimes up --build
+  spark-runtime-builder:
+    image: docker:27-cli
+    profiles: ["runtimes"]
+    depends_on:
+      docker-runtime:
+        condition: service_healthy
+    environment:
+      - DOCKER_HOST=tcp://docker-runtime:2375
+    volumes:
+      - ./docker:/context/docker:ro
+    working_dir: /context
+    command: >
+      sh -lc "docker build -t jobseeker/spark-runtime:4.0.0-python -f docker/spark/Dockerfile.spark-4.0-python docker/spark &&
+              docker build -t jobseeker/spark-runtime:4.0.0-scala  -f docker/spark/Dockerfile.spark-4.0-scala  docker/spark"
+    networks:
+      - internal
+
+  ml-runtime-builder:
+    image: docker:27-cli
+    profiles: ["runtimes"]
+    depends_on:
+      docker-runtime:
+        condition: service_healthy
+    environment:
+      - DOCKER_HOST=tcp://docker-runtime:2375
+    volumes:
+      - ./docker:/context/docker:ro
+    working_dir: /context
+    command: >
+      sh -lc "docker build -t jobseeker/ml-runtime:cpu    -f docker/ml/Dockerfile.ml-cpu    docker/ml &&
+              docker build -t jobseeker/ml-runtime:dl-cpu -f docker/ml/Dockerfile.ml-dl-cpu docker/ml"
+    networks:
+      - internal
 
   jenkins-home-init:
     image: alpine:3.20

@@ -1,0 +1,13 @@
+order_id,region,product,amount
+1001,EMEA,Widget,120.50
+1002,AMER,Widget,90.00
+1003,APAC,Gadget,210.75
+1004,EMEA,Gadget,55.25
+1005,AMER,Sprocket,300.00
+1006,APAC,Widget,145.10
+1007,EMEA,Sprocket,80.00
+1008,AMER,Gadget,175.40
+1009,APAC,Sprocket,260.00
+1010,EMEA,Widget,99.99
+1011,AMER,Widget,60.00
+1012,APAC,Gadget,320.30

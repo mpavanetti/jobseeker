@@ -1,0 +1,18 @@
+# JobSeeker ML CPU runtime image (Miniconda).
+#   docker build -t jobseeker/ml-runtime:cpu -f docker/ml/Dockerfile.ml-cpu docker/ml
+#
+# General-purpose CPU machine learning: numpy, pandas, scikit-learn, xgboost,
+# matplotlib. Built on continuumio/miniconda3 so conda-only stacks work too.
+FROM continuumio/miniconda3
+
+COPY env-ml-cpu.yml /tmp/env-ml-cpu.yml
+
+RUN set -eux; \
+    conda env update -n base -f /tmp/env-ml-cpu.yml; \
+    conda clean -afy; \
+    rm -f /tmp/env-ml-cpu.yml
+
+LABEL com.jobseeker.runtime="ml-cpu" \
+      com.jobseeker.runtime.kind="ml"
+
+WORKDIR /workspace

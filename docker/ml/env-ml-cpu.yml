@@ -1,0 +1,14 @@
+# Conda environment for jobseeker/ml-runtime:cpu.
+# General-purpose CPU machine learning. Versions pinned for reproducible builds.
+name: base
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scikit-learn=1.5.1
+  - xgboost=2.1.1
+  - matplotlib-base=3.9.2
+  - joblib=1.4.2
+  - pyarrow=17.0.0

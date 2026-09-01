@@ -1,0 +1,11 @@
+# JobSeeker Spark 4.0 JVM runtime image (Scala 2.13 / Java 17).
+#   docker build -t jobseeker/spark-runtime:4.0.0-scala -f docker/spark/Dockerfile.spark-4.0-scala docker/spark
+#
+# For Scala/Java spark-submit workloads (JARs). Thin passthrough of the official
+# Apache Spark 4.0.0 image with JobSeeker labels so the Docker Monitor screen and
+# the compute orchestrator can recognise it.
+FROM apache/spark:4.0.0
+
+LABEL com.jobseeker.runtime="spark-4.0-scala" \
+      com.jobseeker.runtime.kind="spark" \
+      com.jobseeker.spark.version="4.0.0"

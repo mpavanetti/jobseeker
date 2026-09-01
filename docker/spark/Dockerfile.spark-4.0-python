@@ -1,0 +1,21 @@
+# JobSeeker Spark 4.0 PySpark runtime image.
+#   docker build -t jobseeker/spark-runtime:4.0.0-python -f docker/spark/Dockerfile.spark-4.0-python docker/spark
+#
+# Layered on the official Apache Spark image (Spark 4.0.0, Scala 2.13, Java 17,
+# Python 3). Adds only the DataFrame-interchange libraries every PySpark job
+# tends to need, kept deliberately lean.
+FROM apache/spark:4.0.0
+
+USER root
+
+# Pinned so image builds are reproducible. Bump deliberately.
+RUN set -eux; \
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        "pandas==2.2.3" \
+        "pyarrow==17.0.0"
+
+LABEL com.jobseeker.runtime="spark-4.0-python" \
+      com.jobseeker.runtime.kind="spark" \
+      com.jobseeker.spark.version="4.0.0"
+
+USER spark

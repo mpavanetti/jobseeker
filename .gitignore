@@ -3,7 +3,15 @@
 .env.connectors
 node_modules/
 assets/bower_components/
-repository/
+repository/*
+!repository/spark
+!repository/ml
+repository/spark/*
+repository/ml/*
+!repository/spark/jobs
+!repository/ml/jobs
+!repository/spark/README.md
+!repository/ml/README.md
 json/result.json
 talend.sql
 old/cias.sql

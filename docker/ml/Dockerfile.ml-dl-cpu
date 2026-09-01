@@ -1,0 +1,17 @@
+# JobSeeker ML deep-learning CPU runtime image (Miniconda).
+#   docker build -t jobseeker/ml-runtime:dl-cpu -f docker/ml/Dockerfile.ml-dl-cpu docker/ml
+#
+# CPU deep learning: PyTorch, torchvision and Lightning, plus pandas/scikit-learn.
+FROM continuumio/miniconda3
+
+COPY env-ml-dl-cpu.yml /tmp/env-ml-dl-cpu.yml
+
+RUN set -eux; \
+    conda env update -n base -f /tmp/env-ml-dl-cpu.yml; \
+    conda clean -afy; \
+    rm -f /tmp/env-ml-dl-cpu.yml
+
+LABEL com.jobseeker.runtime="ml-dl-cpu" \
+      com.jobseeker.runtime.kind="ml"
+
+WORKDIR /workspace
