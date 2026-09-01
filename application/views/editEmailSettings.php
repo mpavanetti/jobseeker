@@ -1,3 +1,5 @@
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/email-template-editor.css?v=2">
+
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->
     <section class="content-header">
@@ -65,14 +67,14 @@
                     <div class="col-md-3" style="display: none;">                                
                         <div class="form-group">
                             <label for="id">Id</label>
-                            <input type="text" class="form-control required" value="<?php echo $fetch->id; ?>" id="name" name="id" maxlength="50" required autocomplete="off">
+                            <input type="text" class="form-control required" value="<?php echo (int) $fetch->id; ?>" id="emailSettingId" name="id" maxlength="50" required autocomplete="off">
                         </div>
                     </div>
 
                     <div class="col-md-3">                                
                         <div class="form-group">
                             <label for="name">Email Name</label>
-                            <input type="text" class="form-control required" value="<?php echo $fetch->name; ?>" id="name" name="name" maxlength="50" required autocomplete="off">
+                            <input type="text" class="form-control required" value="<?php echo html_escape($fetch->name); ?>" id="name" name="name" maxlength="50" required autocomplete="off">
                         </div>
                     </div>
 
@@ -101,7 +103,7 @@
 
                 <div class="form-group">
                     <label for="to">To</label>
-                    <input type="text" class="form-control required" id="to" value="<?php echo $fetch->to; ?>" name="to" maxlength="200" autocomplete="on" required>
+                    <input type="text" class="form-control required" id="to" value="<?php echo html_escape($fetch->to); ?>" name="to" maxlength="200" autocomplete="on" required>
                 </div>
             </div>
 
@@ -109,7 +111,7 @@
 
                 <div class="form-group">
                     <label for="from">From</label>
-                    <input type="text" class="form-control" id="from" value="<?php echo $fetch->from; ?>" name="from" maxlength="200" autocomplete="off" onkeypress="return event.charCode != 32">
+                    <input type="text" class="form-control" id="from" value="<?php echo html_escape($fetch->from); ?>" name="from" maxlength="200" autocomplete="off" onkeypress="return event.charCode != 32">
                 </div>
             </div>
 
@@ -117,14 +119,14 @@
             <div class="col-md-3">
                 <div class="form-group">
                     <label for="cc">Cc</label>
-                    <input type="cc" class="form-control" id="cc" value="<?php echo $fetch->cc; ?>" name="cc" maxlength="200" autocomplete="off">
+                    <input type="cc" class="form-control" id="cc" value="<?php echo html_escape($fetch->cc); ?>" name="cc" maxlength="200" autocomplete="off">
                 </div>
             </div> 
 
             <div class="col-md-3">
                 <div class="form-group">
                     <label for="subject">Subject</label>
-                    <input type="text" class="form-control" id="subject" value="<?php echo $fetch->subject; ?>" name="subject" maxlength="200" autocomplete="off" required>
+                    <input type="text" class="form-control" id="subject" value="<?php echo html_escape($fetch->subject); ?>" name="subject" maxlength="200" autocomplete="off" required>
                 </div>
             </div> 
 
@@ -135,8 +137,8 @@
         <h4>Email Message:</h4><br>
         <div class="row">
            <div class="col-lg-12 col-md-12 col-xs-12">
-            <div class="form-group">
-                <textarea name="msg" id="msg" rows="1000" cols="80" value="<?php echo $fetch->msg; ?>"><?php echo $fetch->msg; ?></textarea>
+            <div class="form-group email-template-editor">
+                <textarea class="form-control" name="msg" id="msg" rows="24" spellcheck="false"><?php echo html_escape($fetch->msg); ?></textarea>
             </div>
         </div> 
 
@@ -148,7 +150,7 @@
        <div class="col-md-6">
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea class="form-control" id="description" value="<?php echo $fetch->description; ?>" name="description" maxlength="500" rows="5" required><?php echo $fetch->name; ?></textarea>
+            <textarea class="form-control" id="description" name="description" maxlength="500" rows="5" required><?php echo html_escape($fetch->description); ?></textarea>
         </div>
     </div> 
 
@@ -160,7 +162,7 @@
     <div class="form-group">
       <div class="checkbox">
         <label>
-          <input type="checkbox" id="enabled" value="1" name="enabled">
+          <input type="checkbox" id="enabled" value="1" name="enabled"<?php echo (int) $fetch->enabled === 1 ? ' checked' : ''; ?>>
           Enabled
       </label>
   </div>
@@ -211,7 +213,7 @@
 <!-- /.modal-dialog -->
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/ckeditor/ckeditor.js"></script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/ckeditor/config.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/email-template-editor.js?v=2"></script>
 
 <script type="text/javascript">
 
@@ -253,22 +255,13 @@
             }));
 
         })
+                $('#smtp').val(<?php echo json_encode($fetch->smtp); ?>);
       }
 
   });
     });
 
 
-</script>
-
-<script>
-    // Replace the <textarea id="editor1"> with a CKEditor
-    // instance, using default configuration.
-    
-    CKEDITOR.replace('msg', {
-      language: 'en'
-  });
-      CKEDITOR.config.extraPlugins = 'colorbutton,justify,find,font,templates,tableresize,tableselection,tabletools,selectall,codesnippet,indentblock'; 
 </script>
 
 
