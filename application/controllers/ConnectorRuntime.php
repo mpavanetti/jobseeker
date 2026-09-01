@@ -55,7 +55,9 @@ class ConnectorRuntime extends CI_Controller
             if ($values === FALSE) {
                 throw new RuntimeException('Connector '.$row['connector_key'].' has an unreadable local secret.');
             }
-            $secret['values'] = array_map(function($value) { return (string) $value; }, $values);
+            // Keep the runtime schema stable: an empty secret is an object, not
+            // a JSON list, just like a populated field-to-value mapping.
+            $secret['values'] = (object) array_map(function($value) { return (string) $value; }, $values);
         } else {
             $secret['reference'] = $reference;
         }
