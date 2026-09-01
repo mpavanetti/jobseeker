@@ -72,9 +72,23 @@ assert(controller.includes("\$this->cache->get(\$cacheKey)") && controller.inclu
 assert(controller.includes("in_array((string) \$this->input->get('fresh')"), 'The dashboard overview must support a fresh=1 cache bypass.');
 assert(script.includes("+ 'fresh=1'"), 'The dashboard client must request a fresh payload on manual refresh.');
 
-// Timezone is configured once centrally, not hardcoded per controller.
+// The application runs in UTC; JOBSEEKER_TIMEZONE only picks the UI toggle default.
 const config = fs.readFileSync(path.join(root, 'application', 'config', 'config.php'), 'utf8');
-assert(config.includes("getenv('JOBSEEKER_TIMEZONE')") && config.includes('date_default_timezone_set($jobseekerTimezone)'), 'The application timezone must be set once from JOBSEEKER_TIMEZONE.');
+assert(config.includes("date_default_timezone_set('UTC')"), 'The application must run in UTC.');
+assert(config.includes("$config['jobseeker_display_timezone']") && config.includes("getenv('JOBSEEKER_TIMEZONE')"), 'JOBSEEKER_TIMEZONE must feed the display-timezone default.');
 assert(!controller.includes("date_default_timezone_set('America/Sao_Paulo')"), 'Controllers must not hardcode the timezone.');
+
+// MariaDB session must also be UTC so SDK-written now() timestamps are UTC.
+const compose = fs.readFileSync(path.join(root, 'docker-compose.yml'), 'utf8');
+assert(compose.includes('--default-time-zone=+00:00'), 'The MariaDB service must run at +00:00.');
+
+// The shared timezone toggle is loaded globally and mounted on the dashboard.
+const header = fs.readFileSync(path.join(root, 'application', 'views', 'includes', 'header.php'), 'utf8');
+assert(header.includes('assets/js/jobseeker-time.js'), 'jobseeker-time.js must be loaded for every page.');
+assert(header.includes('window.jobseekerTime') && header.includes('displayTimezone'), 'The display timezone must be passed to the client.');
+const jstime = fs.readFileSync(path.join(root, 'assets', 'js', 'jobseeker-time.js'), 'utf8');
+assert(jstime.includes('JobSeekerTime') && jstime.includes("timeZone = 'UTC'") && jstime.includes('renderToggle'), 'JobSeekerTime must expose a UTC/local renderer and toggle.');
+assert(view.includes('id="dashboardTimezoneToggle"'), 'The dashboard must host the timezone toggle.');
+assert(script.includes("JobSeekerTime.renderToggle('#dashboardTimezoneToggle')") && script.includes('JobSeekerTime.onChange'), 'The dashboard must mount the toggle and re-render on change.');
 
 console.log('Dashboard metric and rendering tests passed.');

@@ -85,6 +85,9 @@ $dashboardConfig = array(
     <div class="dashboard-scope">
       <span class="text-muted">Viewing</span><span class="label label-primary"><?php echo html_escape($dashboardEnvironmentLabel); ?></span>
       <span class="text-muted">Use the environment selector above to change scope.</span>
+      <span class="dashboard-scope-sep">·</span>
+      <span class="text-muted">Times in</span>
+      <span id="dashboardTimezoneToggle" class="dashboard-tz"></span>
     </div>
   </section>
 
@@ -154,4 +157,4 @@ $dashboardConfig = array(
 <script src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.js"></script>
 <script>window.jobseekerDashboardConfig = <?php echo json_encode($dashboardConfig, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;</script>
-<script src="<?php echo base_url(); ?>assets/js/dashboard.js?v=42"></script>
+<script src="<?php echo base_url(); ?>assets/js/dashboard.js?v=43"></script>

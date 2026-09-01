@@ -93,10 +93,22 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     color:red;
     font-weight: normal;
   }
+  .jt-toggle { display: inline-flex; border: 1px solid #c8d0da; border-radius: 4px; overflow: hidden; vertical-align: middle; }
+  .jt-toggle .jt-btn { border: 0; background: #fff; color: #5a6b7b; font-size: 11px; line-height: 1; padding: 3px 8px; cursor: pointer; }
+  .jt-toggle .jt-btn + .jt-btn { border-left: 1px solid #c8d0da; }
+  .jt-toggle .jt-btn.is-active { background: #3c8dbc; color: #fff; }
+  .jt-toggle .jt-btn:focus { outline: 2px solid #8ab8d6; outline-offset: -2px; }
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=4" type="text/javascript"></script>
+<script type="text/javascript">
+  window.jobseekerTime = {
+    serverTimezone: 'UTC',
+    displayTimezone: <?php echo json_encode($this->config->item('jobseeker_display_timezone') ?: 'UTC'); ?>
+  };
+</script>
+<script src="<?php echo base_url(); ?>assets/js/jobseeker-time.js?v=1" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
   window.jobseekerUserId = <?php echo json_encode(isset($user_id) ? $user_id : ''); ?>;

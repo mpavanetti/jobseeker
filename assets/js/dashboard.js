@@ -60,13 +60,17 @@
   }
 
   function formatActivity(value) {
-    if (!value || !window.moment) return value || 'N/A';
+    if (!value) return 'N/A';
+    if (window.JobSeekerTime) return JobSeekerTime.fromNow(value);
+    if (!window.moment) return value;
     var activity = moment(value);
     return activity.isValid() ? activity.fromNow() : value;
   }
 
   function titleActivity(value) {
-    if (!value || !window.moment) return value || '';
+    if (!value) return '';
+    if (window.JobSeekerTime) return JobSeekerTime.format(value);
+    if (!window.moment) return value;
     var activity = moment(value);
     return activity.isValid() ? activity.format('lll') : value;
   }
@@ -132,8 +136,13 @@
     $('#dashboardRecords').text(formatCompact(current.recordsProcessed)).attr('title', formatInteger(current.recordsProcessed));
     $('#dashboardRecordsDetail').text(formatInteger(current.executions) + ' ' + plural(current.executions, 'execution') + ' reported');
 
-    var first = data.history.firstActivity ? moment(data.history.firstActivity).format('MMM D, YYYY') : 'No activity';
-    var last = data.history.lastActivity ? moment(data.history.lastActivity).format('MMM D, YYYY') : 'No activity';
+    var fmtDay = function(value) {
+      if (!value) return 'No activity';
+      if (window.JobSeekerTime) return JobSeekerTime.formatDate(value);
+      return window.moment ? moment(value).format('MMM D, YYYY') : value;
+    };
+    var first = fmtDay(data.history.firstActivity);
+    var last = fmtDay(data.history.lastActivity);
     $('#dashboardHistoryDetail').text(formatInteger(data.history.executions) + ' total executions · ' + first + ' — ' + last);
   }
 
@@ -372,6 +381,12 @@
 
   $(function() {
     $('body').addClass('sidebar-collapse');
+    if (window.JobSeekerTime) {
+      JobSeekerTime.renderToggle('#dashboardTimezoneToggle');
+      JobSeekerTime.onChange(function() {
+        if (state.overview) renderOverview(state.overview);
+      });
+    }
     refreshAll();
     $('input[name="dashboardTrendDays"]').on('change', function() {
       state.trendDays = Math.max(30, Math.min(180, number(this.value) || 30));

@@ -549,17 +549,26 @@ $config['compress_output'] = FALSE;
 $config['time_reference'] = 'local';
 
 /*
-| Application timezone. Set once here so every controller, model and view
-| formats timestamps consistently (dashboards, TMF, analytics, email). Override
-| with JOBSEEKER_TIMEZONE; defaults to America/Sao_Paulo for backwards
-| compatibility with existing deployments.
+| Application timezone.
+|
+| The project runs in UTC: every timestamp is stored, computed and served in
+| UTC (PHP here, and the MariaDB session via --default-time-zone=+00:00). The
+| browser then renders each timestamp in the viewer's local time or in UTC,
+| controlled by the timezone toggle (assets/js/jobseeker-time.js, persisted
+| per browser).
+|
+| JOBSEEKER_TIMEZONE only sets which side of that toggle a first-time viewer
+| starts on: "UTC" (default) starts on UTC, any other valid PHP timezone
+| identifier starts on local time.
 */
-$jobseekerTimezone = getenv('JOBSEEKER_TIMEZONE');
-if (! is_string($jobseekerTimezone) || $jobseekerTimezone === '' || ! in_array($jobseekerTimezone, timezone_identifiers_list(), TRUE)) {
-	$jobseekerTimezone = 'America/Sao_Paulo';
+date_default_timezone_set('UTC');
+
+$jobseekerDisplayTimezone = getenv('JOBSEEKER_TIMEZONE');
+if (! is_string($jobseekerDisplayTimezone) || $jobseekerDisplayTimezone === '' || ! in_array($jobseekerDisplayTimezone, timezone_identifiers_list(), TRUE)) {
+	$jobseekerDisplayTimezone = 'UTC';
 }
-date_default_timezone_set($jobseekerTimezone);
-$config['jobseeker_timezone'] = $jobseekerTimezone;
+$config['jobseeker_timezone'] = 'UTC';
+$config['jobseeker_display_timezone'] = $jobseekerDisplayTimezone;
 
 /*
 |--------------------------------------------------------------------------
