@@ -46,6 +46,7 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 - Monitor running, queued, successful, failed, disabled, and not-built Jenkins jobs from operational dashboards.
 - Query Transaction Monitoring Framework (TMF) history by job, status, environment, time range, dimension, event, and reprocessing state.
 - Track processed records, completion, warnings, errors, messages, runtime, host, and user metadata.
+- Store all time in UTC and switch any screen's timestamps between UTC and the viewer's local time with a per-browser toggle.
 - Build private or shared dashboards in Insight Studio using governed application datasets or approved database tables.
 - Publish sandboxed Power BI, Tableau, Qlik, Superset, Metabase, Grafana, and other external BI reports with user and group access rules.
 
@@ -132,7 +133,7 @@ Variable | Purpose
 `JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` | Overrides limits by environment, for example `DEV=2,QA=1,PROD=2`.
 `JOBSEEKER_OPENVSCODE_TOKEN` | Protects the browser-based Python workspace.
 `JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES` | Stops an unused editor automatically; use `0` to keep it running.
-`JOBSEEKER_TIMEZONE` | Application timezone for every timestamp (dashboards, TMF, analytics, email). Any PHP timezone identifier; defaults to `America/Sao_Paulo`.
+`JOBSEEKER_TIMEZONE` | The app always stores and computes time in UTC; this only sets which side of the per-browser UI timezone toggle a first-time viewer starts on (`UTC` by default, or any PHP timezone identifier to start on local time).
 `JOBSEEKER_COMMAND_GUARD_ENFORCE` | When `true`, a critical/high `CommandGuard` finding blocks job creation instead of only warning.
 
 Connector values for local workers can be placed in an ignored `.env.connectors` file based on [.env.connectors.example](.env.connectors.example).
