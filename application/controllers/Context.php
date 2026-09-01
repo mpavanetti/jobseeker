@@ -15,7 +15,6 @@ class Context extends BaseController
       $this->load->model('Context_model','model');
       $this->load->library('session');
       $this->isLoggedIn();   
-      date_default_timezone_set('America/Sao_Paulo');
     }
 
     private function selectedContextEnvironment()

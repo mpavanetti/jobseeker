@@ -24,3 +24,11 @@
 .jd-empty { font-size: 12px; margin: 4px 0 0; }
 .jd-summary { font-size: 12px; color: #6b7684; }
 .jd-summary .fa { margin-right: 5px; }
+.jd-command-guard { margin-top: 10px; padding: 8px 10px; border: 1px solid #e6b0aa; border-radius: 6px; background: #fdedec; }
+.jd-command-guard.jd-command-guard-blocking { border-color: #c0392b; }
+.jd-command-guard .jd-group-label { color: #a5352a; }
+.jd-command-guard .jd-command-guard-headline { font-size: 12px; font-weight: 600; color: #a5352a; margin: 2px 0 6px; }
+.jd-command-guard .jd-warnings li { color: #6b7684; margin-bottom: 8px; }
+.jd-command-guard .jd-warnings li.jd-bad > strong { color: #c0392b; }
+.jd-command-guard .jd-warnings li.jd-warn > strong { color: #b9770e; }
+.jd-command-guard .jd-warnings li code { display: inline-block; margin: 3px 0; padding: 1px 5px; font-size: 11px; background: #fff; border: 1px solid #e6b0aa; border-radius: 3px; word-break: break-all; }
