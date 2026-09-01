@@ -142,6 +142,43 @@ $route['InsertGenericSettings'] = "GenericSettings/insertGenericSetting";
 $route['DeleteGenericSettings'] = "GenericSettings/deleteGenericSetting";
 $route['updateGenericSetting'] = "GenericSettings/updateGenericSetting";
 
+# Data Engineering : Spark job clusters and ML runtimes
+
+$route['data-engineering/spark-clusters'] = "SparkClusters/index";
+$route['data-engineering/spark-clusters/list'] = "SparkClusters/listClusters";
+$route['data-engineering/spark-clusters/runtimes'] = "SparkClusters/runtimes";
+$route['data-engineering/spark-clusters/get/(:num)'] = "SparkClusters/get/$1";
+$route['data-engineering/spark-clusters/save'] = "SparkClusters/save";
+$route['data-engineering/spark-clusters/delete'] = "SparkClusters/delete";
+
+$route['data-engineering/spark-jobs'] = "SparkJobs/index";
+$route['data-engineering/spark-jobs/list'] = "SparkJobs/listJobs";
+$route['data-engineering/spark-jobs/samples'] = "SparkJobs/samples";
+$route['data-engineering/spark-jobs/get/(:num)'] = "SparkJobs/get/$1";
+$route['data-engineering/spark-jobs/save'] = "SparkJobs/save";
+$route['data-engineering/spark-jobs/delete'] = "SparkJobs/delete";
+$route['data-engineering/spark-jobs/run'] = "SparkJobs/run";
+$route['data-engineering/spark-jobs/status/(:num)'] = "SparkJobs/status/$1";
+$route['data-engineering/spark-jobs/logs/(:num)'] = "SparkJobs/logs/$1";
+$route['data-engineering/spark-jobs/cancel'] = "SparkJobs/cancel";
+
+$route['data-engineering/ml-runtimes'] = "MlRuntimes/index";
+$route['data-engineering/ml-runtimes/list'] = "MlRuntimes/listRuntimes";
+$route['data-engineering/ml-runtimes/get/(:num)'] = "MlRuntimes/get/$1";
+$route['data-engineering/ml-runtimes/save'] = "MlRuntimes/save";
+$route['data-engineering/ml-runtimes/delete'] = "MlRuntimes/delete";
+
+$route['data-engineering/ml-jobs'] = "MlJobs/index";
+$route['data-engineering/ml-jobs/list'] = "MlJobs/listJobs";
+$route['data-engineering/ml-jobs/samples'] = "MlJobs/samples";
+$route['data-engineering/ml-jobs/get/(:num)'] = "MlJobs/get/$1";
+$route['data-engineering/ml-jobs/save'] = "MlJobs/save";
+$route['data-engineering/ml-jobs/delete'] = "MlJobs/delete";
+$route['data-engineering/ml-jobs/run'] = "MlJobs/run";
+$route['data-engineering/ml-jobs/status/(:num)'] = "MlJobs/status/$1";
+$route['data-engineering/ml-jobs/logs/(:num)'] = "MlJobs/logs/$1";
+$route['data-engineering/ml-jobs/cancel'] = "MlJobs/cancel";
+
 
 
 

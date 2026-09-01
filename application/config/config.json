@@ -21,5 +21,8 @@
     "setup": {
         "enabled": false,
         "env": ""
+    },
+    "compute": {
+        "enabled": true
     }
 }

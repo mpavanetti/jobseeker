@@ -1681,6 +1681,12 @@ class BaseController extends CI_Controller {
 			// builds its own Authorization header from the runtime config.
 			$this->global ['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
 
+			// Data Engineering (Spark clusters / ML runtimes) can be turned off
+			// per-install. Defaults on when the key is absent from config.json.
+			$this->global ['compute_enabled'] = isset($jsonToArray->compute->enabled)
+				? (bool) $jsonToArray->compute->enabled
+				: TRUE;
+
 
 			// Set global var to detect OS Version
 			if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {

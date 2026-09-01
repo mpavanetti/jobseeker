@@ -39,6 +39,11 @@ $jobseekerExecutorMonitorActive = $jobseekerCurrentController === 'jobexecution'
 $jobseekerDockerMonitorActive = $jobseekerCurrentController === 'dockermonitoring';
 $jobseekerTransactionMonitorActive = $jobseekerCurrentController === 'tmf';
 $jobseekerMonitoringActive = $jobseekerExecutorMonitorActive || $jobseekerDockerMonitorActive;
+$jobseekerSparkClustersActive = $jobseekerCurrentController === 'sparkclusters';
+$jobseekerSparkJobsActive = $jobseekerCurrentController === 'sparkjobs';
+$jobseekerMlRuntimesActive = $jobseekerCurrentController === 'mlruntimes';
+$jobseekerMlJobsActive = $jobseekerCurrentController === 'mljobs';
+$jobseekerDataEngineeringActive = $jobseekerSparkClustersActive || $jobseekerSparkJobsActive || $jobseekerMlRuntimesActive || $jobseekerMlJobsActive;
 $jobseekerSelectedEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE);
 if (trim((string) $jobseekerSelectedEnvironment) === '') {
   $jobseekerPreferenceUserId = preg_replace('/[^0-9]/', '', (string) (isset($user_id) ? $user_id : ''));
@@ -1248,6 +1253,38 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </ul>
             </li>
           <?php } } ?>
+          <?php if(($role == ROLE_ADMIN || $role == ROLE_MANAGER) && ! empty($compute_enabled)) { ?>
+          <li class="treeview<?php echo $jobseekerDataEngineeringActive ? ' active' : ''; ?>">
+            <a href="#">
+              <i class="fa fa-bolt"></i> <span>Data Engineering</span>
+              <span class="pull-right-container">
+                <i class="fa fa-angle-left pull-right"></i>
+              </span>
+            </a>
+            <ul class="treeview-menu">
+              <li<?php echo $jobseekerSparkClustersActive ? ' class="active"' : ''; ?>>
+                <a href="<?php echo base_url(); ?>data-engineering/spark-clusters">
+                  <i class="fa fa-server"></i> <span>Spark Clusters</span>
+                </a>
+              </li>
+              <li<?php echo $jobseekerSparkJobsActive ? ' class="active"' : ''; ?>>
+                <a href="<?php echo base_url(); ?>data-engineering/spark-jobs">
+                  <i class="fa fa-fire"></i> <span>Spark Jobs</span>
+                </a>
+              </li>
+              <li<?php echo $jobseekerMlRuntimesActive ? ' class="active"' : ''; ?>>
+                <a href="<?php echo base_url(); ?>data-engineering/ml-runtimes">
+                  <i class="fa fa-cubes"></i> <span>ML Runtimes</span>
+                </a>
+              </li>
+              <li<?php echo $jobseekerMlJobsActive ? ' class="active"' : ''; ?>>
+                <a href="<?php echo base_url(); ?>data-engineering/ml-jobs">
+                  <i class="fa fa-flask"></i> <span>ML Jobs</span>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <?php } ?>
           <?php if($role == ROLE_ADMIN || $role == ROLE_MANAGER) { ?>
           <li class="treeview<?php echo $jobseekerMonitoringActive ? ' active' : ''; ?>">
             <a href="#">
