@@ -1406,7 +1406,6 @@ $(document).on('click', '#table6 .btnSelect', function(event){
     var jenkins_url = <?php echo json_encode($jenkins_url); ?>;
     var jenkins_username = '';
     var jenkins_token = '';
-    var jenkins_authorization = <?php echo json_encode($jenkins_authorization); ?>;
     jenkins_url = String(jenkins_url || '');
     if (jenkins_url && jenkins_url.charAt(jenkins_url.length - 1) !== '/') {
       jenkins_url += '/';

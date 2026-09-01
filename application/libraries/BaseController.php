@@ -1676,7 +1676,9 @@ class BaseController extends CI_Controller {
 			$this->global ['jenkins_url'] = $jsonToArray->jenkins->url;
 			$this->global ['jenkins_username'] = '';
 			$this->global ['jenkins_token'] = '';
-			$this->global ['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
+			// The Jenkins credential is never exposed to the browser. All Jenkins
+			// traffic goes through the authenticated server-side proxy, which
+			// builds its own Authorization header from the runtime config.
 			$this->global ['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
 
 

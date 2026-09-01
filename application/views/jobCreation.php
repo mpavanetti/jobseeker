@@ -11,6 +11,15 @@
     margin-left: auto;
     margin-right: auto;
   }
+  .schedule-validation { margin-top: 6px; padding: 8px 10px; border: 1px solid #d7dde5; border-radius: 5px; background: #f7f9fb; font-size: 12px; }
+  .schedule-validation .sv-spec { margin-bottom: 4px; }
+  .schedule-validation .sv-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a94a6; margin-right: 4px; }
+  .schedule-validation code { background: #fff; border: 1px solid #d7dde5; border-radius: 3px; padding: 1px 5px; }
+  .schedule-validation .sv-line { margin-top: 3px; }
+  .schedule-validation .sv-line .fa { margin-right: 5px; }
+  .schedule-validation .sv-ok { color: #2e8540; }
+  .schedule-validation .sv-warn { color: #b9770e; }
+  .schedule-validation .sv-error { color: #c0392b; }
 
   .checkbox input {
 
@@ -1922,6 +1931,17 @@
         <?php echo $success; ?>
       </div>
     <?php } ?>
+    <?php
+    $commandGuardWarning = $this->session->flashdata('command_guard_warning');
+    if($commandGuardWarning)
+    {
+      $this->session->unset_userdata('command_guard_warning');
+      ?>
+      <div class="alert alert-warning alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+        <i class="fa fa-exclamation-triangle"></i> <?php echo html_escape($commandGuardWarning); ?>
+      </div>
+    <?php } ?>
     <script>window.jobseekerSavedJobs = <?php echo json_encode(array_values($savedJobNames)); ?>;</script>
 
     <div class="row">
@@ -2777,6 +2797,12 @@
                             <input type="text" class="form-control" id="customCronExpression" name="customCronExpression" maxlength="120" autocomplete="off" placeholder="H 2 * * 1-5">
                             <p class="help-block">Use a five-field Jenkins cron expression such as <code>H 2 * * 1-5</code> or <code>H/15 * * * *</code>.</p>
                           </div>
+                        </div>
+                      </div>
+
+                      <div class="row" id="scheduleValidationRow" style="display: none;">
+                        <div class="col-md-12">
+                          <div id="scheduleValidation" class="schedule-validation" aria-live="polite"></div>
                         </div>
                       </div>
                     </div>
@@ -7154,7 +7180,6 @@
      var jenkins_url = '<?php echo $jenkins_url; ?>';
     var jenkins_username = '';
     var jenkins_token = '';
-     var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
       var availableJobsRefreshTimer = null;
       var availableJobsRefreshIntervalMs = 10000;
       var savedJobName = <?php echo json_encode($savedJobName); ?>;
@@ -8307,6 +8332,86 @@
     $('#checkBuild').change(updateSchedulePanel);
     $('#action').change(updateScheduleActionForms);
     $('#send, #saveAndTrigger').hover(confirmEveryMinuteSchedule);
+
+    // Live schedule validation: resolve the form to a Jenkins TimerTrigger spec,
+    // validate it offline, and show Jenkins' own previous / next run times.
+    (function() {
+      var svTimer = null;
+      var svSeq = 0;
+
+      function svEscape(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+      }
+
+      function svPayload() {
+        var payload = {
+          checkBuild: $('#checkBuild').is(':checked') ? '1' : '0',
+          action: $('#action').val() || '0',
+          tag: $('#tag').val() || '',
+          customCronExpression: $('#customCronExpression').val() || '',
+          repetitiveMinute: $('#repetitiveMinute').val() || '',
+          repetitiveHour: $('#repetitiveHour').val() || '',
+          repetitiveDayOfMonth: $('#repetitiveDayOfMonth').val() || '',
+          repetitiveMonth: $('#repetitiveMonth').val() || '',
+          repetitiveDayOfWeek: $('#repetitiveDayOfWeek').val() || ''
+        };
+        $.each(['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek'], function(i, id) {
+          payload[id] = $('#' + id).val() || [];
+        });
+        return payload;
+      }
+
+      function svRender(data) {
+        var $row = $('#scheduleValidationRow');
+        var $box = $('#scheduleValidation');
+        if (! data) { $row.hide(); $box.empty(); return; }
+
+        var html = '';
+        if (data.spec) {
+          html += '<div class="sv-spec"><span class="sv-label">Jenkins spec</span><code>' + svEscape(data.spec) + '</code></div>';
+        }
+        if (! data.ok && data.error) {
+          html += '<div class="sv-line sv-error"><i class="fa fa-times-circle"></i>' + svEscape(data.error) + '</div>';
+        }
+        if (data.jenkins && data.jenkins.message) {
+          var level = data.jenkins.level === 'error' ? 'sv-error' : (data.jenkins.level === 'warning' ? 'sv-warn' : 'sv-ok');
+          var icon = data.jenkins.level === 'error' ? 'fa-times-circle' : (data.jenkins.level === 'warning' ? 'fa-exclamation-triangle' : 'fa-check-circle');
+          html += '<div class="sv-line ' + level + '"><i class="fa ' + icon + '"></i>' + svEscape(data.jenkins.message) + '</div>';
+        }
+        $.each(data.warnings || [], function(i, w) {
+          html += '<div class="sv-line sv-warn"><i class="fa fa-exclamation-triangle"></i>' + svEscape(w) + '</div>';
+        });
+        if (data.ok && ! data.error && ! html) {
+          html = '<div class="sv-line sv-ok"><i class="fa fa-check-circle"></i>Schedule looks valid.</div>';
+        }
+
+        $box.html(html);
+        $row.toggle(html !== '');
+      }
+
+      function svRefresh() {
+        if (! $('#checkBuild').is(':checked') || ($('#action').val() || '0') === '0') {
+          svRender(null);
+          return;
+        }
+        var seq = ++svSeq;
+        $.post(baseURL + 'jobCreation/validateSchedule', svPayload())
+          .done(function(data) { if (seq === svSeq) { svRender(data); } })
+          .fail(function() { if (seq === svSeq) { svRender(null); } });
+      }
+
+      function svSchedule() {
+        clearTimeout(svTimer);
+        svTimer = setTimeout(svRefresh, 350);
+      }
+
+      $('#checkBuild, #action').on('change', svSchedule);
+      $(document).on('change keyup', '#customCronExpression', svSchedule);
+      $(document).on('change',
+        '#tag, #repetitiveMinute, #repetitiveHour, #repetitiveDayOfMonth, #repetitiveMonth, #repetitiveDayOfWeek, ' +
+        '#singleMinute, #singleHour, #singleDayOfMonth, #singleMonth, #singleDayOfWeek',
+        svSchedule);
+    })();
 
 $('#abort').click(function(){
   function updateTimeoutRequiredFields() {

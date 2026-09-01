@@ -132,6 +132,8 @@ Variable | Purpose
 `JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` | Overrides limits by environment, for example `DEV=2,QA=1,PROD=2`.
 `JOBSEEKER_OPENVSCODE_TOKEN` | Protects the browser-based Python workspace.
 `JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES` | Stops an unused editor automatically; use `0` to keep it running.
+`JOBSEEKER_TIMEZONE` | Application timezone for every timestamp (dashboards, TMF, analytics, email). Any PHP timezone identifier; defaults to `America/Sao_Paulo`.
+`JOBSEEKER_COMMAND_GUARD_ENFORCE` | When `true`, a critical/high `CommandGuard` finding blocks job creation instead of only warning.
 
 Connector values for local workers can be placed in an ignored `.env.connectors` file based on [.env.connectors.example](.env.connectors.example).
 
@@ -173,6 +175,7 @@ Browser requests to Jenkins pass through an authenticated server-side proxy. Jen
 
 - Role-based access controls protect administrative and job-management actions.
 - CSRF validation covers application mutations and proxied Jenkins mutations.
+- Operator-authored job commands are screened at creation for destructive and exfiltration patterns (`CommandGuard`); findings are advisory by default and become blocking with `JOBSEEKER_COMMAND_GUARD_ENFORCE=true`. This is a guard rail, not a sandbox - see [doc/jobseeker/Security/command-hardening.md](doc/jobseeker/Security/command-hardening.md) for the container controls that contain a hostile job.
 - Connector secrets are resolved only when a build starts, scoped by environment and job, materialized in protected temporary files, and removed after execution.
 - Insight Studio resolves datasets and fields through server-side allowlists; it does not expose arbitrary SQL or database credentials to the browser.
 - Connected BI reports are rebuilt into restricted iframe elements with sandbox and referrer controls.
@@ -186,6 +189,8 @@ Topic | Guide
 Documentation index | [doc/README.md](doc/README.md)
 Job management | [doc/jobseeker/JobManagement/README.md](doc/jobseeker/JobManagement/README.md)
 Visual pipelines | [doc/jobseeker/ETL/pipelines/README.md](doc/jobseeker/ETL/pipelines/README.md)
+Security model and hardening | [doc/jobseeker/Security/README.md](doc/jobseeker/Security/README.md)
+Job command hardening | [doc/jobseeker/Security/command-hardening.md](doc/jobseeker/Security/command-hardening.md)
 Data Assets | [doc/jobseeker/ETL/data-assets/README.md](doc/jobseeker/ETL/data-assets/README.md)
 ETL connectors | [doc/jobseeker/ETL/connectors/README.md](doc/jobseeker/ETL/connectors/README.md)
 Transaction Monitoring Framework | [doc/jobseeker/TransactionMonitoring/README.md](doc/jobseeker/TransactionMonitoring/README.md)

@@ -154,4 +154,4 @@ $dashboardConfig = array(
 <script src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.js"></script>
 <script>window.jobseekerDashboardConfig = <?php echo json_encode($dashboardConfig, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;</script>
-<script src="<?php echo base_url(); ?>assets/js/dashboard.js?v=41"></script>
+<script src="<?php echo base_url(); ?>assets/js/dashboard.js?v=42"></script>

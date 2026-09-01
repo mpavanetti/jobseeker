@@ -418,6 +418,16 @@ class JobCreation extends BaseController
         return;
       }
 
+      $previewGuard = $this->commandGuard()->inspectSources(array('Inline Python' => array('text' => $sourceCode, 'language' => 'python')));
+      if (! empty($previewGuard['findings'])) {
+        $previewGuardSummary = $this->commandGuard()->summarize($previewGuard['findings']);
+        log_message('error', 'CommandGuard '.($previewGuard['blocked'] ? 'blocked' : 'advisory').' for inline Python preview: '.$previewGuardSummary);
+        if ($previewGuard['blocked']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Preview blocked. '.$previewGuardSummary), 422);
+          return;
+        }
+      }
+
       $requirementsText = $this->cleanPythonRequirementsText($this->input->post('pythonRequirementsText'));
       if ($requirementsText === FALSE) {
         $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Your Python requirements.txt content is too large or contains invalid characters.'), 400);
@@ -844,93 +854,6 @@ class JobCreation extends BaseController
 
       echo 'File uploaded and extracted.';
 
-      }
-
-      private function cronFieldString($values, $min, $max) {
-        if (! is_array($values)) {
-          $values = array($values);
-        }
-
-        $cleanValues = array();
-        foreach ($values as $value) {
-          $value = trim((string) $value);
-
-          if ($value === '') {
-            continue;
-          }
-
-          if ($value === '*') {
-            $cleanValues[] = '*';
-            continue;
-          }
-
-          if (! ctype_digit($value)) {
-            return FALSE;
-          }
-
-          $number = (int) $value;
-          if ($number < $min || $number > $max) {
-            return FALSE;
-          }
-
-          $cleanValues[] = (string) $number;
-        }
-
-        $cleanValues = array_values(array_unique($cleanValues));
-        if (empty($cleanValues)) {
-          return FALSE;
-        }
-
-        if (in_array('*', $cleanValues, TRUE) && count($cleanValues) > 1) {
-          $cleanValues = array_values(array_diff($cleanValues, array('*')));
-        }
-
-        return implode(',', $cleanValues);
-      }
-
-      private function cronMinuteStepString($value) {
-        $value = trim((string) $value);
-
-        if ($value === '*') {
-          return '*';
-        }
-
-        if (! ctype_digit($value)) {
-          return FALSE;
-        }
-
-        $number = (int) $value;
-        if ($number < 1 || $number > 59) {
-          return FALSE;
-        }
-
-        return 'H/'.$number;
-      }
-
-      private function cleanCustomCronExpression($value) {
-        $value = preg_replace('/\s+/', ' ', trim((string) $value));
-
-        if ($value === '' || strlen($value) > 120) {
-          return FALSE;
-        }
-
-        $allowedTags = array('@hourly', '@daily', '@weekly', '@monthly', '@annually', '@yearly', '@midnight');
-        if (in_array($value, $allowedTags, TRUE)) {
-          return $value;
-        }
-
-        $parts = preg_split('/\s+/', $value);
-        if (count($parts) !== 5) {
-          return FALSE;
-        }
-
-        foreach ($parts as $part) {
-          if ($part === '' || ! preg_match('/^[A-Za-z0-9*?,\/#LWH()\-]+$/', $part)) {
-            return FALSE;
-          }
-        }
-
-        return implode(' ', $parts);
       }
 
       private function removeUploadDirectory($path) {
@@ -3107,6 +3030,122 @@ class JobCreation extends BaseController
         return $this->dependencyscanner;
       }
 
+      private function commandGuard() {
+        $this->load->library('CommandGuard');
+        return $this->commandguard;
+      }
+
+      private function cronSchedule() {
+        $this->load->library('JenkinsCronSchedule');
+        return $this->jenkinscronschedule;
+      }
+
+      /**
+       * Collect just the "Schedule Job" form fields so JenkinsCronSchedule can
+       * turn them into a single Jenkins <spec> and validate it.
+       */
+      private function scheduleRequestFields() {
+        $fields = array('checkBuild', 'action', 'tag', 'customCronExpression',
+          'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek');
+        $data = array();
+        foreach ($fields as $field) {
+          $data[$field] = $this->input->post($field);
+        }
+        foreach (array('singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek') as $field) {
+          $value = $this->input->post($field);
+          $data[$field] = is_array($value) ? $value : array($value);
+        }
+        return $data;
+      }
+
+      /**
+       * Live schedule validation for Job Creation: builds the Jenkins spec from
+       * the form, validates it offline, and (best effort) asks Jenkins for the
+       * previous / next fire times via the TimerTrigger form-check endpoint.
+       */
+      public function validateSchedule() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+
+        $result = $this->cronSchedule()->build($this->scheduleRequestFields());
+        $payload = array(
+          'ok'       => $result['ok'],
+          'mode'     => $result['mode'],
+          'spec'     => $result['spec'],
+          'error'    => $result['error'],
+          'warnings' => $result['warnings'],
+        );
+
+        if ($result['ok'] && $result['spec'] !== '' && strpos($result['spec'], '@') !== 0) {
+          $check = $this->requestJenkins('GET', 'descriptorByName/hudson.triggers.TimerTrigger/checkSpec?value=' . rawurlencode($result['spec']));
+          if ((int) $check['status'] === 200 && preg_match('#<div class="(ok|warning|error)">(.*?)</div>#s', (string) $check['body'], $m)) {
+            $payload['jenkins'] = array(
+              'level'   => $m[1],
+              'message' => trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
+            );
+            if ($m[1] === 'error') {
+              $payload['ok'] = FALSE;
+              if ($payload['error'] === '') {
+                $payload['error'] = $payload['jenkins']['message'];
+              }
+            }
+          }
+        }
+
+        $this->jsonJobCreationResponse($payload);
+      }
+
+      /**
+       * Screen the shell / batch commands an operator supplied for this job
+       * (typed command lines, inline Python, and - once a job name is known -
+       * the generated <command> in Jenkins) against CommandGuard. Advisory by
+       * default; the "blocked" flag is only TRUE when
+       * JOBSEEKER_COMMAND_GUARD_ENFORCE is set to a truthy value.
+       *
+       * @param  string $jobName
+       * @param  array<string,array{text:string,language?:string}> $extraSources
+       * @return array{findings:array,blocked:bool,critical:int,high:int,medium:int}
+       */
+      private function screenSubmittedCommands($jobName = '', array $extraSources = array()) {
+        $sources = $extraSources;
+
+        $typed = array(
+          'Linux command'   => array('field' => 'linuxCommandLine', 'language' => 'shell'),
+          'Windows command' => array('field' => 'windowsCommandLine', 'language' => 'batch'),
+        );
+        foreach ($typed as $label => $meta) {
+          $value = (string) $this->input->post($meta['field']);
+          if (trim($value) !== '' && $value !== '0' && $value !== '1') {
+            $sources[$label] = array('text' => $value, 'language' => $meta['language']);
+          }
+        }
+
+        $inlineCode = (string) $this->input->post('pythonInlineCode');
+        if (trim($inlineCode) !== '') {
+          $sources['Inline Python'] = array('text' => $inlineCode, 'language' => 'python');
+        }
+
+        if (empty($sources) && $jobName !== '') {
+          $configResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($jobName).'/config.xml');
+          if ((int) $configResponse['status'] === 200 && preg_match_all('#<command>(.*?)</command>#s', (string) $configResponse['body'], $commandMatches)) {
+            foreach ($commandMatches[1] as $index => $command) {
+              $sources['Generated command '.($index + 1)] = array(
+                'text' => html_entity_decode($command, ENT_QUOTES | ENT_XML1, 'UTF-8'),
+                'language' => 'shell',
+              );
+            }
+          }
+        }
+
+        if (empty($sources)) {
+          return array('findings' => array(), 'blocked' => FALSE, 'critical' => 0, 'high' => 0, 'medium' => 0);
+        }
+
+        return $this->commandGuard()->inspectSources($sources);
+      }
+
       private function scanAndResolve($sources, $environment, $jobName) {
         $scan = $this->dependencyScanner()->scan($sources);
         $this->load->model('JobDependency_model', 'jobDependencies');
@@ -3158,6 +3197,14 @@ class JobCreation extends BaseController
         }
 
         $resolved = $this->scanAndResolve($this->collectDependencySources($jobName), $environment, $jobName);
+        $commandScreen = $this->screenSubmittedCommands($jobName);
+        $resolved['commandSafety'] = array(
+          'findings' => $commandScreen['findings'],
+          'enforced' => $this->commandGuard()->isEnforced(),
+          'critical' => $commandScreen['critical'],
+          'high'     => $commandScreen['high'],
+          'medium'   => $commandScreen['medium'],
+        );
         if ($jobName !== '' && (string) $this->input->post('persist') === '1') {
           $this->load->model('JobDependency_model', 'jobDependencies');
           $this->jobDependencies->replaceForJob($jobName, $environment, $resolved);
@@ -3351,17 +3398,10 @@ class JobCreation extends BaseController
                 $timestamp = $this->security->xss_clean($this->input->post('timestamp'));
 
 
-                // Trigger Build Periodically Option 
+                // Trigger Build Periodically Option. The schedule form fields
+                // (single* / repetitive* / tag / customCronExpression) are read and
+                // validated by JenkinsCronSchedule via scheduleRequestFields().
                  $checkBuild = $this->security->xss_clean($this->input->post('checkBuild'));
-                 $action = $this->security->xss_clean($this->input->post('action'));
-
-                // Single Build Options
-                $singleMinute = $this->input->post('singleMinute');
-                $singleHour = $this->input->post('singleHour');
-                $singleDayOfMonth = $this->input->post('singleDayOfMonth');
-                $singleMonth = $this->input->post('singleMonth');
-                $singleDayOfWeek = $this->input->post('singleDayOfWeek');
-                $customCronExpression = $this->security->xss_clean($this->input->post('customCronExpression'));
 
                 // Execute a Windows Command Option
 
@@ -3742,16 +3782,6 @@ class JobCreation extends BaseController
                 }
 
                 // END Linux File Upload
-          
-                 // Repetitive Build Options
-                $repetitiveMinute = $this->security->xss_clean($this->input->post('repetitiveMinute'));
-                $repetitiveHour = $this->security->xss_clean($this->input->post('repetitiveHour'));
-                $repetitiveDayOfMonth = $this->security->xss_clean($this->input->post('repetitiveDayOfMonth'));
-                $repetitiveMonth = $this->security->xss_clean($this->input->post('repetitiveMonth'));
-                $repetitiveDayOfWeek = $this->security->xss_clean($this->input->post('repetitiveDayOfWeek'));
-
-                // Tag Build Option
-                $tag = $this->security->xss_clean($this->input->post('tag'));
 
                 // Abort the build Checkbox
                 $abort = $this->security->xss_clean($this->input->post('abort'));
@@ -3801,43 +3831,47 @@ class JobCreation extends BaseController
                 }
 
                
-                // Array to String Conversion Section
-                $singleMinuteString = $this->cronFieldString($singleMinute, 0, 59);
-                $singleHourString = $this->cronFieldString($singleHour, 0, 23);
-                $singleDayOfMonthString = $this->cronFieldString($singleDayOfMonth, 1, 31);
-                $singleMonthString = $this->cronFieldString($singleMonth, 1, 12);
-                $singleDayOfWeekString = $this->cronFieldString($singleDayOfWeek, 1, 7);
-
-                $repetitiveMinuteString = $this->cronMinuteStepString($repetitiveMinute);
-                $repetitiveHourString = $this->cronFieldString($repetitiveHour, 0, 23);
-                $repetitiveDayOfMonthString = $this->cronFieldString($repetitiveDayOfMonth, 1, 31);
-                $repetitiveMonthString = $this->cronFieldString($repetitiveMonth, 1, 12);
-                $repetitiveDayOfWeekString = $this->cronFieldString($repetitiveDayOfWeek, 1, 7);
-                $customCronString = $this->cleanCustomCronExpression($customCronExpression);
-
-                if($checkBuild == 1){
-                  if($action == "single" && ($singleMinuteString === FALSE || $singleHourString === FALSE || $singleDayOfMonthString === FALSE || $singleMonthString === FALSE || $singleDayOfWeekString === FALSE)){
-                    $this->session->set_flashdata('error', 'You missed to select valid values for Single Execution scheduling.');
-                    redirect('JobCreation');
-                  } else if($action == "repetitive" && ($repetitiveMinuteString === FALSE || $repetitiveHourString === FALSE || $repetitiveDayOfMonthString === FALSE || $repetitiveMonthString === FALSE || $repetitiveDayOfWeekString === FALSE)){
-                    $this->session->set_flashdata('error', 'You missed to select valid values for Repetitive Execution scheduling.');
-                    redirect('JobCreation');
-                  } else if($action == "tags" && ! in_array($tag, array('@hourly', '@daily', '@weekly', '@monthly', '@annually', '@yearly', '@midnight'), TRUE)){
-                    $this->session->set_flashdata('error', 'You missed to select a valid Execution Tag option.');
-                    redirect('JobCreation');
-                  } else if($action == "cron" && $customCronString === FALSE){
-                    $this->session->set_flashdata('error', 'You missed to provide a valid Jenkins cron expression. Use 5 fields such as H 2 * * 1-5.');
-                    redirect('JobCreation');
-                  } else if($action != "single" && $action != "repetitive" && $action != "tags" && $action != "cron"){
-                    $this->session->set_flashdata('error', 'You missed to select one field value for Build Periodically function');
-                    redirect('JobCreation');
-                  }
+                // Schedule: build the single Jenkins TimerTrigger <spec> for whichever
+                // mode (single / repetitive / tag / custom cron) the operator chose and
+                // validate it offline against the grammar Jenkins itself accepts.
+                $scheduleResult = $this->cronSchedule()->build($this->scheduleRequestFields());
+                if ($checkBuild == 1 && ! $scheduleResult['ok']) {
+                  $this->session->set_flashdata('error', 'Schedule not saved: '.$scheduleResult['error']);
+                  redirect('JobCreation');
+                }
+                $scheduleSpec = $checkBuild == 1 ? $scheduleResult['spec'] : '';
+                if ($checkBuild == 1 && ! empty($scheduleResult['warnings'])) {
+                  $this->session->set_flashdata('command_guard_warning', 'Schedule note: '.implode(' ', $scheduleResult['warnings']));
                 }
 
                 if ($jobList != null) {
                   $jobListString = rtrim(implode(', ', $jobList), ',');
                 }
                 // Array to String Conversion Section
+
+                // Screen operator-authored commands for destructive / exfil patterns before
+                // they are compiled into a Jenkins job. Advisory unless JOBSEEKER_COMMAND_GUARD_ENFORCE.
+                $guardExtraSources = array();
+                if (is_array($linuxScriptExecution) && ! empty($linuxScriptExecution['scriptPath']) && is_file($linuxScriptExecution['scriptPath'])) {
+                  $uploadedScriptBody = @file_get_contents($linuxScriptExecution['scriptPath'], FALSE, NULL, 0, 200000);
+                  if (is_string($uploadedScriptBody) && trim($uploadedScriptBody) !== '') {
+                    $guardExtraSources['Uploaded shell script'] = array('text' => $uploadedScriptBody, 'language' => 'shell');
+                  }
+                }
+                if ($executionStrategy == 'command' && trim((string) $filePath) !== '') {
+                  $guardExtraSources['Windows command'] = array('text' => (string) $filePath, 'language' => 'batch');
+                }
+                $commandScreen = $this->screenSubmittedCommands($job_name, $guardExtraSources);
+                if (! empty($commandScreen['findings'])) {
+                  $commandScreenSummary = $this->commandGuard()->summarize($commandScreen['findings']);
+                  if ($commandScreen['blocked']) {
+                    log_message('error', 'CommandGuard blocked job "'.$job_name.'": '.$commandScreenSummary);
+                    $this->session->set_flashdata('error', 'This job was not created. '.$commandScreenSummary.' Remove the flagged commands, or clear JOBSEEKER_COMMAND_GUARD_ENFORCE to allow them.');
+                    redirect('JobCreation');
+                  }
+                  log_message('error', 'CommandGuard advisory for job "'.$job_name.'": '.$commandScreenSummary);
+                  $this->session->set_flashdata('command_guard_warning', $commandScreenSummary.' The job was still created - review the flagged commands in the job\'s dependency panel.');
+                }
 
                 // XMl Creation Node Section
 
@@ -3857,47 +3891,14 @@ class JobCreation extends BaseController
                 $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment));
                 $this->appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment);
 
-                // Create Trigger Elements
-                if($checkBuild == 1){ // If Build Periodically Build is selected then
-
-                  // If Single Build option is selected then
-                    if($action == "single") {
-                      $triggers = $dom->createElement('triggers');
-                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
-                      $spec = $dom->createElement('spec', $singleMinuteString.' '.$singleHourString.' '.$singleDayOfMonthString.' '.$singleMonthString.' '.$singleDayOfWeekString);
-                      $hudson_triggers->appendChild($spec);  
-                      $triggers->appendChild($hudson_triggers);    
-                      $root->appendChild($triggers);
-                  }
-
-                  // If Repetitive Build option is selected then
-                  if($action == "repetitive") {
-                     $triggers = $dom->createElement('triggers');
-                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
-                      $spec = $dom->createElement('spec', $repetitiveMinuteString.' '.$repetitiveHourString.' '.$repetitiveDayOfMonthString.' '.$repetitiveMonthString.' '.$repetitiveDayOfWeekString);
-                      $hudson_triggers->appendChild($spec);  
-                      $triggers->appendChild($hudson_triggers);    
-                      $root->appendChild($triggers);
-                  }
-
-                  // If Single Tags option is selected then
-                  if($action == "tags") {
-                     $triggers = $dom->createElement('triggers');
-                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
-                      $spec = $dom->createElement('spec', $tag);
-                      $hudson_triggers->appendChild($spec);  
-                      $triggers->appendChild($hudson_triggers);    
-                      $root->appendChild($triggers);
-                  }
-
-                  if($action == "cron") {
-                     $triggers = $dom->createElement('triggers');
-                      $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
-                      $spec = $dom->createElement('spec', $customCronString);
-                      $hudson_triggers->appendChild($spec);
-                      $triggers->appendChild($hudson_triggers);
-                      $root->appendChild($triggers);
-                  }
+                // Create Trigger Elements - one TimerTrigger with the spec built above,
+                // regardless of which schedule mode produced it.
+                if($checkBuild == 1 && $scheduleSpec !== '') {
+                  $triggers = $dom->createElement('triggers');
+                  $hudson_triggers = $dom->createElement('hudson.triggers.TimerTrigger');
+                  $hudson_triggers->appendChild($dom->createElement('spec', $scheduleSpec));
+                  $triggers->appendChild($hudson_triggers);
+                  $root->appendChild($triggers);
                 }
 
                 // Create builders Elements

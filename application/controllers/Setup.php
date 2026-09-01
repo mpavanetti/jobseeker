@@ -10,8 +10,57 @@ class Setup extends BaseController
      */
     public function __construct()
     {
-        parent::__construct();  
+        parent::__construct();
         $this->load->helper('url');
+        $this->guardSetupAccess();
+    }
+
+    /**
+     * The setup wizard writes application/config/config.json (Jenkins URL and
+     * credentials) and opens server-side database connections to whatever host
+     * the form supplies. Once the instance has been provisioned it must never be
+     * reachable anonymously, and only an administrator may re-run it - otherwise
+     * anyone who can load the page could repoint the application at a hostile
+     * Jenkins/database or probe the internal network.
+     *
+     * First-run bootstrap (no users provisioned yet) is still allowed so the
+     * very first configuration can happen before any account exists.
+     */
+    private function guardSetupAccess()
+    {
+        $config = $this->getRuntimeConfig();
+        $locked = ! empty($config->setup) && ! empty($config->setup->enabled);
+
+        if (! $locked) {
+            try {
+                if ($this->db->table_exists('tbl_users')) {
+                    $locked = ((int) $this->db->where('isDeleted', 0)->count_all_results('tbl_users')) > 0;
+                }
+            } catch (Exception $exception) {
+                $locked = FALSE;
+            }
+        }
+
+        if (! $locked) {
+            return;
+        }
+
+        $loggedIn = $this->session->userdata('isLoggedIn') === TRUE;
+        if (! $loggedIn) {
+            if ($this->input->is_ajax_request()) {
+                $this->output
+                    ->set_status_header(401)
+                    ->set_content_type('application/json', 'utf-8')
+                    ->set_output(json_encode(array('status' => FALSE, 'error' => 'Authentication required.')));
+                exit;
+            }
+            redirect('login');
+            exit;
+        }
+
+        if ($this->session->userdata('role') != ROLE_ADMIN) {
+            show_error('Setup has already been completed. Only an administrator can change it.', 403);
+        }
     }
 
     public function index()
@@ -44,7 +93,6 @@ class Setup extends BaseController
         $data['jenkins_url'] = $jsonToArray->jenkins->url;
         $data['jenkins_username'] = '';
         $data['jenkins_token'] = '';
-        $data['jenkins_authorization'] = $jsonToArray->jenkins->authorization;
         $data['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
         
         $this->loadViewsSetup("setupJenkins", $this->global, $data, NULL);

@@ -9,6 +9,7 @@ class Pipelines extends BaseController
         parent::__construct();
         $this->load->model('Pipeline_model', 'pipelines');
         $this->load->library('WorkflowCompiler', NULL, 'compiler');
+        $this->load->library('JenkinsCronSchedule', NULL, 'cronSchedule');
         $this->isLoggedIn();
     }
 
@@ -635,25 +636,69 @@ class Pipelines extends BaseController
         return array('ok' => TRUE, 'deployed' => $deployed, 'artifactFolders' => $artifactFolders);
     }
 
-    private function cleanCronExpression($value)
+    /**
+     * Validate a pipeline schedule expression with the same offline Jenkins-cron
+     * grammar Job Creation uses (JenkinsCronSchedule), so pipelines reject the
+     * Quartz-only tokens Jenkins' TimerTrigger would refuse and give a specific
+     * reason rather than a generic "invalid schedule".
+     *
+     * @return array{ok:bool,spec:string,error:string,warnings:string[]}
+     */
+    private function validatePipelineCron($value)
     {
-        $value = preg_replace('/\s+/', ' ', trim((string) $value));
-        if ($value === '' || strlen($value) > 120) {
-            return FALSE;
+        $value = trim((string) $value);
+        if ($value === '') {
+            return array('ok' => FALSE, 'spec' => '', 'error' => 'Enter a Jenkins cron schedule such as "H 2 * * 1-5".', 'warnings' => array());
         }
-        if (in_array($value, array('@hourly', '@daily', '@weekly', '@monthly', '@annually', '@yearly', '@midnight'), TRUE)) {
-            return $value;
+        if (strlen($value) > 120) {
+            return array('ok' => FALSE, 'spec' => '', 'error' => 'The cron expression is too long (120 characters maximum).', 'warnings' => array());
         }
-        $parts = preg_split('/\s+/', $value);
-        if (count($parts) !== 5) {
-            return FALSE;
+
+        $check = $this->cronSchedule->validateSpec($value);
+        return array(
+            'ok'       => $check['ok'],
+            'spec'     => $check['normalized'],
+            'error'    => $check['error'],
+            'warnings' => $check['warnings'],
+        );
+    }
+
+    /**
+     * Live schedule validation for the pipeline editor: offline grammar check
+     * plus Jenkins' own previous / next run times.
+     */
+    public function validateSchedule()
+    {
+        if (! $this->canManagePipelines()) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+            return;
         }
-        foreach ($parts as $part) {
-            if ($part === '' || ! preg_match('/^[A-Za-z0-9*?,\/#LWH()\-]+$/', $part)) {
-                return FALSE;
+
+        $cron = $this->validatePipelineCron($this->input->post('schedule_cron'));
+        $payload = array(
+            'ok'       => $cron['ok'],
+            'spec'     => $cron['spec'],
+            'error'    => $cron['error'],
+            'warnings' => $cron['warnings'],
+        );
+
+        if ($cron['ok'] && $cron['spec'] !== '' && strpos($cron['spec'], '@') !== 0) {
+            $check = $this->requestJenkins('GET', 'descriptorByName/hudson.triggers.TimerTrigger/checkSpec?value=' . rawurlencode($cron['spec']));
+            if ((int) $check['status'] === 200 && preg_match('#<div class="(ok|warning|error)">(.*?)</div>#s', (string) $check['body'], $m)) {
+                $payload['jenkins'] = array(
+                    'level'   => $m[1],
+                    'message' => trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
+                );
+                if ($m[1] === 'error') {
+                    $payload['ok'] = FALSE;
+                    if ($payload['error'] === '') {
+                        $payload['error'] = $payload['jenkins']['message'];
+                    }
+                }
             }
         }
-        return implode(' ', $parts);
+
+        $this->jsonResponse($payload);
     }
 
     private function pipelineXml($pipeline, $script)
@@ -748,7 +793,8 @@ class Pipelines extends BaseController
         $groupName = trim((string) $this->input->post('group_name'));
         $description = trim((string) $this->input->post('description'));
         $scheduleEnabled = $this->input->post('schedule_enabled') === '1';
-        $scheduleCron = $scheduleEnabled ? $this->cleanCronExpression($this->input->post('schedule_cron')) : NULL;
+        $scheduleCronResult = $scheduleEnabled ? $this->validatePipelineCron($this->input->post('schedule_cron')) : NULL;
+        $scheduleCron = $scheduleEnabled && $scheduleCronResult['ok'] ? $scheduleCronResult['spec'] : ($scheduleEnabled ? FALSE : NULL);
         if ($name === '' || strlen($name) > 200 || preg_match('/[\x00-\x1F\x7F]/', $name)
             || $key === '' || $groupName === '' || strlen($groupName) > 128 || preg_match('/[\x00-\x1F\x7F]/', $groupName)
             || strlen($description) > 2000 || strpos($description, "\0") !== FALSE) {
@@ -756,7 +802,7 @@ class Pipelines extends BaseController
             return;
         }
         if ($scheduleEnabled && $scheduleCron === FALSE) {
-            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Enter a valid five-field Jenkins cron schedule.'), 422);
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Schedule: '.$scheduleCronResult['error']), 422);
             return;
         }
         if ($this->pipelines->scopeExists($key, $environment, $id)) {
