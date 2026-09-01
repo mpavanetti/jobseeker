@@ -113,8 +113,8 @@ services:
       # Data Engineering (Spark clusters / ML runtimes)
       - JOBSEEKER_COMPUTE_DRIVER=${JOBSEEKER_COMPUTE_DRIVER:-docker}
       - JOBSEEKER_COMPUTE_REPOSITORY_ROOT=/php/repository
-      - JOBSEEKER_SPARK_BIND_SOURCE=/jobseeker/spark
-      - JOBSEEKER_ML_BIND_SOURCE=/jobseeker/ml
+      - JOBSEEKER_SPARK_BIND_SOURCE=/jobseeker/src/spark
+      - JOBSEEKER_ML_BIND_SOURCE=/jobseeker/src/ml
       - JOBSEEKER_SPARK_MAX_WORKERS=${JOBSEEKER_SPARK_MAX_WORKERS:-8}
       - JOBSEEKER_COMPUTE_RUN_TIMEOUT_SECONDS=${JOBSEEKER_COMPUTE_RUN_TIMEOUT_SECONDS:-1800}
       - JOBSEEKER_COMPUTE_MAX_CONCURRENT_RUNS=${JOBSEEKER_COMPUTE_MAX_CONCURRENT_RUNS:-3}
@@ -240,8 +240,10 @@ services:
       - jobseeker-docker-cache:/var/lib/docker
       # Spark / ML job source, visible to the DinD daemon so ephemeral job
       # containers can bind-mount it at /workspace (read-only).
-      - ./repository/spark:/jobseeker/spark:ro
-      - ./repository/ml:/jobseeker/ml:ro
+      # Mount the whole repository (a directory that always exists) rather than
+      # its spark/ and ml/ children - a child dir recreated by git would leave a
+      # stale bind and every job container would fail to start.
+      - ./repository:/jobseeker/src:ro
     networks:
       - internal
     healthcheck:

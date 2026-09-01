@@ -1,5 +1,6 @@
-# Conda environment for jobseeker/ml-runtime:dl-cpu.
-# CPU deep learning (PyTorch + Lightning). Versions pinned for reproducible builds.
+# Conda environment for jobseeker/ml-runtime:dl-cpu (base packages).
+# PyTorch itself is installed with pip from the official CPU wheel index in the
+# Dockerfile - the conda-forge pytorch builds are less predictable across tags.
 name: base
 channels:
   - conda-forge
@@ -8,6 +9,4 @@ dependencies:
   - numpy=1.26.4
   - pandas=2.2.2
   - scikit-learn=1.5.1
-  - pytorch-cpu=2.3.1
-  - torchvision-cpu=0.18.1
-  - lightning=2.3.3
+  - pip

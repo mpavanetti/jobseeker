@@ -5,12 +5,19 @@
 # matplotlib. Built on continuumio/miniconda3 so conda-only stacks work too.
 FROM continuumio/miniconda3
 
+# scikit-learn / xgboost load libgomp.so.1 at import; take it from the OS so the
+# result does not depend on conda's openmp packaging.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY env-ml-cpu.yml /tmp/env-ml-cpu.yml
 
 RUN set -eux; \
+    conda config --system --set channel_priority strict; \
     conda env update -n base -f /tmp/env-ml-cpu.yml; \
     conda clean -afy; \
-    rm -f /tmp/env-ml-cpu.yml
+    rm -f /tmp/env-ml-cpu.yml; \
+    python -c "import sklearn, xgboost, pandas, numpy; print('ml-cpu ok', sklearn.__version__)"
 
 LABEL com.jobseeker.runtime="ml-cpu" \
       com.jobseeker.runtime.kind="ml"
