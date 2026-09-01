@@ -1,6 +1,10 @@
 (function($) {
   'use strict';
 
+  function escapeHtml(value) {
+    return $('<div>').text(value == null ? '' : value).html();
+  }
+
   function normalizeEnvironment(value) {
     if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize) {
       return window.JobSeekerGlobalEnvironment.normalize(value || 'all');
@@ -214,9 +218,181 @@
     });
   }
 
+  function initializeContextComparison() {
+    var config = window.contextDetailsConfig || {};
+    var rows = Array.isArray(config.comparisonRows) ? config.comparisonRows : [];
+    var environments = Array.isArray(config.comparisonEnvironments) ? config.comparisonEnvironments.slice() : [];
+    var $project = $('#contextCompareProject');
+    var $key = $('#contextCompareKey');
+    var $table = $('#contextCompareTable');
+    var $empty = $('#contextComparisonEmpty');
+
+    if (!$project.length || !$table.length) {
+      return;
+    }
+
+    environments.sort(function(left, right) {
+      return String(left).localeCompare(String(right));
+    });
+
+    function uniqueValues(values) {
+      var seen = {};
+      return values.filter(function(value) {
+        var key = String(value);
+        if (seen[key]) {
+          return false;
+        }
+        seen[key] = true;
+        return true;
+      });
+    }
+
+    function option(value, text) {
+      return $('<option>').val(value).text(text == null ? value : text);
+    }
+
+    function projects() {
+      return uniqueValues(rows.map(function(row) { return row.project; })).sort(function(left, right) {
+        return String(left).localeCompare(String(right));
+      });
+    }
+
+    function keysForProject(project) {
+      return uniqueValues(rows.filter(function(row) {
+        return row.project === project;
+      }).map(function(row) {
+        return row.key;
+      })).sort(function(left, right) {
+        return String(left).localeCompare(String(right));
+      });
+    }
+
+    function selectedRows() {
+      var project = $project.val();
+      var key = $key.val();
+      var result = {};
+      rows.forEach(function(row) {
+        if (row.project !== project || row.key !== key) {
+          return;
+        }
+        var environment = normalizeEnvironment(row.environment);
+        if (!result[environment] || String(row.updated || '') > String(result[environment].updated || '')) {
+          result[environment] = row;
+        }
+      });
+      return result;
+    }
+
+    function comparisonCell(row, field) {
+      if (!row) {
+        return '<span class="context-compare-missing">Not configured</span>';
+      }
+      if (field === 'value') {
+        return row.encrypted
+          ? '<span class="context-badge context-badge-secret"><i class="fa fa-lock"></i> Encrypted value</span>'
+          : '<code class="context-compare-value" title="' + escapeHtml(row.value) + '">' + escapeHtml(row.value) + '</code>';
+      }
+      if (field === 'status') {
+        return '<span class="context-badge ' + (row.active ? 'context-badge-active' : 'context-badge-inactive') + '">' + (row.active ? 'Active' : 'Inactive') + '</span>';
+      }
+      if (field === 'protection') {
+        return row.encrypted
+          ? '<span class="context-badge context-badge-secret"><i class="fa fa-lock"></i> Encrypted</span>'
+          : '<span class="context-row-meta">Standard</span>';
+      }
+      return escapeHtml(row[field] || 'Not available');
+    }
+
+    function comparisonSignature(row, field) {
+      if (!row) {
+        return null;
+      }
+      if (field === 'value') {
+        return row.encrypted ? 'encrypted' : 'value:' + row.value;
+      }
+      if (field === 'status') {
+        return row.active ? 'active' : 'inactive';
+      }
+      if (field === 'protection') {
+        return row.encrypted ? 'encrypted' : 'standard';
+      }
+      return null;
+    }
+
+    function appendComparisonRow($body, label, field, environmentRows) {
+      var signatures = uniqueValues(environments.map(function(environment) {
+        return comparisonSignature(environmentRows[normalizeEnvironment(environment)], field);
+      }).filter(function(signature) {
+        return signature !== null;
+      }));
+      var $row = $('<tr>').toggleClass('context-compare-different', signatures.length > 1);
+      $row.append($('<th scope="row">').text(label));
+      environments.forEach(function(environment) {
+        $row.append($('<td>').html(comparisonCell(environmentRows[normalizeEnvironment(environment)], field)));
+      });
+      $body.append($row);
+    }
+
+    function renderComparison() {
+      var environmentRows = selectedRows();
+      var configuredCount = Object.keys(environmentRows).length;
+      var hasKey = Boolean($key.val());
+      $empty.prop('hidden', hasKey);
+      $table.prop('hidden', !hasKey);
+      if (!hasKey) {
+        $('#contextComparisonSummary').text('No context keys are available for this project.');
+        return;
+      }
+
+      var $headRow = $('<tr>').append($('<th scope="col">').text('Attribute'));
+      environments.forEach(function(environment) {
+        $headRow.append($('<th scope="col">').text(environment));
+      });
+      $table.find('thead').empty().append($headRow);
+
+      var $body = $table.find('tbody').empty();
+      appendComparisonRow($body, 'Value', 'value', environmentRows);
+      appendComparisonRow($body, 'Status', 'status', environmentRows);
+      appendComparisonRow($body, 'Protection', 'protection', environmentRows);
+      appendComparisonRow($body, 'Updated', 'updated', environmentRows);
+      appendComparisonRow($body, 'Owner', 'owner', environmentRows);
+      $('#contextComparisonSummary').text(configuredCount + ' of ' + environments.length + ' environments configured for ' + $key.val() + '.');
+    }
+
+    function populateKeys() {
+      var keys = keysForProject($project.val());
+      $key.empty();
+      keys.forEach(function(key) {
+        $key.append(option(key));
+      });
+      renderComparison();
+    }
+
+    $project.empty();
+    projects().forEach(function(project) {
+      $project.append(option(project));
+    });
+    $project.on('change', populateKeys);
+    $key.on('change', renderComparison);
+    populateKeys();
+
+    $('[data-context-view]').on('click', function(event) {
+      event.preventDefault();
+      var view = $(this).data('context-view');
+      $('[data-context-view]').parent().removeClass('active');
+      $(this).parent().addClass('active');
+      $('#contextManagePanel').prop('hidden', view !== 'manage');
+      $('#contextComparePanel').prop('hidden', view !== 'compare');
+      if (view === 'compare') {
+        renderComparison();
+      }
+    });
+  }
+
   $(function() {
     initializeValueControls();
     initializeContextTable();
     initializeDeleteAction();
+    initializeContextComparison();
   });
 })(jQuery);

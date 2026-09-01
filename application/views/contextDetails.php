@@ -32,6 +32,29 @@ foreach ((array) $listEnvironments as $environmentRecord) {
 }
 $filterEnvironmentNames = array_keys($filterEnvironmentNames);
 sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
+
+$comparisonRows = array();
+foreach ((array) $comparisonList as $comparisonRecord) {
+  $comparisonUpdated = !empty($comparisonRecord->ModifiedOn) ? $comparisonRecord->ModifiedOn : $comparisonRecord->CreatedOn;
+  $comparisonRows[] = array(
+    'project' => (string) $comparisonRecord->ProjectName,
+    'key' => (string) $comparisonRecord->ContextKey,
+    'environment' => (string) $comparisonRecord->Environment,
+    'value' => (int) $comparisonRecord->isEncrypted === 1 ? '' : (string) $comparisonRecord->ContextValue,
+    'encrypted' => (int) $comparisonRecord->isEncrypted === 1,
+    'active' => (int) $comparisonRecord->IsActive === 1,
+    'updated' => !empty($comparisonUpdated) ? date('Y-m-d H:i', strtotime($comparisonUpdated)) : '',
+    'owner' => !empty($comparisonRecord->ModifiedBy) ? (string) $comparisonRecord->ModifiedBy : (string) $comparisonRecord->CreatedBy
+  );
+}
+
+$comparisonEnvironmentNames = array();
+foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
+  $comparisonEnvironmentName = trim((string) $comparisonEnvironment->Environment);
+  if ($comparisonEnvironmentName !== '') {
+    $comparisonEnvironmentNames[] = $comparisonEnvironmentName;
+  }
+}
 ?>
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=6">
 
@@ -96,6 +119,12 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
       <?php } ?>
       <?php echo validation_errors('<div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>', '</div>'); ?>
 
+      <ul class="nav nav-tabs context-view-tabs" role="tablist">
+        <li class="active" role="presentation"><a href="#contextManagePanel" data-context-view="manage" role="tab"><i class="fa fa-list"></i> Manage</a></li>
+        <li role="presentation"><a href="#contextComparePanel" data-context-view="compare" role="tab"><i class="fa fa-columns"></i> Compare environments</a></li>
+      </ul>
+
+      <div id="contextManagePanel" class="context-view-panel" role="tabpanel">
       <div class="box box-primary context-card animated fadeIn">
         <div class="box-header with-border context-card-header">
           <div class="context-card-title">
@@ -291,6 +320,44 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
           </table>
         </div>
       </div>
+      </div>
+
+      <div id="contextComparePanel" class="context-view-panel" role="tabpanel" hidden>
+        <div class="box box-primary context-card context-compare-card">
+          <div class="box-header with-border context-card-header">
+            <div class="context-card-title">
+              <span class="context-card-title-icon"><i class="fa fa-columns"></i></span>
+              <div>
+                <h3>Environment comparison</h3>
+                <p id="contextComparisonSummary">Context coverage across configured environments.</p>
+              </div>
+            </div>
+          </div>
+          <div class="box-body context-card-body">
+            <div class="context-compare-controls">
+              <div class="context-field">
+                <label for="contextCompareProject">Project</label>
+                <select id="contextCompareProject" class="form-control"></select>
+              </div>
+              <div class="context-field context-field-key">
+                <label for="contextCompareKey">Context key</label>
+                <select id="contextCompareKey" class="form-control"></select>
+              </div>
+            </div>
+          </div>
+          <div class="context-compare-wrap">
+            <table class="table context-compare-table" id="contextCompareTable">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="contextComparisonEmpty" class="context-compare-empty" hidden>
+            <i class="fa fa-inbox"></i>
+            <strong>No comparable contexts</strong>
+            <span>This project has no context keys.</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </div>
@@ -299,7 +366,9 @@ sort($filterEnvironmentNames, SORT_NATURAL | SORT_FLAG_CASE);
 window.contextDetailsConfig = {
   deleteUrl: <?php echo json_encode(base_url().'Context/deleteContext?environment='.rawurlencode($selectedEnvironment)); ?>,
   baseUrl: <?php echo json_encode(base_url().'Context/contextDetails'); ?>,
-  selectedEnvironment: <?php echo json_encode(isset($selectedEnvironment) ? $selectedEnvironment : 'ALL'); ?>
+  selectedEnvironment: <?php echo json_encode(isset($selectedEnvironment) ? $selectedEnvironment : 'ALL'); ?>,
+  comparisonRows: <?php echo json_encode($comparisonRows, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>,
+  comparisonEnvironments: <?php echo json_encode($comparisonEnvironmentNames, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>
 };
 </script>
-<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=4"></script>
+<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=5"></script>
