@@ -1,4 +1,15 @@
 pandas==2.3.2
 azure-identity==1.25.0
 azure-keyvault-secrets==4.10.0
+azure-storage-blob>=12.19,<13
 boto3>=1.35.0,<2
+
+# Connection-test framework drivers (jobseeker.conntest). Lightweight clients only;
+# heavier ones (google-cloud-storage, snowflake, databricks, kafka, pika) are resolved
+# lazily and reported as "driver_missing" with a TCP fallback when absent.
+psycopg[binary]>=3.1,<4
+redis>=5.0,<6
+pymongo>=4.6,<5
+oracledb>=2.2,<3
+pymssql>=2.3,<3
+paramiko>=3.4,<4
