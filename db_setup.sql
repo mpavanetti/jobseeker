@@ -700,6 +700,7 @@ CREATE TABLE IF NOT EXISTS `spark_job_runs` (
   `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
   `triggered_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
   `cluster_network` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `master_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
   `driver_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
   `worker_container_ids_json` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
   `worker_count` int(11) NOT NULL DEFAULT 0,

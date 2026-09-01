@@ -125,6 +125,40 @@ class ComputeEngineClient
     }
 
     /**
+     * Physical capacity of the engine host.
+     *
+     * @return array{available:bool, cpus:int, memoryBytes:int}
+     */
+    public function engineCapacity()
+    {
+        $result = $this->request('GET', '/info', NULL, 5);
+        if ($result['status'] !== 200 || ! is_array($result['json'])) {
+            return array('available' => FALSE, 'cpus' => 0, 'memoryBytes' => 0);
+        }
+        return array(
+            'available' => TRUE,
+            'cpus' => isset($result['json']['NCPU']) ? max(0, (int) $result['json']['NCPU']) : 0,
+            'memoryBytes' => isset($result['json']['MemTotal']) ? max(0, (int) $result['json']['MemTotal']) : 0,
+        );
+    }
+
+    /**
+     * Configured (reserved) CPU and memory for a container, from its HostConfig.
+     *
+     * @return array{nanoCpus:int, memoryBytes:int}
+     */
+    public function containerReservation($id)
+    {
+        $result = $this->request('GET', '/containers/'.rawurlencode((string) $id).'/json', NULL, 6);
+        $host = $result['status'] === 200 && isset($result['json']['HostConfig']) && is_array($result['json']['HostConfig'])
+            ? $result['json']['HostConfig'] : array();
+        return array(
+            'nanoCpus' => isset($host['NanoCpus']) ? max(0, (int) $host['NanoCpus']) : 0,
+            'memoryBytes' => isset($host['Memory']) ? max(0, (int) $host['Memory']) : 0,
+        );
+    }
+
+    /**
      * @return bool TRUE when the image is present on the engine.
      */
     public function imageExists($reference)
@@ -235,6 +269,81 @@ class ComputeEngineClient
             'oomKilled' => ! empty($state['OOMKilled']),
             'startedAt' => isset($state['StartedAt']) ? (string) $state['StartedAt'] : '',
             'finishedAt' => isset($state['FinishedAt']) ? (string) $state['FinishedAt'] : '',
+        );
+    }
+
+    /**
+     * One-shot resource sample for a running container. The CPU / memory math
+     * mirrors DockerMonitoring::calculateContainerStats so the numbers line up
+     * with the Docker Monitor screen.
+     *
+     * @return array{available:bool, cpuPercent:float, memoryBytes:int, memoryLimitBytes:int,
+     *               memoryPercent:float, networkRxBytes:int, networkTxBytes:int,
+     *               blockReadBytes:int, blockWriteBytes:int, pids:int}
+     */
+    public function containerStats($id)
+    {
+        $empty = array(
+            'available' => FALSE, 'cpuPercent' => 0.0, 'memoryBytes' => 0, 'memoryLimitBytes' => 0,
+            'memoryPercent' => 0.0, 'networkRxBytes' => 0, 'networkTxBytes' => 0,
+            'blockReadBytes' => 0, 'blockWriteBytes' => 0, 'pids' => 0,
+        );
+        $result = $this->request('GET', '/containers/'.rawurlencode((string) $id).'/stats?stream=false&one-shot=true', NULL, 6);
+        if ($result['status'] < 200 || $result['status'] >= 300 || ! is_array($result['json'])) {
+            return $empty;
+        }
+        $stats = $result['json'];
+
+        $cpu = isset($stats['cpu_stats']) ? $stats['cpu_stats'] : array();
+        $preCpu = isset($stats['precpu_stats']) ? $stats['precpu_stats'] : array();
+        $cpuTotal = isset($cpu['cpu_usage']['total_usage']) ? (float) $cpu['cpu_usage']['total_usage'] : 0;
+        $preCpuTotal = isset($preCpu['cpu_usage']['total_usage']) ? (float) $preCpu['cpu_usage']['total_usage'] : 0;
+        $systemTotal = isset($cpu['system_cpu_usage']) ? (float) $cpu['system_cpu_usage'] : 0;
+        $preSystemTotal = isset($preCpu['system_cpu_usage']) ? (float) $preCpu['system_cpu_usage'] : 0;
+        $onlineCpus = isset($cpu['online_cpus']) ? max(1, (int) $cpu['online_cpus']) : 1;
+        $cpuDelta = $cpuTotal - $preCpuTotal;
+        $systemDelta = $systemTotal - $preSystemTotal;
+        $cpuPercent = ($cpuDelta > 0 && $systemDelta > 0 && $preCpuTotal > 0 && $preSystemTotal > 0)
+            ? ($cpuDelta / $systemDelta) * $onlineCpus * 100 : 0;
+
+        $memory = isset($stats['memory_stats']['usage']) ? (float) $stats['memory_stats']['usage'] : 0;
+        $cache = isset($stats['memory_stats']['stats']['inactive_file'])
+            ? (float) $stats['memory_stats']['stats']['inactive_file']
+            : (isset($stats['memory_stats']['stats']['cache']) ? (float) $stats['memory_stats']['stats']['cache'] : 0);
+        $memory = max(0, $memory - $cache);
+        $memoryLimit = isset($stats['memory_stats']['limit']) ? (float) $stats['memory_stats']['limit'] : 0;
+
+        $networkRx = 0;
+        $networkTx = 0;
+        foreach (isset($stats['networks']) && is_array($stats['networks']) ? $stats['networks'] : array() as $network) {
+            $networkRx += isset($network['rx_bytes']) ? (float) $network['rx_bytes'] : 0;
+            $networkTx += isset($network['tx_bytes']) ? (float) $network['tx_bytes'] : 0;
+        }
+
+        $blockRead = 0;
+        $blockWrite = 0;
+        $ioEntries = isset($stats['blkio_stats']['io_service_bytes_recursive']) && is_array($stats['blkio_stats']['io_service_bytes_recursive'])
+            ? $stats['blkio_stats']['io_service_bytes_recursive'] : array();
+        foreach ($ioEntries as $entry) {
+            $operation = strtolower(isset($entry['op']) ? (string) $entry['op'] : '');
+            if ($operation === 'read') {
+                $blockRead += isset($entry['value']) ? (float) $entry['value'] : 0;
+            } elseif ($operation === 'write') {
+                $blockWrite += isset($entry['value']) ? (float) $entry['value'] : 0;
+            }
+        }
+
+        return array(
+            'available' => TRUE,
+            'cpuPercent' => round($cpuPercent, 2),
+            'memoryBytes' => (int) $memory,
+            'memoryLimitBytes' => (int) $memoryLimit,
+            'memoryPercent' => $memoryLimit > 0 ? round(($memory / $memoryLimit) * 100, 2) : 0.0,
+            'networkRxBytes' => (int) $networkRx,
+            'networkTxBytes' => (int) $networkTx,
+            'blockReadBytes' => (int) $blockRead,
+            'blockWriteBytes' => (int) $blockWrite,
+            'pids' => isset($stats['pids_stats']['current']) ? (int) $stats['pids_stats']['current'] : 0,
         );
     }
 

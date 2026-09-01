@@ -42,7 +42,7 @@ class SparkClusterOrchestrator
             : (getenv('JOBSEEKER_COMPUTE_REPOSITORY_ROOT') ?: '/php/repository')), '/');
         $this->bindSource = rtrim((string) (isset($config['spark_bind_source']) && $config['spark_bind_source'] !== ''
             ? $config['spark_bind_source']
-            : (getenv('JOBSEEKER_SPARK_BIND_SOURCE') ?: '/jobseeker/spark')), '/');
+            : (getenv('JOBSEEKER_SPARK_BIND_SOURCE') ?: '/jobseeker/src/spark')), '/');
     }
 
     public function driverName()
@@ -73,7 +73,7 @@ class SparkClusterOrchestrator
     /**
      * @return array{ok:bool, run:object|null, message:string}
      */
-    public function start($job, $cluster, $runtime, $triggeredBy)
+    public function start($job, $cluster, $runtime, $triggeredBy, $workerOverride = NULL)
     {
         if (! $job || ! $cluster || ! $runtime) {
             return array('ok' => FALSE, 'run' => NULL, 'message' => 'Job, cluster and runtime are all required.');
@@ -91,7 +91,20 @@ class SparkClusterOrchestrator
             return array('ok' => FALSE, 'run' => NULL, 'message' => $imageCheck['message']);
         }
 
-        $workerCount = min($this->maxWorkers(), max(1, (int) $cluster->min_workers));
+        $ceiling = min($this->maxWorkers(), max(1, (int) $cluster->max_workers ?: $this->maxWorkers()));
+        $requestedWorkers = $workerOverride !== NULL
+            ? max(1, min($ceiling, (int) $workerOverride))
+            : min($ceiling, max(1, (int) $cluster->min_workers));
+
+        // Size the run to the engine host: never let a cluster reserve more CPU
+        // or memory than the host can back. Scale workers down to fit; reject
+        // only when even the driver + one worker cannot.
+        $admission = $this->admitToHost($cluster, $requestedWorkers);
+        if (! $admission['ok']) {
+            return array('ok' => FALSE, 'run' => NULL, 'message' => $admission['message']);
+        }
+        $workerCount = $admission['workers'];
+        $capacityNote = $admission['note'];
         $runId = $this->model->createSparkRun($job->id, $job->environment, $triggeredBy, $workerCount);
         $run = $this->model->getSparkRun($runId);
         if (! $run) {
@@ -120,6 +133,7 @@ class SparkClusterOrchestrator
 
             $this->model->updateSparkRun($runId, array(
                 'cluster_network' => isset($handle['network']) ? $handle['network'] : NULL,
+                'master_container_id' => isset($handle['master_id']) ? $handle['master_id'] : NULL,
                 'worker_container_ids_json' => json_encode(array_values($handle['worker_ids'] ?? array())),
                 'worker_count' => count($handle['worker_ids'] ?? array()),
                 'provisioned_at' => date('Y-m-d H:i:s'),
@@ -133,6 +147,8 @@ class SparkClusterOrchestrator
                 'application_args' => $this->splitArgs($job->application_args),
                 'driver_cores' => (int) $cluster->driver_cores,
                 'driver_memory_mb' => (int) $cluster->driver_memory_mb,
+                'worker_cores' => (int) $cluster->worker_cores,
+                'worker_memory_mb' => (int) $cluster->worker_memory_mb,
                 'spark_conf' => array_merge($sparkConf, $this->decodeMap($job->spark_submit_conf_json)),
                 'env' => $env,
             );
@@ -143,7 +159,11 @@ class SparkClusterOrchestrator
                 'status' => 'RUNNING',
             ));
 
-            return array('ok' => TRUE, 'run' => $this->model->getSparkRun($runId), 'message' => 'Cluster provisioning; spark-submit started.');
+            $message = 'Cluster provisioning ('.$workerCount.' worker'.($workerCount === 1 ? '' : 's').'); spark-submit started.';
+            if ($capacityNote !== '') {
+                $message .= ' '.$capacityNote;
+            }
+            return array('ok' => TRUE, 'run' => $this->model->getSparkRun($runId), 'message' => $message);
         } catch (Exception $exception) {
             $this->failAndTeardown($runId, $exception->getMessage());
             return array('ok' => FALSE, 'run' => $this->model->getSparkRun($runId), 'message' => 'Run failed: '.$exception->getMessage());
@@ -214,6 +234,97 @@ class SparkClusterOrchestrator
         return $this->driver->fetchSparkLogs($this->handleFromRun($run));
     }
 
+    /**
+     * Live per-container resource usage for a run's cluster.
+     *
+     * @return array{engineHealthy:bool, phase:string, terminal:bool, containers:array, aggregate:array}
+     */
+    public function runStats($run)
+    {
+        $terminal = ! $run || in_array($run->status, self::TERMINAL, TRUE);
+        if ($terminal) {
+            return array('engineHealthy' => TRUE, 'phase' => $run ? (string) $run->status : 'UNKNOWN', 'terminal' => TRUE, 'containers' => array(), 'aggregate' => new stdClass());
+        }
+        $stats = $this->driver->clusterStats($this->handleFromRun($run));
+        return array(
+            'engineHealthy' => $this->driver->healthy(),
+            'phase' => (string) $run->status,
+            'terminal' => FALSE,
+            'containers' => $stats['containers'],
+            'aggregate' => $stats['aggregate'],
+        );
+    }
+
+    /**
+     * Host capacity plus, optionally, what a given cluster spec would consume at
+     * its min / max worker counts. Drives the "proportional" UI widget.
+     */
+    public function capacity($cluster = NULL)
+    {
+        $snapshot = $this->driver->capacitySnapshot();
+        $result = array('host' => $snapshot, 'demand' => NULL);
+        if ($cluster) {
+            $driverCores = max(1, (int) $cluster->driver_cores);
+            $driverMemMb = max(512, (int) $cluster->driver_memory_mb);
+            $workerCores = max(1, (int) $cluster->worker_cores);
+            $workerMemMb = max(512, (int) $cluster->worker_memory_mb);
+            $result['demand'] = array(
+                'min' => array(
+                    'workers' => max(1, (int) $cluster->min_workers),
+                    'cpus' => $driverCores + max(1, (int) $cluster->min_workers) * $workerCores,
+                    'memoryMb' => $driverMemMb + max(1, (int) $cluster->min_workers) * $workerMemMb,
+                ),
+                'max' => array(
+                    'workers' => max(1, (int) $cluster->max_workers),
+                    'cpus' => $driverCores + max(1, (int) $cluster->max_workers) * $workerCores,
+                    'memoryMb' => $driverMemMb + max(1, (int) $cluster->max_workers) * $workerMemMb,
+                ),
+                'fitsMax' => ! $snapshot['available'] || (
+                    ($driverMemMb + max(1, (int) $cluster->max_workers) * $workerMemMb) <= $snapshot['freeMemoryMb']
+                    && ($driverCores + max(1, (int) $cluster->max_workers) * $workerCores) <= $snapshot['freeCpus']
+                ),
+            );
+        }
+        return $result;
+    }
+
+    /**
+     * @return array{ok:bool, workers:int, note:string, message:string}
+     */
+    private function admitToHost($cluster, $requestedWorkers)
+    {
+        $snapshot = $this->driver->capacitySnapshot();
+        if (empty($snapshot['available'])) {
+            // Can't measure the host (e.g. Kubernetes driver) - trust the caller.
+            return array('ok' => TRUE, 'workers' => $requestedWorkers, 'note' => '', 'message' => '');
+        }
+
+        $driverMemMb = max(512, (int) $cluster->driver_memory_mb);
+        $driverCores = max(1, (int) $cluster->driver_cores);
+        $workerMemMb = max(512, (int) $cluster->worker_memory_mb);
+        $workerCores = max(1, (int) $cluster->worker_cores);
+        $freeMemMb = (int) $snapshot['freeMemoryMb'];
+        $freeCpus = (float) $snapshot['freeCpus'];
+
+        $baseline = $driverMemMb + $workerMemMb;
+        $baselineCpus = $driverCores + $workerCores;
+        if ($baseline > $freeMemMb || $baselineCpus > $freeCpus) {
+            return array('ok' => FALSE, 'workers' => 0, 'note' => '', 'message' => sprintf(
+                'Not enough headroom on the compute host for this cluster. Driver + 1 worker need %d MB / %s vCPU; only %d MB / %s vCPU are free. Lower the driver/worker size on the cluster spec.',
+                $baseline, rtrim(rtrim(number_format($baselineCpus, 1), '0'), '.'), $freeMemMb, rtrim(rtrim(number_format($freeCpus, 1), '0'), '.')
+            ));
+        }
+
+        $fit = $requestedWorkers;
+        while ($fit > 1 && (($driverMemMb + $fit * $workerMemMb) > $freeMemMb || ($driverCores + $fit * $workerCores) > $freeCpus)) {
+            $fit--;
+        }
+        $note = $fit < $requestedWorkers
+            ? sprintf('Scaled from %d to %d workers to stay within host headroom (%d MB / %s vCPU free).', $requestedWorkers, $fit, $freeMemMb, rtrim(rtrim(number_format($freeCpus, 1), '0'), '.'))
+            : '';
+        return array('ok' => TRUE, 'workers' => $fit, 'note' => $note, 'message' => '');
+    }
+
     // --- internals ---------------------------------------------------
 
     private function imageReference($runtime)
@@ -271,10 +382,9 @@ class SparkClusterOrchestrator
             'run_key' => (string) $run->run_key,
             'network' => (string) $run->cluster_network,
             'image' => '',
-            'master_id' => '',
+            'master_id' => isset($run->master_container_id) ? (string) $run->master_container_id : '',
             'worker_ids' => json_decode((string) $run->worker_container_ids_json, TRUE) ?: array(),
             'driver_id' => (string) $run->driver_container_id,
-            'master_id_hint' => 'js-'.$run->run_key.'-master',
             'bind_source' => $this->bindSource,
         );
     }

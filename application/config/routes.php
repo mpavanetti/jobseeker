@@ -160,6 +160,9 @@ $route['data-engineering/spark-jobs/delete'] = "SparkJobs/delete";
 $route['data-engineering/spark-jobs/run'] = "SparkJobs/run";
 $route['data-engineering/spark-jobs/status/(:num)'] = "SparkJobs/status/$1";
 $route['data-engineering/spark-jobs/logs/(:num)'] = "SparkJobs/logs/$1";
+$route['data-engineering/spark-jobs/monitor/(:num)'] = "SparkJobs/monitor/$1";
+$route['data-engineering/spark-jobs/capacity'] = "SparkJobs/capacity";
+$route['data-engineering/spark-jobs/develop'] = "SparkJobs/develop";
 $route['data-engineering/spark-jobs/cancel'] = "SparkJobs/cancel";
 
 $route['data-engineering/ml-runtimes'] = "MlRuntimes/index";
@@ -177,6 +180,9 @@ $route['data-engineering/ml-jobs/delete'] = "MlJobs/delete";
 $route['data-engineering/ml-jobs/run'] = "MlJobs/run";
 $route['data-engineering/ml-jobs/status/(:num)'] = "MlJobs/status/$1";
 $route['data-engineering/ml-jobs/logs/(:num)'] = "MlJobs/logs/$1";
+$route['data-engineering/ml-jobs/monitor/(:num)'] = "MlJobs/monitor/$1";
+$route['data-engineering/ml-jobs/capacity'] = "MlJobs/capacity";
+$route['data-engineering/ml-jobs/develop'] = "MlJobs/develop";
 $route['data-engineering/ml-jobs/cancel'] = "MlJobs/cancel";
 
 

@@ -100,6 +100,7 @@ class SparkCompute_model extends CI_Model
             `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
             `triggered_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
             `cluster_network` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+            `master_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
             `driver_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
             `worker_container_ids_json` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
             `worker_count` int(11) NOT NULL DEFAULT 0,
@@ -115,6 +116,10 @@ class SparkCompute_model extends CI_Model
             KEY `spark_job_run_job` (`job_id`,`id`),
             KEY `spark_job_run_status` (`status`,`updated_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci");
+
+        if (! $this->db->field_exists('master_container_id', 'spark_job_runs')) {
+            $this->db->query('ALTER TABLE `spark_job_runs` ADD `master_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL AFTER `cluster_network`');
+        }
 
         $this->seedRuntimes();
     }

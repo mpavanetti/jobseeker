@@ -25,6 +25,7 @@ class MlJobs extends BaseController
             show_404();
         }
         $this->load->library('MlJobOrchestrator', array('model' => $this->ml), 'orchestrator');
+        $this->load->library('OpenVsCodeWorkspace', array(), 'editor');
     }
 
     private function canManage()
@@ -122,6 +123,8 @@ class MlJobs extends BaseController
             'recentRuns' => $job ? $this->ml->recentMlRuns($job->id, 12) : array(),
             'engineHealthy' => $this->orchestrator->engineHealthy(),
             'driverName' => $this->orchestrator->driverName(),
+            'openVsCodeEnabled' => $this->editor->enabled(),
+            'capacity' => $this->orchestrator->capacity(),
         );
         $this->global['pageTitle'] = 'Job Seeker : ML Jobs';
         $this->loadViews('mlJobs', $this->global, $data, NULL);
@@ -263,6 +266,11 @@ class MlJobs extends BaseController
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Job not found.'), 404);
             return;
         }
+        foreach ($this->ml->recentMlRuns($id, 20) as $run) {
+            if (! in_array($run->status, MlJobOrchestrator::TERMINAL, TRUE)) {
+                $this->orchestrator->cancel($run, (string) $this->name);
+            }
+        }
         $this->ml->deleteJob($id);
         $this->jsonResponse(array('ok' => TRUE, 'message' => 'Job deleted.'));
     }
@@ -304,6 +312,102 @@ class MlJobs extends BaseController
         }
         $run = $this->orchestrator->advance($run);
         $this->jsonResponse(array('ok' => TRUE, 'run' => $this->runPayload($run)));
+    }
+
+    public function monitor($runId)
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $run = $this->ml->getMlRun((int) $runId);
+        if (! $run) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Run not found.'), 404);
+            return;
+        }
+        $this->jsonResponse(array('ok' => TRUE) + $this->orchestrator->runStats($run));
+    }
+
+    public function capacity()
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $this->jsonResponse(array('ok' => TRUE) + $this->orchestrator->capacity());
+    }
+
+    public function develop()
+    {
+        if (! $this->requireManagerPost()) {
+            return;
+        }
+        if (! $this->editor->enabled()) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'OpenVSCode Server is disabled for this deployment.'), 404);
+            return;
+        }
+        $job = $this->ml->getJob((int) $this->input->post('id'));
+        if (! $job) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Job not found.'), 404);
+            return;
+        }
+        $runtime = $this->ml->getRuntime($job->runtime_key);
+
+        $runState = $this->editor->ensureRunning();
+        if (empty($runState['available'])) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => $runState['message']), 503);
+            return;
+        }
+
+        $repoRoot = rtrim((string) (getenv('JOBSEEKER_COMPUTE_REPOSITORY_ROOT') ?: '/php/repository'), '/');
+        $key = preg_replace('/[^a-z0-9._-]+/', '-', strtolower((string) $job->job_key));
+        $dir = $repoRoot.'/ml/inline/'.$key;
+        if (! is_dir($dir) && ! @mkdir($dir, 0775, TRUE) && ! is_dir($dir)) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Could not create the workspace directory.'), 500);
+            return;
+        }
+
+        $libs = $runtime && $runtime->library_summary ? $runtime->library_summary : 'numpy, pandas, scikit-learn';
+        $entryArgs = trim((string) $job->application_args);
+        $starter = trim((string) $job->inline_code) !== ''
+            ? (string) $job->inline_code
+            : "\"\"\"".$job->name." - JobSeeker ML job.\n\nJobSeeker runs this with:\n  python /workspace/inline/".$key."/main.py".($entryArgs !== '' ? ' '.$entryArgs : '')."\n\nRuntime libraries: ".$libs."\n\"\"\"\n\nimport pandas as pd\n\n\ndef main() -> None:\n    frame = pd.DataFrame({\"x\": range(10)})\n    print(frame.describe())\n\n\nif __name__ == \"__main__\":\n    main()\n";
+
+        $this->writeWorkspaceFiles($dir, array(
+            'main.py' => $starter,
+            'requirements.txt' => "# Runtime image already provides: ".$libs."\n# Add extra pip packages here (installed at run time is not automatic - bake into the image).\n",
+            'README.md' => "# ".$job->name."\n\nEdit `main.py`, save, then use **Run job** on the ML Jobs screen.\n\n- Environment: ".$job->environment."\n- Runtime image: ".($runtime ? $runtime->image_repository.':'.$runtime->image_tag : '(unset)')."\n- Libraries: ".$libs."\n- Entry point: `inline/".$key."/main.py`\n- CPU / memory limit: ".$job->cpu_limit." vCPU / ".(int) $job->memory_limit_mb." MB\n\nJobSeeker mounts this folder read-only at `/workspace` and runs:\n\n```\npython /workspace/inline/".$key."/main.py ".$entryArgs."\n```\n",
+            '.vscode/settings.json' => "{\n  \"python.analysis.typeCheckingMode\": \"basic\"\n}\n",
+        ));
+
+        $this->ml->saveJob(array(
+            'source_type' => 'inline',
+            'entry_point' => '',
+            'inline_code' => file_get_contents($dir.'/main.py'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ), (int) $job->id);
+
+        $url = $this->editor->folderUrl($dir);
+        if ($url === '') {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Could not resolve the editor workspace path.'), 500);
+            return;
+        }
+        $this->jsonResponse(array('ok' => TRUE, 'url' => $url, 'starting' => ! empty($runState['started']), 'message' => $runState['message']));
+    }
+
+    private function writeWorkspaceFiles($baseDir, array $files)
+    {
+        foreach ($files as $relative => $content) {
+            $target = $baseDir.'/'.$relative;
+            $parent = dirname($target);
+            if (! is_dir($parent)) {
+                @mkdir($parent, 0775, TRUE);
+            }
+            if ($relative === 'main.py' && is_file($target)) {
+                continue;
+            }
+            @file_put_contents($target, $content);
+        }
     }
 
     public function logs($runId)

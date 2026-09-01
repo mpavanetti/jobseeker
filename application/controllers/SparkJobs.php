@@ -27,6 +27,12 @@ class SparkJobs extends BaseController
             show_404();
         }
         $this->load->library('SparkClusterOrchestrator', array('model' => $this->spark), 'orchestrator');
+        $this->load->library('OpenVsCodeWorkspace', array(), 'editor');
+    }
+
+    private function openVsCodeEnabled()
+    {
+        return $this->editor->enabled();
     }
 
     private function canManage()
@@ -117,6 +123,7 @@ class SparkJobs extends BaseController
         if ($job && $environment !== 'ALL' && $job->environment !== $environment) {
             $job = NULL;
         }
+        $jobCluster = $job ? $this->spark->getCluster((int) $job->cluster_id) : NULL;
         $data = array(
             'selectedEnvironment' => $environment,
             'environments' => $this->activeEnvironments(),
@@ -124,10 +131,13 @@ class SparkJobs extends BaseController
             'clusters' => $this->spark->listClusters($environment),
             'runtimes' => $this->spark->listRuntimes(TRUE),
             'job' => $job,
+            'jobCluster' => $jobCluster,
             'samples' => $this->samples,
             'recentRuns' => $job ? $this->spark->recentSparkRuns($job->id, 12) : array(),
             'engineHealthy' => $this->orchestrator->engineHealthy(),
             'driverName' => $this->orchestrator->driverName(),
+            'openVsCodeEnabled' => $this->openVsCodeEnabled(),
+            'capacity' => $this->orchestrator->capacity($jobCluster),
         );
         $this->global['pageTitle'] = 'Job Seeker : Spark Jobs';
         $this->loadViews('sparkJobs', $this->global, $data, NULL);
@@ -268,6 +278,12 @@ class SparkJobs extends BaseController
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Job not found.'), 404);
             return;
         }
+        // Tear down any in-flight run so deleting the job never orphans a cluster.
+        foreach ($this->spark->recentSparkRuns($id, 20) as $run) {
+            if (! in_array($run->status, SparkClusterOrchestrator::TERMINAL, TRUE)) {
+                $this->orchestrator->cancel($run, (string) $this->name);
+            }
+        }
         $this->spark->deleteJob($id);
         $this->jsonResponse(array('ok' => TRUE, 'message' => 'Job deleted.'));
     }
@@ -289,13 +305,122 @@ class SparkJobs extends BaseController
             return;
         }
 
-        $result = $this->orchestrator->start($job, $cluster, $runtime, (string) $this->name);
+        $workerOverride = NULL;
+        if ($this->input->post('workers') !== NULL && $this->input->post('workers') !== '') {
+            $workerOverride = (int) $this->input->post('workers');
+        }
+
+        $result = $this->orchestrator->start($job, $cluster, $runtime, (string) $this->name, $workerOverride);
         $status = $result['ok'] ? 200 : 502;
         $this->jsonResponse(array(
             'ok' => $result['ok'],
             'message' => $result['message'],
             'run' => $result['run'] ? $this->runPayload($result['run']) : NULL,
         ), $status);
+    }
+
+    public function monitor($runId)
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $run = $this->spark->getSparkRun((int) $runId);
+        if (! $run) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Run not found.'), 404);
+            return;
+        }
+        $this->jsonResponse(array('ok' => TRUE) + $this->orchestrator->runStats($run));
+    }
+
+    public function capacity()
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $cluster = $this->spark->getCluster((int) $this->input->get('cluster'));
+        $this->jsonResponse(array('ok' => TRUE) + $this->orchestrator->capacity($cluster));
+    }
+
+    public function develop()
+    {
+        if (! $this->requireManagerPost()) {
+            return;
+        }
+        if (! $this->editor->enabled()) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'OpenVSCode Server is disabled for this deployment.'), 404);
+            return;
+        }
+        $job = $this->spark->getJob((int) $this->input->post('id'));
+        if (! $job) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Job not found.'), 404);
+            return;
+        }
+        $cluster = $this->spark->getCluster((int) $job->cluster_id);
+        $runtime = $cluster ? $this->spark->getRuntime($cluster->runtime_key) : NULL;
+
+        $runState = $this->editor->ensureRunning();
+        if (empty($runState['available'])) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => $runState['message']), 503);
+            return;
+        }
+
+        $repoRoot = rtrim((string) (getenv('JOBSEEKER_COMPUTE_REPOSITORY_ROOT') ?: '/php/repository'), '/');
+        $key = preg_replace('/[^a-z0-9._-]+/', '-', strtolower((string) $job->job_key));
+        $dir = $repoRoot.'/spark/inline/'.$key;
+        if (! is_dir($dir) && ! @mkdir($dir, 0775, TRUE) && ! is_dir($dir)) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Could not create the workspace directory.'), 500);
+            return;
+        }
+
+        $sparkVersion = $runtime && $runtime->spark_version ? $runtime->spark_version : '4.0.0';
+        $entryArgs = trim((string) $job->application_args);
+        $starter = trim((string) $job->inline_code) !== ''
+            ? (string) $job->inline_code
+            : "\"\"\"".$job->name." - JobSeeker Spark job.\n\nJobSeeker runs this with:\n  spark-submit --master spark://master:7077 --deploy-mode client \\\n    /workspace/inline/".$key."/main.py".($entryArgs !== '' ? ' '.$entryArgs : '')."\n\"\"\"\n\nfrom pyspark.sql import SparkSession\n\n\ndef main() -> None:\n    spark = SparkSession.builder.appName(\"".$key."\").getOrCreate()\n    try:\n        df = spark.range(1000)\n        print(\"rows:\", df.count())\n    finally:\n        spark.stop()\n\n\nif __name__ == \"__main__\":\n    main()\n";
+
+        $this->writeWorkspaceFiles($dir, array(
+            'main.py' => $starter,
+            'pyproject.toml' => "[project]\nname = \"jobseeker-spark-".$key."\"\nversion = \"0.1.0\"\nrequires-python = \">=3.9\"\ndependencies = [\n  \"pyspark==".$sparkVersion."\",\n  \"pandas\",\n  \"pyarrow\",\n]\n\n[tool.ruff]\nline-length = 100\n",
+            'requirements.txt' => "pyspark==".$sparkVersion."\npandas\npyarrow\n",
+            'README.md' => "# ".$job->name."\n\nEdit `main.py`, save, then use **Run job** on the Spark Jobs screen.\n\n- Environment: ".$job->environment."\n- Cluster: ".($cluster ? $cluster->name : '(unset)')."\n- Runtime image: ".($runtime ? $runtime->image_repository.':'.$runtime->image_tag : '(unset)')."\n- Entry point: `inline/".$key."/main.py`\n- Args: `".($entryArgs !== '' ? $entryArgs : '(none)')."`\n\nJobSeeker mounts this folder read-only at `/workspace` inside the driver and runs:\n\n```\nspark-submit --master spark://master:7077 --deploy-mode client /workspace/inline/".$key."/main.py ".$entryArgs."\n```\n",
+            '.vscode/settings.json' => "{\n  \"python.analysis.typeCheckingMode\": \"basic\",\n  \"files.exclude\": { \"**/__pycache__\": true }\n}\n",
+        ));
+
+        // A later Run should execute exactly what was edited here.
+        $this->spark->saveJob(array(
+            'source_type' => 'inline',
+            'entry_point' => '',
+            'inline_code' => file_get_contents($dir.'/main.py'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ), (int) $job->id);
+
+        $url = $this->editor->folderUrl($dir);
+        if ($url === '') {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Could not resolve the editor workspace path.'), 500);
+            return;
+        }
+        $this->jsonResponse(array('ok' => TRUE, 'url' => $url, 'starting' => ! empty($runState['started']), 'message' => $runState['message']));
+    }
+
+    private function writeWorkspaceFiles($baseDir, array $files)
+    {
+        foreach ($files as $relative => $content) {
+            $target = $baseDir.'/'.$relative;
+            $parent = dirname($target);
+            if (! is_dir($parent)) {
+                @mkdir($parent, 0775, TRUE);
+            }
+            // Never clobber main.py if it already holds the same content.
+            if ($relative === 'main.py' && is_file($target) && file_get_contents($target) === $content) {
+                continue;
+            }
+            if ($relative === 'main.py' && is_file($target)) {
+                continue;
+            }
+            @file_put_contents($target, $content);
+        }
     }
 
     public function status($runId)

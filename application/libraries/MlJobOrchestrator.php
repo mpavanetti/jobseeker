@@ -36,7 +36,7 @@ class MlJobOrchestrator
             : (getenv('JOBSEEKER_COMPUTE_REPOSITORY_ROOT') ?: '/php/repository')), '/');
         $this->bindSource = rtrim((string) (isset($config['ml_bind_source']) && $config['ml_bind_source'] !== ''
             ? $config['ml_bind_source']
-            : (getenv('JOBSEEKER_ML_BIND_SOURCE') ?: '/jobseeker/ml')), '/');
+            : (getenv('JOBSEEKER_ML_BIND_SOURCE') ?: '/jobseeker/src/ml')), '/');
     }
 
     public function driverName()
@@ -78,6 +78,19 @@ class MlJobOrchestrator
         $imageCheck = $this->driver->ensureImage($image);
         if (empty($imageCheck['ok'])) {
             return array('ok' => FALSE, 'run' => NULL, 'message' => $imageCheck['message']);
+        }
+
+        // Keep the container proportional to the engine host.
+        $host = $this->driver->capacitySnapshot();
+        if (! empty($host['available'])) {
+            $needMemMb = max(256, (int) $job->memory_limit_mb);
+            $needCpus = max(0.25, (float) $job->cpu_limit);
+            if ($needMemMb > $host['freeMemoryMb'] || $needCpus > $host['freeCpus']) {
+                return array('ok' => FALSE, 'run' => NULL, 'message' => sprintf(
+                    'Not enough headroom on the compute host: this job asks for %d MB / %s vCPU but only %d MB / %s vCPU are free. Lower the job limits or wait for other runs to finish.',
+                    $needMemMb, rtrim(rtrim(number_format($needCpus, 2), '0'), '.'), (int) $host['freeMemoryMb'], rtrim(rtrim(number_format($host['freeCpus'], 2), '0'), '.')
+                ));
+            }
         }
 
         $runId = $this->model->createMlRun($job->id, $job->environment, $triggeredBy);
@@ -171,6 +184,32 @@ class MlJobOrchestrator
             return (string) $run->log_tail;
         }
         return $this->driver->fetchMlLogs($this->handleFromRun($run));
+    }
+
+    /**
+     * Live resource usage for the run's single container.
+     *
+     * @return array{engineHealthy:bool, phase:string, terminal:bool, containers:array, aggregate:array}
+     */
+    public function runStats($run)
+    {
+        if (! $run || in_array($run->status, self::TERMINAL, TRUE)) {
+            return array('engineHealthy' => TRUE, 'phase' => $run ? (string) $run->status : 'UNKNOWN', 'terminal' => TRUE, 'containers' => array(), 'aggregate' => new stdClass());
+        }
+        $stats = $this->driver->mlJobStats($this->handleFromRun($run));
+        return array(
+            'engineHealthy' => $this->driver->healthy(),
+            'phase' => (string) $run->status,
+            'terminal' => FALSE,
+            'containers' => $stats['containers'],
+            'aggregate' => $stats['aggregate'],
+        );
+    }
+
+    /** Host capacity snapshot for the ML Jobs capacity widget. */
+    public function capacity()
+    {
+        return array('host' => $this->driver->capacitySnapshot(), 'demand' => NULL);
     }
 
     // --- internals ---------------------------------------------------

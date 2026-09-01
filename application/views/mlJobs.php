@@ -7,11 +7,20 @@ foreach ($runtimes as $runtime) {
     $runtimeByKey[$runtime->runtime_key] = $runtime;
 }
 ?>
-<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=1" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=2" rel="stylesheet" type="text/css">
 <div class="content-wrapper compute-page">
   <section class="content-header">
+    <h1>ML Jobs <small>single-container runs on Miniconda runtimes</small></h1>
+    <ol class="breadcrumb">
+      <li><a href="<?php echo base_url(); ?>dashboard"><i class="fa fa-home"></i> Home</a></li>
+      <li>Data Engineering</li>
+      <li class="active">ML Jobs</li>
+    </ol>
+  </section>
+
+  <section class="content">
     <div class="compute-toolbar">
-      <h1>ML Jobs <small>single-container runs on Miniconda runtimes</small></h1>
+      <span class="compute-toolbar-env">Environment <strong><?php echo html_escape($env); ?></strong></span>
       <div class="compute-toolbar-actions">
         <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/ml-runtimes"><i class="fa fa-cubes"></i> Runtimes</a>
         <select class="form-control input-sm" id="sampleSelect" style="width:190px"<?php echo ($env === 'ALL' || empty($runtimes)) ? ' disabled' : ''; ?>>
@@ -23,14 +32,6 @@ foreach ($runtimes as $runtime) {
         <button class="btn btn-primary btn-sm" type="button" id="jobNew"<?php echo ($env === 'ALL' || empty($runtimes)) ? ' disabled' : ''; ?>><i class="fa fa-plus"></i> New job</button>
       </div>
     </div>
-    <ol class="breadcrumb">
-      <li><a href="<?php echo base_url(); ?>dashboard"><i class="fa fa-home"></i> Home</a></li>
-      <li>Data Engineering</li>
-      <li class="active">ML Jobs</li>
-    </ol>
-  </section>
-
-  <section class="content">
     <?php if ($env === 'ALL') { ?>
       <div class="compute-alert is-warn"><i class="fa fa-filter"></i> Pick a global environment (top bar) to manage ML jobs.</div>
     <?php } elseif (empty($runtimes)) { ?>
@@ -82,8 +83,21 @@ foreach ($runtimes as $runtime) {
               <dt>Resources</dt><dd><?php echo html_escape($selectedJob->cpu_limit); ?> vCPU / <?php echo (int) $selectedJob->memory_limit_mb; ?> MB</dd>
               <dt>Args</dt><dd><?php echo html_escape($selectedJob->application_args ?: '&mdash;'); ?></dd>
             </dl>
-            <div style="margin:12px 0">
+            <?php
+            $capHost = isset($capacity['host']) ? $capacity['host'] : array();
+            if (! empty($capHost['available'])) {
+            ?>
+            <div class="compute-capacity">
+              <span>Host <strong><?php echo (float) $capHost['cpus']; ?></strong> vCPU / <strong><?php echo (int) round($capHost['memoryMb'] / 1024); ?></strong> GB</span>
+              <span>Free <strong><?php echo (float) $capHost['freeCpus']; ?></strong> vCPU / <strong><?php echo (int) $capHost['freeMemoryMb']; ?></strong> MB</span>
+              <span>This job asks <strong><?php echo html_escape($selectedJob->cpu_limit); ?></strong> vCPU / <strong><?php echo (int) $selectedJob->memory_limit_mb; ?></strong> MB</span>
+            </div>
+            <?php } ?>
+            <div class="compute-run-controls">
               <button class="btn btn-success btn-sm job-run" type="button" data-id="<?php echo (int) $selectedJob->id; ?>"<?php echo $engineHealthy ? '' : ' disabled'; ?>><i class="fa fa-play"></i> Run job</button>
+              <?php if (! empty($openVsCodeEnabled)) { ?>
+                <button class="btn btn-primary btn-sm" type="button" id="jobDevelop" data-id="<?php echo (int) $selectedJob->id; ?>"><i class="fa fa-code"></i> Develop</button>
+              <?php } ?>
               <button class="btn btn-default btn-sm" type="button" id="jobEdit"><i class="fa fa-pencil"></i> Edit</button>
               <button class="btn btn-danger btn-sm" type="button" id="jobDelete"><i class="fa fa-trash"></i></button>
             </div>
@@ -166,6 +180,7 @@ foreach ($runtimes as $runtime) {
           (canCancel ? '<button type="button" class="btn btn-xs btn-danger" id="runCancel">Cancel</button>' : '') +
         '</header>' +
         (run.error_message ? '<div style="padding:8px 14px;color:#fca5a5;font-size:12px">' + esc(run.error_message) + '</div>' : '') +
+        '<div class="compute-cluster-panel" id="runCluster"></div>' +
         '<pre class="compute-run-log" id="runLog">waiting for logs&hellip;</pre>' +
       '</div>';
     var cancelBtn = document.getElementById('runCancel');
@@ -186,19 +201,53 @@ foreach ($runtimes as $runtime) {
       });
   }
 
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    var units = ['B', 'KB', 'MB', 'GB'];
+    var i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+  }
+
+  function renderCluster(stats) {
+    var panel = document.getElementById('runCluster');
+    if (!panel || !stats) { return; }
+    var rows = (stats.containers || []).map(function (c) {
+      var mem = c.memoryLimitBytes ? fmtBytes(c.memoryBytes) + ' / ' + fmtBytes(c.memoryLimitBytes) : fmtBytes(c.memoryBytes);
+      return '<tr>' +
+        '<td><span class="compute-role compute-role-' + esc(c.role) + '">' + esc(c.name) + '</span>' +
+          '<span class="compute-sub" style="margin:0">' + esc(c.state) + (c.running ? '' : (c.exitCode != null ? ' (exit ' + c.exitCode + ')' : '')) + '</span></td>' +
+        '<td class="compute-meter"><span>' + (Number(c.cpuPercent) || 0).toFixed(1) + '%</span><i style="width:' + Math.min(100, Number(c.cpuPercent) || 0) + '%"></i></td>' +
+        '<td class="compute-meter"><span>' + esc(mem) + '</span><i style="width:' + Math.min(100, Number(c.memoryPercent) || 0) + '%"></i></td>' +
+        '<td class="compute-sub" style="margin:0">&darr;' + fmtBytes(c.networkRxBytes) + ' &uarr;' + fmtBytes(c.networkTxBytes) + ' &middot; ' + (Number(c.pids) || 0) + ' pids</td>' +
+      '</tr>';
+    }).join('');
+    panel.innerHTML =
+      '<table class="compute-cluster-table"><thead><tr><th>Container</th><th>CPU</th><th>Memory</th><th>Activity</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="4" class="compute-sub" style="padding:8px">starting&hellip;</td></tr>') + '</tbody></table>';
+  }
+
+  function refreshMonitor(runId) {
+    fetch(BASE + 'data-engineering/ml-jobs/monitor/' + runId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (payload) { if (payload.ok && !payload.terminal) { renderCluster(payload); } });
+  }
+
   function track(run) {
     stopPolling();
+    var lastStatus = run.status;
     renderDrawer(run);
     refreshLog(run.id);
+    refreshMonitor(run.id);
     if (TERMINAL.indexOf(run.status) !== -1) { return; }
     poller = window.setInterval(function () {
       fetch(BASE + 'data-engineering/ml-jobs/status/' + run.id, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function (r) { return r.json(); })
         .then(function (payload) {
           if (!payload.ok) { return; }
-          renderDrawer(payload.run);
+          if (payload.run.status !== lastStatus) { renderDrawer(payload.run); lastStatus = payload.run.status; }
           refreshLog(run.id);
-          if (payload.run.terminal) { stopPolling(); }
+          if (payload.run.terminal) { stopPolling(); } else { refreshMonitor(run.id); }
         });
     }, 2500);
   }
@@ -291,6 +340,21 @@ foreach ($runtimes as $runtime) {
   if (newBtn) { newBtn.addEventListener('click', function () { openModal(null); }); }
   var editBtn = document.getElementById('jobEdit');
   if (editBtn && SELECTED_JOB) { editBtn.addEventListener('click', function () { openModal(SELECTED_JOB); }); }
+  var developBtn = document.getElementById('jobDevelop');
+  if (developBtn) {
+    developBtn.addEventListener('click', function () {
+      developBtn.disabled = true;
+      var original = developBtn.innerHTML;
+      developBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Opening&hellip;';
+      post('data-engineering/ml-jobs/develop', { id: developBtn.getAttribute('data-id') }).then(function (payload) {
+        developBtn.disabled = false;
+        developBtn.innerHTML = original;
+        if (!payload.ok) { window.alert(payload.message || 'Could not open the editor.'); return; }
+        window.open(payload.url, '_blank', 'noopener');
+        if (payload.starting) { window.alert('OpenVSCode is starting. If the tab shows an error, reload it in a few seconds.'); }
+      });
+    });
+  }
   var deleteBtn = document.getElementById('jobDelete');
   if (deleteBtn && SELECTED_JOB) {
     deleteBtn.addEventListener('click', function () {

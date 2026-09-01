@@ -1,13 +1,7 @@
-<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=1" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=2" rel="stylesheet" type="text/css">
 <div class="content-wrapper compute-page">
   <section class="content-header">
-    <div class="compute-toolbar">
-      <h1>ML Runtimes <small>Miniconda-based runtime images</small></h1>
-      <div class="compute-toolbar-actions">
-        <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/ml-jobs"><i class="fa fa-flask"></i> ML Jobs</a>
-        <button class="btn btn-primary btn-sm" type="button" id="runtimeNew"><i class="fa fa-plus"></i> New runtime</button>
-      </div>
-    </div>
+    <h1>ML Runtimes <small>Miniconda-based runtime images</small></h1>
     <ol class="breadcrumb">
       <li><a href="<?php echo base_url(); ?>dashboard"><i class="fa fa-home"></i> Home</a></li>
       <li>Data Engineering</li>
@@ -16,6 +10,13 @@
   </section>
 
   <section class="content">
+    <div class="compute-toolbar">
+      <span class="compute-toolbar-env">Runtime catalogue</span>
+      <div class="compute-toolbar-actions">
+        <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/ml-jobs"><i class="fa fa-flask"></i> ML Jobs</a>
+        <button class="btn btn-primary btn-sm" type="button" id="runtimeNew"><i class="fa fa-plus"></i> New runtime</button>
+      </div>
+    </div>
     <div class="compute-alert is-info"><i class="fa fa-info-circle"></i> Build images with <code>scripts/build-compute-runtimes.sh</code> (or <code>docker compose --profile runtimes up --build</code>). Conda-only stacks: keep <strong>Conda based</strong> on.</div>
     <div class="compute-card">
       <header><h2>Runtimes <span class="compute-chip"><?php echo count($runtimes); ?></span></h2></header>

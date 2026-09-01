@@ -43,6 +43,15 @@ abstract class ComputeDriver
      */
     abstract public function ensureImage($imageReference);
 
+    /**
+     * Host capacity and what JobSeeker compute is already reserving on it, so a
+     * run can be sized proportionally to the engine instead of over-committing.
+     *
+     * @return array{available:bool, cpus:float, memoryMb:int, usedCpus:float,
+     *               usedMemoryMb:int, freeCpus:float, freeMemoryMb:int, reservedHeadroomMb:int}
+     */
+    abstract public function capacitySnapshot();
+
     // --- Spark job clusters -------------------------------------------------
 
     /**
@@ -236,6 +245,46 @@ class DockerComputeDriver extends ComputeDriver
         return $this->engine->pullImage($parts[0], isset($parts[1]) ? $parts[1] : 'latest');
     }
 
+    public function capacitySnapshot()
+    {
+        // Leave the engine host some room for itself and the base stack.
+        $headroomMb = max(256, (int) (getenv('JOBSEEKER_COMPUTE_HOST_HEADROOM_MB') ?: 1024));
+        $capacity = $this->engine->engineCapacity();
+        if (empty($capacity['available'])) {
+            return array(
+                'available' => FALSE, 'cpus' => 0.0, 'memoryMb' => 0, 'usedCpus' => 0.0,
+                'usedMemoryMb' => 0, 'freeCpus' => 0.0, 'freeMemoryMb' => 0, 'reservedHeadroomMb' => $headroomMb,
+            );
+        }
+
+        $usedNanoCpus = 0;
+        $usedMemoryBytes = 0;
+        foreach ($this->engine->listByLabel(self::LABEL_KIND, 'compute') as $container) {
+            if (! isset($container['Id']) || strtolower((string) ($container['State'] ?? '')) !== 'running') {
+                continue;
+            }
+            $reservation = $this->engine->containerReservation((string) $container['Id']);
+            $usedNanoCpus += $reservation['nanoCpus'];
+            $usedMemoryBytes += $reservation['memoryBytes'];
+        }
+
+        $cpus = (float) $capacity['cpus'];
+        $memoryMb = (int) round($capacity['memoryBytes'] / 1048576);
+        $usedCpus = round($usedNanoCpus / 1e9, 2);
+        $usedMemoryMb = (int) round($usedMemoryBytes / 1048576);
+
+        return array(
+            'available' => TRUE,
+            'cpus' => $cpus,
+            'memoryMb' => $memoryMb,
+            'usedCpus' => $usedCpus,
+            'usedMemoryMb' => $usedMemoryMb,
+            'freeCpus' => max(0.0, round($cpus - $usedCpus, 2)),
+            'freeMemoryMb' => max(0, $memoryMb - $usedMemoryMb - $headroomMb),
+            'reservedHeadroomMb' => $headroomMb,
+        );
+    }
+
     public function provisionSparkCluster(array $spec)
     {
         $runKey = $this->assertRunKey($spec['run_key']);
@@ -267,11 +316,15 @@ class DockerComputeDriver extends ComputeDriver
                 '/opt/spark/bin/spark-class', 'org.apache.spark.deploy.master.Master',
                 '--host', 'master', '--port', '7077', '--webui-port', '8080',
             );
+            // Every node gets the job source at /workspace: executors, not just
+            // the driver, read local input files (spark.read.csv, addFile, ...).
+            $workspaceBind = $handle['bind_source'].':/workspace:ro';
+
             $handle['master_id'] = $this->createComputeContainer(
                 'js-'.$runKey.'-master', $image, $masterCmd,
                 $this->envList($spec['env'] ?? array()),
                 $labels + array(self::LABEL_ROLE => 'master'),
-                $networkName, 'master', 1.0, 1024, NULL
+                $networkName, 'master', 1.0, 1024, $workspaceBind
             );
 
             for ($i = 1; $i <= $workerCount; $i++) {
@@ -286,7 +339,7 @@ class DockerComputeDriver extends ComputeDriver
                     'js-'.$runKey.'-worker-'.$i, $image, $workerCmd,
                     $this->envList($spec['env'] ?? array()),
                     $labels + array(self::LABEL_ROLE => 'worker'),
-                    $networkName, 'worker-'.$i, $workerCores, $workerMemMb, NULL
+                    $networkName, 'worker-'.$i, $workerCores, $workerMemMb, $workspaceBind
                 );
             }
         } catch (RuntimeException $exception) {
@@ -306,11 +359,35 @@ class DockerComputeDriver extends ComputeDriver
         $driverMemMb = max(512, min(65536, (int) ($spec['driver_memory_mb'] ?? 1024)));
         $labels = $this->baseLabels('spark', $spec + array('run_key' => $runKey));
 
-        $cmd = array_merge(
+        // Default executor size to the worker size so the master can actually
+        // place executors (a standalone worker with 900 MB can't host the 1 GB
+        // executor spark-submit asks for by default). User spark_conf wins.
+        $conf = is_array($spec['spark_conf'] ?? NULL) ? $spec['spark_conf'] : array();
+        $workerCores = max(1, (int) ($spec['worker_cores'] ?? 1));
+        $workerMemMb = max(512, (int) ($spec['worker_memory_mb'] ?? 1024));
+        if (! isset($conf['spark.executor.memory'])) {
+            $conf['spark.executor.memory'] = max(512, $workerMemMb - 384).'m';
+        }
+        if (! isset($conf['spark.executor.cores'])) {
+            $conf['spark.executor.cores'] = (string) $workerCores;
+        }
+        if (! isset($conf['spark.cores.max'])) {
+            $conf['spark.cores.max'] = (string) ($workerCores * max(1, count(is_array($handle['worker_ids'] ?? NULL) ? $handle['worker_ids'] : array())));
+        }
+
+        $submitArgv = array_merge(
             array('/opt/spark/bin/spark-submit', '--master', 'spark://master:7077', '--deploy-mode', 'client'),
-            $this->sparkConfFlags($spec['spark_conf'] ?? array()),
+            $this->sparkConfFlags($conf),
             array('/workspace/'.$entryPoint),
             $this->argList($spec['application_args'] ?? array())
+        );
+        // Don't race the master: wait for spark://master:7077 to accept a TCP
+        // connection (bash /dev/tcp, present in the apache/spark image) for up to
+        // two minutes, then exec spark-submit so signals reach it directly.
+        $submitCommand = implode(' ', array_map('escapeshellarg', $submitArgv));
+        $cmd = array(
+            '/bin/bash', '-lc',
+            'for i in $(seq 1 60); do (exec 3<>/dev/tcp/master/7077) 2>/dev/null && break; sleep 2; done; exec '.$submitCommand,
         );
 
         $driverId = $this->createComputeContainer(
@@ -366,6 +443,73 @@ class DockerComputeDriver extends ComputeDriver
             return "[master]\n".$this->engine->containerLogs($handle['master_id'], $tailLines);
         }
         return '';
+    }
+
+    /**
+     * Live resource usage for every container in the run (master, each worker,
+     * driver) plus an aggregate. Empty when nothing is running.
+     *
+     * @return array{containers:array<int,array>, aggregate:array}
+     */
+    public function clusterStats(array $handle)
+    {
+        $targets = array();
+        if (! empty($handle['master_id'])) {
+            $targets[] = array('role' => 'master', 'name' => 'master', 'id' => (string) $handle['master_id']);
+        }
+        $workerIds = is_array($handle['worker_ids'] ?? NULL) ? array_values($handle['worker_ids']) : array();
+        foreach ($workerIds as $index => $workerId) {
+            $targets[] = array('role' => 'worker', 'name' => 'worker-'.($index + 1), 'id' => (string) $workerId);
+        }
+        if (! empty($handle['driver_id'])) {
+            $targets[] = array('role' => 'driver', 'name' => 'driver', 'id' => (string) $handle['driver_id']);
+        }
+
+        return $this->collectStats($targets);
+    }
+
+    /** Live resource usage for the single ML job container. */
+    public function mlJobStats(array $handle)
+    {
+        $id = (string) ($handle['container_id'] ?? '');
+        return $this->collectStats($id === '' ? array() : array(array('role' => 'job', 'name' => 'job', 'id' => $id)));
+    }
+
+    private function collectStats(array $targets)
+    {
+        $containers = array();
+        $aggregate = array('cpuPercent' => 0.0, 'memoryBytes' => 0, 'memoryLimitBytes' => 0, 'running' => 0, 'total' => 0);
+        foreach ($targets as $target) {
+            $state = $this->engine->inspectContainer($target['id']);
+            $row = array(
+                'role' => $target['role'],
+                'name' => $target['name'],
+                'state' => $state['found'] ? $state['status'] : 'gone',
+                'running' => $state['running'],
+                'exitCode' => $state['exitCode'],
+                'uptimeSeconds' => 0,
+                'available' => FALSE,
+                'cpuPercent' => 0.0, 'memoryBytes' => 0, 'memoryLimitBytes' => 0, 'memoryPercent' => 0.0,
+                'networkRxBytes' => 0, 'networkTxBytes' => 0, 'blockReadBytes' => 0, 'blockWriteBytes' => 0, 'pids' => 0,
+            );
+            if ($state['found'] && $state['startedAt'] !== '' && strtotime($state['startedAt']) > 0) {
+                $row['uptimeSeconds'] = max(0, time() - strtotime($state['startedAt']));
+            }
+            if ($state['running']) {
+                $row = array_merge($row, $this->engine->containerStats($target['id']));
+                $aggregate['cpuPercent'] += $row['cpuPercent'];
+                $aggregate['memoryBytes'] += $row['memoryBytes'];
+                $aggregate['memoryLimitBytes'] += $row['memoryLimitBytes'];
+                $aggregate['running']++;
+            }
+            $aggregate['total']++;
+            $containers[] = $row;
+        }
+        $aggregate['cpuPercent'] = round($aggregate['cpuPercent'], 2);
+        $aggregate['memoryPercent'] = $aggregate['memoryLimitBytes'] > 0
+            ? round(($aggregate['memoryBytes'] / $aggregate['memoryLimitBytes']) * 100, 2) : 0.0;
+
+        return array('containers' => $containers, 'aggregate' => $aggregate);
     }
 
     public function teardownSpark(array $handle)
@@ -471,7 +615,7 @@ class DockerComputeDriver extends ComputeDriver
     private function assertBindSource(array $spec, $kind)
     {
         $source = isset($spec['bind_source']) ? trim((string) $spec['bind_source']) : '';
-        $default = $kind === 'spark' ? '/jobseeker/spark' : '/jobseeker/ml';
+        $default = $kind === 'spark' ? '/jobseeker/src/spark' : '/jobseeker/src/ml';
         if ($source === '') {
             return $default;
         }

@@ -2,10 +2,11 @@
    Deliberately small: leans on AdminLTE, adds only layout + status affordances. */
 
 .compute-page .content { padding: 18px; }
-.compute-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-bottom: 16px; }
-.compute-toolbar h1 { font-size: 22px; margin: 0; }
-.compute-toolbar h1 small { color: #8a929c; font-size: 13px; }
+.compute-toolbar { align-items: center; background: #fff; border: 1px solid #e6e9ee; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-bottom: 16px; padding: 10px 14px; }
+.compute-toolbar-env { color: #667085; font-size: 13px; }
+.compute-toolbar-env strong { color: #1d2939; }
 .compute-toolbar-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.compute-toolbar-actions .form-control { height: 30px; }
 
 .compute-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 992px) { .compute-grid.compute-grid-split { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } }
@@ -45,7 +46,31 @@
 .compute-run-drawer { background: #0f172a; border-radius: 8px; color: #e2e8f0; overflow: hidden; }
 .compute-run-drawer header { align-items: center; display: flex; gap: 10px; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .compute-run-drawer header .compute-run-meta { color: #94a3b8; font-size: 12px; }
-.compute-run-log { background: #0b1220; color: #cbd5e1; font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.5; margin: 0; max-height: 380px; min-height: 140px; overflow: auto; padding: 12px 14px; white-space: pre-wrap; word-break: break-word; }
+.compute-run-log { background: #0b1220; color: #cbd5e1; font-family: Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.5; margin: 0; max-height: 340px; min-height: 120px; overflow: auto; padding: 12px 14px; white-space: pre-wrap; word-break: break-word; }
+
+/* Run controls + host capacity */
+.compute-run-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.compute-run-controls label { align-items: center; color: #475467; display: flex; font-size: 12px; font-weight: 600; gap: 6px; margin: 0; }
+.compute-capacity { align-items: center; background: #f8fafc; border: 1px solid #e6e9ee; border-radius: 6px; color: #475467; display: flex; flex-wrap: wrap; font-size: 12px; gap: 14px; margin: 10px 0 0; padding: 8px 12px; }
+.compute-capacity strong { color: #1d2939; }
+.compute-capacity-warn { color: #b9770e; font-style: normal; font-weight: 600; }
+.compute-capacity-ok { color: #1f9254; font-style: normal; font-weight: 600; }
+
+/* Live cluster / container monitor inside the run drawer */
+.compute-cluster-panel { padding: 10px 14px; }
+.compute-cluster-table { border-collapse: collapse; color: #cbd5e1; font-size: 12px; width: 100%; }
+.compute-cluster-table th { color: #94a3b8; font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 4px 8px; text-align: left; text-transform: uppercase; }
+.compute-cluster-table td { border-top: 1px solid rgba(255, 255, 255, 0.06); padding: 6px 8px; vertical-align: middle; }
+.compute-cluster-table tfoot td { border-top: 1px solid rgba(255, 255, 255, 0.16); color: #e2e8f0; font-weight: 600; }
+.compute-cluster-table .compute-sub { color: #7c8aa0; }
+.compute-role { border-radius: 4px; display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; text-transform: uppercase; }
+.compute-role-master { background: #1d4ed8; color: #fff; }
+.compute-role-worker { background: #334155; color: #cbd5e1; }
+.compute-role-driver { background: #7c3aed; color: #fff; }
+.compute-role-job { background: #0f766e; color: #fff; }
+.compute-meter { min-width: 120px; position: relative; }
+.compute-meter span { position: relative; z-index: 1; }
+.compute-meter i { background: rgba(59, 130, 246, 0.35); border-radius: 3px; bottom: 4px; display: block; height: 4px; left: 8px; max-width: calc(100% - 16px); position: absolute; }
 
 .compute-alert { border-radius: 6px; font-size: 13px; margin-bottom: 14px; padding: 10px 14px; }
 .compute-alert.is-warn { background: #fff7e6; border: 1px solid #ffe1a8; color: #92610a; }

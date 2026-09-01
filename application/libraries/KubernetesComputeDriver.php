@@ -65,6 +65,16 @@ class KubernetesComputeDriver extends ComputeDriver
         return array('ok' => TRUE, 'message' => 'image pulls are handled by the kubelet');
     }
 
+    public function capacitySnapshot()
+    {
+        // On Kubernetes the scheduler + cluster autoscaler enforce proportionality
+        // via ResourceQuota and pod requests/limits; there is no single host cap.
+        return array(
+            'available' => FALSE, 'cpus' => 0.0, 'memoryMb' => 0, 'usedCpus' => 0.0,
+            'usedMemoryMb' => 0, 'freeCpus' => 0.0, 'freeMemoryMb' => 0, 'reservedHeadroomMb' => 0,
+        );
+    }
+
     public function provisionSparkCluster(array $spec)
     {
         $this->notImplemented();

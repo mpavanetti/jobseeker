@@ -6,16 +6,10 @@ foreach ($runtimes as $runtime) {
     $runtimeByKey[$runtime->runtime_key] = $runtime;
 }
 ?>
-<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=1" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=2" rel="stylesheet" type="text/css">
 <div class="content-wrapper compute-page">
   <section class="content-header">
-    <div class="compute-toolbar">
-      <h1>Spark Clusters <small>ephemeral job-cluster specifications</small></h1>
-      <div class="compute-toolbar-actions">
-        <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/spark-jobs?environment=<?php echo $envQuery; ?>"><i class="fa fa-tasks"></i> Spark Jobs</a>
-        <button class="btn btn-primary btn-sm" type="button" id="clusterNew"<?php echo $env === 'ALL' ? ' disabled' : ''; ?>><i class="fa fa-plus"></i> New cluster</button>
-      </div>
-    </div>
+    <h1>Spark Clusters <small>ephemeral job-cluster specifications</small></h1>
     <ol class="breadcrumb">
       <li><a href="<?php echo base_url(); ?>dashboard"><i class="fa fa-home"></i> Home</a></li>
       <li>Data Engineering</li>
@@ -24,6 +18,13 @@ foreach ($runtimes as $runtime) {
   </section>
 
   <section class="content">
+    <div class="compute-toolbar">
+      <span class="compute-toolbar-env">Environment <strong><?php echo html_escape($env); ?></strong></span>
+      <div class="compute-toolbar-actions">
+        <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/spark-jobs?environment=<?php echo $envQuery; ?>"><i class="fa fa-tasks"></i> Spark Jobs</a>
+        <button class="btn btn-primary btn-sm" type="button" id="clusterNew"<?php echo $env === 'ALL' ? ' disabled' : ''; ?>><i class="fa fa-plus"></i> New cluster</button>
+      </div>
+    </div>
     <?php if ($env === 'ALL') { ?>
       <div class="compute-alert is-warn"><i class="fa fa-filter"></i> Pick a global environment (top bar) to create or edit clusters.</div>
     <?php } ?>
