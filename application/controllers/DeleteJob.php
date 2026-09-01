@@ -176,6 +176,7 @@ class DeleteJob extends BaseController
             $ok = in_array((int) $response['status'], array(200, 201, 302, 303), TRUE);
             $systems = $ok && $deleteRepositories ? $this->deleteRepositoryForJob($jobName) : array();
             if ($ok) {
+                $this->removeJobCreationDate($jobName);
                 $deleted++;
             }
             $results[] = array(
@@ -244,6 +245,36 @@ class DeleteJob extends BaseController
         }
 
         return $deletedSystems;
+    }
+
+    private function removeJobCreationDate($jobName)
+    {
+        $path = APPPATH.'cache/job_creation_dates.json';
+        $handle = fopen($path, 'c+');
+        if ($handle === FALSE || ! flock($handle, LOCK_EX)) {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+            return FALSE;
+        }
+
+        rewind($handle);
+        $dates = json_decode(stream_get_contents($handle), TRUE);
+        if (! is_array($dates) || ! array_key_exists($jobName, $dates)) {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+            return TRUE;
+        }
+
+        unset($dates[$jobName]);
+        $payload = json_encode($dates, JSON_PRETTY_PRINT);
+        rewind($handle);
+        $written = $payload !== FALSE && ftruncate($handle, 0) && fwrite($handle, $payload) !== FALSE;
+        fflush($handle);
+        flock($handle, LOCK_UN);
+        fclose($handle);
+
+        return $written;
     }
 
     private function jsonDeleteResponse($payload, $status = 200)
