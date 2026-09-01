@@ -9,7 +9,7 @@ foreach ($pipelineList as $item) {
     $groups[$group][] = $item;
 }
 ?>
-<link href="<?php echo base_url(); ?>assets/dist/css/pipeline-builder.css?v=10" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/pipeline-builder.css?v=11" rel="stylesheet" type="text/css">
 <div class="content-wrapper">
   <section class="content-header">
     <h1>Pipelines <small>workflow orchestration</small></h1>
@@ -75,6 +75,7 @@ foreach ($pipelineList as $item) {
               <label class="pipeline-schedule-toggle" title="Enable Jenkins schedule"><input type="checkbox" id="pipelineScheduleEnabled"<?php echo $pipeline && $pipeline->schedule_enabled ? ' checked' : ''; ?><?php echo $selectedEnvironment === 'ALL' ? ' disabled' : ''; ?>><i class="fa fa-clock-o"></i></label>
               <input class="form-control input-sm" id="pipelineScheduleCron" maxlength="120" placeholder="H 2 * * *" value="<?php echo html_escape($pipeline && $pipeline->schedule_cron ? $pipeline->schedule_cron : ''); ?>"<?php echo $selectedEnvironment === 'ALL' || ! ($pipeline && $pipeline->schedule_enabled) ? ' disabled' : ''; ?>>
             </div>
+            <div id="pipelineScheduleValidation" class="pipeline-schedule-validation" aria-live="polite" hidden></div>
           </div>
         </div>
 
@@ -190,6 +191,7 @@ window.JobSeekerPipelineConfig = <?php echo json_encode(array(
   'currentRunId' => $currentRunId,
   'urls' => array(
     'validate' => base_url().'pipelines/validate?environment='.$environmentQuery,
+    'validateSchedule' => base_url().'pipelines/validateSchedule?environment='.$environmentQuery,
     'save' => base_url().'pipelines/save?environment='.$environmentQuery,
     'deploy' => base_url().'pipelines/deploy?environment='.$environmentQuery,
     'run' => base_url().'pipelines/run?environment='.$environmentQuery,
@@ -199,5 +201,5 @@ window.JobSeekerPipelineConfig = <?php echo json_encode(array(
   )
 ), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
-<script src="<?php echo base_url(); ?>assets/js/pipeline-builder.js?v=9"></script>
+<script src="<?php echo base_url(); ?>assets/js/pipeline-builder.js?v=11"></script>
 <script>jQuery(function() { window.JobSeekerPipelineBuilder.initialize(window.JobSeekerPipelineConfig); });</script>

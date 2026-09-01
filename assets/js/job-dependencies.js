@@ -70,9 +70,12 @@
     var connectors = (data && data.connectors) || [];
     var datasets = (data && data.datasets) || [];
     var environment = options.environment || (data && data.environment) || '';
+    var commandSafety = (data && data.commandSafety) || null;
+    var guardHtml = options.showWarnings === false ? '' : renderCommandSafety(commandSafety);
 
     if (!connectors.length && !datasets.length) {
-      $box.html('<p class="jd-empty text-muted">No connectors or datasets are referenced in this job’s code.</p>');
+      var emptyHtml = '<p class="jd-empty text-muted">No connectors or datasets are referenced in this job’s code.</p>';
+      $box.html(emptyHtml + guardHtml);
       return;
     }
 
@@ -89,7 +92,34 @@
     if (warnings.length && options.showWarnings !== false) {
       html += '<ul class="jd-warnings">' + warnings.map(function(w) { return '<li><i class="fa fa-exclamation-triangle"></i> ' + escapeHtml(w) + '</li>'; }).join('') + '</ul>';
     }
-    $box.html(html);
+    $box.html(html + guardHtml);
+  }
+
+  function renderCommandSafety(commandSafety) {
+    var findings = (commandSafety && commandSafety.findings) || [];
+    if (!findings.length) {
+      return '';
+    }
+    var enforced = !!(commandSafety && commandSafety.enforced);
+    var blocking = findings.filter(function(f) { return f.severity === 'critical' || f.severity === 'high'; }).length;
+    var headline = enforced && blocking
+      ? blocking + ' command pattern' + (blocking === 1 ? '' : 's') + ' will block this job from being created'
+      : findings.length + ' risky command pattern' + (findings.length === 1 ? '' : 's') + ' detected — review before creating this job';
+    var items = findings.map(function(f) {
+      var sev = f.severity === 'medium' ? 'jd-warn' : 'jd-bad';
+      return '<li class="' + sev + '">' +
+        '<i class="fa fa-exclamation-triangle"></i> ' +
+        '<strong>' + escapeHtml(f.title) + '</strong>' +
+        (f.source ? ' <small>(' + escapeHtml(f.source) + ')</small>' : '') +
+        '<br><code>' + escapeHtml(f.snippet) + '</code>' +
+        '<br><span class="text-muted">' + escapeHtml(f.detail) + '</span>' +
+      '</li>';
+    }).join('');
+    return '<div class="jd-command-guard' + (enforced && blocking ? ' jd-command-guard-blocking' : '') + '">' +
+      '<span class="jd-group-label"><i class="fa fa-shield"></i> Command safety</span>' +
+      '<p class="jd-command-guard-headline">' + escapeHtml(headline) + '</p>' +
+      '<ul class="jd-warnings">' + items + '</ul>' +
+    '</div>';
   }
 
   function summaryText(data) {

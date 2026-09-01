@@ -23,6 +23,8 @@
     "test:job-deps:e2e": "python3 scripts/test-job-dependencies-e2e.py",
     "test:pipelines": "node scripts/test-pipeline-builder.js",
     "test:pipelines:e2e": "python3 scripts/test-pipeline-deployment-e2e.py",
+    "test:command-guard": "php scripts/test-command-guard.php",
+    "test:cron-schedule": "php scripts/test-cron-schedule.php",
     "test:dashboard": "node scripts/test-dashboard.js",
     "postinstall": "npm run assets:sync"
   },
