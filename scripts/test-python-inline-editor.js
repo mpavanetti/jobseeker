@@ -4,6 +4,9 @@ const vm = require('vm');
 
 const viewPath = path.join(__dirname, '..', 'application', 'views', 'jobCreation.php');
 const view = fs.readFileSync(viewPath, 'utf8');
+const controller = fs.readFileSync(path.join(__dirname, '..', 'application', 'controllers', 'JobCreation.php'), 'utf8');
+const emailConcern = fs.readFileSync(path.join(__dirname, '..', 'application', 'controllers', 'concerns', 'JobCreationEmailTrait.php'), 'utf8');
+const executionConcern = fs.readFileSync(path.join(__dirname, '..', 'application', 'controllers', 'concerns', 'JobCreationExecutionTrait.php'), 'utf8');
 const start = view.indexOf('function handleCodeEditorTab');
 const end = view.indexOf('function updatePythonInlineEditor', start);
 
@@ -59,6 +62,10 @@ function assert(condition, message) {
     throw new Error(message);
   }
 }
+
+assert(controller.includes('use JobCreationEmailTrait;') && controller.includes('use JobCreationExecutionTrait;'), 'JobCreation must compose its focused implementation concerns.');
+assert(!controller.includes('private function buildPythonExecutionCommand(') && executionConcern.includes('private function buildPythonExecutionCommand('), 'Execution command generation must remain isolated from the main controller.');
+assert(!controller.includes('private function defaultFailureEmailBody(') && emailConcern.includes('private function defaultFailureEmailBody('), 'Email XML generation must remain isolated from the main controller.');
 
 let editor = textarea('if ready:', 9);
 context.handlePythonCodeEditorKey(key('Enter'), editor);

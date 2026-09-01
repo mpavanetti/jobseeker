@@ -543,6 +543,9 @@
   </section>
 </div>
 
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
+
 <script type="text/javascript">
   $(document).ready(function() {
     var jenkinsUrl = window.jobseekerJenkinsUrl || <?php echo json_encode(isset($jenkins_url) ? $jenkins_url : ''); ?>;
@@ -1567,11 +1570,23 @@
               '<div class="execution-runtime-metric"><span>Processes</span><strong class="run-container-pids">—</strong><small class="run-container-pids-detail"></small></div>' +
             '</div>' +
           '</div>' +
+          '<div class="job-dependency-panel execution-dependency-panel" id="deps-' + run.id + '"></div>' +
           '<div class="execution-console job-console-host" id="console-' + run.id + '"><div class="job-console-empty">Waiting for Jenkins to start this build...</div></div>' +
         '</div>'
       );
 
       $('#executionTabs a[href="#pane-' + run.id + '"]').tab('show');
+
+      if (window.JobSeekerJobDependencies) {
+        var depEnvironment = environmentHelper.text(run.environmentInfo);
+        window.JobSeekerJobDependencies.load('JobExecution', run.jobName, depEnvironment).done(function(data) {
+          var hasAny = data && ((data.connectors || []).length || (data.datasets || []).length);
+          if (hasAny) {
+            $('#deps-' + run.id).html('<strong class="jd-group-label">Connectors &amp; datasets used</strong>');
+            window.JobSeekerJobDependencies.render($('#deps-' + run.id), data, {environment: depEnvironment, showWarnings: false});
+          }
+        });
+      }
     }
 
     function updateConsoleViewLayout() {

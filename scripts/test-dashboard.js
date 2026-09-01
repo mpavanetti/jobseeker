@@ -62,6 +62,8 @@ assert(jenkinsProxy.includes('function dashboardMetrics()'), 'The sanitized Jenk
 assert(jenkinsProxy.includes("$slots[$field] += isset($row[$field])"), 'Dashboard slots must aggregate backend environment limits.');
 assert(jenkinsProxy.includes("'onlineAgentExecutors' => 0"), 'Dashboard capacity rows must expose online agent executors.');
 assert(baseController.includes("$effectiveLimit = $configuredLimit + (int) $slotStatus['environments'][$environmentName]['onlineAgentExecutors']"), 'Online environment-agent executors must be additive to dashboard slot limits.');
+assert(baseController.includes("$includeControllerCapacity = $requestedEnvironment === 'LOCAL'") && baseController.includes("empty($status['environmentAgentsEnabled'])") && baseController.includes("$environmentRow['onlineAgentExecutors']") && baseController.includes('$controllerHasScopedBuild'), 'Scoped metrics must include controller capacity when routing is disabled, it is the environment fallback, or it is running a scoped build.');
+assert(baseController.includes('function($row) use ($requestedEnvironment, $includeControllerCapacity)'), 'Scoped nodes and executors must apply the controller-capacity decision consistently.');
 assert(routes.includes("dashboard/overview") && routes.includes("jenkins/dashboardMetrics"), 'Dashboard routes must remain registered.');
 
 console.log('Dashboard metric and rendering tests passed.');
