@@ -515,6 +515,9 @@
   </section>
 </div>
 
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
+
 <script type="text/javascript">
   $(document).ready(function() {
     var jenkinsUrl = window.jobseekerJenkinsUrl || <?php echo json_encode(isset($jenkins_url) ? $jenkins_url : ''); ?>;
@@ -1866,6 +1869,7 @@
             '</div>' +
             '<div class="job-detail-section"><h4>Description</h4><p>' + escapeHtml(description) + '</p>' + healthText(detail) + '</div>' +
             '<div class="job-detail-section"><h4>Execution Runtime</h4>' + renderRuntimeConfig(config) + '</div>' +
+            '<div class="job-detail-section"><h4>Connectors &amp; datasets</h4><div class="job-dependency-panel" id="jobDependencies-' + index + '" data-job="' + escapeAttribute(detail.name) + '" data-env="' + escapeAttribute(environmentHelper.text(config.environmentInfo)) + '"><p class="text-muted jd-empty">Loading…</p></div></div>' +
             '<div class="job-detail-section"><h4>Build History</h4>' + renderBuildHistory(detail.builds) + '</div>' +
             '<div class="row">' +
               '<div class="col-md-6"><div class="job-detail-section"><h4>Schedule</h4>' + renderList(config.schedules) + '</div></div>' +
@@ -1887,6 +1891,20 @@
       });
 
       $('#jobDetailsGrid').html(html);
+
+      if (window.JobSeekerJobDependencies) {
+        $('#jobDetailsGrid .job-dependency-panel[data-job]').each(function() {
+          var panel = $(this);
+          var jobName = panel.data('job');
+          var environment = panel.data('env');
+          if (!jobName) { return; }
+          window.JobSeekerJobDependencies.load('JobView', jobName, environment).done(function(data) {
+            window.JobSeekerJobDependencies.render(panel, data, {environment: environment});
+          }).fail(function() {
+            panel.html('<p class="text-muted jd-empty">Dependency map is unavailable.</p>');
+          });
+        });
+      }
 
       $.each(consoleMounts, function(index, mount) {
         if (window.JobSeekerConsole) {
