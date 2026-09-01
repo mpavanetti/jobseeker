@@ -589,3 +589,189 @@ INSERT INTO `jobseeker`.`contextdetails` (`Id`, `ProjectDetailsFK`, `ContextKey`
 
 INSERT INTO `jobseeker`.`contextdetails` (`Id`, `ProjectDetailsFK`, `ContextKey`, `ContextValue`, `isEncrypted`, `EnvironmentFK`, `Description`, `IsActive`, `CreatedOn`, `CreatedBy`, `ModifiedOn`, `ModifiedBy`) VALUES
 (3,	1,	'Custom',	'This is a custom context from jobseeker DEV',	0,	2,	'',	1,	CURRENT_TIMESTAMP(),	'Developer',	NULL,	NULL);
+
+-- ---------------------------------------------------------------------------
+-- Data Engineering : Docker-based Spark job clusters and ML runtimes.
+-- Clusters are ephemeral (Databricks job-cluster model): rows below only hold
+-- the *specification*; containers are created on the docker-runtime engine when
+-- a job is triggered and removed when it finishes. The application models also
+-- run CREATE TABLE IF NOT EXISTS at load time, so these statements simply keep a
+-- fresh install schema-complete.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `spark_runtimes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `display_name` varchar(160) COLLATE utf8_unicode_ci NOT NULL,
+  `spark_version` varchar(32) COLLATE utf8_unicode_ci NOT NULL,
+  `image_repository` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `image_tag` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `base_image` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `description` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 100,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `spark_runtime_key` (`runtime_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_runtimes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `display_name` varchar(160) COLLATE utf8_unicode_ci NOT NULL,
+  `image_repository` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `image_tag` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `base_image` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `conda_based` tinyint(1) NOT NULL DEFAULT 1,
+  `library_summary` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `description` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 100,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_runtime_key` (`runtime_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `spark_clusters` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `cluster_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `group_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'General',
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `driver_cores` int(11) NOT NULL DEFAULT 1,
+  `driver_memory_mb` int(11) NOT NULL DEFAULT 1024,
+  `worker_cores` int(11) NOT NULL DEFAULT 1,
+  `worker_memory_mb` int(11) NOT NULL DEFAULT 1024,
+  `min_workers` int(11) NOT NULL DEFAULT 1,
+  `max_workers` int(11) NOT NULL DEFAULT 2,
+  `autoscale` tinyint(1) NOT NULL DEFAULT 0,
+  `idle_timeout_minutes` int(11) NOT NULL DEFAULT 10,
+  `spark_conf_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `env_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `spark_cluster_scope` (`cluster_key`,`environment`),
+  KEY `spark_cluster_environment` (`environment`),
+  KEY `spark_cluster_group` (`group_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `spark_jobs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `job_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `group_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'General',
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `cluster_id` int(11) NOT NULL,
+  `source_type` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'repository',
+  `entry_point` varchar(500) COLLATE utf8_unicode_ci NOT NULL,
+  `application_args` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `inline_code` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `requirements_txt` text COLLATE utf8_unicode_ci DEFAULT NULL,
+  `spark_submit_conf_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `schedule_cron` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `spark_job_scope` (`job_key`,`environment`),
+  KEY `spark_job_environment` (`environment`),
+  KEY `spark_job_cluster` (`cluster_id`),
+  CONSTRAINT `spark_jobs_cluster_fk` FOREIGN KEY (`cluster_id`) REFERENCES `spark_clusters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `spark_job_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` int(11) NOT NULL,
+  `run_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `status` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'QUEUED',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `triggered_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `cluster_network` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `driver_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `worker_container_ids_json` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `worker_count` int(11) NOT NULL DEFAULT 0,
+  `exit_code` int(11) DEFAULT NULL,
+  `log_tail` mediumtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `error_message` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `started_at` datetime NOT NULL,
+  `provisioned_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `spark_job_run_key` (`run_key`),
+  KEY `spark_job_run_job` (`job_id`,`id`),
+  KEY `spark_job_run_status` (`status`,`updated_at`),
+  CONSTRAINT `spark_job_runs_job_fk` FOREIGN KEY (`job_id`) REFERENCES `spark_jobs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_jobs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `job_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `group_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'General',
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `source_type` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'repository',
+  `entry_point` varchar(500) COLLATE utf8_unicode_ci NOT NULL,
+  `application_args` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `inline_code` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `requirements_txt` text COLLATE utf8_unicode_ci DEFAULT NULL,
+  `cpu_limit` decimal(4,2) NOT NULL DEFAULT 1.00,
+  `memory_limit_mb` int(11) NOT NULL DEFAULT 2048,
+  `env_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `schedule_cron` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_job_scope` (`job_key`,`environment`),
+  KEY `ml_job_environment` (`environment`),
+  KEY `ml_job_runtime` (`runtime_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_job_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `job_id` int(11) NOT NULL,
+  `run_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `status` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'QUEUED',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `triggered_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `exit_code` int(11) DEFAULT NULL,
+  `log_tail` mediumtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `error_message` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `started_at` datetime NOT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_job_run_key` (`run_key`),
+  KEY `ml_job_run_job` (`job_id`,`id`),
+  KEY `ml_job_run_status` (`status`,`updated_at`),
+  CONSTRAINT `ml_job_runs_job_fk` FOREIGN KEY (`job_id`) REFERENCES `ml_jobs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+INSERT IGNORE INTO `spark_runtimes`
+  (`runtime_key`, `display_name`, `spark_version`, `image_repository`, `image_tag`, `base_image`, `description`, `is_default`, `is_active`, `sort_order`, `created_at`, `updated_at`) VALUES
+  ('spark-4.0-python', 'Spark 4.0.0 (Python 3, Java 17)', '4.0.0', 'jobseeker/spark-runtime', '4.0.0-python', 'apache/spark:4.0.0', 'PySpark runtime with pandas and pyarrow for DataFrame interchange.', 1, 1, 10, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
+  ('spark-4.0-scala', 'Spark 4.0.0 (Scala 2.13, Java 17)', '4.0.0', 'jobseeker/spark-runtime', '4.0.0-scala', 'apache/spark:4.0.0', 'JVM Spark runtime for Scala and Java workloads and spark-submit JARs.', 0, 1, 20, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
+
+INSERT IGNORE INTO `ml_runtimes`
+  (`runtime_key`, `display_name`, `image_repository`, `image_tag`, `base_image`, `conda_based`, `library_summary`, `description`, `is_default`, `is_active`, `sort_order`, `created_at`, `updated_at`) VALUES
+  ('ml-cpu', 'ML CPU (Miniconda)', 'jobseeker/ml-runtime', 'cpu', 'continuumio/miniconda3', 1, 'numpy, pandas, scikit-learn, xgboost, matplotlib, joblib', 'General purpose CPU machine-learning runtime built on Miniconda.', 1, 1, 10, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
+  ('ml-dl-cpu', 'Deep Learning CPU (Miniconda)', 'jobseeker/ml-runtime', 'dl-cpu', 'continuumio/miniconda3', 1, 'pytorch (cpu), lightning, torchvision, pandas, scikit-learn', 'CPU deep-learning runtime with PyTorch and Lightning on Miniconda.', 0, 1, 20, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
