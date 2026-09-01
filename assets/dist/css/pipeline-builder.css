@@ -36,6 +36,13 @@
 .pipeline-schedule-toggle:has(input:checked) { background: #167d8d; border-color: #167d8d; }
 .pipeline-schedule-toggle:has(input:checked) i { color: #fff; }
 .pipeline-schedule-control .form-control { min-width: 0; }
+.pipeline-schedule-validation { margin-top: 5px; font-size: 11px; line-height: 1.5; text-transform: none; }
+.pipeline-schedule-validation .psv-spec { margin-bottom: 3px; }
+.pipeline-schedule-validation code { padding: 1px 4px; background: #eef2f4; border-radius: 3px; }
+.pipeline-schedule-validation .psv-line .fa { margin-right: 4px; }
+.pipeline-schedule-validation .psv-ok { color: #2e7d32; }
+.pipeline-schedule-validation .psv-warn { color: #b9770e; }
+.pipeline-schedule-validation .psv-error { color: #c0392b; }
 .pipeline-canvas-scroll { position: relative; min-height: 500px; overflow: auto; flex: 1; }
 .pipeline-canvas { position: relative; width: 100%; min-width: 100%; height: 100%; min-height: 500px; overflow: hidden; background-color: #f8fafb; background-image: linear-gradient(#e5eaee 1px, transparent 1px), linear-gradient(90deg, #e5eaee 1px, transparent 1px); background-size: 24px 24px; }
 .pipeline-canvas-empty { position: absolute; inset: 0; z-index: 3; padding: 28px; background: rgba(248,250,251,.82); display: none; align-items: center; justify-content: center; pointer-events: none; }

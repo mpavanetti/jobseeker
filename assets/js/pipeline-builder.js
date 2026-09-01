@@ -465,6 +465,53 @@
       }).always(function() { $('#pipelineSave').prop('disabled', false); });
     }
 
+    var scheduleValidationTimer = null;
+    var scheduleValidationSeq = 0;
+
+    function debounceScheduleValidation() {
+      clearTimeout(scheduleValidationTimer);
+      scheduleValidationTimer = setTimeout(refreshScheduleValidation, 350);
+    }
+
+    function refreshScheduleValidation() {
+      var $box = $('#pipelineScheduleValidation');
+      if (!$box.length || !config.urls || !config.urls.validateSchedule) {
+        return;
+      }
+      var enabled = $('#pipelineScheduleEnabled').is(':checked');
+      var cron = $.trim($('#pipelineScheduleCron').val());
+      if (!enabled || !cron) {
+        $box.attr('hidden', true).empty();
+        return;
+      }
+      var seq = ++scheduleValidationSeq;
+      $.ajax({type: 'POST', dataType: 'json', url: config.urls.validateSchedule, data: {schedule_cron: cron}})
+        .done(function(data) { if (seq === scheduleValidationSeq) { renderScheduleValidation(data); } })
+        .fail(function() { if (seq === scheduleValidationSeq) { $box.attr('hidden', true).empty(); } });
+    }
+
+    function renderScheduleValidation(data) {
+      var $box = $('#pipelineScheduleValidation');
+      var html = '';
+      if (data && data.spec) {
+        html += '<div class="psv-spec"><code>' + escapeHtml(data.spec) + '</code></div>';
+      }
+      if (data && !data.ok && data.error) {
+        html += '<div class="psv-line psv-error"><i class="fa fa-times-circle"></i> ' + escapeHtml(data.error) + '</div>';
+      }
+      if (data && data.jenkins && data.jenkins.message) {
+        var level = data.jenkins.level === 'error' ? 'psv-error' : (data.jenkins.level === 'warning' ? 'psv-warn' : 'psv-ok');
+        html += '<div class="psv-line ' + level + '"><i class="fa fa-clock-o"></i> ' + escapeHtml(data.jenkins.message) + '</div>';
+      }
+      (data && data.warnings ? data.warnings : []).forEach(function(w) {
+        html += '<div class="psv-line psv-warn"><i class="fa fa-exclamation-triangle"></i> ' + escapeHtml(w) + '</div>';
+      });
+      if (data && data.ok && !data.error && !html) {
+        html = '<div class="psv-line psv-ok"><i class="fa fa-check-circle"></i> Schedule looks valid.</div>';
+      }
+      $box.html(html).attr('hidden', html === '' ? true : null);
+    }
+
     function autoLayout() {
       var validation = validateGraph(state.nodes, state.edges);
       if (!validation.ok) {
@@ -680,7 +727,10 @@
       $('#pipelineScheduleCron').prop('disabled', !this.checked);
       markDirty();
       if (this.checked) $('#pipelineScheduleCron').trigger('focus');
+      refreshScheduleValidation();
     });
+    $('#pipelineScheduleCron').on('input change', debounceScheduleValidation);
+    refreshScheduleValidation();
     $('#pipelinePicker').on('change', function() {
       var id = Number($(this).val() || 0);
       window.location.href = id ? pipelineUrl(id) : config.baseUrl + 'pipelines?environment=' + encodeURIComponent(config.environment);
