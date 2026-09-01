@@ -35,8 +35,8 @@ const header = read('application/views/includes/header.php');
 const controllerClusters = read('application/controllers/SparkClusters.php');
 const controllerJobs = read('application/controllers/SparkJobs.php');
 const model = read('application/models/SparkCompute_model.php');
-const engine = read('application/libraries/ComputeEngineClient.php');
 const driver = read('application/libraries/ComputeDriver.php');
+const engine = read('application/libraries/ComputeEngineClient.php');
 const k8sDriver = read('application/libraries/KubernetesComputeDriver.php');
 const orchestrator = read('application/libraries/SparkClusterOrchestrator.php');
 const compose = read('docker-compose.yml');
@@ -53,6 +53,9 @@ const dockerfileScala = read('docker/spark/Dockerfile.spark-4.0-scala');
   'data-engineering/spark-jobs/run',
   'data-engineering/spark-jobs/status/(:num)',
   'data-engineering/spark-jobs/logs/(:num)',
+  'data-engineering/spark-jobs/monitor/(:num)',
+  'data-engineering/spark-jobs/capacity',
+  'data-engineering/spark-jobs/develop',
   'data-engineering/spark-jobs/cancel',
 ].forEach((route) => {
   assert(routes.includes("$route['" + route + "']"), 'Missing route: ' + route);
@@ -111,11 +114,35 @@ assert(/jobseeker\/spark-runtime/.test(driver) === false, 'Driver must not hardc
 });
 assert(dbSetup.includes("'spark-4.0-python'") && dbSetup.includes("'jobseeker/spark-runtime'"),
   'db_setup.sql must seed the Spark runtime catalogue.');
-assert(compose.includes('./repository/spark:/jobseeker/spark:ro'), 'docker-runtime must mount the Spark job source read-only.');
+assert(compose.includes('./repository:/jobseeker/src:ro'), 'docker-runtime must mount the repository into the compute engine.');
 assert(compose.includes('spark-runtime-builder') && compose.includes('profiles: ["runtimes"]'),
   'A runtimes build profile must exist.');
 assert(/FROM apache\/spark:4\.\d/.test(dockerfilePython) && /FROM apache\/spark:4\.\d/.test(dockerfileScala),
   'Spark runtime images must start from Apache Spark 4.x.');
+
+// --- iteration 2: monitoring, capacity, scalable workers, develop, layout ---
+const editorLib = read('application/libraries/OpenVsCodeWorkspace.php');
+assert(engine.includes('function containerStats'), 'Engine client must expose containerStats (ported from DockerMonitoring).');
+assert(engine.includes('function engineCapacity') && engine.includes('function containerReservation'),
+  'Engine client must expose host capacity + per-container reservation.');
+assert(driver.includes('function clusterStats') && driver.includes('function capacitySnapshot'),
+  'Driver must expose clusterStats + capacitySnapshot.');
+assert(driver.includes('/dev/tcp/master/7077'), 'Driver must wait for the master before spark-submit (readiness gate).');
+assert(driver.includes("'spark.executor.memory'") && driver.includes("'spark.executor.cores'"),
+  'Driver must size executors to the worker so the master can place them.');
+assert(driver.includes('$workspaceBind'), 'Driver binds the job source on master and every worker, not just the driver.');
+assert(orchestrator.includes('admitToHost') && orchestrator.includes('function runStats'),
+  'Orchestrator must do host admission control and expose runStats.');
+assert(orchestrator.includes('$workerOverride'), 'Spark run must accept a per-run worker override.');
+assert(controllerJobs.includes('function monitor(') && controllerJobs.includes('function develop(') && controllerJobs.includes('function capacity('),
+  'SparkJobs must expose monitor / develop / capacity endpoints.');
+assert(controllerJobs.includes("$this->input->post('workers')"), 'SparkJobs::run must read the workers override.');
+assert(editorLib.includes('function folderUrl') && editorLib.includes('function ensureRunning'),
+  'OpenVsCodeWorkspace must map a repo folder to an editor URL and manage the container.');
+[read('application/views/sparkClusters.php'), read('application/views/sparkJobs.php')].forEach((v) => {
+  const head = v.slice(v.indexOf('content-header'), v.indexOf('</section>'));
+  assert(!/compute-toolbar/.test(head), 'The toolbar must not live inside AdminLTE .content-header (breadcrumb overlap).');
+});
 
 // --- browser scripts parse -------------------------------------
 const clusterScripts = parseInlineScripts('application/views/sparkClusters.php');

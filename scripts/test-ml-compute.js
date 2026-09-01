@@ -50,6 +50,9 @@ const envCpu = read('docker/ml/env-ml-cpu.yml');
   'data-engineering/ml-jobs/run',
   'data-engineering/ml-jobs/status/(:num)',
   'data-engineering/ml-jobs/logs/(:num)',
+  'data-engineering/ml-jobs/monitor/(:num)',
+  'data-engineering/ml-jobs/capacity',
+  'data-engineering/ml-jobs/develop',
   'data-engineering/ml-jobs/cancel',
 ].forEach((route) => {
   assert(routes.includes("$route['" + route + "']"), 'Missing route: ' + route);
@@ -83,12 +86,27 @@ assert(!/\bexec\s*\(\s*['"][^'"]*docker/.test(orchestrator), 'ML orchestrator mu
 });
 assert(dbSetup.includes("'ml-cpu'") && dbSetup.includes("'jobseeker/ml-runtime'"),
   'db_setup.sql must seed the ML runtime catalogue.');
-assert(compose.includes('./repository/ml:/jobseeker/ml:ro'), 'docker-runtime must mount the ML job source read-only.');
+assert(compose.includes('./repository:/jobseeker/src:ro'), 'docker-runtime must mount the repository into the compute engine.');
 assert(compose.includes('ml-runtime-builder'), 'A runtimes build profile must build the ML images.');
 assert(/FROM continuumio\/miniconda3/.test(dockerfileCpu) && /FROM continuumio\/miniconda3/.test(dockerfileDl),
   'ML runtime images must be Miniconda based.');
 assert(/scikit-learn/.test(envCpu) && /conda env update/.test(dockerfileCpu),
   'The ML CPU image must install its conda environment.');
+
+// --- iteration 2: monitoring, develop, layout ---
+const driverSrc2 = read('application/libraries/ComputeDriver.php');
+const editorLib2 = read('application/libraries/OpenVsCodeWorkspace.php');
+assert(driverSrc2.includes('function mlJobStats'), 'Driver must expose mlJobStats for the ML run monitor.');
+assert(orchestrator.includes('function runStats') && orchestrator.includes('capacitySnapshot'),
+  'ML orchestrator must expose runStats and check host capacity.');
+assert(controllerJobs.includes('function monitor(') && controllerJobs.includes('function develop('),
+  'MlJobs must expose monitor and develop endpoints.');
+assert(controllerJobs.includes("'/ml/inline/'"), 'MlJobs::develop must materialise the workspace under repository/ml/inline.');
+assert(editorLib2.includes('JOBSEEKER_OPENVSCODE_TOKEN') && editorLib2.includes("'folder'") && editorLib2.includes('http_build_query'),
+  'OpenVsCodeWorkspace must build a tokenised folder URL.');
+const mlHead = read('application/views/mlJobs.php');
+assert(!/compute-toolbar/.test(mlHead.slice(mlHead.indexOf('content-header'), mlHead.indexOf('</section>'))),
+  'The ML Jobs toolbar must not live inside .content-header.');
 
 // --- browser scripts parse -------------------------------------
 const runtimeScripts = parseInlineScripts('application/views/mlRuntimes.php');

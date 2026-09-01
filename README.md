@@ -46,7 +46,10 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 - Define Spark clusters (runtime, driver/worker resources, worker bounds, Spark conf) and PySpark jobs with bundled samples (`SparkPi`, word count, CSV aggregate).
 - Run jobs on **ephemeral, Databricks-style job clusters**: JobSeeker starts one master plus N workers on the in-stack Docker engine only when a job is triggered, submits with `spark-submit`, streams status and logs, then removes the cluster and its per-run network.
 - Choose a Spark 4.0+ runtime image from a dropdown; run Miniconda-based ML jobs (scikit-learn / XGBoost, or PyTorch + Lightning) as single ephemeral containers with sample jobs.
-- Build the runtime images once with `docker compose --profile runtimes up --build` (or `scripts/build-compute-runtimes.sh`); orchestration sits behind a `ComputeDriver` interface with a Docker driver today and a Kubernetes seam for later.
+- Set the worker count per run, watch a **live per-container monitor** (master, every worker, the driver) with CPU / memory / network while the job runs, and cancel mid-flight.
+- Runs are **sized to the host**: JobSeeker checks free CPU and memory on the compute engine, scales the worker count down to fit, and refuses a run only when the driver plus one worker will not fit.
+- **Develop in the editor**: a job's *Develop* button materialises a full workspace (`main.py`, `pyproject.toml` / `requirements.txt`, `.vscode/`, a README with the exact run command) and opens it in OpenVSCode Server; the next run executes what you edited.
+- Build the runtime images once with `docker compose --profile runtimes up --build` (or `scripts/build-compute-runtimes.sh`); orchestration sits behind a `ComputeDriver` interface with a Docker driver today and a Kubernetes seam for later (see `doc/jobseeker/DataEngineering/architecture.md`).
 - Turn the whole section off with `"compute": { "enabled": false }` in `application/config/config.json`.
 
 ### Monitoring and analytics
