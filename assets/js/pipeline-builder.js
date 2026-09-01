@@ -724,12 +724,7 @@
       }).fail(function(xhr) {
         var response = xhr.responseJSON || {};
         var message = response.message || 'Pipeline could not be deployed.';
-        if (response.missingJobs && response.missingJobs.length) {
-          message += ' <a href="' + escapeHtml(config.baseUrl + 'Context/promotion') + '">Open environment deployment</a>';
-          $('#pipelineDeployError').html(message).show();
-        } else {
-          $('#pipelineDeployError').text(message).show();
-        }
+        $('#pipelineDeployError').text(message).show();
       }).always(function() { button.prop('disabled', false); });
     });
     $('#pipelineRun').on('click', runPipeline);

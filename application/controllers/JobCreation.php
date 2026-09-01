@@ -1,10 +1,17 @@
 <?php if(!defined('BASEPATH')) exit('No direct script access allowed');
 
 require APPPATH . '/libraries/BaseController.php';
+require APPPATH . '/controllers/concerns/JobCreationEmailTrait.php';
+require APPPATH . '/controllers/concerns/JobCreationExecutionTrait.php';
+require APPPATH . '/controllers/concerns/JenkinsRunnerTrait.php';
 
 
 class JobCreation extends BaseController
 {
+  use JobCreationEmailTrait;
+  use JobCreationExecutionTrait;
+  use JenkinsRunnerTrait;
+
     /**
      * This is default constructor of the class
      */
@@ -3026,6 +3033,228 @@ class JobCreation extends BaseController
         $this->jsonJobCreationResponse($snapshot);
       }
 
+      private function dependencyEnvironment() {
+        $environment = trim((string) $this->input->post('environment', TRUE));
+        if ($environment === '') {
+          $environment = trim((string) $this->input->get('environment', TRUE));
+        }
+        if ($environment === '') {
+          $environment = $this->jobSeekerEnvironmentPreference();
+        }
+        $environment = $this->normalizeJobSeekerEnvironment($environment);
+        return $environment === '' ? 'ALL' : $environment;
+      }
+
+      /**
+       * Build the text bundle to scan for connector / dataset references from
+       * whatever the caller supplied: unsaved editor content, or a saved job's
+       * generated command plus its repository source.
+       */
+      private function collectDependencySources($jobName) {
+        $sources = array();
+
+        $inlineCode = (string) $this->input->post('pythonInlineCode');
+        if (trim($inlineCode) !== '') {
+          $sources[] = array('text' => $inlineCode, 'from' => 'code');
+        }
+        $filesJson = (string) $this->input->post('pythonInlineFilesJson');
+        if (trim($filesJson) !== '' && strlen($filesJson) < 400000) {
+          $payload = json_decode($filesJson, TRUE);
+          if (is_array($payload) && isset($payload['files']) && is_array($payload['files'])) {
+            foreach ($payload['files'] as $file) {
+              if (is_array($file) && isset($file['content']) && is_string($file['content'])) {
+                $sources[] = array('text' => $file['content'], 'from' => 'code');
+              }
+            }
+          }
+        }
+        foreach (array('linuxCommand', 'windowsCommand', 'linuxCommandLine', 'windowsCommandLine', 'pythonRequirementsText') as $field) {
+          $value = (string) $this->input->post($field);
+          if (trim($value) !== '' && $value !== '0' && $value !== '1') {
+            $sources[] = array('text' => $value, 'from' => 'command');
+          }
+        }
+
+        if (empty($sources) && $jobName !== '') {
+          $configResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($jobName).'/config.xml');
+          if ((int) $configResponse['status'] === 200) {
+            if (preg_match_all('#<command>(.*?)</command>#s', (string) $configResponse['body'], $commandMatches)) {
+              foreach ($commandMatches[1] as $command) {
+                $sources[] = array('text' => html_entity_decode($command, ENT_QUOTES | ENT_XML1, 'UTF-8'), 'from' => 'command');
+              }
+            }
+          }
+          $repositoryRoot = $this->inlinePythonRepositoryRoot();
+          foreach (array('python/inline', 'python/jobs', 'bash/jobs', 'batch/jobs', 'talend/jobs') as $location) {
+            $relative = $this->safeRelativePath($location.'/'.$jobName);
+            if ($relative === FALSE) {
+              continue;
+            }
+            $directory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.$relative;
+            if (is_dir($directory)) {
+              foreach ($this->dependencyScanner()->sourcesForJob('', $directory) as $repoSource) {
+                $sources[] = $repoSource;
+              }
+            }
+          }
+        }
+
+        return $sources;
+      }
+
+      private function dependencyScanner() {
+        $this->load->library('DependencyScanner');
+        return $this->dependencyscanner;
+      }
+
+      private function scanAndResolve($sources, $environment, $jobName) {
+        $scan = $this->dependencyScanner()->scan($sources);
+        $this->load->model('JobDependency_model', 'jobDependencies');
+        $resolved = $this->jobDependencies->resolve(
+          $this->dependencyScanner()->keys($scan, 'connectors'),
+          $this->dependencyScanner()->keys($scan, 'datasets'),
+          $environment,
+          $jobName
+        );
+        foreach (array('connectors' => 'connectors', 'datasets' => 'datasets') as $group => $_) {
+          foreach ($resolved[$group] as &$item) {
+            $item['from'] = isset($scan[$group][$item['key']]['from']) ? $scan[$group][$item['key']]['from'] : array();
+          }
+          unset($item);
+        }
+        $resolved['warnings'] = $this->dependencyWarnings($resolved);
+        return $resolved;
+      }
+
+      private function dependencyWarnings($resolved) {
+        $warnings = array();
+        foreach (array('connectors', 'datasets') as $group) {
+          foreach ($resolved[$group] as $item) {
+            if ($item['lightStatus'] === 'missing') {
+              $warnings[] = ucfirst(rtrim($group, 's')).' "'.$item['key'].'" was not found in the catalog.';
+            } else if ($item['lightStatus'] === 'inactive') {
+              $warnings[] = ucfirst(rtrim($group, 's')).' "'.$item['key'].'" is inactive.';
+            } else if ($item['lightStatus'] === 'out_of_scope') {
+              $warnings[] = ucfirst(rtrim($group, 's')).' "'.$item['key'].'" is not published for this environment or job scope.';
+            }
+          }
+        }
+        return $warnings;
+      }
+
+      public function scanDependencies() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        $environment = $this->dependencyEnvironment();
+        $jobName = '';
+        $rawJobName = $this->input->post('job_name');
+        if (trim((string) $rawJobName) !== '') {
+          $clean = $this->cleanSubmittedJobName($rawJobName);
+          if ($clean['ok']) {
+            $jobName = $clean['name'];
+          }
+        }
+
+        $resolved = $this->scanAndResolve($this->collectDependencySources($jobName), $environment, $jobName);
+        if ($jobName !== '' && (string) $this->input->post('persist') === '1') {
+          $this->load->model('JobDependency_model', 'jobDependencies');
+          $this->jobDependencies->replaceForJob($jobName, $environment, $resolved);
+          $resolved['persisted'] = TRUE;
+        }
+        $resolved['ok'] = TRUE;
+        $resolved['environment'] = $environment;
+        $resolved['jobName'] = $jobName;
+        $this->jsonJobCreationResponse($resolved);
+      }
+
+      public function testDependencies() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        if ($this->input->method(TRUE) !== 'POST') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Method not allowed.'), 405);
+          return;
+        }
+
+        $environment = $this->dependencyEnvironment();
+        $jobName = '';
+        if (trim((string) $this->input->post('job_name')) !== '') {
+          $clean = $this->cleanSubmittedJobName($this->input->post('job_name'));
+          $jobName = $clean['ok'] ? $clean['name'] : '';
+        }
+
+        $requestedKeys = $this->input->post('connector_keys');
+        $requestedKeys = is_array($requestedKeys) ? array_values(array_filter(array_map('strval', $requestedKeys))) : array();
+        if (empty($requestedKeys)) {
+          $resolved = $this->scanAndResolve($this->collectDependencySources($jobName), $environment, $jobName);
+          foreach ($resolved['connectors'] as $connector) {
+            $requestedKeys[] = $connector['key'];
+          }
+        }
+        $requestedKeys = array_slice(array_values(array_unique($requestedKeys)), 0, 12);
+        if (empty($requestedKeys)) {
+          $this->jsonJobCreationResponse(array('ok' => TRUE, 'results' => array(), 'message' => 'No connectors were referenced.'));
+          return;
+        }
+
+        $this->load->model('DbSettings_model', 'connectorCatalog');
+        $this->load->model('JobDependency_model', 'jobDependencies');
+
+        $results = array();
+        foreach ($requestedKeys as $key) {
+          $row = $this->db->select('connector_key,environment,job_name,db_type')
+            ->from('database_settings')->where('connector_key', $key)
+            ->order_by("environment = ".$this->db->escape($environment), 'DESC', FALSE)
+            ->limit(1)->get()->row();
+          if (! $row) {
+            $results[] = array('key' => $key, 'ok' => FALSE, 'status' => 'missing', 'message' => 'Connector is not in the catalog.');
+            continue;
+          }
+          $testEnvironment = $environment;
+          if ($testEnvironment === 'ALL') {
+            $testEnvironment = $this->normalizeJobSeekerEnvironment((string) $row->environment);
+            if ($testEnvironment === '' || $testEnvironment === 'ALL') {
+              $testEnvironment = 'DEV';
+            }
+          }
+          $outcome = $this->runConnectorConnectionTest($key, $testEnvironment, $jobName !== '' ? $jobName : (string) $row->job_name);
+          unset($outcome['httpStatus']);
+          $outcome['key'] = $key;
+          $results[] = $outcome;
+          if ($jobName !== '') {
+            $this->jobDependencies->recordTestResult($jobName, $environment, $key, $outcome['status'], isset($outcome['message']) ? $outcome['message'] : '');
+          }
+        }
+
+        $this->jsonJobCreationResponse(array('ok' => TRUE, 'environment' => $environment, 'results' => $results));
+      }
+
+      /**
+       * Best-effort: after a job is saved, persist its connector / dataset map
+       * from the submitted source. The one-time worker connection test is
+       * triggered by the client after the redirect (testDependencies) so the
+       * form submit stays fast. Never blocks save.
+       */
+      private function persistJobDependencies($jobName, $environment) {
+        try {
+          $environment = $this->normalizeJobSeekerEnvironment((string) $environment) ?: 'ALL';
+          $resolved = $this->scanAndResolve($this->collectDependencySources($jobName), $environment, $jobName);
+          $this->load->model('JobDependency_model', 'jobDependencies');
+          $this->jobDependencies->replaceForJob($jobName, $environment, $resolved);
+          return array(
+            'connectors' => count($resolved['connectors']),
+            'datasets' => count($resolved['datasets']),
+            'attention' => count($resolved['warnings']),
+          );
+        } catch (Exception $exception) {
+          log_message('error', 'Job dependency persistence failed for '.$jobName.': '.$exception->getMessage());
+          return NULL;
+        }
+      }
+
       public function availableJobs() {
         if (! $this->canManageJobs()) {
           $this->output->set_status_header(403);
@@ -3061,400 +3290,6 @@ class JobCreation extends BaseController
 
         echo json_encode($payload);
       }
-
-      private function pythonEnvironmentArgument($environment, $checkEnvironment) {
-        return ($environment != '0' && $checkEnvironment == 1) ? escapeshellarg($environment) : '';
-      }
-
-      private function shellArgumentString($arguments) {
-        $escapedArguments = array();
-
-        foreach ($arguments as $argument) {
-          $escapedArguments[] = escapeshellarg($argument);
-        }
-
-        return implode(' ', $escapedArguments);
-      }
-
-      private function dataAssetsRuntimeLines($repositoryRoot) {
-        $repositoryRoot = rtrim((string) $repositoryRoot, '/\\');
-        return array(
-          'export JOBSEEKER_REPOSITORY_ROOT='.escapeshellarg($repositoryRoot),
-          'export JOBSEEKER_DATA_ASSETS_MANIFEST="$JOBSEEKER_REPOSITORY_ROOT/data-assets/manifest.json"',
-          'export JOBSEEKER_ENVIRONMENT="${ENVIRONMENT:-${JOBSEEKER_ENVIRONMENT:-}}"',
-          'export JOBSEEKER_JOB_NAME="${JOB_NAME:-${JOBSEEKER_JOB_NAME:-}}"',
-          'export JOBSEEKER_DATA_ASSET_JOB="${JOBSEEKER_DATA_ASSET_JOB:-${JOBSEEKER_JOB_NAME:-}}"'
-        );
-      }
-
-      private function connectorRuntimeLines() {
-        return array(
-          'export JOBSEEKER_CONNECTORS_DIR="$WORKSPACE/.jobseeker-connectors"',
-          'rm -rf "$JOBSEEKER_CONNECTORS_DIR"',
-          'if [ -z "${JOBSEEKER_CONNECTOR_API_URL:-}" ] || [ -z "${JOBSEEKER_CONNECTOR_API_TOKEN:-}" ]; then echo "JobSeeker connector runtime is not configured on this Jenkins worker." >&2; exit 78; fi',
-          'command -v jobseeker-connector >/dev/null || { echo "The JobSeeker connector helper is not installed on this Jenkins worker." >&2; exit 127; }',
-          'umask 077',
-          'jobseeker-connector materialize --directory "$JOBSEEKER_CONNECTORS_DIR" --environment "${JOBSEEKER_ENVIRONMENT:-LOCAL}" --job "${JOBSEEKER_JOB_NAME:-job}" >/dev/null || { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; exit 1; }',
-          'if [ -f "$JOBSEEKER_CONNECTORS_DIR/.source-environment-variables" ]; then while IFS= read -r JOBSEEKER_SECRET_VARIABLE; do if [ -n "$JOBSEEKER_SECRET_VARIABLE" ]; then unset "$JOBSEEKER_SECRET_VARIABLE"; fi; done < "$JOBSEEKER_CONNECTORS_DIR/.source-environment-variables"; unset JOBSEEKER_SECRET_VARIABLE; fi',
-          'unset JOBSEEKER_CONNECTOR_API_URL JOBSEEKER_CONNECTOR_API_TOKEN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_FEDERATED_TOKEN_FILE AZURE_AUTHORITY_HOST AWS_REGION AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE',
-          'export JOBSEEKER_CONNECTOR_HELPER="$(command -v jobseeker-connector)"'
-        );
-      }
-
-      private function dockerConnectorSetupLines($dockerImage, $imageIsVariable = FALSE) {
-        $imageArgument = $imageIsVariable ? '"$JOBSEEKER_DOCKER_RUN_IMAGE"' : escapeshellarg($dockerImage);
-        return array(
-          'JOBSEEKER_CONNECTORS_VOLUME="$(printf "jobseeker-connectors-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"',
-          'docker volume create "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null',
-          'tar -C "$JOBSEEKER_CONNECTORS_DIR" -cf - . | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors" '.$imageArgument.' -c "cd /run/jobseeker-connectors && tar -xf - && find . -type d -exec chmod 0555 {} + && find . -type f ! -name jobseeker-connector -exec chmod 0444 {} + && chmod 0555 ./jobseeker-connector"'
-        );
-      }
-
-      private function dockerJobIdentityLines($runtime) {
-        return array(
-          'JOBSEEKER_CONTAINER_IDENTITY="${JOB_NAME:-job}-${BUILD_NUMBER:-0}"',
-          'JOBSEEKER_CONTAINER_SLUG="$(printf "%s" "${JOB_NAME:-job}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-72)"',
-          'if [ -z "$JOBSEEKER_CONTAINER_SLUG" ]; then JOBSEEKER_CONTAINER_SLUG="job"; fi',
-          'JOBSEEKER_CONTAINER_FINGERPRINT="$(printf "%s" "$JOBSEEKER_CONTAINER_IDENTITY" | cksum | awk \'{print $1}\')"',
-          'JOBSEEKER_CONTAINER_NAME="$(printf "jobseeker-job-%s-%s-%s" "$JOBSEEKER_CONTAINER_SLUG" "${BUILD_NUMBER:-0}" "$JOBSEEKER_CONTAINER_FINGERPRINT" | cut -c1-120)"',
-          'export JOBSEEKER_CONTAINER_NAME',
-          'export JOBSEEKER_CONTAINER_RUNTIME='.escapeshellarg($runtime)
-        );
-      }
-
-      private function dockerJobRunIdentityOptions() {
-        return array(
-          '  --name "$JOBSEEKER_CONTAINER_NAME" \\',
-          '  --cpus "$JOBSEEKER_CONTAINER_CPUS" \\',
-          '  --memory "${JOBSEEKER_CONTAINER_MEMORY_MB}m" \\',
-          '  --memory-swap "${JOBSEEKER_CONTAINER_MEMORY_MB}m" \\',
-          '  --label com.jobseeker.managed=true \\',
-          '  --label com.jobseeker.kind=job \\',
-          '  --label "com.jobseeker.job.name=${JOB_NAME:-${JOBSEEKER_JOB_NAME:-job}}" \\',
-          '  --label "com.jobseeker.build.number=${BUILD_NUMBER:-0}" \\',
-          '  --label "com.jobseeker.environment=${JOBSEEKER_ENVIRONMENT:-}" \\',
-          '  --label "com.jobseeker.runtime=${JOBSEEKER_CONTAINER_RUNTIME}" \\'
-        );
-      }
-
-      private function dockerJobResourceLines($runtimeOptions) {
-        $cpu = isset($runtimeOptions['cpuLimit']) ? $runtimeOptions['cpuLimit'] : '1';
-        $memory = isset($runtimeOptions['memoryLimitMb']) ? (int) $runtimeOptions['memoryLimitMb'] : 512;
-        return array(
-          'export JOBSEEKER_CONTAINER_CPUS='.escapeshellarg($cpu),
-          'export JOBSEEKER_CONTAINER_MEMORY_MB='.escapeshellarg($memory)
-        );
-      }
-
-      private function buildLinuxCommandExecutionCommand($commandText, $runtimeOptions = array(), $repositoryRoot = '') {
-        $commandText = str_replace(array("\r\n", "\r"), "\n", (string) $commandText);
-        $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
-        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'alpine:3.20';
-        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
-
-        if ($runtimeMode !== 'docker') {
-          $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
-          $runtimeLines[] = $commandText;
-          return implode("\n", $runtimeLines);
-        }
-
-        $lines = array_merge(array('set -e'), $runtimeLines);
-        $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
-        $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
-        $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
-        $lines[] = 'export JOBSEEKER_LINUX_COMMAND_B64='.escapeshellarg(base64_encode($commandText));
-        $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
-        $lines = array_merge($lines, $this->dockerJobIdentityLines('linux-shell'));
-        $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
-        $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
-        $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
-        $lines = array_merge($lines, $this->dockerConnectorSetupLines($dockerImage));
-        $lines[] = 'jobseeker_asset_cleanup() { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
-        $lines[] = 'trap jobseeker_asset_cleanup EXIT';
-        $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
-        $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
-        $lines[] = 'docker run --rm -i \\';
-        $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
-        $lines[] = '  --network host \\';
-        $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
-        $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
-        $lines[] = '  -e "JOBSEEKER_LINUX_COMMAND_B64=$JOBSEEKER_LINUX_COMMAND_B64" \\';
-        $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
-        $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
-        $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
-        $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
-        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
-        $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
-        $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
-        $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
-        $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
-
-        return implode("\n", $lines);
-      }
-
-      private function buildShellScriptExecutionCommand($execution, $runtimeOptions = array(), $repositoryRoot = '') {
-        $arguments = isset($execution['arguments']) ? $execution['arguments'] : array();
-        $argumentString = $this->shellArgumentString($arguments);
-        $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
-        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : ($execution['scriptType'] === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
-
-        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
-
-        if ($runtimeMode !== 'docker') {
-          $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
-          $runtimeLines[] = 'sh '.escapeshellarg($execution['scriptPath']).($argumentString !== '' ? ' '.$argumentString : '');
-          return implode("\n", $runtimeLines);
-        }
-
-        $dockerScript = implode("\n", array(
-          'set -e',
-          'mkdir -p /tmp/jobseeker-context',
-          'tar -C /tmp/jobseeker-context -xf -',
-          'cd /tmp/jobseeker-context/source',
-          'if [ -n "${JAVA_HOME:-}" ] && [ -d "$JAVA_HOME/bin" ]; then export PATH="$JAVA_HOME/bin:$PATH"; fi',
-          'if [ -d /opt/java/openjdk/bin ]; then export PATH="/opt/java/openjdk/bin:$PATH"; fi',
-          'sh "$JOBSEEKER_ENTRYPOINT" "$@"'
-        ));
-
-        $lines = array_merge(array('set -e'), $runtimeLines);
-        $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
-        $lines[] = 'export JOBSEEKER_LINUX_SCRIPT_TYPE='.escapeshellarg($execution['scriptType']);
-        $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
-        $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
-        $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
-        $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
-        $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
-        $lines = array_merge($lines, $this->dockerJobIdentityLines($execution['scriptType'] === 'talend' ? 'talend' : 'linux-shell'));
-        $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
-        $lines[] = 'if [ "$JOBSEEKER_DOCKER_ENTRYPOINT" = "$JOBSEEKER_SCRIPT_PATH" ]; then JOBSEEKER_DOCKER_ENTRYPOINT="$(basename "$JOBSEEKER_SCRIPT_PATH")"; fi';
-        $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-linux-docker-context"';
-        $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
-        $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source"';
-        $lines[] = 'cp -R "$JOBSEEKER_SOURCE_DIR/." "$JOBSEEKER_DOCKER_CONTEXT/source/"';
-        $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type d \( -name .git -o -name .venv -o -name venv -o -name __pycache__ -o -name .pytest_cache -o -name .mypy_cache -o -name .ruff_cache \) -prune -exec rm -rf {} +';
-        $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
-        $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
-        $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
-        $lines = array_merge($lines, $this->dockerConnectorSetupLines($dockerImage));
-        $lines[] = 'jobseeker_linux_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
-        $lines[] = 'trap jobseeker_linux_docker_cleanup EXIT';
-        $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
-        $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
-        $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
-        $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
-        $lines[] = '  --network host \\';
-        $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
-        $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
-        $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
-        $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
-        $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
-        $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
-        $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
-        $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
-        $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
-        $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
-        $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
-        $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
-
-        return implode("\n", $lines);
-      }
-
-      private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument, $runtimeOptions = array()) {
-        $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
-        $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
-        $pythonExecutable = isset($runtimeOptions['pythonExecutable']) ? $runtimeOptions['pythonExecutable'] : 'python3';
-        $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : $this->defaultPythonDockerImage();
-        $requirementsText = isset($runtimeOptions['requirementsText']) ? (string) $runtimeOptions['requirementsText'] : '';
-        $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
-        $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
-        $runTests = ! isset($runtimeOptions['runTests']) || (bool) $runtimeOptions['runTests'];
-        $lines = array_merge(array('set -e'), $this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
-
-        if ($execution['mode'] === 'git') {
-          $cloneCommand = 'git clone --depth 1';
-          if ($execution['branch'] !== '') {
-            $cloneCommand .= ' --branch '.escapeshellarg($execution['branch']);
-          }
-          $cloneCommand .= ' '.escapeshellarg($execution['repositoryUrl']).' "$WORKSPACE/jobseeker-python-source"';
-
-          $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
-          $lines[] = $cloneCommand;
-          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
-          $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
-          $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
-        } else {
-          $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
-          $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
-        }
-
-        $lines[] = 'export JOBSEEKER_PYTHON_LIB='.escapeshellarg($pythonLibraryPath);
-        $lines[] = 'export JOBSEEKER_PYTHON_SDK="$JOBSEEKER_PYTHON_LIB/jobseeker-sdk"';
-        $lines[] = 'export JOBSEEKER_RUNTIME_LIBS="$WORKSPACE/.jobseeker-runtime-libs"';
-        $lines[] = 'export JOBSEEKER_VENV="$WORKSPACE/.venv"';
-        $lines[] = 'jobseeker_python_cleanup() { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; if [ -n "${JOBSEEKER_VENV:-}" ]; then rm -rf "$JOBSEEKER_VENV"; fi; }';
-        $lines[] = 'trap jobseeker_python_cleanup EXIT';
-        $lines[] = 'export JOBSEEKER_PYTHON_RUNTIME='.escapeshellarg($runtimeMode);
-        $lines[] = 'export JOBSEEKER_RUN_PYTEST='.escapeshellarg($runTests ? '1' : '0');
-        $lines[] = 'export JOBSEEKER_PYTHON='.escapeshellarg($pythonExecutable);
-        $lines[] = 'export PYTHONUNBUFFERED=1';
-        $lines[] = 'export JOBSEEKER_EMAIL_METRICS_FILE="$WORKSPACE/jobseeker-email-metrics.properties"';
-        $lines[] = 'printf "%s\n" "dataset=Not reported" "rows_read=Not reported" "rows_written=Not reported" "rows_rejected=Not reported" "duration=Not reported" > "$JOBSEEKER_EMAIL_METRICS_FILE"';
-        $lines[] = 'export JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_SCRIPT_PATH")"';
-        $lines[] = 'cd "$JOBSEEKER_SOURCE_DIR"';
-
-        if ($runtimeMode === 'docker') {
-          $dockerScriptLines = array(
-            'set -e',
-            'mkdir -p /tmp/jobseeker-context',
-            'tar -C /tmp/jobseeker-context -xf -',
-            'cd /tmp/jobseeker-context/source',
-            'JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_ENTRYPOINT")"',
-            'rm -rf /tmp/jobseeker-runtime-libs',
-            'PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-runtime-libs /tmp/jobseeker-context/jobseeker-sdk',
-            'JOBSEEKER_PROJECT_DIR=""',
-            'JOBSEEKER_REQUIREMENTS=""',
-            'JOBSEEKER_USER_LIBS=""',
-            'if [ -f "/tmp/jobseeker-context/source/pyproject.toml" ]; then JOBSEEKER_PROJECT_DIR="/tmp/jobseeker-context/source"; fi',
-            'if [ -f "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/pyproject.toml" ]; then JOBSEEKER_PROJECT_DIR="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR"; fi',
-            'if [ -f "/tmp/jobseeker-context/source/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/requirements.txt"; fi',
-            'if [ -f "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi',
-            'if [ -n "$JOBSEEKER_PROJECT_DIR" ]; then',
-            '  if [ "${JOBSEEKER_DEPENDENCIES_PREINSTALLED:-0}" != "1" ]; then',
-            '    PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check "poetry==2.4.1"',
-            '    (cd "$JOBSEEKER_PROJECT_DIR" && POETRY_VIRTUALENVS_CREATE=false poetry install --no-root --no-interaction --no-ansi)',
-            '  fi',
-            'elif [ -n "$JOBSEEKER_REQUIREMENTS" ]; then',
-            '  rm -rf /tmp/jobseeker-python-libs',
-            '  PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-python-libs -r "$JOBSEEKER_REQUIREMENTS"',
-            '  JOBSEEKER_USER_LIBS="/tmp/jobseeker-python-libs"',
-            'fi',
-            'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="/tmp/jobseeker-runtime-libs:$JOBSEEKER_USER_LIBS:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="/tmp/jobseeker-runtime-libs:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi'
-          );
-
-          if ($runTests) {
-            $dockerScriptLines = array_merge($dockerScriptLines, array(
-              'JOBSEEKER_TEST_ROOT="/tmp/jobseeker-context/source"',
-              'if [ -n "$JOBSEEKER_PROJECT_DIR" ]; then JOBSEEKER_TEST_ROOT="$JOBSEEKER_PROJECT_DIR"; elif [ -d "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/tests" ]; then JOBSEEKER_TEST_ROOT="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR"; fi',
-              'JOBSEEKER_TEST_FILE="$(find "$JOBSEEKER_TEST_ROOT" -type f \( -name "test_*.py" -o -name "*_test.py" \) -print -quit 2>/dev/null || true)"',
-              'printf "%s\n" "[JobSeeker] Python tests"',
-              'if [ -n "$JOBSEEKER_TEST_FILE" ]; then',
-              '  if ! python -c "import pytest" >/dev/null 2>&1; then',
-              '    rm -rf /tmp/jobseeker-pytest-libs',
-              '    PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-pytest-libs "pytest>=8,<10"',
-              '    export PYTHONPATH="/tmp/jobseeker-pytest-libs:$PYTHONPATH"',
-              '  fi',
-              '  (cd "$JOBSEEKER_TEST_ROOT" && python -m pytest)',
-              'else',
-              '  echo "No pytest test files were found; continuing to Python execution."',
-              'fi'
-            ));
-          }
-
-          $dockerScriptLines = array_merge($dockerScriptLines, array(
-            'printf "%s\n" "[JobSeeker] Python execution"',
-            'python -u "$JOBSEEKER_ENTRYPOINT" "$@"'
-          ));
-          $dockerScript = implode("\n", $dockerScriptLines);
-
-          $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
-          $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
-          $lines[] = 'echo "Preparing Python Docker build context..."';
-          $lines[] = 'JOBSEEKER_RESTORE_XTRACE=0; case "$-" in *x*) JOBSEEKER_RESTORE_XTRACE=1; set +x ;; esac';
-          if (trim($requirementsText) !== '') {
-            $lines[] = 'export JOBSEEKER_PYTHON_REQUIREMENTS_B64='.escapeshellarg(base64_encode($requirementsText));
-          }
-          if (trim($pyprojectText) !== '') {
-            $lines[] = 'export JOBSEEKER_PYPROJECT_B64='.escapeshellarg(base64_encode($pyprojectText));
-          }
-          if (trim($dockerfileText) !== '') {
-            $lines[] = 'export JOBSEEKER_PYTHON_DOCKERFILE_B64='.escapeshellarg(base64_encode($dockerfileText));
-          }
-          $lines[] = 'command -v docker >/dev/null || { echo "Docker runtime selected, but docker is not available on this Jenkins agent."; exit 127; }';
-          $lines = array_merge($lines, $this->dockerJobIdentityLines('python'));
-          $lines[] = 'JOBSEEKER_DOCKER_ENTRYPOINT="${JOBSEEKER_SCRIPT_PATH#$JOBSEEKER_SOURCE_DIR/}"';
-          $lines[] = 'JOBSEEKER_DOCKER_CONTEXT="$WORKSPACE/jobseeker-python-docker-context"';
-          $lines[] = 'JOBSEEKER_DOCKER_BUILT_IMAGE=""';
-          $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME=""';
-          $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME=""';
-          $lines[] = 'JOBSEEKER_CONNECTORS_VOLUME=""';
-          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; if [ -n "$JOBSEEKER_CONNECTORS_VOLUME" ]; then docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DATA_ASSETS_VOLUME" ]; then docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
-          $lines[] = 'trap jobseeker_python_docker_cleanup EXIT';
-          $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
-          $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source" "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"';
-          $lines[] = 'cp -R "$JOBSEEKER_SOURCE_DIR/." "$JOBSEEKER_DOCKER_CONTEXT/source/"';
-          // Editor virtual environments and caches are local development
-          // state. Never stream them into the disposable Jenkins container.
-          $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type d \( -name .git -o -name .venv -o -name venv -o -name __pycache__ -o -name .pytest_cache -o -name .mypy_cache -o -name .ruff_cache \) -prune -exec rm -rf {} +';
-          $lines[] = 'cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"';
-          $lines[] = 'JOBSEEKER_DOCKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_DOCKER_ENTRYPOINT")"';
-          // The copied workspace is authoritative. Embedded values support
-          // legacy/path sources only when the corresponding live project file
-          // is absent; they must not split pyproject.toml from poetry.lock.
-          $lines[] = 'if [ -n "${JOBSEEKER_PYTHON_REQUIREMENTS_B64:-}" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/pyproject.toml" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR"; printf "%s" "$JOBSEEKER_PYTHON_REQUIREMENTS_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt"; fi';
-          $lines[] = 'if [ -n "${JOBSEEKER_PYPROJECT_B64:-}" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/pyproject.toml" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/requirements.txt" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/requirements.txt" ]; then printf "%s" "$JOBSEEKER_PYPROJECT_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/pyproject.toml"; fi';
-          $lines[] = 'if [ -n "${JOBSEEKER_PYTHON_DOCKERFILE_B64:-}" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ] && [ ! -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then printf "%s" "$JOBSEEKER_PYTHON_DOCKERFILE_B64" | base64 -d > "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
-          $lines[] = 'if [ "$JOBSEEKER_RESTORE_XTRACE" = "1" ]; then set -x; fi';
-          $lines[] = 'JOBSEEKER_DOCKERFILE=""';
-          $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
-          $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile"; fi';
-          $lines[] = 'JOBSEEKER_DOCKER_RUN_IMAGE="$JOBSEEKER_DOCKER_IMAGE"';
-          $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILT_IMAGE="$JOBSEEKER_DOCKER_RUN_IMAGE"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; DOCKER_BUILDKIT=1 docker build --network host --pull -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
-          $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME="$(printf "jobseeker-email-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
-          $lines[] = 'docker volume create "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null';
-          $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "chmod 0777 /jobseeker-email"';
-          $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
-          $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
-          $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
-          $lines = array_merge($lines, $this->dockerConnectorSetupLines('', TRUE));
-          $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
-          $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
-          $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
-          $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
-          $lines[] = '  --network host \\';
-          $lines[] = '  -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" \\';
-          $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
-          $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
-          $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
-          $lines[] = '  -e JOBSEEKER_EMAIL_METRICS_FILE=/jobseeker-email/jobseeker-email-metrics.properties \\';
-          $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
-          $lines[] = '  -e JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \\';
-          $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
-          $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
-          $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
-          $lines[] = '  -e PYTHONUNBUFFERED \\';
-          $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
-          $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
-          $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
-          $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '').' || JOBSEEKER_DOCKER_STATUS=$?';
-          $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
-          $lines[] = 'docker run --rm --user 0 --entrypoint cat -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email:ro" "$JOBSEEKER_DOCKER_RUN_IMAGE" /jobseeker-email/jobseeker-email-metrics.properties > "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" 2>/dev/null && mv "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" "$JOBSEEKER_EMAIL_METRICS_FILE" || rm -f "$JOBSEEKER_EMAIL_METRICS_FILE.tmp"';
-          $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
-          $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
-        } else {
-          $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
-          $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
-          $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
-          $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
-          $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
-          $lines[] = '  "$JOBSEEKER_PYTHON" -m venv "$JOBSEEKER_VENV" || { echo "Unable to create Python virtual environment. Install python3-venv on this Jenkins agent or switch this job to Docker runtime."; exit 127; }';
-          $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_VENV/bin/python"';
-          $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check "$JOBSEEKER_PYTHON_SDK"';
-          $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check -r "$JOBSEEKER_REQUIREMENTS"';
-          $lines[] = '  export PYTHONPATH="$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
-          $lines[] = 'else';
-          $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_PYTHON"';
-          $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_RUNTIME_LIBS"';
-          $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"';
-          $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
-          $lines[] = 'fi';
-          $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
-        }
-
-        return implode("\n", $lines);
-      }
-
 
     public function send() {
 
@@ -4302,6 +4137,14 @@ class JobCreation extends BaseController
                   redirect('JobCreation');
                 }
 
+                $dependencySummary = NULL;
+                foreach ($savedJobNames as $targetJobName) {
+                  $summary = $this->persistJobDependencies($targetJobName, $environment);
+                  if ($summary !== NULL && $dependencySummary === NULL) {
+                    $dependencySummary = $summary;
+                  }
+                }
+
                 foreach ($upstreamJobNames as $upstreamJobName) {
                   foreach ($savedJobNames as $targetJobName) {
                     if ($upstreamJobName === $targetJobName) {
@@ -4321,6 +4164,11 @@ class JobCreation extends BaseController
                 }
 
                 $successMessage = count($savedJobNames).' job(s) saved: '.$createdCount.' created, '.$updatedCount.' updated.';
+
+                if ($dependencySummary !== NULL && ($dependencySummary['connectors'] > 0 || $dependencySummary['datasets'] > 0)) {
+                  $successMessage .= ' Mapped '.$dependencySummary['connectors'].' connector(s) and '.$dependencySummary['datasets'].' dataset(s)';
+                  $successMessage .= $dependencySummary['attention'] > 0 ? ', '.$dependencySummary['attention'].' need attention.' : '.';
+                }
 
                 if ($upstreamWireCount > 0) {
                   $successMessage .= ' '.$upstreamWireCount.' upstream link(s) updated.';
@@ -4357,232 +4205,6 @@ class JobCreation extends BaseController
 
             }
         }
-    }
-
-    private function createExtendedEmailPublisher($dom, $publishers) {
-      $publisher = $dom->createElement('hudson.plugins.emailext.ExtendedEmailPublisher');
-      $attrPublisher = new DOMAttr('plugin', 'email-ext@2.68');
-      $publisher->setAttributeNode($attrPublisher);
-      $publishers->appendChild($publisher);
-      $this->appendEmailConsoleLogging($dom, $publisher);
-
-      $configuredTriggers = $dom->createElement('configuredTriggers');
-      $publisher->appendChild($configuredTriggers);
-
-      return array('publisher' => $publisher, 'configuredTriggers' => $configuredTriggers);
-    }
-
-    private function appendEmailConsoleLogging($dom, $publisher) {
-      $preSendScript = <<<'GROOVY'
-def from = msg.getFrom() == null ? "Not configured" : msg.getFrom().collect { it.toString() }.join(", ")
-def recipients = msg.getAllRecipients() == null ? "Not configured" : msg.getAllRecipients().collect { it.toString() }.join(", ")
-logger.println("[JobSeeker Email] From: " + from)
-logger.println("[JobSeeker Email] To: " + recipients)
-logger.println("[JobSeeker Email] Subject: " + msg.getSubject())
-GROOVY;
-
-      $this->appendTextElement($dom, $publisher, 'presendScript', $preSendScript);
-      $this->appendTextElement($dom, $publisher, 'postsendScript', 'logger.println("[JobSeeker Email] Delivery completed.")');
-    }
-
-    private function appendTextElement($dom, $parent, $name, $value) {
-      $element = $dom->createElement($name);
-      $element->appendChild($dom->createTextNode((string) $value));
-      $parent->appendChild($element);
-
-      return $element;
-    }
-
-    private function emailTemplateRecipientList($template) {
-      $recipients = trim((string) $template->to);
-      $cc = trim((string) $template->cc);
-
-      if($cc !== '') {
-        foreach(explode(',', $cc) as $ccRecipient) {
-          $ccRecipient = trim($ccRecipient);
-          if($ccRecipient !== '') {
-            $recipients .= ($recipients === '' ? '' : ', ') . 'cc:' . $ccRecipient;
-          }
-        }
-      }
-
-      return $recipients;
-    }
-
-    private function appendEditableEmailTrigger($dom, $configuredTriggers, $publisher, $triggerName, $templateName, $attachBuildLog) {
-      $this->load->model('emailSettings_model', 'model');
-      $templates = $this->model->fetchName($templateName);
-
-      if (empty($templates)) {
-        return;
-      }
-
-      $template = $templates[0];
-      $trigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.'.$triggerName);
-      $configuredTriggers->appendChild($trigger);
-
-      $email = $dom->createElement('email');
-      $trigger->appendChild($email);
-      $this->appendTextElement($dom, $email, 'recipientList', $this->emailTemplateRecipientList($template));
-      $this->appendTextElement($dom, $email, 'subject', $template->subject);
-
-      $body = $dom->createElement('body');
-      $body->appendChild($dom->createCDATASection((string) $template->msg));
-      $email->appendChild($body);
-
-      $recipientProviders = $dom->createElement('recipientProviders');
-      $email->appendChild($recipientProviders);
-      $recipientProviders->appendChild($dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider'));
-
-      $this->appendTextElement($dom, $email, 'attachmentsPattern', '');
-      $this->appendTextElement($dom, $email, 'attachBuildLog', $this->normalizeAttachBuildLog($attachBuildLog));
-      $this->appendTextElement($dom, $email, 'compressBuildLog', 'false');
-      $this->appendTextElement($dom, $email, 'replyTo', '$PROJECT_DEFAULT_REPLYTO');
-      $this->appendTextElement($dom, $email, 'contentType', 'text/html');
-
-      if ($publisher->getElementsByTagName('from')->length === 0) {
-        $this->appendTextElement($dom, $publisher, 'from', $template->from);
-      }
-    }
-
-    private function normalizeAttachBuildLog($value) {
-      return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
-    }
-
-    private function appendDefaultFailureEmailTrigger($dom, $configuredTriggers, $recipients, $environment = '') {
-      $failureTrigger = $dom->createElement('hudson.plugins.emailext.plugins.trigger.FailureTrigger');
-      $configuredTriggers->appendChild($failureTrigger);
-
-      $email = $dom->createElement('email');
-      $failureTrigger->appendChild($email);
-
-      $recipientList = $dom->createElement('recipientList', $recipients);
-      $email->appendChild($recipientList);
-
-      $subject = $dom->createElement('subject', $this->failureEmailSubject('[FAILED] ${PROJECT_NAME} #${BUILD_NUMBER}', $environment));
-      $email->appendChild($subject);
-
-      $body = $dom->createElement('body');
-      $body->appendChild($dom->createCDATASection($this->defaultFailureEmailBody($environment)));
-      $email->appendChild($body);
-
-      $recipientProviders = $dom->createElement('recipientProviders');
-      $email->appendChild($recipientProviders);
-
-      $recipientProvidersPlugin = $dom->createElement('hudson.plugins.emailext.plugins.recipients.DevelopersRecipientProvider');
-      $recipientProviders->appendChild($recipientProvidersPlugin);
-
-      $attachments = $dom->createElement('attachmentsPattern', '');
-      $email->appendChild($attachments);
-
-      $attachBuildLog = $dom->createElement('attachBuildLog', 'false');
-      $email->appendChild($attachBuildLog);
-
-      $compressBuildLog = $dom->createElement('compressBuildLog', 'false');
-      $email->appendChild($compressBuildLog);
-
-      $replyTo = $dom->createElement('replyTo', '$PROJECT_DEFAULT_REPLYTO');
-      $email->appendChild($replyTo);
-
-      $contentType = $dom->createElement('contentType', 'text/html');
-      $email->appendChild($contentType);
-    }
-
-    private function environmentEmailPalette($environment) {
-      switch ($this->normalizeJobSeekerEnvironment($environment)) {
-        case 'DEV':
-          return array('start' => '#0f4c81', 'end' => '#2563eb', 'text' => '#dbeafe');
-        case 'QA':
-          return array('start' => '#047857', 'end' => '#14b8a6', 'text' => '#ccfbf1');
-        case 'UAT':
-          return array('start' => '#7c3aed', 'end' => '#0ea5e9', 'text' => '#e0f2fe');
-        case 'PREPROD':
-        case 'HML':
-          return array('start' => '#b45309', 'end' => '#f59e0b', 'text' => '#fff7ed');
-        case 'PROD':
-          return array('start' => '#7f1d1d', 'end' => '#dc2626', 'text' => '#fee2e2');
-        case 'LOCAL':
-          return array('start' => '#334155', 'end' => '#64748b', 'text' => '#e2e8f0');
-        default:
-          return array('start' => '#4A00E0', 'end' => '#8E2DE2', 'text' => '#ede9fe');
-      }
-    }
-
-    private function emailEnvironmentLabel($environment) {
-      $environment = $this->normalizeJobSeekerEnvironment($environment);
-      return $environment === '' || $environment === '0' || $environment === 'ALL' ? 'Runtime Environment' : $environment;
-    }
-
-    private function failureEmailEnvironmentHeader($environment) {
-      $palette = $this->environmentEmailPalette($environment);
-      $environmentLabel = htmlspecialchars($this->emailEnvironmentLabel($environment), ENT_QUOTES, 'UTF-8');
-
-      return '<div style="background:'.$palette['start'].'; background:linear-gradient(to right, '.$palette['start'].', '.$palette['end'].'); color:#ffffff; padding:20px 24px;">'
-        .'<p style="margin:0 0 6px; font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:'.$palette['text'].';">FAILED - '.$environmentLabel.'</p>'
-        .'<h1 style="margin:0; font-size:23px; line-height:1.3;">'.$environmentLabel.' - ${PROJECT_NAME} #${BUILD_NUMBER} failed</h1>'
-        .'<p style="margin:8px 0 0; font-size:14px; line-height:1.4; color:'.$palette['text'].';">${CAUSE}</p>'
-        .'</div>';
-    }
-
-    private function failureEmailSubject($subject, $environment) {
-      $environmentLabel = $this->emailEnvironmentLabel($environment);
-      return '['.$environmentLabel.'] '.trim((string) $subject);
-    }
-
-    private function failureEmailBodyWithEnvironment($body, $environment) {
-      $banner = $this->failureEmailEnvironmentHeader($environment);
-      $body = (string) $body;
-
-      if (preg_match('/<body\b[^>]*>/i', $body)) {
-        return preg_replace_callback('/<body\b[^>]*>/i', function($matches) use ($banner) {
-          return $matches[0].$banner;
-        }, $body, 1);
-      }
-
-      return $banner.$body;
-    }
-
-    private function defaultFailureEmailBody($environment = '') {
-      return str_replace(
-        array('@@JOBSEEKER_ENVIRONMENT_EMAIL_HEADER@@', '@@JOBSEEKER_EMAIL_ENVIRONMENT@@'),
-        array($this->failureEmailEnvironmentHeader($environment), htmlspecialchars($this->emailEnvironmentLabel($environment), ENT_QUOTES, 'UTF-8')),
-        <<<'HTML'
-<html>
-  <body style="margin:0; padding:0; background:#f3f4f6; color:#17202a; font-family:Arial, Helvetica, sans-serif;">
-    <div style="max-width:780px; margin:0 auto; padding:24px;">
-      <div style="background:#ffffff; border:1px solid #d8dee9; border-radius:6px; overflow:hidden;">
-        @@JOBSEEKER_ENVIRONMENT_EMAIL_HEADER@@
-        <div style="padding:24px;">
-          <p style="margin:0 0 18px; font-size:15px; line-height:1.55;">Jenkins marked this JobSeeker build as failed. Start with the highlighted error excerpt, then open the console log if the surrounding context is needed.</p>
-          <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse; margin:0 0 20px;"><tr>
-            <td style="padding:0 8px 8px 0;"><a href="${BUILD_URL}" style="display:block; white-space:nowrap; padding:9px 13px; background:#1f2937; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Open build</a></td>
-            <td style="padding:0 8px 8px 0;"><a href="${BUILD_URL}console" style="display:block; white-space:nowrap; padding:9px 13px; background:#2563eb; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Console log</a></td>
-            <td style="padding:0 8px 8px 0;"><a href="${BUILD_URL}consoleText" style="display:block; white-space:nowrap; padding:9px 13px; background:#475569; color:#ffffff; text-decoration:none; border-radius:4px; font-size:13px;">Raw log</a></td>
-            <td style="padding:0 0 8px;"><a href="${PROJECT_URL}" style="display:block; white-space:nowrap; padding:9px 13px; background:#e5e7eb; color:#111827; text-decoration:none; border-radius:4px; font-size:13px;">Job page</a></td>
-          </tr></table>
-          <table style="width:100%; border-collapse:collapse; margin:0 0 20px; font-size:14px;">
-            <tr><th align="left" style="width:150px; padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Job</th><td style="padding:8px; border:1px solid #d8dee9;">${PROJECT_NAME}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Environment</th><td style="padding:8px; border:1px solid #d8dee9; font-weight:bold;">@@JOBSEEKER_EMAIL_ENVIRONMENT@@</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build</th><td style="padding:8px; border:1px solid #d8dee9;">#${BUILD_NUMBER}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Status</th><td style="padding:8px; border:1px solid #d8dee9; color:#991b1b; font-weight:bold;">FAILED</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build ID</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_ID"}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build tag</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="BUILD_TAG"}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Node</th><td style="padding:8px; border:1px solid #d8dee9;">${ENV,var="NODE_NAME"} / executor ${ENV,var="EXECUTOR_NUMBER"}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Workspace</th><td style="padding:8px; border:1px solid #d8dee9; word-break:break-all;">${ENV,var="WORKSPACE"}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Cause</th><td style="padding:8px; border:1px solid #d8dee9;">${CAUSE}</td></tr>
-            <tr><th align="left" style="padding:8px; border:1px solid #d8dee9; background:#f8fafc;">Build URL</th><td style="padding:8px; border:1px solid #d8dee9; word-break:break-all;"><a href="${BUILD_URL}" style="color:#2563eb;">${BUILD_URL}</a></td></tr>
-          </table>
-          <h2 style="margin:20px 0 8px; font-size:16px;">Error Focus</h2>
-          <pre style="white-space:pre-wrap; word-break:break-word; background:#111827; color:#e5e7eb; padding:14px; border-radius:4px; font-size:12px; line-height:1.45;">${BUILD_LOG_REGEX, regex="(?i)(traceback|[a-z_][a-z0-9_]*(error|exception):|error|exception|fatal|command not found|no such file|permission denied|returned non-zero exit status|script returned exit code|build step .* marked build as failure)", linesBefore=5, linesAfter=0, maxTailMatches=6, maxLineLength=360, showTruncatedLines=false, escapeHtml=true, matchedLineHtmlStyle="color:#fecaca; font-weight:bold;", defaultValue="No explicit error lines were detected in the captured console output."}</pre>
-          <h2 style="margin:20px 0 8px; font-size:16px;">Recent Console Output</h2>
-          <pre style="white-space:pre-wrap; word-break:break-word; background:#0f172a; color:#e5e7eb; padding:14px; border-radius:4px; font-size:12px; line-height:1.45;">${BUILD_LOG, maxLines=160, maxLineLength=500, escapeHtml=true}</pre>
-        </div>
-      </div>
-    </div>
-  </body>
-</html>
-HTML
-  );
     }
 
     public function readXML() {
