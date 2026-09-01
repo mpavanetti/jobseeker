@@ -14,18 +14,6 @@
   function errorMessage(xhr, fallback) { return xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : fallback; }
   function busy($button, isBusy, icon) { $button.prop('disabled', isBusy).find('i').attr('class', isBusy ? 'fa fa-circle-o-notch fa-spin' : 'fa ' + icon); }
 
-  $('#vizDriver').on('change', function() { $('#vizPort').val($(this).val() === 'pgsql' ? 5432 : 3306); });
-
-  $('#vizConnectionForm').on('submit', function(event) {
-    event.preventDefault();
-    var $button = $('#vizSaveConnection');
-    busy($button, true, 'fa-plug');
-    $.post(endpoints.saveConnection, $(this).serialize()).done(function(payload) {
-      if (payload && payload.status) { notify(true, payload.message); window.setTimeout(function() { window.location.reload(); }, 650); }
-      else notify(false, payload && payload.message ? payload.message : 'Connection could not be saved.');
-    }).fail(function(xhr) { notify(false, errorMessage(xhr, 'Connection could not be saved.')); }).always(function() { busy($button, false, 'fa-plug'); });
-  });
-
   $('#vizDatasetConnection').on('change', function() {
     var id = $(this).val();
     var $table = $('#vizDatasetTable').prop('disabled', true).html('<option>Discovering tables…</option>');
@@ -88,12 +76,6 @@
     }).fail(function(xhr) { notify(false, errorMessage(xhr, 'Dataset could not be published.')); }).always(function() { busy($button, false, 'fa-cloud-upload'); });
   });
 
-  $('.viz-delete-connection').on('click', function() {
-    var id = $(this).closest('[data-connection-id]').data('connection-id');
-    alertify.confirm('Delete database connection', 'Delete this connection and every Studio dataset published from it?', function() {
-      $.post(endpoints.deleteConnection, { id: id }).done(function(payload) { if (payload.status) window.location.reload(); else notify(false, payload.message); }).fail(function(xhr) { notify(false, errorMessage(xhr, 'Connection could not be deleted.')); });
-    }, function() {});
-  });
   $('.viz-delete-dataset').on('click', function() {
     var id = $(this).closest('[data-dataset-id]').data('dataset-id');
     alertify.confirm('Remove connected dataset', 'Remove this dataset from Insight Studio? Existing dashboards using it will stop loading.', function() {

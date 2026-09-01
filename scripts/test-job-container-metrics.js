@@ -35,7 +35,12 @@ const second = {cpuTotalUsage: 3000000000, systemCpuUsage: 108000000000, onlineC
 metricsContext.normalizeRunContainerCpu(run, second);
 assert(second.cpuSampleAvailable === true && Math.abs(second.cpuPercent - 100) < 0.001, 'CPU usage should be calculated from consecutive raw Docker counters.');
 
-const generator = fs.readFileSync(path.join(root, 'application', 'controllers', 'JobCreation.php'), 'utf8');
+const generator = [
+  path.join(root, 'application', 'controllers', 'JobCreation.php'),
+  ...fs.readdirSync(path.join(root, 'application', 'controllers', 'concerns'))
+    .filter(file => file.startsWith('JobCreation') && file.endsWith('.php'))
+    .map(file => path.join(root, 'application', 'controllers', 'concerns', file))
+].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const creationView = fs.readFileSync(path.join(root, 'application', 'views', 'jobCreation.php'), 'utf8');
 const identityUses = (generator.match(/\$this->dockerJobRunIdentityOptions\(\)/g) || []).length;
 assert(identityUses === 3, 'Every primary Docker execution path must add JobSeeker identity options.');

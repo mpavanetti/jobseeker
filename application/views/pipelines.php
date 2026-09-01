@@ -171,7 +171,7 @@ foreach ($pipelineList as $item) {
             </select>
           </div>
         </div>
-        <label class="pipeline-deploy-overwrite"><input type="checkbox" id="pipelineDeployOverwrite"> Overwrite the target pipeline when it already exists</label>
+        <label class="pipeline-deploy-overwrite"><input type="checkbox" id="pipelineDeployOverwrite"> Overwrite the target pipeline and its jobs when they already exist</label>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>

@@ -1,5 +1,6 @@
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.css">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
 <style>
   .dropzone {
     background: white;
@@ -1921,6 +1922,7 @@
         <?php echo $success; ?>
       </div>
     <?php } ?>
+    <script>window.jobseekerSavedJobs = <?php echo json_encode(array_values($savedJobNames)); ?>;</script>
 
     <div class="row">
       <div class="col-md-12">
@@ -2253,6 +2255,15 @@
                         <span id="dataAssetsRuntimeMessage">Resolve a published path with <code>jobseeker-asset asset-key</code>; use <code>$JOBSEEKER_DATA_ASSETS_MANIFEST</code> when the shell script needs the full contract.</span>
                       </div>
                       <a class="alert-link data-assets-runtime-link" href="<?php echo base_url(); ?>data-assets" target="_blank" rel="noopener">Manage Data Assets <i class="fa fa-external-link"></i></a>
+                    </div>
+                    <div id="jobDependencyPanel" class="job-dependency-panel box box-default" style="display:none;">
+                      <div class="box-body">
+                        <div class="jd-toolbar">
+                          <strong><i class="fa fa-sitemap"></i> Connectors &amp; datasets used by this job</strong>
+                          <button type="button" class="btn btn-default btn-xs" id="jobDependencyTest" disabled><i class="fa fa-plug"></i> Test connections</button>
+                        </div>
+                        <div id="jobDependencyList"><p class="text-muted jd-empty">Add code that calls <code>js.connector(...)</code> or <code>js.asset(...)</code> to see the map.</p></div>
+                      </div>
                     </div>
                     <div class="linux-execution-section linux-shell-options" style="display: none;">
                       <div class="linux-execution-section-header">
@@ -8602,4 +8613,99 @@ $(document).on('click', '.inspectJenkinsJob', function() {
 
 });
 
+</script>
+
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
+<script type="text/javascript">
+(function($) {
+  var deps = window.JobSeekerJobDependencies;
+  if (!deps) { return; }
+
+  function selectedEnvironment() {
+    var value = $('#environment').val() || '';
+    if (!value && window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected) {
+      value = window.JobSeekerGlobalEnvironment.selected();
+    }
+    if (!value || String(value).toUpperCase() === '__UNKNOWN__') { value = ''; }
+    return value;
+  }
+
+  function currentPayload() {
+    return {
+      environment: selectedEnvironment(),
+      job_name: $.trim($('#job_name').val() || ''),
+      pythonInlineCode: $('#pythonInlineCode').val() || '',
+      pythonInlineFilesJson: $('#pythonInlineFilesJson').val() || '',
+      pythonRequirementsText: $('#pythonRequirementsText').val() || '',
+      linuxCommandLine: $('#linuxCommandLine').val() || '',
+      windowsCommandLine: $('#windowsCommandLine').val() || ''
+    };
+  }
+
+  var lastData = null;
+  function paint(data) {
+    lastData = data;
+    var has = data && ((data.connectors || []).length || (data.datasets || []).length);
+    $('#jobDependencyPanel').toggle(!!has || (data && (data.warnings || []).length));
+    if (!has) {
+      $('#jobDependencyList').html('<p class="text-muted jd-empty">No <code>js.connector(...)</code> or <code>js.asset(...)</code> references detected yet.</p>');
+      $('#jobDependencyTest').prop('disabled', true);
+      return;
+    }
+    deps.render('#jobDependencyList', data, {environment: selectedEnvironment()});
+    $('#jobDependencyTest').prop('disabled', !((data.connectors || []).length));
+  }
+
+  var timer = null;
+  function schedule() {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(function() {
+      deps.scan(currentPayload()).done(paint).fail(function() {});
+    }, 600);
+  }
+
+  $(document).on('input change', '#pythonInlineCode, #linuxCommandLine, #windowsCommandLine, #pythonRequirementsText, #job_name', schedule);
+  $(document).on('change', '#environment', schedule);
+  $(document).on('DOMSubtreeModified', '#pythonInlineFilesJson', schedule);
+
+  $(document).on('click', '#jobDependencyTest', function() {
+    var button = $(this).prop('disabled', true);
+    button.find('i').attr('class', 'fa fa-circle-o-notch fa-spin');
+    var payload = currentPayload();
+    if (lastData && lastData.connectors) {
+      payload.connector_keys = lastData.connectors.map(function(c) { return c.key; });
+    }
+    deps.test(payload).done(function(response) {
+      var byKey = {};
+      (response.results || []).forEach(function(r) { byKey[r.key] = r; });
+      (lastData.connectors || []).forEach(function(c) {
+        var r = byKey[c.key];
+        if (r) { c.status = r.status; c.statusMessage = r.message; }
+      });
+      deps.render('#jobDependencyList', lastData, {environment: selectedEnvironment()});
+      if (window.toastr) {
+        var passed = (response.results || []).filter(function(r) { return r.ok; }).length;
+        window.toastr.info(passed + ' of ' + (response.results || []).length + ' connector(s) passed.', 'Connection test');
+      }
+    }).fail(function(xhr) {
+      if (window.toastr) { window.toastr.error((xhr.responseJSON && xhr.responseJSON.message) || 'Connection test failed.', 'Connection test'); }
+    }).always(function() {
+      button.prop('disabled', false).find('i').attr('class', 'fa fa-plug');
+    });
+  });
+
+  $(function() {
+    schedule();
+    var saved = window.jobseekerSavedJobs || [];
+    if (saved.length) {
+      // Auto-run the one-time worker connection test for the freshly created job.
+      deps.test({environment: selectedEnvironment(), job_name: saved[0]}).done(function(response) {
+        if (window.toastr && response && (response.results || []).length) {
+          var passed = response.results.filter(function(r) { return r.ok; }).length;
+          window.toastr.info('Checked ' + response.results.length + ' connector(s) for ' + saved[0] + ': ' + passed + ' passed.', 'Job dependencies');
+        }
+      });
+    }
+  });
+})(jQuery);
 </script>

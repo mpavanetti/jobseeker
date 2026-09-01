@@ -72,87 +72,8 @@ class Visualization extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Insight Studio Data Sources';
         $data['connections'] = $this->model->listConnections();
         $data['connectedDatasets'] = $this->model->listExternalDatasets();
+        $data['manageConnectorsUrl'] = base_url() . 'dbSettings';
         $this->loadViews('visualizationDataSources', $this->global, $data, NULL);
-    }
-
-    public function saveConnection()
-    {
-        if(!$this->requireVisualizationManagerJson('POST')) {
-            return;
-        }
-        $id = (int) $this->input->post('id');
-        $driver = trim((string) $this->input->post('driver', TRUE));
-        $name = trim(strip_tags((string) $this->input->post('name')));
-        $host = trim((string) $this->input->post('host', TRUE));
-        $port = (int) $this->input->post('port');
-        $database = trim((string) $this->input->post('database_name', TRUE));
-        $username = trim((string) $this->input->post('username', TRUE));
-        $password = (string) $this->input->post('password');
-        $sslMode = trim((string) $this->input->post('ssl_mode', TRUE));
-        $isActive = (string) $this->input->post('is_active') !== '0';
-
-        if(!in_array($driver, array('mysql', 'pgsql'), TRUE)
-            || !in_array($sslMode, array('required', 'preferred', 'disabled'), TRUE)
-            || $name === '' || strlen($name) > 120
-            || !preg_match('/^[A-Za-z0-9._:-]{1,255}$/', $host)
-            || $port < 1 || $port > 65535
-            || !preg_match('/^[^\x00-\x1F\x7F]{1,128}$/', $database)
-            || !preg_match('/^[^\x00-\x1F\x7F]{1,128}$/', $username)) {
-            $this->jsonResponse(array('status' => FALSE, 'message' => 'Check the connection name, driver, host, port, database, username, and TLS mode.'), 422);
-            return;
-        }
-
-        $existing = $id > 0 ? $this->model->getConnection($id, TRUE) : FALSE;
-        if($id > 0 && !$existing) {
-            $this->jsonResponse(array('status' => FALSE, 'message' => 'Connection not found.'), 404);
-            return;
-        }
-        $this->load->library('encryption');
-        if($password === '' && $existing) {
-            $password = $this->encryption->decrypt($existing['password_encrypted']);
-        }
-        if($password === FALSE || ($password === '' && !$existing) || strlen((string) $password) > 1000) {
-            $this->jsonResponse(array('status' => FALSE, 'message' => 'Enter a valid database password.'), 422);
-            return;
-        }
-
-        $connection = array(
-            'driver' => $driver,
-            'host' => $host,
-            'port' => $port,
-            'database_name' => $database,
-            'username' => $username,
-            'ssl_mode' => $sslMode
-        );
-        $test = $this->model->testExternalConnection($connection, $password);
-        if(!$test['status']) {
-            $this->jsonResponse($test, 422);
-            return;
-        }
-
-        $now = date('Y-m-d H:i:s');
-        $data = array_merge($connection, array(
-            'name' => $name,
-            'password_encrypted' => $this->encryption->encrypt($password),
-            'is_active' => $isActive ? 1 : 0,
-            'updated_at' => $now
-        ));
-        if(!$existing) {
-            $data['owner_id'] = (int) $this->vendorId;
-            $data['owner'] = $this->name;
-            $data['created_at'] = $now;
-        }
-        $savedId = $this->model->saveConnection($id, $data);
-        $this->jsonResponse(array('status' => TRUE, 'id' => $savedId, 'message' => 'Connection verified and saved.'));
-    }
-
-    public function deleteConnection()
-    {
-        if(!$this->requireVisualizationManagerJson('POST')) {
-            return;
-        }
-        $deleted = $this->model->deleteConnection((int) $this->input->post('id'));
-        $this->jsonResponse(array('status' => $deleted > 0, 'message' => $deleted > 0 ? 'Connection and its curated datasets were removed.' : 'Connection not found.'), $deleted > 0 ? 200 : 404);
     }
 
     public function connectionTables($id = 0)

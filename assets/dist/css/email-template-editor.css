@@ -1,0 +1,25 @@
+.email-template-editor {
+  margin-bottom: 0;
+}
+
+.email-template-editor .cke {
+  border-radius: 2px;
+}
+
+.email-template-editor .cke_chrome {
+  border-color: #d2d6de;
+  box-shadow: none;
+}
+
+.email-template-editor .cke_top {
+  background: #f7f8fa;
+  border-bottom-color: #e1e4e8;
+}
+
+/* The textarea is only a fallback before CKEditor takes over. */
+.email-template-editor > textarea#msg {
+  font-family: Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  width: 100%;
+}

@@ -62,6 +62,40 @@ class CatalogHandler(BaseHTTPRequestHandler):
                 },
             ],
         }
+        if self.path == "/invalid-payload":
+            payload = ["not", "a", "catalog"]
+        elif self.path == "/malformed-connector":
+            payload = {"schema_version": 1, "connectors": [{"type": "generic", "config": {}}]}
+        elif self.path == "/duplicate-connectors":
+            payload = {
+                "schema_version": 1,
+                "connectors": [
+                    {"key": "duplicate", "type": "generic", "config": {}, "secret": {"backend": "local", "values": {}}},
+                    {"key": "duplicate", "type": "generic", "config": {}, "secret": {"backend": "local", "values": {}}},
+                ],
+            }
+        elif self.path == "/resolution-failure":
+            payload = {
+                "schema_version": 1,
+                "generated_at": "2026-08-28T00:00:00Z",
+                "connectors": [
+                    {
+                        "key": "would-be-partial",
+                        "type": "generic",
+                        "config": {"host": "partial.invalid"},
+                        "secret": {"backend": "local", "values": {"token": "must-not-be-written"}},
+                    },
+                    {
+                        "key": "missing-worker-secret",
+                        "type": "generic",
+                        "config": {},
+                        "secret": {
+                            "backend": "environment",
+                            "reference": {"variables": {"token": "JOBSEEKER_TEST_MISSING_SECRET"}},
+                        },
+                    },
+                ],
+            }
         body = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -256,9 +290,107 @@ def test_aws_secrets_manager_backend():
             sys.modules["boto3"] = previous
 
 
+def test_connection_tester():
+    conntest = jobseeker.conntest
+    Connector = jobseeker.Connector
+
+    # generic_secret: no endpoint, secret bundle present -> passed
+    result = Connector(
+        key="vault", type="generic_secret", environment="DEV", job="*", config={}, secrets={"token": "abc"}
+    ).test(timeout=1)
+    assert result.status == conntest.PASSED and result.ok, result.to_dict()
+
+    # unknown/undriven type against a dead port -> unreachable, never raises
+    result = Connector(
+        key="bus", type="kafka", environment="DEV", job="*", config={"host": "127.0.0.1", "port": 1}, secrets={}
+    ).test(timeout=1)
+    assert result.status in (conntest.UNREACHABLE, conntest.DRIVER_MISSING) and not result.ok, result.to_dict()
+
+    # driver_missing degrades to a TCP probe against a listening socket
+    listener = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    try:
+        port = listener.server_address[1]
+        saved = sys.modules.pop("redis", None)
+        sys.modules["redis"] = None  # force ImportError inside the handler
+        try:
+            result = Connector(
+                key="cache", type="redis", environment="DEV", job="*",
+                config={"host": "127.0.0.1", "port": port}, secrets={},
+            ).test(timeout=2)
+        finally:
+            if saved is not None:
+                sys.modules["redis"] = saved
+            else:
+                sys.modules.pop("redis", None)
+        assert result.status == conntest.DRIVER_MISSING, result.to_dict()
+        assert any(check.name == "tcp" and check.ok for check in result.checks), result.to_dict()
+    finally:
+        listener.server_close()
+
+    # secrets are scrubbed from messages / check details
+    scrubbed = conntest.ConnectionTestResult(connector="x", type="mysql")
+    scrubbed.add("connect", False, "Access denied for user 'etl' (using password: YES) token=supersecret")
+    assert "supersecret" not in scrubbed.to_json()
+
+    # HTTP endpoint check via a local server
+    http_server = ThreadingHTTPServer(("127.0.0.1", 0), _OkHandler)
+    http_thread = threading.Thread(target=http_server.serve_forever, daemon=True)
+    http_thread.start()
+    try:
+        http_port = http_server.server_address[1]
+        result = Connector(
+            key="api", type="http_api", environment="DEV", job="*",
+            config={"host": "http://127.0.0.1:%d/health" % http_port, "port": http_port}, secrets={},
+        ).test(timeout=3)
+        assert result.status == conntest.PASSED and result.ok, result.to_dict()
+    finally:
+        http_server.shutdown()
+        http_server.server_close()
+
+    # CLI: python -m jobseeker.conntest --json against a materialized catalog dir
+    with tempfile.TemporaryDirectory() as directory:
+        os.makedirs(os.path.join(directory, "vault-key"))
+        with open(os.path.join(directory, "vault-key", "token"), "w", encoding="utf-8") as handle:
+            handle.write("abc")
+        manifest = {
+            "schema_version": 1,
+            "connectors": [
+                {
+                    "key": "vault-key",
+                    "type": "generic_secret",
+                    "environment": "DEV",
+                    "job": "*",
+                    "config": {},
+                    "secret_files": {"token": "vault-key/token"},
+                }
+            ],
+        }
+        with open(os.path.join(directory, "connectors.json"), "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+        completed = subprocess.run(
+            [sys.executable, "-m", "jobseeker.conntest", "--directory", directory, "--key", "vault-key", "--json"],
+            capture_output=True, text=True,
+            env=dict(os.environ, PYTHONPATH=str(module_path.parents[1])),
+        )
+        assert completed.returncode == 0, completed.stderr
+        payload = json.loads(completed.stdout.strip().splitlines()[-1])
+        assert payload["connector"] == "vault-key" and payload["ok"] is True, payload
+
+
+class _OkHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, *args):
+        pass
+
+
 def main():
     test_azure_key_vault_backend()
     test_aws_secrets_manager_backend()
+    test_connection_tester()
     server = ThreadingHTTPServer(("127.0.0.1", 0), CatalogHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -331,6 +463,105 @@ def main():
                 raise AssertionError("missing required connector should fail")
             except JobSeekerError as error:
                 assert "warehouse" in str(error)
+
+            stable_directory = os.path.join(workspace, "stable-runtime")
+            os.makedirs(stable_directory)
+            stable_marker = os.path.join(stable_directory, "last-good-catalog")
+            with open(stable_marker, "w", encoding="utf-8") as stream:
+                stream.write("preserved")
+            os.environ.pop("JOBSEEKER_TEST_MISSING_SECRET", None)
+            try:
+                materialize_connectors(
+                    directory=stable_directory,
+                    environment="DEV",
+                    job="load-orders",
+                    api_url="http://127.0.0.1:%d/resolution-failure" % server.server_port,
+                    api_token="test-token",
+                )
+                raise AssertionError("missing environment secret should fail materialization")
+            except JobSeekerError as error:
+                assert "JOBSEEKER_TEST_MISSING_SECRET" in str(error)
+            assert os.path.isfile(stable_marker)
+            assert not os.path.exists(os.path.join(stable_directory, "would-be-partial"))
+
+            try:
+                materialize_connectors(
+                    directory=os.path.join(workspace, "invalid-runtime"),
+                    environment="DEV",
+                    job="load-orders",
+                    api_url="http://127.0.0.1:%d/invalid-payload" % server.server_port,
+                    api_token="test-token",
+                )
+                raise AssertionError("non-object catalog should fail materialization")
+            except JobSeekerError as error:
+                assert "response is invalid" in str(error)
+
+            for path, expected_error in (
+                ("malformed-connector", "missing a key"),
+                ("duplicate-connectors", "duplicate connector key"),
+            ):
+                try:
+                    materialize_connectors(
+                        directory=stable_directory,
+                        environment="DEV",
+                        job="load-orders",
+                        api_url="http://127.0.0.1:%d/%s" % (server.server_port, path),
+                        api_token="test-token",
+                    )
+                    raise AssertionError("invalid connector entries should fail materialization")
+                except JobSeekerError as error:
+                    assert expected_error in str(error).lower()
+                assert os.path.isfile(stable_marker)
+
+            original_open = jobseeker.os.open
+
+            def fail_catalog_write(path, flags, mode=0o777, *args, **kwargs):
+                if str(path).endswith("/warehouse/host"):
+                    raise OSError("simulated catalog write failure")
+                return original_open(path, flags, mode, *args, **kwargs)
+
+            jobseeker.os.open = fail_catalog_write
+            try:
+                try:
+                    materialize_connectors(
+                        directory=stable_directory,
+                        environment="DEV",
+                        job="load-orders",
+                        api_url=endpoint,
+                        api_token="test-token",
+                    )
+                    raise AssertionError("catalog write failure should fail materialization")
+                except OSError as error:
+                    assert "simulated catalog write failure" in str(error)
+            finally:
+                jobseeker.os.open = original_open
+            assert os.path.isfile(stable_marker)
+            assert not any(".stable-runtime." in name for name in os.listdir(workspace))
+
+            original_replace = jobseeker.os.replace
+
+            def fail_catalog_install(source, destination):
+                if ".stable-runtime.tmp-" in source and destination == stable_directory:
+                    raise OSError("simulated catalog install failure")
+                return original_replace(source, destination)
+
+            jobseeker.os.replace = fail_catalog_install
+            try:
+                try:
+                    materialize_connectors(
+                        directory=stable_directory,
+                        environment="DEV",
+                        job="load-orders",
+                        api_url=endpoint,
+                        api_token="test-token",
+                    )
+                    raise AssertionError("catalog install failure should fail materialization")
+                except OSError as error:
+                    assert "simulated catalog install failure" in str(error)
+            finally:
+                jobseeker.os.replace = original_replace
+            assert os.path.isfile(stable_marker)
+            assert not any(".stable-runtime." in name for name in os.listdir(workspace))
     finally:
         server.shutdown()
         server.server_close()

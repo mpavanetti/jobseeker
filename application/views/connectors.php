@@ -86,7 +86,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
             <div class="connector-form-grid">
               <div class="form-group">
                 <label for="connector_key">Connector key</label>
-                <input class="form-control" id="connector_key" name="connector_key" maxlength="128" pattern="[a-z0-9-]+" value="<?php echo html_escape($value('connector_key')); ?>" required>
+                <input class="form-control" id="connector_key" name="connector_key" maxlength="128" pattern="[a-z0-9\-]+" value="<?php echo html_escape($value('connector_key')); ?>" required>
               </div>
               <div class="form-group">
                 <label>Environment</label>
@@ -163,6 +163,9 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
                 <div class="form-group span-2"><label for="login">Username</label><input class="form-control" id="login" name="login" maxlength="500" autocomplete="off"></div>
                 <div class="form-group span-2"><label for="password">Password</label><input class="form-control" type="password" id="password" name="password" maxlength="2000" autocomplete="new-password"></div>
                 <div class="form-group span-4"><label for="local_secret_fields">Additional secret fields</label><textarea class="form-control" id="local_secret_fields" name="local_secret_fields" rows="4" spellcheck="false" placeholder="api_key=...&#10;sas_token=...&#10;connection_string=..."></textarea></div>
+                <?php if ($isEditing && $editing->secret_backend === 'local') { ?>
+                  <div class="form-group span-4"><label><input type="checkbox" name="clear_local_secrets" value="1"> Clear all stored local values</label><p class="help-block">Use this when the selected authentication type does not require a saved credential. Otherwise, blank fields preserve the current encrypted values.</p></div>
+                <?php } ?>
               </div>
             </div>
 
@@ -208,16 +211,18 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
           <table id="connectorTable" class="table table-bordered table-striped">
             <thead><tr><th>Key</th><th>Scope</th><th>Type</th><th>Endpoint</th><th>Secret source</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
             <tbody>
-            <?php foreach ($settings as $record) { ?>
-              <tr>
-                <td class="connector-key"><?php echo html_escape($record->connector_key); ?></td>
+            <?php foreach ($settings as $record) {
+              $isBuiltin = ($record->owner === 'system' && $record->connector_key === 'jobseeker-mariadb');
+            ?>
+              <tr data-connector-key="<?php echo html_escape($record->connector_key); ?>">
+                <td class="connector-key"><?php echo html_escape($record->connector_key); ?><?php echo $isBuiltin ? ' <span class="label label-info" title="Seeded by JobSeeker; editable">Built-in</span>' : ''; ?></td>
                 <td class="connector-scope"><?php echo html_escape($record->environment); ?> / <?php echo $record->job_name === '*' ? 'shared' : html_escape($record->job_name); ?></td>
                 <td><?php echo html_escape(isset($connectorTypes[$record->db_type]) ? $connectorTypes[$record->db_type] : $record->db_type); ?><br><small><?php echo html_escape(isset($authenticationTypes[$record->auth_type]) ? $authenticationTypes[$record->auth_type] : $record->auth_type); ?></small></td>
                 <td class="connector-endpoint"><?php echo html_escape($record->address); ?>:<?php echo html_escape($record->port); ?><br><small><?php echo html_escape($record->schema); ?></small></td>
                 <td><?php echo html_escape(isset($secretBackends[$record->secret_backend]) ? $secretBackends[$record->secret_backend] : $record->secret_backend); ?></td>
                 <td><span class="connector-status <?php echo (int) $record->is_active === 1 ? 'active' : ''; ?>"><span class="connector-status-dot"></span><?php echo (int) $record->is_active === 1 ? 'Active' : 'Inactive'; ?></span></td>
                 <td><?php echo html_escape($record->updated_at ?: $record->creation_date); ?></td>
-                <td class="connector-actions"><button class="btn btn-default btn-xs connectorHelp" type="button" data-key="<?php echo html_escape($record->connector_key); ?>" data-type="<?php echo html_escape($record->db_type); ?>" data-auth="<?php echo html_escape($record->auth_type); ?>" data-backend="<?php echo html_escape($record->secret_backend); ?>" title="Usage"><i class="fa fa-code"></i></button> <button class="btn btn-info btn-xs testConnector" type="button" data-id="<?php echo (int) $record->id; ?>" title="Test"><i class="fa fa-plug"></i></button> <a class="btn btn-warning btn-xs" href="<?php echo base_url().'dbSettings?edit='.(int) $record->id.'&amp;environment='.$environmentQuery; ?>" title="Edit"><i class="fa fa-pencil"></i></a> <button class="btn btn-danger btn-xs deleteConnector" type="button" data-id="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
+                <td class="connector-actions"><button class="btn btn-default btn-xs connectorHelp" type="button" data-key="<?php echo html_escape($record->connector_key); ?>" data-type="<?php echo html_escape($record->db_type); ?>" data-auth="<?php echo html_escape($record->auth_type); ?>" data-backend="<?php echo html_escape($record->secret_backend); ?>" title="Usage"><i class="fa fa-code"></i></button> <button class="btn btn-info btn-xs testConnector" type="button" data-id="<?php echo (int) $record->id; ?>" data-key="<?php echo html_escape($record->connector_key); ?>" title="Run a live connection test on a Jenkins worker"><i class="fa fa-plug"></i> Test</button> <a class="btn btn-warning btn-xs" href="<?php echo base_url().'dbSettings?edit='.(int) $record->id.'&amp;environment='.$environmentQuery; ?>" title="Edit"><i class="fa fa-pencil"></i></a> <button class="btn btn-danger btn-xs deleteConnector" type="button" data-id="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
               </tr>
             <?php } ?>
             </tbody>
@@ -250,6 +255,31 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
           <div class="tab-pane" id="connectorShellUsage"><pre id="connectorShellCode"></pre></div>
           <div class="tab-pane" id="connectorTalendUsage"><pre id="connectorTalendCode"></pre></div>
           <div class="tab-pane" id="connectorFileUsage"><pre id="connectorFileCode"></pre></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-default" data-dismiss="modal">Close</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="connectorTestModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header"><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button><h4 class="modal-title">Connection test &mdash; <code id="connectorTestKey"></code></h4></div>
+      <div class="modal-body">
+        <div id="connectorTestRunning" class="text-muted"><i class="fa fa-circle-o-notch fa-spin"></i> Running a live handshake on a Jenkins worker. This can take a few seconds&hellip;</div>
+        <div id="connectorTestOutcome" style="display:none">
+          <p><span id="connectorTestBadge" class="label"></span> <span id="connectorTestMessage"></span></p>
+          <table class="table table-condensed">
+            <tbody>
+              <tr><th style="width:40%">Result</th><td id="connectorTestStatus"></td></tr>
+              <tr><th>Latency</th><td id="connectorTestLatency"></td></tr>
+              <tr><th>Server</th><td id="connectorTestServer"></td></tr>
+              <tr><th>Test environment</th><td id="connectorTestEnv"></td></tr>
+            </tbody>
+          </table>
+          <ul id="connectorTestChecks" class="list-unstyled"></ul>
+          <pre id="connectorTestConsole" style="display:none;max-height:220px;overflow:auto"></pre>
         </div>
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-default" data-dismiss="modal">Close</button></div>
@@ -307,19 +337,39 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     refreshConnectorType(false);
     if ($.fn.DataTable) { $('#connectorTable').DataTable({order:[[0,'asc']], pageLength:25}); }
   });
+  function renderConnectorTest(response) {
+    var ok = !!response.ok;
+    $('#connectorTestRunning').hide();
+    $('#connectorTestOutcome').show();
+    $('#connectorTestBadge').attr('class', 'label ' + (ok ? 'label-success' : (response.status === 'driver_missing' ? 'label-warning' : 'label-danger'))).text(ok ? 'Passed' : 'Failed');
+    $('#connectorTestMessage').text(response.message || '');
+    $('#connectorTestStatus').text(response.status || (ok ? 'passed' : 'error'));
+    $('#connectorTestLatency').text(response.latencyMs != null ? response.latencyMs + ' ms' : '—');
+    $('#connectorTestServer').text(response.serverVersion || '—');
+    $('#connectorTestEnv').text(response.testEnvironment || '—');
+    var checks = $('#connectorTestChecks').empty();
+    $.each(response.checks || [], function(_, check) {
+      checks.append($('<li>').html('<i class="fa ' + (check.ok ? 'fa-check text-success' : 'fa-times text-danger') + '"></i> <strong>' + $('<span>').text(check.name).html() + '</strong> — ' + $('<span>').text(check.detail || '').html()));
+    });
+    if (response.consoleTail) {
+      $('#connectorTestConsole').text(response.consoleTail).show();
+    } else {
+      $('#connectorTestConsole').hide();
+    }
+  }
   $(document).on('click', '.testConnector', function() {
     var button = $(this);
-    var icon = button.find('i');
-    button.prop('disabled', true);
-    icon.removeClass('fa-plug').addClass('fa-spinner fa-spin');
-    $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/testConnector?environment=' + encodeURIComponent(<?php echo json_encode($globalEnvironment); ?>), data:{id:button.data('id')}}).done(function(response) {
-      toastr.success(response.message, 'Connector test');
+    button.prop('disabled', true).find('i').removeClass('fa-plug').addClass('fa-spinner fa-spin');
+    $('#connectorTestKey').text(String(button.data('key') || ''));
+    $('#connectorTestRunning').show();
+    $('#connectorTestOutcome').hide();
+    $('#connectorTestModal').modal('show');
+    $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/testConnector?environment=' + encodeURIComponent(<?php echo json_encode($globalEnvironment); ?>), data:{id:button.data('id'), mode:'live'}}).done(function(response) {
+      renderConnectorTest(response);
     }).fail(function(xhr) {
-      var response = xhr.responseJSON || {};
-      toastr.error(response.message || 'Connector test failed.', 'Connector test');
+      renderConnectorTest(xhr.responseJSON || {ok:false, status:'error', message:'Connector test failed.'});
     }).always(function() {
-      button.prop('disabled', false);
-      icon.removeClass('fa-spinner fa-spin').addClass('fa-plug');
+      button.prop('disabled', false).find('i').removeClass('fa-spinner fa-spin').addClass('fa-plug');
     });
   });
   $(document).on('click', '.connectorHelp', function() {

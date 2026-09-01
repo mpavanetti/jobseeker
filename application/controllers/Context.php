@@ -110,8 +110,10 @@ public function contextDetails() {
 
     $data["user"] = $user;
     $data["list"] = $this->model->listContexts($selectedEnvironment);
+    $data["comparisonList"] = $this->model->listContexts('ALL');
     $data["listProjects"] = $this->model->listProjects();
-    $data["listEnvironments"] = $this->model->listEnvironments();
+    $data["comparisonEnvironments"] = $this->model->listEnvironments();
+    $data["listEnvironments"] = $data["comparisonEnvironments"];
     if ($selectedEnvironment !== 'ALL') {
       $data["listEnvironments"] = array_values(array_filter($data["listEnvironments"], function($row) use ($selectedEnvironment) {
         return $this->normalizeJobSeekerEnvironment($row->Environment) === $selectedEnvironment;

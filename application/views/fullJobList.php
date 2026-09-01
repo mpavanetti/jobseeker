@@ -195,7 +195,7 @@ pre {
         </div>
       </form>
       <p class="full-job-filter-note" id="fullJobFilterStatus">Select a Jenkins job, then search builds. Console text filtering checks the logs from the fetched builds.</p>
-      <p class="full-job-filter-note full-job-environment-line" id="selectedJobEnvironment"><i class="fa fa-globe"></i> Environment: <span id="selectedJobEnvironmentLabel"><span class="label label-default">Unknown</span></span></p>
+      <p class="full-job-filter-note full-job-environment-line" id="selectedJobEnvironment"><i class="fa fa-globe"></i> Environment: <span id="selectedJobEnvironmentLabel"><span class="label label-default">No job selected</span></span></p>
     </div>
   </div>
 
@@ -331,6 +331,28 @@ pre {
       text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
     };
 
+    // jobCreation/availableJobs already resolves each job's environment on the
+    // server from its Jenkins ENVIRONMENT parameter. Trust that first; only fall
+    // back to name/config heuristics when the backend could not detect one.
+    function jobEnvironmentInfo(jobName) {
+      if (! jobName) {
+        return {environment: 'No job selected', source: '', unknown: true};
+      }
+
+      var meta = jobMetadata[jobName];
+      var backendEnvironment = meta && meta.environment ? String(meta.environment) : '';
+
+      if (backendEnvironment && backendEnvironment.toUpperCase() !== 'UNKNOWN') {
+        return {
+          environment: (environmentHelper.normalize && environmentHelper.normalize(backendEnvironment)) || backendEnvironment,
+          source: meta.environmentSource || 'Jenkins metadata',
+          unknown: false
+        };
+      }
+
+      return environmentHelper.detectFromJob(meta || {name: jobName, fullName: jobName});
+    }
+
     loadJobs();
 
     function fullJobEnvironmentRequestValue() {
@@ -445,6 +467,27 @@ pre {
       return json && Array.isArray(json.builds) ? json.builds : [];
     }
 
+    function environmentInfoFromBuild(build) {
+      var parameterEnvironment = '';
+
+      $.each(build && Array.isArray(build.actions) ? build.actions : [], function(actionIndex, action) {
+        $.each(action && Array.isArray(action.parameters) ? action.parameters : [], function(parameterIndex, parameter) {
+          if (/^(ENVIRONMENT|ENV|CONTEXT|JOB_CONTEXT|JOBSEEKER_ENVIRONMENT|TARGET_ENVIRONMENT|CONTEXT_ENVIRONMENT)$/i.test(parameter && parameter.name ? parameter.name : '')) {
+            parameterEnvironment = parameter.value;
+            return false;
+          }
+        });
+        return parameterEnvironment === '';
+      });
+
+      if (parameterEnvironment !== '') {
+        return environmentHelper.detectFromJob({environment: parameterEnvironment});
+      }
+
+      var info = jobEnvironmentInfo(build && build.jobName ? build.jobName : '');
+      return info && ! info.unknown ? info : selectedJobEnvironmentInfo;
+    }
+
     function destroyDataTable(selector) {
       if ($.fn.DataTable.isDataTable(selector)) {
         $(selector).DataTable().clear().destroy();
@@ -521,13 +564,15 @@ pre {
     }
 
     function loadSelectedJobEnvironment(jobName) {
-      var fallback = environmentHelper.detectFromJob(jobMetadata[jobName] || {name: jobName, fullName: jobName});
+      var fallback = jobEnvironmentInfo(jobName);
       setSelectedJobEnvironment(fallback);
 
       if (! jobName) {
         return $.Deferred().resolve(fallback).promise();
       }
 
+      // Optional refinement from the live Jenkins config. Never downgrade a
+      // resolved environment to "Unknown" when Jenkins is unreachable here.
       return $.ajax({
         contentType: 'application/text',
         url: jenkins_url + jenkinsJobPath(jobName) + '/config.xml',
@@ -535,8 +580,11 @@ pre {
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
       }).then(function(xmlText) {
         var info = environmentHelper.detectFromConfig(xmlText || '', jobName);
-        setSelectedJobEnvironment(info);
-        return info;
+        if (info && ! info.unknown) {
+          setSelectedJobEnvironment(info);
+          return info;
+        }
+        return fallback;
       }, function() {
         return fallback;
       });
@@ -631,6 +679,9 @@ pre {
         });
 
         $('#job_name').html(options);
+        if ($('#job_name').val()) {
+          setSelectedJobEnvironment(jobEnvironmentInfo($('#job_name').val()));
+        }
         $('#fullJobFilterStatus').text(jobs.length ? 'Select a Jenkins job, then search builds.' : 'No Jenkins jobs were returned.');
       }).fail(function(xhr) {
         toastr.error(responseMessage(xhr, 'Unable to load Jenkins jobs.'), 'Job Query Failed');
@@ -639,6 +690,10 @@ pre {
         setBusy(false);
       });
     }
+
+    $('#job_name').on('change', function() {
+      setSelectedJobEnvironment(jobEnvironmentInfo($(this).val() || ''));
+    });
 
     $(document).on('jobseeker:environment-change', function(event, environment) {
       jobEnvironmentFilter = environment || 'all';
@@ -706,13 +761,13 @@ pre {
 
     function fetchBuilds(filters) {
       return $.ajax({
-        url: jenkins_url + jenkinsJobPath(filters.jobName) + '/api/json?tree=builds[number,fullDisplayName,result,timestamp,duration,builtOn,url,queueId,building]{0,' + filters.rowLimit + '}',
+        url: jenkins_url + jenkinsJobPath(filters.jobName) + '/api/json?tree=builds[number,fullDisplayName,result,timestamp,duration,builtOn,url,queueId,building,actions[parameters[name,value]]]{0,' + filters.rowLimit + '}',
         method: 'GET',
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
       }).then(function(data) {
         return $.map(buildsFromJenkinsResponse(data), function(build) {
           build.jobName = filters.jobName;
-          build.environmentInfo = selectedJobEnvironmentInfo;
+          build.environmentInfo = environmentInfoFromBuild(build);
           build.number = parseInt(build.number, 10) || build.number;
           return build;
         });
@@ -903,7 +958,7 @@ pre {
       $('#dateFrom, #dateTo, #buildFrom, #buildTo, #logText').val('');
       $('#rowLimit').val(100);
       $('#caseSensitiveLog').prop('checked', false);
-      setSelectedJobEnvironment({environment: 'Unknown', source: 'Not detected', unknown: true});
+      setSelectedJobEnvironment(jobEnvironmentInfo($('#job_name').val() || ''));
       $('#fullJobFilterStatus').text('Filters reset. Search again to refresh the report.');
     }
 
@@ -931,11 +986,6 @@ pre {
 
     $('#resetFilters').click(function() {
       resetFilters();
-    });
-
-    $('#job_name').on('change', function() {
-      var jobName = $(this).val() || '';
-      setSelectedJobEnvironment(environmentHelper.detectFromJob({name: jobName, fullName: jobName}));
     });
 
     $('#fetch').on('click', '.log', function() {

@@ -82,6 +82,14 @@ class Pipelines extends BaseController
         return implode('/', $path);
     }
 
+    private function jenkinsCreateItemPath($jobName)
+    {
+        $segments = explode('/', trim((string) $jobName, '/'));
+        $name = array_pop($segments);
+        $parent = implode('/', $segments);
+        return ($parent !== '' ? $this->jenkinsJobPath($parent).'/' : '').'createItem?name='.rawurlencode($name);
+    }
+
     private function successfulJenkinsStatus($status)
     {
         return in_array((int) $status, array(200, 201, 302, 303), TRUE);
@@ -267,24 +275,364 @@ class Pipelines extends BaseController
     private function deploymentGraph($graph, $sourceEnvironment, $targetEnvironment, $targetJobs)
     {
         $availableNames = array_fill_keys(array_map(function($job) { return $job['name']; }, $targetJobs), TRUE);
-        $missing = array();
         $mappings = array();
         foreach ($graph['nodes'] as &$node) {
             $sourceJob = $node['job'];
             $suggestedJob = $this->suggestedDeploymentJobName($sourceJob, $sourceEnvironment, $targetEnvironment);
-            $targetJob = isset($availableNames[$suggestedJob]) ? $suggestedJob : (isset($availableNames[$sourceJob]) ? $sourceJob : '');
-            if ($targetJob === '') {
-                $missing[] = array('nodeId' => $node['id'], 'sourceJob' => $sourceJob, 'expectedJob' => $suggestedJob);
-                continue;
-            }
+            $targetJob = isset($availableNames[$suggestedJob]) ? $suggestedJob : (isset($availableNames[$sourceJob]) ? $sourceJob : $suggestedJob);
+            $targetExists = isset($availableNames[$targetJob]);
             if (! isset($node['label']) || $node['label'] === '' || $node['label'] === $sourceJob) {
                 $node['label'] = $targetJob;
             }
             $node['job'] = $targetJob;
-            $mappings[] = array('nodeId' => $node['id'], 'sourceJob' => $sourceJob, 'targetJob' => $targetJob);
+            $mappings[] = array('nodeId' => $node['id'], 'sourceJob' => $sourceJob, 'targetJob' => $targetJob, 'targetExists' => $targetExists);
         }
         unset($node);
-        return array('ok' => empty($missing), 'graph' => $graph, 'mappings' => $mappings, 'missing' => $missing);
+        return array('ok' => TRUE, 'graph' => $graph, 'mappings' => $mappings);
+    }
+
+    private function prepareDeploymentJobs($mappings, $sourceEnvironment, $targetEnvironment, $overwrite)
+    {
+        $jobNameMap = array();
+        foreach ($mappings as $mapping) {
+            $jobNameMap[$mapping['sourceJob']] = $mapping['targetJob'];
+        }
+
+        $prepared = array();
+        $seen = array();
+        foreach ($mappings as $mapping) {
+            $key = $mapping['sourceJob']."\0".$mapping['targetJob'];
+            if (isset($seen[$key]) || (! $overwrite && $mapping['targetExists'])) {
+                continue;
+            }
+            $seen[$key] = TRUE;
+
+            $sourceResponse = $this->requestJenkins('GET', $this->jenkinsJobPath($mapping['sourceJob']).'/config.xml');
+            if ((int) $sourceResponse['status'] !== 200) {
+                return array('ok' => FALSE, 'message' => 'Source Jenkins job '.$mapping['sourceJob'].' could not be loaded (HTTP '.$sourceResponse['status'].').');
+            }
+            $transform = $this->transformDeploymentJobXml($sourceResponse['body'], $sourceEnvironment, $targetEnvironment, $mapping['sourceJob'], $mapping['targetJob'], $jobNameMap);
+            if (! $transform['ok']) {
+                return $transform;
+            }
+            $prepared[] = array(
+                'sourceJob' => $mapping['sourceJob'],
+                'targetJob' => $mapping['targetJob'],
+                'targetExists' => $mapping['targetExists'],
+                'xml' => $transform['xml']
+            );
+        }
+        return array('ok' => TRUE, 'jobs' => $prepared);
+    }
+
+    private function transformDeploymentJobXml($xml, $sourceEnvironment, $targetEnvironment, $sourceJob, $targetJob, $jobNameMap)
+    {
+        $dom = new DOMDocument();
+        $dom->preserveWhiteSpace = FALSE;
+        $dom->formatOutput = TRUE;
+        $previousErrors = libxml_use_internal_errors(TRUE);
+        $loaded = $dom->loadXML($xml);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousErrors);
+        if (! $loaded || ! $dom->documentElement) {
+            return array('ok' => FALSE, 'message' => 'Source Jenkins job '.$sourceJob.' has invalid config.xml.');
+        }
+
+        $xpath = new DOMXPath($dom);
+        foreach ($xpath->query('//hudson.tasks.Shell/command | //hudson.tasks.BatchFile/command') as $commandNode) {
+            $updated = $this->rewriteDeploymentCommand($commandNode->nodeValue, $sourceEnvironment, $targetEnvironment, $sourceJob, $targetJob);
+            if ($updated !== $commandNode->nodeValue) {
+                while ($commandNode->firstChild) {
+                    $commandNode->removeChild($commandNode->firstChild);
+                }
+                $commandNode->appendChild($dom->createTextNode($updated));
+            }
+        }
+
+        $parameterNames = array('environment', 'env', 'context', 'job_environment', 'jobseeker_environment', 'target_environment', 'context_environment');
+        foreach ($dom->getElementsByTagName('defaultValue') as $defaultValueNode) {
+            $nameNode = $this->directDeploymentChild($defaultValueNode->parentNode, 'name');
+            if ($nameNode && in_array(strtolower(trim($nameNode->nodeValue)), $parameterNames, TRUE) && strcasecmp(trim($defaultValueNode->nodeValue), $sourceEnvironment) === 0) {
+                while ($defaultValueNode->firstChild) {
+                    $defaultValueNode->removeChild($defaultValueNode->firstChild);
+                }
+                $defaultValueNode->appendChild($dom->createTextNode($targetEnvironment));
+            }
+        }
+
+        foreach ($dom->getElementsByTagName('childProjects') as $childProjectsNode) {
+            $projects = array();
+            foreach (explode(',', $childProjectsNode->nodeValue) as $project) {
+                $project = trim($project);
+                if ($project !== '') {
+                    $projects[] = isset($jobNameMap[$project]) ? $jobNameMap[$project] : $this->replaceDeploymentEnvironmentToken($project, $sourceEnvironment, $targetEnvironment);
+                }
+            }
+            while ($childProjectsNode->firstChild) {
+                $childProjectsNode->removeChild($childProjectsNode->firstChild);
+            }
+            $childProjectsNode->appendChild($dom->createTextNode(implode(', ', $projects)));
+        }
+
+        $this->rewriteDeploymentAgent($dom, $sourceEnvironment, $targetEnvironment);
+        return array('ok' => TRUE, 'xml' => $dom->saveXML());
+    }
+
+    private function replaceDeploymentEnvironmentToken($jobName, $sourceEnvironment, $targetEnvironment)
+    {
+        $pattern = '/(^|[._\/-])'.preg_quote($sourceEnvironment, '/').'($|[._\/-])/i';
+        return preg_replace_callback($pattern, function($matches) use ($targetEnvironment) {
+            return $matches[1].$targetEnvironment.$matches[2];
+        }, $jobName, 1);
+    }
+
+    private function rewriteDeploymentAgent($dom, $sourceEnvironment, $targetEnvironment)
+    {
+        $assignedNode = $this->directDeploymentChild($dom->documentElement, 'assignedNode');
+        if (! $assignedNode) {
+            return;
+        }
+        $sourceLabel = $this->jenkinsEnvironmentAgentLabel($sourceEnvironment);
+        if ($sourceLabel === '' || trim($assignedNode->nodeValue) !== $sourceLabel) {
+            return;
+        }
+        $targetLabel = $this->jenkinsEnvironmentAgentLabel($targetEnvironment);
+        while ($assignedNode->firstChild) {
+            $assignedNode->removeChild($assignedNode->firstChild);
+        }
+        if ($targetLabel !== '') {
+            $assignedNode->appendChild($dom->createTextNode($targetLabel));
+        }
+        $canRoam = $this->directDeploymentChild($dom->documentElement, 'canRoam');
+        if ($canRoam) {
+            while ($canRoam->firstChild) {
+                $canRoam->removeChild($canRoam->firstChild);
+            }
+            $canRoam->appendChild($dom->createTextNode($targetLabel === '' ? 'true' : 'false'));
+        }
+    }
+
+    private function rewriteDeploymentCommand($text, $sourceEnvironment, $targetEnvironment, $sourceJob, $targetJob)
+    {
+        $source = preg_quote($sourceEnvironment, '/');
+        $updated = preg_replace('/(?<![A-Za-z0-9_-])(["\']?)(--?(?:context|environment))(\s*=\s*)'.$source.'\1(?![A-Za-z0-9_.-])/i', '$1$2$3'.$targetEnvironment.'$1', (string) $text);
+        $updated = preg_replace('/(?<![A-Za-z0-9_-])(["\']?)(--?(?:context|environment))\1(\s+)(["\']?)'.$source.'\4(?![A-Za-z0-9_.-])/i', '$1$2$1$3$4'.$targetEnvironment.'$4', $updated);
+        $assignmentNames = 'JOBSEEKER_ENVIRONMENT|JOBSEEKER_CONTEXT|CONTEXT_ENVIRONMENT|TARGET_ENVIRONMENT|ENVIRONMENT|CONTEXT';
+        $updated = preg_replace('/^(\s*(?:export\s+)?(?:'.$assignmentNames.')\s*=\s*)(["\']?)'.$source.'\2(\s*)$/mi', '$1$2'.$targetEnvironment.'$2$3', $updated);
+
+        $parts = preg_split('/(\r\n|\n|\r)/', $updated, -1, PREG_SPLIT_DELIM_CAPTURE);
+        for ($index = 0; $index < count($parts); $index += 2) {
+            if (strpos($parts[$index], 'JOBSEEKER_PYTHON') !== FALSE || strpos($parts[$index], 'JOBSEEKER_ENTRYPOINT') !== FALSE || preg_match('/(^|\s)python[0-9.]*\s/i', $parts[$index]) || preg_match('/\.py(["\']?)(\s|$)/i', $parts[$index])) {
+                $parts[$index] = preg_replace('/(^|\s)(["\']?)'.$source.'\2(\s*)$/i', '$1$2'.$targetEnvironment.'$2$3', $parts[$index], 1);
+            }
+        }
+        $updated = implode('', $parts);
+
+        // Legacy inline Python jobs baked the environment in as a positional argument
+        // to the entrypoint (docker:  ... "$@"' sh 'DEV' || ...   local:  "$JOBSEEKER_SCRIPT_PATH" 'DEV').
+        // Jobs created after the "$JOBSEEKER_ENVIRONMENT" change need no rewrite here.
+        $updated = preg_replace('/("\$@"\x27\s+sh\s+)([\x27"]?)'.$source.'\2(?=\s*(?:\|\||\r|\n|$))/', '${1}${2}'.$targetEnvironment.'${2}', $updated);
+        $updated = preg_replace('/("\$JOBSEEKER_SCRIPT_PATH"\s+)([\x27"]?)'.$source.'\2(?=\s*(?:\r|\n|$))/', '${1}${2}'.$targetEnvironment.'${2}', $updated);
+
+        $sourcePath = trim(str_replace('\\', '/', $sourceJob), '/');
+        $targetPath = trim(str_replace('\\', '/', $targetJob), '/');
+        foreach (array('talend/jobs/', 'bash/jobs/', 'batch/jobs/', 'python/jobs/', 'python/inline/') as $location) {
+            $updated = str_replace('repository/'.$location.$sourcePath, 'repository/'.$location.$targetPath, $updated);
+        }
+        return $updated;
+    }
+
+    private function directDeploymentChild($parent, $tagName)
+    {
+        if (! $parent) {
+            return NULL;
+        }
+        foreach ($parent->childNodes as $child) {
+            if ($child->nodeType === XML_ELEMENT_NODE && $child->tagName === $tagName) {
+                return $child;
+            }
+        }
+        return NULL;
+    }
+
+    private function deploymentRepositoryRoot()
+    {
+        $jenkinsHome = isset($this->global['jenkins_home']) ? trim((string) $this->global['jenkins_home']) : '';
+        return $jenkinsHome !== '' ? rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository' : FCPATH.'repository';
+    }
+
+    private function isTransientDeploymentPath($relativePath)
+    {
+        $relativePath = trim(str_replace('\\', '/', (string) $relativePath), '/');
+        if ($relativePath === '') {
+            return FALSE;
+        }
+
+        // Local build caches only - never a directory that could hold authored job
+        // deliverables (e.g. a shell job's own build/ or dist/ folder).
+        $transientDirectories = array(
+            '.git', '.venv', 'venv', '.vscode', '.uv-cache', '.jobseeker-wheels', '.jobseeker-python-libs',
+            '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache', 'htmlcov', 'node_modules'
+        );
+        foreach (explode('/', strtolower($relativePath)) as $segment) {
+            if (in_array($segment, $transientDirectories, TRUE) || preg_match('/\.egg-info$/i', $segment) === 1) {
+                return TRUE;
+            }
+        }
+
+        $baseName = strtolower(basename($relativePath));
+        if ($baseName === '.coverage' || $baseName === 'coverage.xml') {
+            return TRUE;
+        }
+        if (($baseName === '.env' || strpos($baseName, '.env.') === 0) && $baseName !== '.env.example') {
+            return TRUE;
+        }
+        return preg_match('/\.py[co]$/i', $baseName) === 1;
+    }
+
+    private function copyDeploymentDirectory($sourcePath, $targetPath)
+    {
+        if (! $this->ensureDirectory($targetPath)) {
+            return FALSE;
+        }
+        $sourcePath = rtrim($sourcePath, DIRECTORY_SEPARATOR);
+        $directory = new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS);
+        $filter = new RecursiveCallbackFilterIterator($directory, function($current) use ($sourcePath) {
+            $relativePath = substr($current->getPathname(), strlen($sourcePath) + 1);
+            return ! $current->isLink() && ! $this->isTransientDeploymentPath($relativePath);
+        });
+        $iterator = new RecursiveIteratorIterator($filter, RecursiveIteratorIterator::SELF_FIRST, RecursiveIteratorIterator::CATCH_GET_CHILD);
+        foreach ($iterator as $item) {
+            if ($item->isLink()) {
+                continue;
+            }
+            $relativePath = substr($item->getPathname(), strlen($sourcePath) + 1);
+            $targetItem = $targetPath.DIRECTORY_SEPARATOR.$relativePath;
+            if ($item->isDir()) {
+                if (! $this->ensureDirectory($targetItem)) {
+                    return FALSE;
+                }
+            } elseif (! $item->isFile() || ! $this->ensureDirectory(dirname($targetItem)) || ! copy($item->getPathname(), $targetItem)) {
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }
+
+    private function copyDeploymentEnvironmentFiles($sourcePath, $targetPath)
+    {
+        if (! is_dir($sourcePath) || ! is_dir($targetPath) || is_link($sourcePath) || is_link($targetPath)) {
+            return FALSE;
+        }
+        $sourcePath = rtrim($sourcePath, DIRECTORY_SEPARATOR);
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST, RecursiveIteratorIterator::CATCH_GET_CHILD);
+        foreach ($iterator as $item) {
+            $relativePath = substr($item->getPathname(), strlen($sourcePath) + 1);
+            $baseName = strtolower(basename(str_replace('\\', '/', $relativePath)));
+            if (($baseName !== '.env' && strpos($baseName, '.env.') !== 0) || $baseName === '.env.example') {
+                continue;
+            }
+            $targetItem = $targetPath.DIRECTORY_SEPARATOR.$relativePath;
+            if ($item->isLink() || ! $item->isFile() || ! $this->ensureDirectory(dirname($targetItem)) || ! copy($item->getPathname(), $targetItem)) {
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }
+
+    private function removeDeploymentDirectory($path)
+    {
+        if (! is_dir($path)) {
+            return TRUE;
+        }
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST, RecursiveIteratorIterator::CATCH_GET_CHILD);
+        foreach ($iterator as $item) {
+            if ($item->isDir() && ! $item->isLink()) {
+                if (! rmdir($item->getPathname())) {
+                    return FALSE;
+                }
+            } elseif (! unlink($item->getPathname())) {
+                return FALSE;
+            }
+        }
+        return rmdir($path);
+    }
+
+    private function copyDeploymentArtifacts($sourceJob, $targetJob, $overwrite)
+    {
+        $root = realpath($this->deploymentRepositoryRoot());
+        if ($root === FALSE || $sourceJob === $targetJob) {
+            return array('ok' => TRUE, 'copied' => 0);
+        }
+        $copied = 0;
+        foreach (array('talend/jobs', 'bash/jobs', 'batch/jobs', 'python/jobs', 'python/inline') as $location) {
+            $sourceRelative = $this->safeRelativePath($location.'/'.$sourceJob);
+            $targetRelative = $this->safeRelativePath($location.'/'.$targetJob);
+            if ($sourceRelative === FALSE || $targetRelative === FALSE) {
+                return array('ok' => FALSE, 'message' => 'A pipeline job resolved to an unsafe repository path.');
+            }
+            $sourcePath = $root.DIRECTORY_SEPARATOR.$sourceRelative;
+            $targetPath = $root.DIRECTORY_SEPARATOR.$targetRelative;
+            if (! is_dir($sourcePath)) {
+                continue;
+            }
+            if (is_link($sourcePath) || is_link($targetPath) || ! $this->pathWithinBase($sourcePath, $root) || ! $this->pathWithinBase($targetPath, $root)) {
+                return array('ok' => FALSE, 'message' => 'A pipeline job repository path is not safe to deploy.');
+            }
+            if (is_dir($targetPath) && ! $overwrite) {
+                return array('ok' => FALSE, 'message' => 'Repository payload for '.$targetJob.' already exists. Enable overwrite to replace it.');
+            }
+            $token = '.pipeline-deploy-'.substr(sha1(uniqid('', TRUE)), 0, 12);
+            $stagePath = dirname($targetPath).DIRECTORY_SEPARATOR.$token.'-stage';
+            $backupPath = dirname($targetPath).DIRECTORY_SEPARATOR.$token.'-backup';
+            if (! $this->ensureDirectory(dirname($targetPath)) || ! $this->copyDeploymentDirectory($sourcePath, $stagePath)) {
+                $this->removeDeploymentDirectory($stagePath);
+                return array('ok' => FALSE, 'message' => 'Repository payload for '.$sourceJob.' could not be staged.');
+            }
+            $hadTarget = is_dir($targetPath);
+            if ($hadTarget && ! $this->copyDeploymentEnvironmentFiles($targetPath, $stagePath)) {
+                $this->removeDeploymentDirectory($stagePath);
+                return array('ok' => FALSE, 'message' => 'Target environment files for '.$targetJob.' could not be preserved.');
+            }
+            if ($hadTarget && ! rename($targetPath, $backupPath)) {
+                $this->removeDeploymentDirectory($stagePath);
+                return array('ok' => FALSE, 'message' => 'Existing repository payload for '.$targetJob.' could not be backed up.');
+            }
+            if (! rename($stagePath, $targetPath)) {
+                if ($hadTarget) {
+                    rename($backupPath, $targetPath);
+                }
+                $this->removeDeploymentDirectory($stagePath);
+                return array('ok' => FALSE, 'message' => 'Repository payload for '.$targetJob.' could not be installed.');
+            }
+            if ($hadTarget) {
+                $this->removeDeploymentDirectory($backupPath);
+            }
+            $copied++;
+        }
+        return array('ok' => TRUE, 'copied' => $copied);
+    }
+
+    private function deployPreparedJobs($prepared, $overwrite)
+    {
+        $deployed = 0;
+        $artifactFolders = 0;
+        foreach ($prepared as $job) {
+            $artifacts = $this->copyDeploymentArtifacts($job['sourceJob'], $job['targetJob'], $overwrite);
+            if (! $artifacts['ok']) {
+                return $artifacts;
+            }
+            $artifactFolders += $artifacts['copied'];
+            $targetPath = $this->jenkinsJobPath($job['targetJob']);
+            $response = $job['targetExists']
+                ? $this->requestJenkins('POST', $targetPath.'/config.xml', $job['xml'], 'text/xml')
+                : $this->requestJenkins('POST', $this->jenkinsCreateItemPath($job['targetJob']), $job['xml'], 'text/xml');
+            if (! $this->successfulJenkinsStatus($response['status'])) {
+                return array('ok' => FALSE, 'message' => 'Jenkins refused pipeline job '.$job['targetJob'].' (HTTP '.$response['status'].').');
+            }
+            $deployed++;
+        }
+        return array('ok' => TRUE, 'deployed' => $deployed, 'artifactFolders' => $artifactFolders);
     }
 
     private function cleanCronExpression($value)
@@ -496,13 +844,10 @@ class Pipelines extends BaseController
             return;
         }
         $deployment = $this->deploymentGraph($this->graphPayload($source), $sourceEnvironment, $targetEnvironment, $targetJobs['jobs']);
-        if (! $deployment['ok']) {
-            $missingNames = array_map(function($item) { return $item['expectedJob']; }, $deployment['missing']);
-            $this->jsonResponse(array(
-                'ok' => FALSE,
-                'message' => 'Deploy the missing target jobs before deploying this pipeline: '.implode(', ', $missingNames).'.',
-                'missingJobs' => $deployment['missing']
-            ), 422);
+        $overwrite = $this->input->post('overwrite') === '1';
+        $preparedJobs = $this->prepareDeploymentJobs($deployment['mappings'], $sourceEnvironment, $targetEnvironment, $overwrite);
+        if (! $preparedJobs['ok']) {
+            $this->jsonResponse($preparedJobs, 422);
             return;
         }
         $validation = $this->compiler->validateGraph($deployment['graph']['nodes'], $deployment['graph']['edges']);
@@ -511,8 +856,13 @@ class Pipelines extends BaseController
             return;
         }
         $target = $this->pipelines->getPipelineByScope($source->pipeline_key, $targetEnvironment);
-        if ($target && $this->input->post('overwrite') !== '1') {
+        if ($target && ! $overwrite) {
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'This pipeline already exists in '.$targetEnvironment.'. Enable overwrite to deploy a new version.', 'targetId' => (int) $target->id), 409);
+            return;
+        }
+        $jobDeployment = $this->deployPreparedJobs($preparedJobs['jobs'], $overwrite);
+        if (! $jobDeployment['ok']) {
+            $this->jsonResponse($jobDeployment, 502);
             return;
         }
         $now = date('Y-m-d H:i:s');
@@ -547,7 +897,9 @@ class Pipelines extends BaseController
             'environment' => $targetEnvironment,
             'version' => (int) $target->version,
             'mappings' => $deployment['mappings'],
-            'message' => $sync['ok'] ? 'Pipeline deployed to '.$targetEnvironment.'.' : $sync['message']
+            'deployedJobs' => $jobDeployment['deployed'],
+            'artifactFolders' => $jobDeployment['artifactFolders'],
+            'message' => $sync['ok'] ? 'Pipeline and '.$jobDeployment['deployed'].' job(s) deployed to '.$targetEnvironment.'.' : $sync['message']
         ), $sync['status']);
     }
 

@@ -840,6 +840,7 @@ class BaseController extends CI_Controller {
 
 				$executors[] = array(
 					'node' => $nodeName,
+					'controller' => $isControllerNode,
 					'executor' => isset($executor->number) ? (int) $executor->number : (int) $executorIndex,
 					'offline' => $isOffline,
 					'temporarilyOffline' => $isTemporarilyOffline,
@@ -872,6 +873,7 @@ class BaseController extends CI_Controller {
 
 			$nodes[] = array(
 				'node' => $nodeName,
+				'controller' => $isControllerNode,
 				'environment' => $nodeEnvironment,
 				'labels' => $nodeLabels,
 				'offline' => $isOffline,
@@ -957,8 +959,20 @@ class BaseController extends CI_Controller {
 
 		$environmentKey = $requestedEnvironment;
 		$environmentRows = isset($status['environments']) && is_array($status['environments']) ? $status['environments'] : array();
+		$environmentRow = isset($environmentRows[$environmentKey]) ? $environmentRows[$environmentKey] : array();
+		$controllerHasScopedBuild = FALSE;
+		foreach (isset($status['executors']) && is_array($status['executors']) ? $status['executors'] : array() as $executor) {
+			if (! empty($executor['controller']) && empty($executor['idle']) && $this->jenkinsMonitorEnvironmentMatches(isset($executor['environment']) ? $executor['environment'] : '', $requestedEnvironment)) {
+				$controllerHasScopedBuild = TRUE;
+				break;
+			}
+		}
+		$includeControllerCapacity = $requestedEnvironment === 'LOCAL'
+			|| empty($status['environmentAgentsEnabled'])
+			|| (isset($environmentRow['onlineAgentExecutors']) ? (int) $environmentRow['onlineAgentExecutors'] : 0) < 1
+			|| $controllerHasScopedBuild;
 		$status['environments'] = array(
-			$environmentKey => isset($environmentRows[$environmentKey]) ? $environmentRows[$environmentKey] : array(
+			$environmentKey => $environmentRow ? $environmentRow : array(
 				'running' => 0,
 				'queued' => 0,
 				'active' => 0,
@@ -969,8 +983,16 @@ class BaseController extends CI_Controller {
 
 		foreach (array('nodes', 'executors', 'queue') as $collection) {
 			$rows = isset($status[$collection]) && is_array($status[$collection]) ? $status[$collection] : array();
-			$status[$collection] = array_values(array_filter($rows, function($row) use ($requestedEnvironment) {
-				return is_array($row) && $this->jenkinsMonitorEnvironmentMatches(isset($row['environment']) ? $row['environment'] : '', $requestedEnvironment);
+			$status[$collection] = array_values(array_filter($rows, function($row) use ($requestedEnvironment, $includeControllerCapacity) {
+				if (! is_array($row)) {
+					return FALSE;
+				}
+
+				if ($includeControllerCapacity && ! empty($row['controller'])) {
+					return TRUE;
+				}
+
+				return $this->jenkinsMonitorEnvironmentMatches(isset($row['environment']) ? $row['environment'] : '', $requestedEnvironment);
 			}));
 		}
 
@@ -978,9 +1000,14 @@ class BaseController extends CI_Controller {
 		foreach ($status['nodes'] as $node) {
 			$offline = ! empty($node['offline']);
 			$global[$offline ? 'offlineNodes' : 'onlineNodes']++;
-			$global['agentNodes']++;
+			$isControllerNode = ! empty($node['controller']);
+			if (! $isControllerNode) {
+				$global['agentNodes']++;
+			}
 			if (! $offline) {
-				$global['onlineAgentNodes']++;
+				if (! $isControllerNode) {
+					$global['onlineAgentNodes']++;
+				}
 				$global['totalExecutors'] += isset($node['executors']) ? (int) $node['executors'] : 0;
 			}
 		}
@@ -1379,6 +1406,64 @@ class BaseController extends CI_Controller {
 		}
 
 		return implode('/', $path);
+	}
+
+	protected function repositoryRootPath() {
+		$jenkinsHome = isset($this->global['jenkins_home']) ? trim((string) $this->global['jenkins_home']) : '';
+		return $jenkinsHome === '' ? FCPATH.'repository' : rtrim($jenkinsHome, '/\\').DIRECTORY_SEPARATOR.'repository';
+	}
+
+	/**
+	 * Connector / data-asset dependency map for a saved job. Returns stored rows
+	 * when the job was scanned at creation; otherwise falls back to a live scan
+	 * of the Jenkins command plus the job's repository source (not persisted).
+	 */
+	protected function jobDependencyMap($jobName, $environment) {
+		$jobName = trim((string) $jobName);
+		$environment = $this->normalizeJobSeekerEnvironment((string) $environment);
+		$environment = $environment === '' ? 'ALL' : $environment;
+		if ($jobName === '') {
+			return array('connectors' => array(), 'datasets' => array(), 'stored' => FALSE);
+		}
+
+		$this->load->model('JobDependency_model', 'jobDependencyModel');
+		$stored = $this->jobDependencyModel->listForJob($jobName, $environment);
+		if (! empty($stored['connectors']) || ! empty($stored['datasets'])) {
+			$stored['stored'] = TRUE;
+			return $stored;
+		}
+
+		$this->load->library('DependencyScanner');
+		$sources = array();
+		$configResponse = $this->requestJenkins('GET', $this->jenkinsEncodedJobPath($jobName).'/config.xml');
+		if ((int) $configResponse['status'] === 200 && preg_match_all('#<command>(.*?)</command>#s', (string) $configResponse['body'], $commandMatches)) {
+			foreach ($commandMatches[1] as $command) {
+				$sources[] = array('text' => html_entity_decode($command, ENT_QUOTES | ENT_XML1, 'UTF-8'), 'from' => 'command');
+			}
+		}
+		$repositoryRoot = $this->repositoryRootPath();
+		foreach (array('python/inline', 'python/jobs', 'bash/jobs', 'batch/jobs', 'talend/jobs') as $location) {
+			$relative = $this->safeRelativePath($location.'/'.$jobName);
+			if ($relative === FALSE) {
+				continue;
+			}
+			$directory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.$relative;
+			if (is_dir($directory)) {
+				foreach ($this->dependencyscanner->sourcesForJob('', $directory) as $repoSource) {
+					$sources[] = $repoSource;
+				}
+			}
+		}
+
+		$scan = $this->dependencyscanner->scan($sources);
+		$resolved = $this->jobDependencyModel->resolve(
+			$this->dependencyscanner->keys($scan, 'connectors'),
+			$this->dependencyscanner->keys($scan, 'datasets'),
+			$environment,
+			$jobName
+		);
+		$resolved['stored'] = FALSE;
+		return $resolved;
 	}
 
 	protected function getUploadedFile($field, $allowedExtensions = array(), $maxBytes = 104857600) {

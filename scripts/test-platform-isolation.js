@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -6,7 +7,12 @@ function assert(condition, message) {
 
 const header = fs.readFileSync('application/views/includes/header.php', 'utf8');
 const baseController = fs.readFileSync('application/libraries/BaseController.php', 'utf8');
-const jobCreationController = fs.readFileSync('application/controllers/JobCreation.php', 'utf8');
+const jobCreationController = [
+  'application/controllers/JobCreation.php',
+  ...fs.readdirSync('application/controllers/concerns')
+    .filter(file => file.startsWith('JobCreation') && file.endsWith('.php'))
+    .map(file => path.join('application/controllers/concerns', file))
+].map(file => fs.readFileSync(file, 'utf8')).join('\n');
 const dashboardController = fs.readFileSync('application/controllers/Dashboard.php', 'utf8');
 const deleteView = fs.readFileSync('application/views/deleteJob.php', 'utf8');
 const jobList = fs.readFileSync('application/views/jobList.php', 'utf8');
@@ -41,6 +47,9 @@ assert(jobCreationController.includes('$this->jobSeekerEnvironmentPreference()')
   assert(view.includes('availableJobs'), 'Jenkins job view #' + (index + 1) + ' must use the backend available-jobs endpoint.');
   assert(/environment/.test(view), 'Jenkins job view #' + (index + 1) + ' must send an environment scope.');
 });
+assert(fullJobList.includes('actions[parameters[name,value]]'), 'Full Job Build List must request environment parameters for every build.');
+assert(fullJobList.includes('environmentInfoFromBuild(build)'), 'Full Job Build List must prefer each build environment over the job fallback.');
+assert(fullJobList.includes("$('#job_name').on('change'"), 'Full Job Build List must refresh the environment badge when job selection changes.');
 assert(!jobExecution.includes('jobMatchesEnvironmentFilter'), 'Job Execution must not re-filter environments in JavaScript.');
 assert(!jobView.includes('jobMatchesEnvironmentFilter'), 'Job View must not re-filter environments in JavaScript.');
 assert(!deleteView.includes("'/doDelete'"), 'Delete Job must not delete Jenkins jobs directly from the browser.');
@@ -58,6 +67,7 @@ assert(tmfController.includes("$environment = array($globalEnvironment)"), 'TMF 
 assert(tmfController.includes('$this->jobSeekerEnvironmentPreference()'), 'TMF must use the current user environment preference when the URL has no filter.');
 assert(dashboardController.includes('$this->jobSeekerEnvironmentPreference()'), 'Dashboard queries must default to the current user environment preference.');
 assert(contextController.includes('listContexts($selectedEnvironment)'), 'Context Details must query its environment in the backend.');
+assert(contextController.includes('$data["comparisonList"] = $this->model->listContexts(\'ALL\')'), 'Context comparison must receive an explicit all-environment snapshot.');
 assert(contextController.includes("The target context environment is outside the current backend scope."), 'Context creation and updates must reject environments outside the backend scope.');
 assert(contextController.includes("'api/json?tree='.rawurlencode($tree)"), 'Environment Deployment must encode its nested Jenkins tree query.');
 assert(contextController.includes("$tree = 'jobs['.$fields.',jobs['.$fields.',jobs['.$fields.']]]';"), 'Environment Deployment must keep a balanced three-level Jenkins tree expression.');
@@ -72,6 +82,9 @@ assert(connectorModel.includes("array_merge($this->environmentFilterValues($envi
 assert(pipelineModel.includes("where_in('environment', $this->environmentFilterValues($environment))"), 'Pipeline lists must be filtered in the backend.');
 assert(visualizationModel.includes('applyStudioEnvironmentFilter'), 'Insight Studio queries must apply environment filters in the backend.');
 assert(contextScript.includes("window.location.href = baseUrl + '?environment='"), 'Context environment changes must reload backend-filtered rows.');
+assert(contextView.includes('data-context-view="compare"') && contextScript.includes('initializeContextComparison'), 'Context Details must provide a separate environment comparison view.');
+assert(contextView.includes("(int) $comparisonRecord->isEncrypted === 1 ? ''"), 'Encrypted context values must be removed before comparison data reaches the browser.');
+assert(contextScript.includes('context-compare-different'), 'Context comparison must identify values that differ across environments.');
 assert(contextScript.includes('dom: \'rt<"context-datatable-footer"ip>\''), 'Context pagination must remain inside the DataTables wrapper.');
 assert(contextScript.includes(".find('.dataTables_paginate').toggle(info.pages > 1)"), 'Context pagination must be hidden when the filtered result has one page.');
 assert(!contextScript.includes('append($pagination)') && !contextView.includes('contextTablePagination'), 'Context pagination must not be detached from DataTables event handling.');

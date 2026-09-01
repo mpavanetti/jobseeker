@@ -55,11 +55,27 @@ class JobView extends BaseController
             return $cleanDates;
         }
 
+    public function dependencies()
+    {
+        $this->output->set_content_type('application/json');
+        $jobName = trim((string) $this->input->get('job', TRUE));
+        $environment = trim((string) $this->input->get('environment', TRUE));
+        if ($environment === '') {
+            $environment = $this->jobSeekerEnvironmentPreference();
+        }
+        if ($jobName === '' || strlen($jobName) > 400) {
+            $this->output->set_status_header(400);
+            echo json_encode(array('ok' => FALSE, 'message' => 'A job name is required.'));
+            return;
+        }
+        echo json_encode(array_merge(array('ok' => TRUE, 'job' => $jobName), $this->jobDependencyMap($jobName, $environment)));
+    }
 
- 
 
-   
-    
+
+
+
+
 }
 
 ?>
