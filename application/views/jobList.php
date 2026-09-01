@@ -1664,7 +1664,6 @@ pre {
         var jenkins_url = '<?php echo $jenkins_url; ?>';
         var jenkins_username = '';
         var jenkins_token = '';
-        var jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
 
         if (! options.silent) {
           toastr.info('Fetching data from server...', 'Query Data');
@@ -1892,8 +1891,7 @@ pre {
 
        var jenkins_url = '<?php echo $jenkins_url; ?>',
            jenkins_username = '',
-           jenkins_token = '',
-           jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+           jenkins_token = '';
 
       var job=$(this).val();
   var environment = $(this).data('environment') || 'Unknown';
@@ -1975,8 +1973,7 @@ pre {
 
        var jenkins_url = '<?php echo $jenkins_url; ?>',
            jenkins_username = '',
-           jenkins_token = '',
-           jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+           jenkins_token = '';
 
       var job=$(this).val();
   var environment = $(this).data('environment') || 'Unknown';
@@ -2025,8 +2022,7 @@ $("#listTable").on('click','.log',function(){
         // get Jenkins credentials
         var jenkins_url = '<?php echo $jenkins_url; ?>',
           jenkins_username = '',
-          jenkins_token = '',
-            jenkins_authorization = '<?php echo $jenkins_authorization; ?>';
+          jenkins_token = '';
 
 
          // get the current row Id, job name and instance id
