@@ -16,7 +16,6 @@ class SmtpSettings extends BaseController
         $this->model->ensureLocalDefaultSetting();
         $this->load->library('session');
         $this->isLoggedIn();  
-        date_default_timezone_set('America/Sao_Paulo'); 
     }
 
     /**

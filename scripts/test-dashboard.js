@@ -66,4 +66,15 @@ assert(baseController.includes("$includeControllerCapacity = $requestedEnvironme
 assert(baseController.includes('function($row) use ($requestedEnvironment, $includeControllerCapacity)'), 'Scoped nodes and executors must apply the controller-capacity decision consistently.');
 assert(routes.includes("dashboard/overview") && routes.includes("jenkins/dashboardMetrics"), 'Dashboard routes must remain registered.');
 
+// The overview endpoint caches its aggregate query for a short window and
+// honours ?fresh=1 so the manual refresh button always recomputes.
+assert(controller.includes("\$this->cache->get(\$cacheKey)") && controller.includes('OVERVIEW_CACHE_TTL'), 'The dashboard overview must be served from a short-lived server-side cache.');
+assert(controller.includes("in_array((string) \$this->input->get('fresh')"), 'The dashboard overview must support a fresh=1 cache bypass.');
+assert(script.includes("+ 'fresh=1'"), 'The dashboard client must request a fresh payload on manual refresh.');
+
+// Timezone is configured once centrally, not hardcoded per controller.
+const config = fs.readFileSync(path.join(root, 'application', 'config', 'config.php'), 'utf8');
+assert(config.includes("getenv('JOBSEEKER_TIMEZONE')") && config.includes('date_default_timezone_set($jobseekerTimezone)'), 'The application timezone must be set once from JOBSEEKER_TIMEZONE.');
+assert(!controller.includes("date_default_timezone_set('America/Sao_Paulo')"), 'Controllers must not hardcode the timezone.');
+
 console.log('Dashboard metric and rendering tests passed.');
