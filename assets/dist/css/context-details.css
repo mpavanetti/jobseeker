@@ -91,6 +91,125 @@
   width: 100%;
 }
 
+.context-view-tabs {
+  border-bottom-color: #d2d6de;
+  margin-bottom: 15px;
+}
+
+.context-view-tabs > li > a {
+  color: #555;
+  font-weight: 600;
+}
+
+.context-view-tabs > li > a .fa {
+  margin-right: 5px;
+}
+
+.context-view-tabs > li.active > a,
+.context-view-tabs > li.active > a:focus,
+.context-view-tabs > li.active > a:hover {
+  border-top: 3px solid #3c8dbc;
+  color: #333;
+  margin-top: -2px;
+}
+
+.context-compare-controls {
+  display: grid;
+  gap: 15px;
+  grid-template-columns: minmax(220px, 1fr) minmax(300px, 2fr);
+  max-width: 900px;
+}
+
+.context-compare-controls .context-field {
+  grid-column: auto;
+}
+
+.context-compare-wrap {
+  overflow-x: auto;
+  padding: 0 10px 10px;
+}
+
+.context-compare-table {
+  margin-bottom: 0;
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.context-compare-table > thead > tr > th {
+  background: #f9fafc;
+  border-bottom: 2px solid #d2d6de;
+  color: #333;
+  min-width: 150px;
+  padding: 11px 10px;
+}
+
+.context-compare-table > thead > tr > th:first-child,
+.context-compare-table > tbody > tr > th {
+  min-width: 120px;
+  width: 120px;
+}
+
+.context-compare-table > tbody > tr > th {
+  background: #f9fafc;
+  color: #555;
+  font-size: 12px;
+  padding: 12px 10px;
+  vertical-align: middle;
+}
+
+.context-compare-table > tbody > tr > td {
+  color: #444;
+  padding: 12px 10px;
+  vertical-align: middle;
+}
+
+.context-compare-table > tbody > tr.context-compare-different > th {
+  border-left: 3px solid #f39c12;
+  color: #8a5a00;
+}
+
+.context-compare-table > tbody > tr.context-compare-different > td {
+  background: #fffdf5;
+}
+
+.context-compare-value {
+  background: transparent;
+  color: #333;
+  display: block;
+  max-height: 88px;
+  overflow: auto;
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.context-compare-missing {
+  color: #999;
+  font-style: italic;
+}
+
+.context-compare-empty {
+  color: #999;
+  padding: 50px 20px;
+  text-align: center;
+}
+
+.context-compare-empty .fa,
+.context-compare-empty strong,
+.context-compare-empty span {
+  display: block;
+}
+
+.context-compare-empty .fa {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.context-compare-empty strong {
+  color: #555;
+  margin-bottom: 3px;
+}
+
 .context-page .context-card-header {
   align-items: center;
   display: flex;
@@ -444,7 +563,8 @@
   }
 
   .context-metrics,
-  .context-toolbar {
+  .context-toolbar,
+  .context-compare-controls {
     grid-template-columns: 1fr;
   }
 

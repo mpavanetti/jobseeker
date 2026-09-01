@@ -373,9 +373,9 @@ class Visualization_model extends CI_Model
     private function externalDatasetsMetadata()
     {
         $this->ensureDataSourceSchema();
-        $this->db->select('dataset.dataset_key,dataset.name,dataset.description,dataset.dimensions_json,dataset.measures_json,connection.name AS connection_name');
+        $this->db->select('dataset.dataset_key,dataset.name,dataset.description,dataset.dimensions_json,dataset.measures_json,connection.connector_key AS connection_name');
         $this->db->from('visualization_datasets dataset');
-        $this->db->join('visualization_connections connection', 'connection.id = dataset.connection_id');
+        $this->db->join('database_settings connection', 'connection.id = dataset.connection_id');
         $this->db->where('dataset.is_active', 1);
         $this->db->where('connection.is_active', 1);
         $this->db->order_by('dataset.name', 'ASC');
@@ -421,59 +421,98 @@ class Visualization_model extends CI_Model
         return $datasets;
     }
 
+    /**
+     * Studio data sources now come from the unified connector catalog
+     * (database_settings). Only SQL connectors whose credentials JobSeeker can
+     * read in-process (local encrypted secret) are usable for live schema
+     * discovery and Studio queries.
+     */
     function listConnections()
     {
         $this->ensureDataSourceSchema();
-        $this->db->select('connection.id,connection.name,connection.driver,connection.host,connection.port,connection.database_name,connection.username,connection.ssl_mode,connection.is_active,connection.owner,connection.created_at,connection.updated_at,COUNT(dataset.id) AS dataset_count');
-        $this->db->from('visualization_connections connection');
+        $this->db->select('connection.id,connection.connector_key AS name,connection.db_type AS driver,connection.address AS host,connection.port,connection.`schema` AS database_name,connection.auth_type,connection.additional_parameters,connection.environment,connection.is_active,connection.owner,connection.creation_date AS created_at,connection.updated_at,COUNT(dataset.id) AS dataset_count', FALSE);
+        $this->db->from('database_settings connection');
         $this->db->join('visualization_datasets dataset', 'dataset.connection_id = connection.id', 'left');
+        $this->db->where_in('connection.db_type', array('mysql', 'pgsql'));
+        $this->db->where('connection.secret_backend', 'local');
         $this->db->group_by('connection.id');
-        $this->db->order_by('connection.name', 'ASC');
-        return $this->db->get()->result();
+        $this->db->order_by('connection.connector_key', 'ASC');
+        $rows = $this->db->get()->result();
+        foreach($rows as $row) {
+            $row->ssl_mode = $this->sslModeFromParams(isset($row->additional_parameters) ? $row->additional_parameters : '');
+            $row->username = '';
+        }
+        return $rows;
     }
 
     function getConnection($id, $withSecret = FALSE)
     {
         $this->ensureDataSourceSchema();
-        $fields = 'id,name,driver,host,port,database_name,username,ssl_mode,is_active,owner_id,owner,created_at,updated_at';
-        if($withSecret) {
-            $fields .= ',password_encrypted';
-        }
-        $this->db->select($fields);
-        $this->db->from('visualization_connections');
-        $this->db->where('id', (int) $id);
-        return $this->db->get()->row_array();
+        $row = $this->db
+            ->select('id,connector_key,db_type,address,port,`schema`,auth_type,secret_backend,secret_encrypted,additional_parameters,is_active,owner', FALSE)
+            ->from('database_settings')
+            ->where('id', (int) $id)
+            ->where_in('db_type', array('mysql', 'pgsql'))
+            ->where('secret_backend', 'local')
+            ->get()
+            ->row_array();
+        return $row ? $this->hydrateCatalogConnection($row, $withSecret) : NULL;
     }
 
-    function saveConnection($id, $data)
+    private function hydrateCatalogConnection($row, $withSecret)
     {
-        $this->ensureDataSourceSchema();
-        if((int) $id > 0) {
-            $this->db->where('id', (int) $id);
-            $this->db->update('visualization_connections', $data);
-            return (int) $id;
+        $username = '';
+        $password = '';
+        if($withSecret && trim((string) $row['secret_encrypted']) !== '') {
+            $this->load->library('encryption');
+            $decoded = $this->encryption->decrypt((string) $row['secret_encrypted']);
+            $parsed = $decoded === FALSE ? NULL : json_decode($decoded, TRUE);
+            if(is_array($parsed)) {
+                $username = isset($parsed['username']) ? (string) $parsed['username'] : '';
+                $password = isset($parsed['password']) ? (string) $parsed['password'] : '';
+            }
         }
-        $this->db->insert('visualization_connections', $data);
-        return (int) $this->db->insert_id();
+        return array(
+            'id' => (int) $row['id'],
+            'name' => (string) $row['connector_key'],
+            'driver' => (string) $row['db_type'],
+            'host' => (string) $row['address'],
+            'port' => (int) $row['port'],
+            'database_name' => (string) $row['schema'],
+            'username' => $username,
+            'password_plain' => $password,
+            'ssl_mode' => $this->sslModeFromParams(isset($row['additional_parameters']) ? $row['additional_parameters'] : ''),
+            'is_active' => (int) $row['is_active'],
+            'owner' => isset($row['owner']) ? (string) $row['owner'] : ''
+        );
     }
 
-    function deleteConnection($id)
+    private function sslModeFromParams($params)
     {
-        $this->ensureDataSourceSchema();
-        $this->db->trans_start();
-        $this->db->where('connection_id', (int) $id)->delete('visualization_datasets');
-        $this->db->where('id', (int) $id)->delete('visualization_connections');
-        $deleted = $this->db->affected_rows();
-        $this->db->trans_complete();
-        return $deleted;
+        if(preg_match('/\bssl_?mode\s*=\s*([a-z-]+)/i', (string) $params, $matches)) {
+            $mode = strtolower($matches[1]);
+            if(in_array($mode, array('required', 'preferred', 'disabled'), TRUE)) {
+                return $mode;
+            }
+            if(in_array($mode, array('require', 'verify-ca', 'verify-full'), TRUE)) {
+                return 'required';
+            }
+            if($mode === 'prefer') {
+                return 'preferred';
+            }
+            if(in_array($mode, array('disable', 'allow'), TRUE)) {
+                return 'disabled';
+            }
+        }
+        return 'preferred';
     }
 
     function listExternalDatasets()
     {
         $this->ensureDataSourceSchema();
-        $this->db->select('dataset.id,dataset.connection_id,dataset.name,dataset.dataset_key,dataset.description,dataset.table_schema,dataset.table_name,dataset.time_column,dataset.environment_column,dataset.is_active,dataset.owner,dataset.created_at,dataset.updated_at,connection.name AS connection_name,connection.driver');
+        $this->db->select('dataset.id,dataset.connection_id,dataset.name,dataset.dataset_key,dataset.description,dataset.table_schema,dataset.table_name,dataset.time_column,dataset.environment_column,dataset.is_active,dataset.owner,dataset.created_at,dataset.updated_at,connection.connector_key AS connection_name,connection.db_type AS driver', FALSE);
         $this->db->from('visualization_datasets dataset');
-        $this->db->join('visualization_connections connection', 'connection.id = dataset.connection_id');
+        $this->db->join('database_settings connection', 'connection.id = dataset.connection_id');
         $this->db->order_by('dataset.name', 'ASC');
         return $this->db->get()->result();
     }
@@ -549,16 +588,27 @@ class Visualization_model extends CI_Model
         if(!preg_match('/^source_[a-f0-9]{16}$/', (string) $datasetKey)) {
             return FALSE;
         }
-        $this->db->select('dataset.*,connection.driver,connection.host,connection.port,connection.database_name,connection.username,connection.password_encrypted,connection.ssl_mode');
+        $this->db->select('dataset.*');
         $this->db->from('visualization_datasets dataset');
-        $this->db->join('visualization_connections connection', 'connection.id = dataset.connection_id');
         $this->db->where('dataset.dataset_key', $datasetKey);
         $this->db->where('dataset.is_active', 1);
-        $this->db->where('connection.is_active', 1);
         $record = $this->db->get()->row_array();
         if(!$record) {
             return FALSE;
         }
+        $connection = $this->getConnection((int) $record['connection_id'], TRUE);
+        if(!$connection || !(int) $connection['is_active']) {
+            $this->lastDataSourceError = 'The dataset connection is no longer available.';
+            return FALSE;
+        }
+        $record = array_merge($record, array(
+            'driver' => $connection['driver'],
+            'host' => $connection['host'],
+            'port' => $connection['port'],
+            'database_name' => $connection['database_name'],
+            'username' => $connection['username'],
+            'ssl_mode' => $connection['ssl_mode']
+        ));
 
         $dimensions = json_decode($record['dimensions_json'], TRUE);
         $measures = json_decode($record['measures_json'], TRUE);
@@ -569,9 +619,9 @@ class Visualization_model extends CI_Model
         }
 
         try {
-            $password = $this->decryptConnectionPassword($record['password_encrypted']);
-            if($password === FALSE) {
-                throw new RuntimeException('The stored credential could not be decrypted.');
+            $password = $connection['password_plain'];
+            if($password === '') {
+                throw new RuntimeException('The stored credential could not be read.');
             }
             $pdo = $this->externalPdo($record, $password);
             $driver = $record['driver'];
@@ -690,9 +740,9 @@ class Visualization_model extends CI_Model
             $this->lastDataSourceError = 'Connection not found or inactive.';
             return array(FALSE, FALSE);
         }
-        $password = $this->decryptConnectionPassword($connection['password_encrypted']);
-        if($password === FALSE) {
-            $this->lastDataSourceError = 'The stored credential could not be decrypted.';
+        $password = isset($connection['password_plain']) ? (string) $connection['password_plain'] : '';
+        if($password === '') {
+            $this->lastDataSourceError = 'The stored credential could not be read.';
             return array(FALSE, FALSE);
         }
         try {
@@ -701,12 +751,6 @@ class Visualization_model extends CI_Model
             $this->lastDataSourceError = $this->safeConnectionError($exception);
             return array(FALSE, FALSE);
         }
-    }
-
-    private function decryptConnectionPassword($encrypted)
-    {
-        $this->load->library('encryption');
-        return $this->encryption->decrypt((string) $encrypted);
     }
 
     private function externalPdo($connection, $password)

@@ -1,3 +1,5 @@
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/email-template-editor.css?v=2">
+
 <div class="content-wrapper">
     <!-- Content Header (Page header) -->
     <section class="content-header">
@@ -129,8 +131,8 @@
     <h4>Email Message:</h4><br>
     <div class="row">
        <div class="col-lg-12 col-md-12 col-xs-12">
-        <div class="form-group">
-            <textarea name="msg" id="msg" rows="1000" cols="80"></textarea>
+        <div class="form-group email-template-editor">
+            <textarea class="form-control" name="msg" id="msg" rows="24" spellcheck="false"><?php echo html_escape(set_value('msg')); ?></textarea>
         </div>
     </div> 
 
@@ -207,7 +209,7 @@
 <!-- /.modal-dialog -->
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/ckeditor/ckeditor.js"></script>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/ckeditor/config.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/email-template-editor.js?v=2"></script>
 
 <script type="text/javascript">
 
@@ -255,14 +257,6 @@
     });
 
 
-</script>
-
-<script>
-    CKEDITOR.replace('msg', {
-      language: 'en'
-  });
-
-   CKEDITOR.config.extraPlugins = 'colorbutton,justify,find,font,templates,tableresize,tableselection,tabletools,selectall,codesnippet,indentblock'; 
 </script>
 
 
