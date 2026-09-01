@@ -41,6 +41,14 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 - Open inline Docker Python jobs as full projects in the bundled OpenVSCode Server with Poetry, uv, Ruff, mypy, BasedPyright, pytest, coverage, and debugpy.
 - Gate Python execution with pytest and keep test output separate from application output in the Jenkins console.
 
+### Spark and ML compute
+
+- Define Spark clusters (runtime, driver/worker resources, worker bounds, Spark conf) and PySpark jobs with bundled samples (`SparkPi`, word count, CSV aggregate).
+- Run jobs on **ephemeral, Databricks-style job clusters**: JobSeeker starts one master plus N workers on the in-stack Docker engine only when a job is triggered, submits with `spark-submit`, streams status and logs, then removes the cluster and its per-run network.
+- Choose a Spark 4.0+ runtime image from a dropdown; run Miniconda-based ML jobs (scikit-learn / XGBoost, or PyTorch + Lightning) as single ephemeral containers with sample jobs.
+- Build the runtime images once with `docker compose --profile runtimes up --build` (or `scripts/build-compute-runtimes.sh`); orchestration sits behind a `ComputeDriver` interface with a Docker driver today and a Kubernetes seam for later.
+- Turn the whole section off with `"compute": { "enabled": false }` in `application/config/config.json`.
+
 ### Monitoring and analytics
 
 - Monitor running, queued, successful, failed, disabled, and not-built Jenkins jobs from operational dashboards.
@@ -240,6 +248,14 @@ Validate Compose configuration and run the focused JavaScript regression suite:
 docker compose config --quiet
 npm ci
 npm test
+```
+
+`npm test` includes the Spark and ML compute guard rails (`test:spark-compute`,
+`test:ml-compute`). The PHP-side compute unit checks need a local PHP and run
+separately, like the other `php scripts/test-*.php` checks:
+
+```bash
+npm run test:compute-runtimes
 ```
 
 Docker Compose restores generated frontend assets automatically. To refresh them manually:
