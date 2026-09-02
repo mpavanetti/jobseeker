@@ -6,7 +6,7 @@
     <!-- Alertify JS -->
     <script src="<?php echo base_url(); ?>assets/plugins/alertify/alertify.min.js" type="text/javascript"></script>
     <!-- jQuery UI -->
-    <script src="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.min.js" type="text/javascript"></script>
+    <script src="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.min.js" type="text/javascript"></script>
     <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
  
 

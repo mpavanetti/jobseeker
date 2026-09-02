@@ -181,6 +181,33 @@
     return format(value);
   }
 
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // Build a <time> element (as an HTML string) that apply() will keep localized.
+  // Use this from JS that injects timestamps into innerHTML so they follow the
+  // Local/UTC toggle without the view having to re-render.
+  function tag(value, opts) {
+    opts = opts || {};
+    var d = toDate(value);
+    if (!d) {
+      return esc(opts.empty != null ? opts.empty : (value == null ? '' : String(value)));
+    }
+    var iso = d.toISOString();
+    var attrs = ' datetime="' + esc(iso) + '"';
+    if (opts.relative) {
+      attrs += ' data-time-relative';
+    }
+    if (opts.dateOnly) {
+      attrs += ' data-time-date-only';
+    }
+    var text = opts.relative ? fromNow(iso) : (opts.dateOnly ? formatDate(iso) : format(iso));
+    return '<time' + attrs + '>' + esc(text) + '</time>';
+  }
+
   function apply(root) {
     var scope = root || w.document;
     if (!scope || !scope.querySelectorAll) {
@@ -194,7 +221,8 @@
         continue;
       }
       var relative = el.hasAttribute('data-time-relative');
-      el.textContent = relative ? fromNow(iso) : format(iso);
+      var dateOnly = el.hasAttribute('data-time-date-only');
+      el.textContent = relative ? fromNow(iso) : (dateOnly ? formatDate(iso) : format(iso));
       el.setAttribute('title', format(iso));
     }
   }
@@ -241,6 +269,7 @@
     format: format,
     formatDate: formatDate,
     fromNow: fromNow,
+    tag: tag,
     apply: apply,
     renderToggle: renderToggle
   };

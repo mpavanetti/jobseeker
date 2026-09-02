@@ -64,7 +64,7 @@
                       <td><?php echo html_escape($record->userAgent); ?></td>
                       <td><?php echo html_escape($record->agentString); ?></td>
                       <td><?php echo html_escape($record->platform); ?></td>
-                      <td><?php echo html_escape($record->createdDtm); ?></td>
+                      <td><?php echo js_time($record->createdDtm); ?></td>
                     </tr>
                     <?php
                         }

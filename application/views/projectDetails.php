@@ -135,10 +135,10 @@ foreach ($projectRows as $projectRecord) {
                 $updatedOn = $modifiedOn !== '' ? $modifiedOn : $createdOn;
               ?>
                 <tr>
-                  <td><span class="settings-name"><?php echo html_escape($record->ProjectName); ?></span><span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo html_escape($createdOn); ?></span></td>
+                  <td><span class="settings-name"><?php echo html_escape($record->ProjectName); ?></span><span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span></td>
                   <td><?php if (trim((string) $record->GitPath) !== '') { ?><code class="settings-path" title="<?php echo html_escape($record->GitPath); ?>"><?php echo html_escape($record->GitPath); ?></code><?php } else { ?><span class="settings-empty-value">Not configured</span><?php } ?></td>
                   <td><span class="context-badge <?php echo (int) $record->IsActive === 1 ? 'context-badge-active' : 'context-badge-inactive'; ?>"><?php echo (int) $record->IsActive === 1 ? 'Active' : 'Inactive'; ?></span></td>
-                  <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo html_escape($updatedOn); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
+                  <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo js_time(!empty($record->ModifiedOn) ? $record->ModifiedOn : $record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
                   <?php if ($role != 1) { ?><td class="settings-actions"><a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editProject/'.(int) $record->Id; ?>" title="Edit <?php echo html_escape($record->ProjectName); ?>"><i class="fa fa-pencil"></i></a><button type="button" class="btn btn-sm btn-danger delete-setting" data-setting-id="<?php echo (int) $record->Id; ?>" data-setting-name="<?php echo html_escape($record->ProjectName); ?>" title="Delete <?php echo html_escape($record->ProjectName); ?>"><i class="fa fa-trash"></i></button></td><?php } ?>
                 </tr>
               <?php } ?>

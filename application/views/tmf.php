@@ -31,8 +31,8 @@ if (!function_exists('tmfTimestamp')) {
 
 if (!function_exists('formatTmfDateValue')) {
   function formatTmfDateValue($value) {
-    $timestamp = tmfTimestamp($value);
-    return $timestamp === false ? '-' : date('m-d-Y H:i:s', $timestamp);
+    // Returns a <time> element localized in the browser by jobseeker-time.js.
+    return js_time($value, array('format' => 'm-d-Y H:i:s', 'empty' => '-'));
   }
 }
 
@@ -150,7 +150,7 @@ foreach($jobs as $tmfJob) {
 
 $totalJobs = count($jobs);
 $throughputRate = $totalRecords > 0 ? min(100, round(($totalProcessed / $totalRecords) * 100)) : 0;
-$latestActivityLabel = $latestActivityTimestamp !== null ? date('m-d-Y H:i:s', $latestActivityTimestamp) : 'No activity';
+$latestActivityLabel = $latestActivityTimestamp !== null ? js_time($latestActivityTimestamp, array('format' => 'm-d-Y H:i:s')) : 'No activity';
 $canManageTmf = isset($role) && ((string) $role === (string) ROLE_ADMIN || (string) $role === (string) ROLE_MANAGER);
 $tmfSelectedEnvironment = isset($selectedEnvironment) ? strtoupper(trim((string) $selectedEnvironment)) : 'all';
 if ($tmfSelectedEnvironment === '' || $tmfSelectedEnvironment === '*' || strtolower($tmfSelectedEnvironment) === 'all') {
@@ -439,7 +439,7 @@ pre {
       <div class="container-fluid tmf-results-shell">
         <div class="tmf-results-toolbar">
           <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning"><i class="fa fa-arrow-left"></i> Back to Query</a>
-          <span class="tmf-refresh-note"><i class="fa fa-database"></i> <?php echo number_format($totalJobs); ?> rows returned &middot; latest <?php echo html_escape($latestActivityLabel); ?></span>
+          <span class="tmf-refresh-note"><i class="fa fa-database"></i> <?php echo number_format($totalJobs); ?> rows returned &middot; latest <?php echo $latestActivityLabel; /* js_time() output or the static 'No activity' string, both HTML-safe */ ?></span>
         </div>
         <div class="tmf-workbench animated fadeIn">
           <div class="tmf-result-signals">
@@ -572,8 +572,8 @@ pre {
                       <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" data-tmf-id="'.(int) $record->id.'" data-job-name="'.html_escape($record->job_name).'" title="Check Message">Check Message</a>'; } ?></td>
                       <td data-order="<?php echo $rowTotal; ?>"><?php echo number_format($rowTotal); ?></td>
                       <td data-order="<?php echo $rowProgress; ?>"><span class="tmf-progress-label"><?php echo number_format($rowProcessed); ?> / <?php echo number_format($rowTotal); ?> <span class="text-muted"><?php echo $rowProgress; ?>%</span></span><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-<?php echo $rowIncomplete ? 'warning' : 'success'; ?>" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
-                      <td data-order="<?php echo $rowStartTimestamp !== false ? (int) $rowStartTimestamp : 0; ?>"><?php echo html_escape(formatTmfDateValue($record->start_time)); ?></td>
-                      <td data-order="<?php echo $rowLastTimestamp !== false ? (int) $rowLastTimestamp : 0; ?>"><?php echo html_escape(formatTmfDateValue($record->last_activity)); ?><span class="tmf-age"><?php echo html_escape(formatTmfAge($rowLastTimestamp)); ?></span></td>
+                      <td data-order="<?php echo $rowStartTimestamp !== false ? (int) $rowStartTimestamp : 0; ?>"><?php echo formatTmfDateValue($record->start_time); ?></td>
+                      <td data-order="<?php echo $rowLastTimestamp !== false ? (int) $rowLastTimestamp : 0; ?>"><?php echo formatTmfDateValue($record->last_activity); ?><span class="tmf-age"><?php echo html_escape(formatTmfAge($rowLastTimestamp)); ?></span></td>
                        <td data-order="<?php echo (int) $rowDurationSeconds; ?>"><?php echo html_escape(formatTmfDuration($rowDurationSeconds)); ?></td>
                        <td data-order="<?php echo $rowHasErrors ? 1 : 0; ?>"><?php echo ($record->distict_errors == 1) ? '<a type="button" href="#" class="btn btn-danger btnSelect" data-tmf-id="'.(int) $record->id.'" data-instance-id="'.html_escape($record->instance_id).'" data-job-name="'.html_escape($record->job_name).'">View Errors</a>' : '<span class="text-muted">-</span>' ?></td>
                        <td data-order="<?php echo $rowHasWarnings ? 1 : 0; ?>"><?php echo ($record->warnings == 1) ? '<span class="label label-warning">Warning</span>' : '<span class="text-muted">-</span>' ?></td>
