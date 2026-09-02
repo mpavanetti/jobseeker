@@ -46,9 +46,27 @@ ok('config.php checks for placeholder / short application secrets',
   config.includes('is still set to a shipped placeholder value') &&
   config.includes('JOBSEEKER_CONNECTOR_API_TOKEN'));
 
-// 5. CSRF stays enabled; only the two self-authenticating routes are excluded.
+// 5. CSRF stays enabled; only self-authenticating routes are excluded.
 ok('csrf_protection is enabled', /\$config\['csrf_protection'\]\s*=\s*TRUE/.test(config));
-ok('csrf_exclude_uris is limited to jenkins/proxy and connector-runtime',
-  /csrf_exclude_uris'\]\s*=\s*array\('jenkins\/proxy',\s*'connector-runtime'\)/.test(config));
+ok('csrf_exclude_uris only lists bearer-token self-authenticating endpoints',
+  /csrf_exclude_uris'\]\s*=\s*array\(('jenkins\/proxy',\s*'connector-runtime'|'jenkins\/proxy',\s*'connector-runtime',\s*'spark-runtime\/trigger',\s*'spark-runtime\/cancel\/\[0-9\]\+')\)/.test(config));
+ok('every csrf_exclude_uris entry is a jenkins/proxy, connector-runtime or spark-runtime route',
+  (config.match(/csrf_exclude_uris'\]\s*=\s*array\(([^)]*)\)/) || [, ''])[1]
+    .split(',').map(s => s.trim().replace(/'/g, ''))
+    .every(uri => uri === 'jenkins/proxy' || uri === 'connector-runtime' || /^spark-runtime\//.test(uri)));
+
+// 6. Persistent Spark cluster lifecycle endpoints stay behind the session CSRF /
+//    manager guard (they are NOT bearer-token endpoints, so must not be excluded).
+const sparkClusters = read('application/controllers/SparkClusters.php');
+ok('SparkClusters start/stop route through the manager + POST guard',
+  /function startCluster\(\)\s*\{[\s\S]*?persistentClusterOr422\(TRUE\)/.test(sparkClusters) &&
+  /function stopCluster\(\)\s*\{[\s\S]*?persistentClusterOr422\(TRUE\)/.test(sparkClusters) &&
+  /function persistentClusterOr422\([\s\S]*?requireManagerPost/.test(sparkClusters));
+ok('spark-clusters lifecycle routes are not CSRF-excluded',
+  !/spark-clusters/.test((config.match(/csrf_exclude_uris'\]\s*=\s*array\(([^)]*)\)/) || [, ''])[1]));
+ok('the nginx spark-persist proxy is port-range constrained',
+  /location\s*~\s*"?\^\/spark-persist\/\(\?<sp_port>18\[0-9\]\{3\}\)/.test(read('nginx/default.conf')));
+ok('SparkJobs::develop flushes the posted buffer with a size ceiling',
+  /inline_code[\s\S]*?<=\s*200000/.test(read('application/controllers/SparkJobs.php')));
 
 console.log('Security hardening regression checks passed (' + checks + ' assertions).');

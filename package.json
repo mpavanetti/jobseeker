@@ -29,14 +29,15 @@
     "test:compute-runtimes": "php scripts/test-compute-runtimes.php",
     "test:cron-schedule": "php scripts/test-cron-schedule.php",
     "test:dashboard": "node scripts/test-dashboard.js",
-    "postinstall": "npm run assets:sync"
+    "postinstall": "npm run assets:sync",
+    "test:spark-ui": "node scripts/test-spark-ui-e2e.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "bootstrap-sass": "3.4.3",
     "bootstrap-datepicker": "1.8.0",
+    "bootstrap-sass": "3.4.3",
     "chart.js": "2.9.4",
     "ckeditor": "4.12.1",
     "datatables.net": "1.13.11",
@@ -46,7 +47,10 @@
     "jquery": "3.7.1",
     "jquery-ui-dist": "1.12.1",
     "moment": "2.30.1",
-    "select2": "4.0.13",
-    "sass": "1.69.5"
+    "sass": "1.69.5",
+    "select2": "4.0.13"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
   }
 }
