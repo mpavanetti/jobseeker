@@ -679,11 +679,34 @@
         return 'Waiting';
       }
 
+      if (window.JobSeekerTime) {
+        return JobSeekerTime.format(timestamp);
+      }
+
       if (typeof moment === 'function') {
         return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
       }
 
       return new Date(timestamp).toLocaleString();
+    }
+
+    // HTML variant: a <time> element that follows the global Local/UTC toggle
+    // live (jobseeker-time.js re-applies it), for use inside innerHTML strings
+    // and .html() sinks.
+    function formatTimeHtml(timestamp) {
+      var n = parseInt(timestamp, 10);
+      if (! n) {
+        return 'Waiting';
+      }
+      return window.JobSeekerTime ? JobSeekerTime.tag(n) : escapeHtml(formatTime(timestamp));
+    }
+
+    function formatJobCreationDateHtml(jobName) {
+      var n = jobCreationTimestamp(jobName);
+      if (! n) {
+        return 'Created: Not tracked';
+      }
+      return 'Created: ' + (window.JobSeekerTime ? JobSeekerTime.tag(n) : escapeHtml(formatJobCreationDate(jobName).replace(/^Created:\s*/, '')));
     }
 
     function jobCreationTimestamp(jobName) {
@@ -698,6 +721,10 @@
 
       if (! timestamp) {
         return 'Created: Not tracked';
+      }
+
+      if (window.JobSeekerTime) {
+        return 'Created: ' + JobSeekerTime.format(timestamp);
       }
 
       if (typeof moment === 'function') {
@@ -980,7 +1007,7 @@
       pane.find('.run-container-block').text(formatBytes(metrics.blockReadBytes) + ' read');
       pane.find('.run-container-block-detail').text(formatBytes(metrics.blockWriteBytes) + ' written · cumulative');
       pane.find('.run-container-pids').text(Number(metrics.pids) || 0);
-      pane.find('.run-container-pids-detail').text('Peak ' + run.containerPeaks.pids + (metrics.startedAt ? ' · started ' + formatTime(Date.parse(metrics.startedAt)) : ''));
+      pane.find('.run-container-pids-detail').html('Peak ' + run.containerPeaks.pids + (metrics.startedAt ? ' · started ' + formatTimeHtml(Date.parse(metrics.startedAt)) : ''));
     }
 
     function runsNeedContainerMetrics() {
@@ -1258,7 +1285,7 @@
           '<span class="execution-job-name">' + escapeHtml(name) + '</span>' +
           jobStateLabel(job) +
           renderJobEnvironment(job) +
-          '<span class="execution-job-created"><i class="fa fa-calendar-o"></i> ' + escapeHtml(formatJobCreationDate(name)) + '</span>' +
+          '<span class="execution-job-created"><i class="fa fa-calendar-o"></i> ' + formatJobCreationDateHtml(name) + '</span>' +
         '</label>';
       });
 
@@ -1637,7 +1664,7 @@
       pane.find('.run-build').text(buildLabel(run));
       pane.find('.run-environment').html(environmentHelper.label(run.environmentInfo));
       pane.find('.run-worker').text(workerNodeLabel(run));
-      pane.find('.run-started').text(formatTime(run.timestamp));
+      pane.find('.run-started').html(formatTimeHtml(run.timestamp));
       pane.find('.run-duration').text(run.finished ? formatDuration(run.duration) : formatDuration(run.timestamp ? Date.now() - parseInt(run.timestamp, 10) : 0));
       pane.find('.run-console-size').text(run.consoleBytes + ' bytes');
       pane.find('.execution-abort').prop('disabled', isTerminal(run));
@@ -1671,7 +1698,7 @@
           '<td>' + escapeHtml(buildLabel(run)) + '</td>' +
           '<td>' + statusLabel(run) + '</td>' +
           '<td>' + escapeHtml(run.queueWhy || (run.queueId ? 'Queue #' + run.queueId : 'None')) + '</td>' +
-          '<td>' + escapeHtml(formatTime(run.timestamp)) + '</td>' +
+          '<td>' + formatTimeHtml(run.timestamp) + '</td>' +
           '<td>' + escapeHtml(run.finished ? formatDuration(run.duration) : formatDuration(run.timestamp ? Date.now() - parseInt(run.timestamp, 10) : 0)) + '</td>' +
           '<td>' + progressBar(run) + '<small>' + escapeHtml(run.consoleBytes + ' bytes') + '</small></td>' +
           '<td>' + (isTerminal(run) ? '<span class="text-muted">Done</span>' : '<button type="button" class="btn btn-xs btn-danger execution-abort" data-execution-id="' + run.id + '">Stop</button>') + '</td>' +
@@ -1764,6 +1791,29 @@
       updateExecutionUI(run);
     }
 
+    // Turn a raw Jenkins queue "why" string into something a JobSeeker operator
+    // can act on. Jenkins reasons like
+    //   "Executor slot already in use; 'jobseeker-dev-agent' doesn't have label 'built-in'; ..."
+    // just mean "all executors are busy, it will run when one frees up" - the
+    // agent/label tail is noise for a queued build and only alarms people.
+    function humanizeQueueWhy(why) {
+      why = String(why == null ? '' : why).trim();
+      if (! why) {
+        return 'Queued - waiting for Jenkins.';
+      }
+      var head = why.split(/;\s*['‘’"]/)[0].trim().replace(/[.;]+$/, '');
+      if (/executor slot already in use|waiting for next available executor|all executors|is reserved for jobs with matching label/i.test(why)) {
+        return 'Queued - waiting for a free executor. Jenkins will start this build automatically.';
+      }
+      if (/in the quiet period/i.test(why)) {
+        return 'Queued - starting shortly (Jenkins quiet period).';
+      }
+      if (/is offline|there are no nodes|no online node/i.test(why)) {
+        return 'Queued - no matching Jenkins worker is online yet (' + head + ').';
+      }
+      return 'Queued - ' + head + '.';
+    }
+
     function appendQueueMessage(run, message) {
       if (! message || run.lastQueueMessage === message) {
         return;
@@ -1833,7 +1883,7 @@
           }
 
           run.status = 'Queued';
-          run.queueWhy = data.why || 'Waiting for executor';
+          run.queueWhy = humanizeQueueWhy(data.why);
           appendQueueMessage(run, run.queueWhy);
           updateExecutionUI(run);
           scheduleRunTimer(run, 'queue', function() { pollQueueItem(run); }, queuePollDelay);
@@ -1871,7 +1921,7 @@
         .done(function(data) {
           if (data.queueItem && data.queueItem.id) {
             run.queueId = data.queueItem.id;
-            run.queueWhy = data.queueItem.why || 'Waiting for executor';
+            run.queueWhy = humanizeQueueWhy(data.queueItem.why);
             run.status = 'Queued';
             appendQueueMessage(run, run.queueWhy);
             updateExecutionUI(run);

@@ -85,7 +85,7 @@
                             <a class="btn btn-sm btn-success sendEmail" href="#" data-settingid="<?php echo (int) $record->id; ?>" title="Send Email"><i class="fa fa-send"></i></a>
                         </td><?php } ?>
                       <td><?php echo (int) $record->id ?></td>
-                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
+                      <td><?php echo js_time($record->creation_date) ?></td>
                         <td><?php echo html_escape($record->name) ?></td>
                         <td><?php echo html_escape($record->to) ?></td>
                         <td><?php echo html_escape($record->from) ?></td>

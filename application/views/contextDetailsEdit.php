@@ -61,9 +61,9 @@
           <div class="box-body context-card-body">
             <div class="context-edit-meta">
               <div><strong>Context ID</strong>#<?php echo (int) $context->Id; ?></div>
-              <div><strong>Created</strong><?php echo !empty($context->CreatedOn) ? html_escape(date('Y-m-d H:i', strtotime($context->CreatedOn))) : 'Unknown'; ?></div>
+              <div><strong>Created</strong><?php echo js_time($context->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Unknown')); ?></div>
               <div><strong>Created by</strong><?php echo !empty($context->CreatedBy) ? html_escape($context->CreatedBy) : 'Unknown'; ?></div>
-              <div><strong>Last modified</strong><?php echo !empty($context->ModifiedOn) ? html_escape(date('Y-m-d H:i', strtotime($context->ModifiedOn))) : 'Never'; ?></div>
+              <div><strong>Last modified</strong><?php echo js_time($context->ModifiedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Never')); ?></div>
             </div>
 
             <div class="context-form-grid">
@@ -135,4 +135,4 @@
   </section>
 </div>
 
-<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=1"></script>
+<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=2"></script>

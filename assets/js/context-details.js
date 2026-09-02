@@ -300,6 +300,13 @@
           ? '<span class="context-badge context-badge-secret"><i class="fa fa-lock"></i> Encrypted</span>'
           : '<span class="context-row-meta">Standard</span>';
       }
+      if (field === 'updated') {
+        // Server sends an ISO-8601 UTC instant; jobseeker-time.js localizes the
+        // <time> node (picked up by the global MutationObserver hook).
+        return row.updated
+          ? '<time datetime="' + escapeHtml(row.updated) + '">' + escapeHtml(row.updated) + '</time>'
+          : 'Not available';
+      }
       return escapeHtml(row[field] || 'Not available');
     }
 

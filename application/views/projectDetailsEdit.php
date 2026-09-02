@@ -31,8 +31,8 @@
           <div class="box-body context-card-body">
             <div class="settings-edit-meta">
               <div><strong>Project ID</strong>#<?php echo (int) $project->Id; ?></div>
-              <div><strong>Created</strong><?php echo !empty($project->CreatedOn) ? html_escape(date('Y-m-d H:i', strtotime($project->CreatedOn))) : 'Unknown'; ?></div>
-              <div><strong>Last modified</strong><?php echo !empty($project->ModifiedOn) ? html_escape(date('Y-m-d H:i', strtotime($project->ModifiedOn))) : 'Never'; ?></div>
+              <div><strong>Created</strong><?php echo js_time($project->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Unknown')); ?></div>
+              <div><strong>Last modified</strong><?php echo js_time($project->ModifiedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Never')); ?></div>
             </div>
             <div class="context-form-grid">
               <div class="context-field settings-field-name"><label for="name">Project name <span class="text-danger">*</span></label><input id="name" type="text" name="name" value="<?php echo html_escape($project->ProjectName); ?>" class="form-control" maxlength="1000" autocomplete="off" required><span class="context-help">The name must remain unique.</span></div>

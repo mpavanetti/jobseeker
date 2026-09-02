@@ -1108,10 +1108,22 @@ pre {
     return '<div class="monitor-progress"><b>#' + escapeHtml(buildNumber || '?') + '</b><div class="progress progress-xs active"><div class="progress-bar progress-bar-info progress-bar-striped" style="width: ' + percent + '%"></div></div><small>' + percent + '% estimated</small></div>';
   }
 
+  function humanizeQueueWhy(why) {
+    why = String(why == null ? '' : why).trim();
+    if (! why) { return 'Waiting for Jenkins'; }
+    var head = why.split(/;\s*['‘’"]/)[0].trim().replace(/[.;]+$/, '');
+    if (/executor slot already in use|waiting for next available executor|all executors|is reserved for jobs with matching label/i.test(why)) {
+      return 'Waiting for a free executor';
+    }
+    if (/in the quiet period/i.test(why)) { return 'Quiet period'; }
+    if (/is offline|there are no nodes|no online node/i.test(why)) { return 'No matching worker online (' + head + ')'; }
+    return head;
+  }
+
   function renderQueue(row) {
     if (row && row.inQueue === true) {
       var why = row.queueItem && row.queueItem.why ? row.queueItem.why : 'Waiting for executor';
-      return monitorPill('Queued', 'warning') + '<br><small>' + escapeHtml(why) + '</small>';
+      return monitorPill('Queued', 'warning') + '<br><small>' + escapeHtml(humanizeQueueWhy(why)) + '</small>';
     }
 
     return '<span class="text-muted">No</span>';
@@ -1494,7 +1506,14 @@ pre {
   }
 
   function renderBuildTime(data, emptyText) {
-    return data != null && data !== '' ? moment(parseInt(data, 10)).format('MMMM Do YYYY, h:mm:ss a') : emptyText;
+    if (data == null || data === '') {
+      return emptyText;
+    }
+    var ts = parseInt(data, 10);
+    if (window.JobSeekerTime) {
+      return JobSeekerTime.format(ts);
+    }
+    return moment(ts).format('MMMM Do YYYY, h:mm:ss a');
   }
 
   function renderDuration(data, emptyText) {
@@ -1681,7 +1700,8 @@ pre {
         var listTable = $('#listTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
-          "order": [[ 3, "asc" ]],
+          // Most-recently-built jobs first (column 10 = last build time).
+          "order": [[ 10, "desc" ]],
           "scrollX": true,
           "ajax": {
             "url": availableJobsUrl,
@@ -1724,7 +1744,11 @@ pre {
             if(result) { return '<b style="color: red;">' + escapeHtml(result) + '</b>'; }
             return '<span class="text-muted">Never Built</span>';
           }},
-          {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderBuildTime(lastBuildField(row, 'timestamp'), '<b>Never Built</b>'); }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){
+            var ts = lastBuildField(row, 'timestamp');
+            if (type === 'sort' || type === 'type') { return parseInt(ts, 10) || 0; }
+            return renderBuildTime(ts, '<b>Never Built</b>');
+          }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderDuration(lastBuildField(row, 'duration'), '<b>Never Built</b>'); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return escapeHtml(lastBuildField(row, 'number')); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderWorkerNode(lastBuildField(row, 'builtOn')); }},

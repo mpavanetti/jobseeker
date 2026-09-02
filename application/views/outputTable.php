@@ -64,7 +64,7 @@
                     ?>
                     <tr>
                       <td><?php echo (int) $record->id; ?></td>
-                      <td><?php echo html_escape(date('Y-m-d H:i:s', strtotime($record->creation_date))) ?></td>
+                      <td><?php echo js_time($record->creation_date) ?></td>
                         <td><?php echo html_escape($record->job_name); ?></td>
                         <td><?php echo html_escape($record->job_component); ?></td>
                         <td><?php echo html_escape($record->component_type); ?></td>
