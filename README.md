@@ -122,6 +122,25 @@ Customize a demo run with environment variables:
 DEMO_PREFIX=showcase DEMO_SLEEP_SECONDS=1200 DEMO_BLOCKER_COUNT=5 ./seed_demo_data.sh
 ```
 
+### Performance datasets
+
+Administrators can open **Dataset Generator** in the sidebar to create a named, seeded batch of TMF history, TMF errors, job identities, end-to-end pipeline definitions, and pipeline run history. Quick, performance, and stress profiles can be overridden, report database rows/second, and can optionally create matching Jenkins samples spanning runtime diagnostics, TMF/context, Data Assets, connectors, and pipeline-ready workloads without triggering them. Removing a batch deletes only records registered to that batch.
+
+The same generator is available for CI or repeatable profiling. It is a dry run unless `--apply` is present:
+
+```bash
+python3 scripts/generate-performance-dataset.py seed \
+  --profile performance --batch-key perf-ci
+
+python3 scripts/generate-performance-dataset.py seed \
+  --profile performance --batch-key perf-ci --jenkins --apply
+
+python3 scripts/generate-performance-dataset.py cleanup \
+  --batch-key perf-ci --apply
+```
+
+Use `--tmf-rows`, `--jobs`, `--pipelines`, `--pipeline-runs`, `--environments`, and `--seed` for a custom workload. Stress profiles are intended for disposable performance-test environments.
+
 ## Configuration
 
 [.env.example](.env.example) documents the complete local configuration. The most important settings are:
