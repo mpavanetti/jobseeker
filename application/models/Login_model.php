@@ -3,7 +3,100 @@
 
 class Login_model extends CI_Model
 {
-    
+    /**
+     * Sliding-window brute-force throttle for the sign-in form. All values are
+     * overridable from the environment so an operator can tighten or relax the
+     * policy without a code change.
+     */
+    const LOGIN_ATTEMPT_TABLE = 'tbl_login_attempts';
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->ensureLoginAttemptSchema();
+    }
+
+    private function ensureLoginAttemptSchema()
+    {
+        $this->db->query('CREATE TABLE IF NOT EXISTS `'.self::LOGIN_ATTEMPT_TABLE.'` (
+            `id` bigint(20) NOT NULL AUTO_INCREMENT,
+            `email` varchar(190) COLLATE utf8_unicode_ci NOT NULL,
+            `ip_address` varchar(45) COLLATE utf8_unicode_ci NOT NULL DEFAULT \'\',
+            `successful` tinyint(1) NOT NULL DEFAULT 0,
+            `attempted_at` datetime NOT NULL,
+            PRIMARY KEY (`id`),
+            KEY `login_attempts_email` (`email`,`attempted_at`),
+            KEY `login_attempts_ip` (`ip_address`,`attempted_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci');
+    }
+
+    private function loginThrottleConfig()
+    {
+        $intOrDefault = function ($name, $default, $min, $max) {
+            $value = getenv($name);
+            if ($value === FALSE || ! preg_match('/^\d+$/', trim((string) $value))) {
+                return $default;
+            }
+            return max($min, min($max, (int) trim((string) $value)));
+        };
+
+        return array(
+            'window'         => $intOrDefault('JOBSEEKER_LOGIN_LOCKOUT_MINUTES', 15, 1, 1440),
+            'email_attempts' => $intOrDefault('JOBSEEKER_LOGIN_MAX_ATTEMPTS', 5, 3, 100),
+            'ip_attempts'    => $intOrDefault('JOBSEEKER_LOGIN_MAX_ATTEMPTS_PER_IP', 50, 10, 1000),
+        );
+    }
+
+    /**
+     * @return array{blocked:bool, retry_after:int} retry_after is whole minutes.
+     */
+    public function loginThrottleState($email, $ip)
+    {
+        $config = $this->loginThrottleConfig();
+        $since = date('Y-m-d H:i:s', time() - ($config['window'] * 60));
+        $email = strtolower(trim((string) $email));
+        $ip = trim((string) $ip);
+
+        $failuresFor = function ($column, $value) use ($since) {
+            if ($value === '') {
+                return 0;
+            }
+            $this->db->where($column, $value);
+            $this->db->where('successful', 0);
+            $this->db->where('attempted_at >=', $since);
+            return (int) $this->db->count_all_results(self::LOGIN_ATTEMPT_TABLE);
+        };
+
+        $blocked = $failuresFor('email', $email) >= $config['email_attempts']
+            || $failuresFor('ip_address', $ip) >= $config['ip_attempts'];
+
+        return array('blocked' => $blocked, 'retry_after' => $config['window']);
+    }
+
+    public function recordLoginAttempt($email, $ip, $successful)
+    {
+        $this->db->insert(self::LOGIN_ATTEMPT_TABLE, array(
+            'email'        => strtolower(trim((string) $email)),
+            'ip_address'   => substr(trim((string) $ip), 0, 45),
+            'successful'   => $successful ? 1 : 0,
+            'attempted_at' => date('Y-m-d H:i:s'),
+        ));
+
+        // A successful sign-in clears the slate for that address so a legitimate
+        // user is never locked out by their own earlier typos.
+        if ($successful) {
+            $this->db->where('email', strtolower(trim((string) $email)));
+            $this->db->where('successful', 0);
+            $this->db->delete(self::LOGIN_ATTEMPT_TABLE);
+        }
+
+        // Opportunistic prune so the table cannot grow without bound.
+        if (mt_rand(1, 20) === 1) {
+            $this->db->where('attempted_at <', date('Y-m-d H:i:s', time() - 86400));
+            $this->db->delete(self::LOGIN_ATTEMPT_TABLE);
+        }
+    }
+
     /**
      * This function used to check the login credentials of the user
      * @param string $email : This is email of the user
