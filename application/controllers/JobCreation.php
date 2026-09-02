@@ -4,6 +4,7 @@ require APPPATH . '/libraries/BaseController.php';
 require APPPATH . '/controllers/concerns/JobCreationEmailTrait.php';
 require APPPATH . '/controllers/concerns/JobCreationExecutionTrait.php';
 require APPPATH . '/controllers/concerns/JenkinsRunnerTrait.php';
+require APPPATH . '/controllers/concerns/SparkJenkinsTrait.php';
 
 
 class JobCreation extends BaseController
@@ -11,6 +12,7 @@ class JobCreation extends BaseController
   use JobCreationEmailTrait;
   use JobCreationExecutionTrait;
   use JenkinsRunnerTrait;
+  use SparkJenkinsTrait;
 
     /**
      * This is default constructor of the class
@@ -19,7 +21,8 @@ class JobCreation extends BaseController
     {
         parent::__construct();
      //   $this->load->model('files_model');
-        $this->isLoggedIn();   
+        $this->isLoggedIn();
+        $this->load->model('SparkCompute_model', 'spark');
     }
 
     /**
@@ -3038,6 +3041,225 @@ class JobCreation extends BaseController
       private function cronSchedule() {
         $this->load->library('JenkinsCronSchedule');
         return $this->jenkinscronschedule;
+      }
+
+      // ================================================================
+      // Spark job authoring - the "Spark" section of this screen. A Spark
+      // job is stored in `spark_jobs` and mirrored as a real Jenkins job
+      // (SparkJenkinsTrait) whose build calls SparkRuntime to provision an
+      // ephemeral cluster. These AJAX endpoints back assets/js/spark-job-authoring.js.
+      // ================================================================
+
+      private function sparkJobKeyFromName($name) {
+        $key = strtolower(trim((string) $name));
+        $key = preg_replace('/[^a-z0-9]+/', '-', $key);
+        return trim(substr($key, 0, 120), '-');
+      }
+
+      private function sparkJenkinsJobNameFor($name, $environment) {
+        $base = trim((string) $name);
+        $base = preg_replace('#[^A-Za-z0-9._/-]+#', '-', $base);
+        $base = trim($base, '-/');
+        $environment = preg_replace('/[^A-Za-z0-9]+/', '', strtoupper((string) $environment));
+        return substr($base.($environment !== '' ? '-'.$environment : ''), 0, 240);
+      }
+
+      private function activeSparkEnvironments() {
+        if (! $this->db->table_exists('environment')) {
+          return array();
+        }
+        $rows = $this->db->select('Environment')->from('environment')->where('IsActive', 1)->get()->result();
+        return array_values(array_unique(array_map(function ($row) {
+          return $this->normalizeJobSeekerEnvironment($row->Environment);
+        }, $rows)));
+      }
+
+      /** GET - dropdown data for the Spark panel (runtimes + clusters for an environment). */
+      public function sparkJobOptions() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        $environment = $this->normalizeJobSeekerEnvironment($this->input->get('environment', TRUE));
+        $clusters = ($environment !== '' && in_array($environment, $this->activeSparkEnvironments(), TRUE))
+          ? $this->spark->listClusters($environment) : array();
+        $this->jsonJobCreationResponse(array(
+          'ok' => TRUE,
+          'environments' => $this->activeSparkEnvironments(),
+          'runtimes' => $this->spark->listRuntimes(TRUE),
+          'clusters' => $clusters,
+          'openVsCodeEnabled' => $this->openVsCodeEnabled(),
+        ));
+      }
+
+      /** GET /jobCreation/sparkJob/{id} - load a Spark job for editing in the panel. */
+      public function sparkJob($id) {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        $job = $this->spark->getJob((int) $id);
+        if (! $job) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Spark job not found.'), 404);
+          return;
+        }
+        $this->jsonJobCreationResponse(array('ok' => TRUE, 'job' => $job,
+          'recentRuns' => $this->spark->recentSparkRuns($job->id, 10)));
+      }
+
+      /** POST - create or update a Spark job + its Jenkins job + job_info row. */
+      public function saveSparkJob() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        if (strtoupper((string) $this->input->method(TRUE)) !== 'POST') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Method not allowed.'), 405);
+          return;
+        }
+
+        $id = (int) $this->input->post('id');
+        $name = trim((string) $this->input->post('name', TRUE));
+        $environment = $this->normalizeJobSeekerEnvironment($this->input->post('environment', TRUE));
+        $clusterId = (int) $this->input->post('cluster_id');
+        $mode = $this->input->post('mode') === 'interactive' ? 'interactive' : 'batch';
+        $sourceType = $this->input->post('source_type') === 'inline' ? 'inline' : 'repository';
+        $entryPoint = ltrim(trim((string) $this->input->post('entry_point', TRUE)), '/');
+        $inlineCode = (string) $this->input->post('inline_code');
+        $applicationArgs = trim((string) $this->input->post('application_args', TRUE));
+
+        $cleanName = $this->cleanSubmittedJobName($name);
+        if (! $cleanName['ok']) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $cleanName['message']), 422);
+          return;
+        }
+        if ($environment === '' || ! in_array($environment, $this->activeSparkEnvironments(), TRUE)) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Choose an active environment.'), 422);
+          return;
+        }
+        $cluster = $this->spark->getCluster($clusterId);
+        if (! $cluster || $cluster->environment !== $environment) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Choose a Spark cluster in the same environment.'), 422);
+          return;
+        }
+        if ($mode === 'interactive' && $cluster->lifecycle !== 'persistent') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Interactive jobs need an All-Purpose cluster. Pick one, or switch the job to Batch.'), 422);
+          return;
+        }
+        if ($sourceType === 'inline') {
+          if (strlen($inlineCode) < 10) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Inline PySpark code looks empty.'), 422);
+            return;
+          }
+          if (strlen($inlineCode) > 200000) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Inline code is too large (200 KB max).'), 422);
+            return;
+          }
+          $entryPoint = '';
+        } else {
+          $inlineCode = '';
+          if ($entryPoint === '' || strpos($entryPoint, '..') !== FALSE || ! preg_match('#^(jobs|inline)/[A-Za-z0-9._/-]+\.py$#', $entryPoint)) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Entry point must be a .py file under jobs/ or inline/.'), 422);
+            return;
+          }
+        }
+        if (strlen($applicationArgs) > 2000) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Application args are too long.'), 422);
+          return;
+        }
+        $sparkConf = trim((string) $this->input->post('spark_submit_conf_json'));
+        if ($sparkConf !== '' && ! is_array(json_decode($sparkConf, TRUE))) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'spark-submit conf must be a JSON object.'), 422);
+          return;
+        }
+
+        // Scheduling is owned by the dedicated Schedule screen; this panel never
+        // writes a Jenkins TimerTrigger.
+        $scheduleSpec = '';
+
+        $jobKey = $this->sparkJobKeyFromName($name);
+        if ($jobKey === '') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Could not derive a job key from the name.'), 422);
+          return;
+        }
+        if ($this->spark->jobScopeExists($jobKey, $environment, $id)) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'A Spark job with this name already exists in '.$environment.'.'), 409);
+          return;
+        }
+
+        $existing = $id > 0 ? $this->spark->getJob($id) : NULL;
+        $workers = $this->input->post('workers') !== NULL && $this->input->post('workers') !== ''
+          ? max(1, min(64, (int) $this->input->post('workers'))) : NULL;
+        $jenkinsJobName = $this->sparkJenkinsJobNameFor($name, $environment);
+        $isActive = $this->input->post('is_active') === '0' ? 0 : 1;
+        $now = date('Y-m-d H:i:s');
+
+        $data = array(
+          'job_key' => $jobKey,
+          'name' => $name,
+          'group_name' => trim((string) $this->input->post('group_name', TRUE)) ?: 'General',
+          'description' => trim((string) $this->input->post('description', TRUE)) ?: NULL,
+          'environment' => $environment,
+          'cluster_id' => $clusterId,
+          'mode' => $mode,
+          'source_type' => $sourceType,
+          'entry_point' => $entryPoint,
+          'application_args' => $applicationArgs !== '' ? $applicationArgs : NULL,
+          'inline_code' => $sourceType === 'inline' ? $inlineCode : NULL,
+          'spark_submit_conf_json' => $sparkConf !== '' ? $sparkConf : NULL,
+          'workers' => $workers,
+          'jenkins_job_name' => $jenkinsJobName,
+          'is_active' => $isActive,
+          'updated_at' => $now,
+        );
+        if ($id <= 0) {
+          $data['created_at'] = $now;
+          $data['owner'] = (string) $this->name;
+        }
+
+        $sync = $this->syncSparkJenkinsJob($jenkinsJobName, $jobKey, $environment,
+          isset($data['description']) ? (string) $data['description'] : '', $scheduleSpec, $isActive === 0);
+        if (empty($sync['ok'])) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE,
+            'message' => 'Could not create the Jenkins job (HTTP '.$sync['status'].'). Check that Jenkins is reachable.'), 502);
+          return;
+        }
+
+        // If the job was renamed, drop the old Jenkins job + registry row.
+        if ($existing && $existing->jenkins_job_name && $existing->jenkins_job_name !== $jenkinsJobName) {
+          $this->deleteSparkJenkinsJob($existing->jenkins_job_name);
+          $this->spark->unregisterJobInfo($existing->jenkins_job_name);
+        }
+
+        $savedId = $this->spark->saveJob($data, $id);
+        $this->spark->registerJobInfo($jenkinsJobName, (string) $this->name);
+
+        $this->jsonJobCreationResponse(array('ok' => TRUE, 'id' => $savedId,
+          'jenkins_job_name' => $jenkinsJobName,
+          'message' => $id > 0 ? 'Spark job updated.' : 'Spark job created.'));
+      }
+
+      /** POST - delete a Spark job, its Jenkins job and its registry row. */
+      public function deleteSparkJob() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        if (strtoupper((string) $this->input->method(TRUE)) !== 'POST') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Method not allowed.'), 405);
+          return;
+        }
+        $job = $this->spark->getJob((int) $this->input->post('id'));
+        if (! $job) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Spark job not found.'), 404);
+          return;
+        }
+        if ($job->jenkins_job_name) {
+          $this->deleteSparkJenkinsJob($job->jenkins_job_name);
+          $this->spark->unregisterJobInfo($job->jenkins_job_name);
+        }
+        $this->spark->deleteJob($job->id);
+        $this->jsonJobCreationResponse(array('ok' => TRUE, 'message' => 'Spark job deleted.'));
       }
 
       /**

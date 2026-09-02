@@ -2140,6 +2140,13 @@
                 <span class="job-option-detail">Run Talend packages; additional ETL engines can be added here.</span>
                 <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
               </button>
+              <label class="job-option-card" data-option-panel="#runSparkJob">
+                <input type="checkbox" name="sparkJob" id="sparkJob" value="1">
+                <i class="fa fa-fire job-option-icon"></i>
+                <span class="job-option-title">Spark</span>
+                <span class="job-option-detail">PySpark on an ephemeral Spark cluster; inline or repository code.</span>
+                <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
+              </label>
             <?php }?>
             <label class="job-option-card" data-option-panel="#build">
               <input type="checkbox" name="checkBuild" id="checkBuild" value="1">
@@ -2592,6 +2599,132 @@
               </div>
             </div>
             <!--Close Run Liux Command, Script Area-->
+
+            <!-- Spark Job Area -->
+            <div id="runSparkJob" style="display: none;">
+              <div class="col-lg-12 col-md-12 col-xs-12">
+                <div class="box box-primary">
+                  <div class="box-header with-border">
+                    <div class="box-tools pull-right">
+                      <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
+                    </div>
+                    <h3 class="box-title"><b><i class="fa fa-fire"></i> PySpark Job</b></h3>
+                  </div>
+                  <div class="box-body">
+                    <p class="text-muted" style="margin-bottom:14px">
+                      Develop the job's <code>notebook.ipynb</code> / <code>job.py</code> in OpenVSCode, attached to a cluster. Saving mirrors it as a Jenkins job that runs <code>spark-submit job.py</code>. Manage clusters under
+                      <a href="<?php echo base_url(); ?>data-engineering/spark-clusters" target="_blank">Data&nbsp;Engineering &rarr; Compute</a>.
+                    </p>
+                    <input type="hidden" id="sparkJobId" value="">
+                    <div id="sparkJobAlert" class="alert" style="display:none"></div>
+
+                    <div class="row">
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="sparkJobName">Job name</label>
+                          <input type="text" class="form-control" id="sparkJobName" maxlength="50" placeholder="daily-sales-rollup">
+                          <span class="help-block" style="margin:2px 0 0">Letters, numbers, dot, dash, underscore. Becomes the Jenkins job <code><span id="sparkJenkinsNamePreview">name-ENV</span></code>.</span>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label>Environment</label>
+                          <p class="form-control-static" id="sparkJobEnvironmentLabel" style="font-weight:600">&mdash;</p>
+                          <input type="hidden" id="sparkJobEnvironment" value="">
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="sparkJobGroup">Group</label>
+                          <input type="text" class="form-control" id="sparkJobGroup" maxlength="128" value="General">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Mode</label>
+                      <div>
+                        <label class="radio-inline"><input type="radio" name="sparkJobMode" value="interactive"> Interactive <small class="text-muted">&mdash; notebook on an All-Purpose cluster</small></label>
+                        <label class="radio-inline"><input type="radio" name="sparkJobMode" value="batch" checked> Batch <small class="text-muted">&mdash; spark-submit on a Job cluster</small></label>
+                      </div>
+                    </div>
+
+                    <div class="row">
+                      <div class="col-md-8">
+                        <div class="form-group">
+                          <label for="sparkJobCluster">Compute</label>
+                          <select class="form-control" id="sparkJobCluster"><option value="">-- pick an environment first --</option></select>
+                          <span class="help-block" style="margin:2px 0 0">
+                            Runtime: <strong id="sparkJobRuntimeLabel">&mdash;</strong>.
+                            <a href="<?php echo base_url(); ?>data-engineering/spark-clusters" target="_blank">Manage compute &rarr;</a>
+                          </span>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="sparkJobWorkers">Workers <small class="text-muted">(optional override)</small></label>
+                          <input type="number" class="form-control" id="sparkJobWorkers" min="1" max="64" placeholder="cluster default">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Source</label>
+                      <div>
+                        <label class="radio-inline"><input type="radio" name="sparkJobSource" value="inline" checked> Notebook workspace</label>
+                        <label class="radio-inline"><input type="radio" name="sparkJobSource" value="repository"> Repository file</label>
+                      </div>
+                    </div>
+
+                    <div class="form-group" id="sparkJobInlineWrap">
+                      <label>Entry point <code>job.py</code> <small class="text-muted">&mdash; edit in OpenVSCode</small></label>
+                      <pre id="sparkJobSourcePreview" style="max-height:240px;overflow:auto;font-family:Menlo,Consolas,monospace;font-size:12px;background:#f7f9fc;border:1px solid #e6e9ee;border-radius:4px;padding:10px;margin:0">Save the job, then Open in VS Code to author it.</pre>
+                      <textarea id="sparkJobInlineCode" style="display:none"></textarea>
+                      <span class="help-block" style="margin:4px 0 0">
+                        The OpenVSCode workspace holds <code>notebook.ipynb</code> + <code>job.py</code> + <code>connect.py</code>, pre-wired to the chosen compute. Runs as <code>spark-submit job.py</code>. Stored under <code>repository/spark/inline/&lt;job-key&gt;/</code>.
+                      </span>
+                    </div>
+
+                    <div class="form-group" id="sparkJobRepoWrap" style="display:none">
+                      <label for="sparkJobEntryPoint">Entry point</label>
+                      <input type="text" class="form-control" id="sparkJobEntryPoint" placeholder="jobs/pi/main.py">
+                      <span class="help-block" style="margin:2px 0 0">A <code>.py</code> file under <code>repository/spark/jobs/</code> or <code>repository/spark/inline/</code>.</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="sparkJobArgs">Application arguments</label>
+                      <input type="text" class="form-control" id="sparkJobArgs" maxlength="2000" placeholder="--date 2026-01-01">
+                      <span class="help-block" style="margin:2px 0 0">Passed after the entry point on <code>spark-submit</code>. Scheduling is configured on the <b>Schedule</b> screen.</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="sparkJobConf">spark-submit conf <small class="text-muted">(JSON object, optional)</small></label>
+                      <textarea class="form-control" id="sparkJobConf" rows="3" spellcheck="false" style="font-family:Menlo,Consolas,monospace;font-size:12px" placeholder='{"spark.sql.shuffle.partitions": "200"}'></textarea>
+                    </div>
+
+                    <div class="form-group">
+                      <label><input type="checkbox" id="sparkJobActive" checked> Active</label>
+                      <span class="text-muted" style="margin-left:10px">Inactive jobs stay in Jenkins but disabled.</span>
+                    </div>
+                  </div>
+                  <div class="box-footer">
+                    <button type="button" class="btn btn-primary" id="sparkJobVsCodeBtn" style="display:none"><i class="fa fa-code"></i> Open in VS Code</button>
+                    <button type="button" class="btn btn-danger pull-right" id="sparkJobDeleteBtn" style="display:none"><i class="fa fa-trash"></i> Delete</button>
+                  </div>
+                </div>
+
+                <div class="box box-default" id="sparkJobRunsBox" style="display:none">
+                  <div class="box-header with-border"><h3 class="box-title">Recent runs</h3></div>
+                  <div class="box-body no-padding">
+                    <table class="table table-condensed" style="margin-bottom:0">
+                      <thead><tr><th>Run</th><th>Status</th><th>Workers</th><th>Started</th><th>Build</th></tr></thead>
+                      <tbody id="sparkJobRunsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Close Spark Job Area -->
 
             <!-- Schedule Job Area-->
             <div id="build" style="display: none;">
@@ -6205,6 +6338,7 @@
         $('#runJob').toggle($('#runJobCheck').is(':checked'));
         $('#runWinCommand').toggle($('#winCommand').is(':checked'));
         $('#runlinuxCommand').toggle($('#linuxCommand').is(':checked'));
+        $('#runSparkJob').toggle($('#sparkJob').is(':checked'));
 
         $('.scriptTypeForm').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'script');
         $('.windowsCommandForm').toggle($('#winCommand').is(':checked') && $('#executionStrategy').val() == 'command');
@@ -7062,6 +7196,8 @@
           return;
         }
 
+        // A job is exactly one of Linux / Python / ETL / Spark.
+        $('#sparkJob').prop('checked', false);
         $('#linuxCommand').prop('checked', true);
         activeConfigPanel = '#runlinuxCommand';
 
@@ -8157,6 +8293,9 @@
     $('#winCommand').click(function(){ // If checkbox is checked
       if($(this).is(":checked")){
 
+        // A job is exactly one of Linux / Python / ETL / Spark.
+        if ($('#sparkJob').is(':checked')) { $('#sparkJob').prop('checked', false); $('#runSparkJob').hide(); }
+
         // Show Windows command Div
         $('#runWinCommand').fadeIn();
 
@@ -8814,3 +8953,5 @@ $(document).on('click', '.inspectJenkinsJob', function() {
   });
 })(jQuery);
 </script>
+<script type="text/javascript">window.jobseekerSparkAuthoring = { baseUrl: <?php echo json_encode(base_url()); ?> };</script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/spark-job-authoring.js?v=3"></script>
