@@ -34,7 +34,38 @@
 .compute-status.is-running { background: #e1f0ff; color: #1d6fd8; }
 .compute-status.is-succeeded { background: #e3f9e5; color: #1f9254; }
 .compute-status.is-failed, .compute-status.is-timed_out { background: #fde7e9; color: #c0392b; }
-.compute-status.is-cancelled { background: #eceff3; color: #667085; }
+.compute-status.is-cancelled, .compute-status.is-stopped { background: #eceff3; color: #667085; }
+
+/* Cluster list + inline monitor (Compute screen) */
+.compute-table-wrap { overflow-x: auto; }
+.compute-table-clusters td { vertical-align: top; }
+.compute-links { display: block; font-size: 12px; margin-top: 3px; }
+.compute-links a { color: #1d6fd8; }
+.compute-actions { align-items: center; display: flex; gap: 6px; justify-content: flex-end; }
+.compute-menu { display: inline-block; position: relative; }
+.compute-menu-list { background: #fff; border: 1px solid #e6e9ee; border-radius: 6px; box-shadow: 0 8px 22px rgba(16, 24, 40, 0.14); min-width: 176px; padding: 4px; position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; }
+.compute-menu-list a { align-items: center; border-radius: 4px; color: #1f2937; display: flex; font-size: 13px; gap: 9px; padding: 7px 10px; text-decoration: none; }
+.compute-menu-list a:hover { background: #f1f5f9; }
+.compute-menu-list a.is-danger { color: #c0392b; }
+.compute-menu-list a[hidden] { display: none; }
+.compute-menu-sep { background: #eef1f5; height: 1px; margin: 4px 2px; }
+
+.compute-detail-row > td { background: #f7f9fc; padding: 0 !important; }
+.compute-detail { border-bottom: 2px solid #e6e9ee; padding: 14px 18px; }
+.compute-detail-head { align-items: center; display: flex; justify-content: space-between; margin-bottom: 10px; }
+.compute-detail-body .compute-table { background: #fff; border: 1px solid #eef1f5; border-radius: 6px; margin-top: 8px; }
+.compute-detail-body p { margin: 4px 0; }
+
+/* Spark Activity: All-Purpose compute strip */
+.compute-ap-strip { display: flex; flex-wrap: wrap; gap: 12px; }
+.compute-ap-card { background: #fff; border: 1px solid #e6e9ee; border-radius: 8px; min-width: 220px; padding: 12px 14px; }
+.compute-ap-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
+.compute-toolbar-check { align-items: center; display: inline-flex; gap: 5px; margin: 0; }
+
+.compute-catalogue { border: 1px solid #eef1f5; border-radius: 6px; padding: 8px 12px; }
+.compute-catalogue summary { cursor: pointer; font-weight: 600; }
+.compute-catalogue ul { margin: 8px 0 0; padding-left: 18px; }
+.compute-catalogue li { margin-bottom: 8px; }
 
 .compute-form-grid { display: grid; gap: 12px 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .compute-form-grid .full { grid-column: 1 / -1; }

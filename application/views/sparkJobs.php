@@ -1,405 +1,280 @@
 <?php
 $env = isset($selectedEnvironment) ? $selectedEnvironment : 'ALL';
 $envQuery = rawurlencode($env);
-$selectedJob = isset($job) ? $job : NULL;
-$clusterById = array();
-foreach ($clusters as $cluster) {
-    $clusterById[$cluster->id] = $cluster;
+$jobs = isset($jobs) ? $jobs : array();
+$runs = isset($runs) ? $runs : array();
+$allPurpose = isset($allPurpose) ? $allPurpose : array();
+$cap = isset($capacity['host']) ? $capacity['host'] : array();
+$terminal = array('SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT');
+function spark_state_class($s) {
+    $m = array('SUCCEEDED' => 'is-succeeded', 'RUNNING' => 'is-running', 'PROVISIONING' => 'is-provisioning',
+        'QUEUED' => 'is-queued', 'FAILED' => 'is-failed', 'TIMED_OUT' => 'is-failed', 'CANCELLED' => 'is-cancelled');
+    return isset($m[$s]) ? $m[$s] : 'is-cancelled';
 }
+function spark_dur($s) { $s = max(0, (int) $s); $h = intdiv($s, 3600); $m = intdiv($s % 3600, 60); return $h ? ($h.'h '.$m.'m') : ($m ? ($m.'m '.($s % 60).'s') : ($s.'s')); }
 ?>
-<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=2" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/compute.css?v=5" rel="stylesheet" type="text/css">
 <div class="content-wrapper compute-page">
   <section class="content-header">
-    <h1>Spark Jobs <small>PySpark on ephemeral job clusters</small></h1>
+    <h1>Spark Activity <small>compute &amp; runs across every Spark job</small></h1>
     <ol class="breadcrumb">
       <li><a href="<?php echo base_url(); ?>dashboard"><i class="fa fa-home"></i> Home</a></li>
       <li>Data Engineering</li>
-      <li class="active">Spark Jobs</li>
+      <li class="active">Spark Activity</li>
     </ol>
   </section>
 
   <section class="content">
     <div class="compute-toolbar">
-      <span class="compute-toolbar-env">Environment <strong><?php echo html_escape($env); ?></strong></span>
+      <span class="compute-toolbar-env">Environment <strong><?php echo html_escape($env); ?></strong>
+        &nbsp;·&nbsp; engine <strong class="<?php echo $engineHealthy ? 'compute-capacity-ok' : 'compute-capacity-warn'; ?>"><?php echo $engineHealthy ? 'reachable' : 'unreachable'; ?></strong>
+        &nbsp;·&nbsp; <span id="capacityGauge">capacity …</span>
+      </span>
       <div class="compute-toolbar-actions">
-        <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/spark-clusters?environment=<?php echo $envQuery; ?>"><i class="fa fa-server"></i> Clusters</a>
-        <select class="form-control input-sm" id="sampleSelect" style="width:190px"<?php echo ($env === 'ALL' || empty($clusters)) ? ' disabled' : ''; ?>>
-          <option value="">Create from sample&hellip;</option>
-          <?php foreach ($samples as $sample) { ?>
-            <option value="<?php echo html_escape($sample['key']); ?>"><?php echo html_escape($sample['name']); ?></option>
-          <?php } ?>
-        </select>
-        <button class="btn btn-primary btn-sm" type="button" id="jobNew"<?php echo ($env === 'ALL' || empty($clusters)) ? ' disabled' : ''; ?>><i class="fa fa-plus"></i> New job</button>
+        <label class="compute-toolbar-check" style="font-size:12px;font-weight:600;color:#475467"><input type="checkbox" id="sparkAutoRefresh" checked> Auto-refresh</label>
+        <a class="btn btn-default btn-sm" href="<?php echo base_url(); ?>data-engineering/spark-clusters?environment=<?php echo $envQuery; ?>"><i class="fa fa-server"></i> Compute</a>
+        <a class="btn btn-primary btn-sm" href="<?php echo base_url(); ?>jobCreation#runSparkJob"><i class="fa fa-plus"></i> New Spark job</a>
       </div>
     </div>
+
     <?php if ($env === 'ALL') { ?>
-      <div class="compute-alert is-warn"><i class="fa fa-filter"></i> Pick a global environment (top bar) to manage Spark jobs.</div>
-    <?php } elseif (empty($clusters)) { ?>
-      <div class="compute-alert is-warn"><i class="fa fa-server"></i> Create a <a href="<?php echo base_url(); ?>data-engineering/spark-clusters?environment=<?php echo $envQuery; ?>">Spark cluster</a> for <strong><?php echo html_escape($env); ?></strong> first.</div>
-    <?php } ?>
-    <?php if (! $engineHealthy) { ?>
-      <div class="compute-alert is-warn"><i class="fa fa-plug"></i> The compute engine (<code><?php echo html_escape($driverName); ?></code>) is not reachable &mdash; runs will fail until it is back.</div>
+      <div class="compute-alert is-warn"><i class="fa fa-filter"></i> Pick a global environment (top bar) to scope this view.</div>
     <?php } ?>
 
-    <div class="compute-grid compute-grid-split">
-      <div class="compute-card">
-        <header><h2>Jobs <span class="compute-chip"><?php echo count($jobs); ?></span></h2></header>
-        <div class="compute-card-body is-flush">
-          <table class="compute-table">
-            <thead><tr><th>Name</th><th>Cluster</th><th>Source</th><th></th></tr></thead>
-            <tbody>
-            <?php if (empty($jobs)) { ?>
-              <tr><td colspan="4" class="compute-empty">No Spark jobs in <strong><?php echo html_escape($env); ?></strong> yet.</td></tr>
-            <?php } foreach ($jobs as $row) { ?>
-              <tr<?php echo ($selectedJob && $selectedJob->id == $row->id) ? ' style="background:#f1f6ff"' : ''; ?>>
-                <td>
-                  <a class="compute-name" href="<?php echo base_url(); ?>data-engineering/spark-jobs?environment=<?php echo $envQuery; ?>&id=<?php echo (int) $row->id; ?>"><?php echo html_escape($row->name); ?></a>
-                  <span class="compute-sub"><?php echo html_escape($row->group_name); ?><?php echo $row->is_active ? '' : ' &middot; inactive'; ?></span>
-                </td>
-                <td><span class="compute-chip"><?php echo html_escape(isset($row->cluster_name) ? $row->cluster_name : ('#'.$row->cluster_id)); ?></span></td>
-                <td><span class="compute-sub" style="margin:0"><?php echo html_escape($row->source_type === 'inline' ? 'inline' : $row->entry_point); ?></span></td>
-                <td class="compute-row-actions">
-                  <button class="btn btn-xs btn-success job-run" type="button" data-id="<?php echo (int) $row->id; ?>"<?php echo (! $engineHealthy || ! $row->is_active) ? ' disabled' : ''; ?>><i class="fa fa-play"></i> Run</button>
-                </td>
-              </tr>
-            <?php } ?>
-            </tbody>
-          </table>
+    <div class="compute-card" style="margin-bottom:16px">
+      <header><h2><i class="fa fa-server"></i> All-Purpose compute</h2>
+        <a class="compute-sub" style="margin:0" href="<?php echo base_url(); ?>data-engineering/spark-clusters?environment=<?php echo $envQuery; ?>">Manage &rarr;</a>
+      </header>
+      <div class="compute-card-body">
+        <div id="allPurposeStrip" class="compute-ap-strip">
+          <?php if (empty($allPurpose)) { ?>
+            <p class="compute-sub" style="margin:0">No All-Purpose clusters in <?php echo html_escape($env); ?>. Create one on the Compute screen to develop notebooks interactively.</p>
+          <?php } ?>
         </div>
       </div>
+    </div>
 
+    <div class="compute-grid">
       <div class="compute-card">
-        <header>
-          <h2><?php echo $selectedJob ? html_escape($selectedJob->name) : 'Run activity'; ?></h2>
-          <?php if ($selectedJob) { ?><span class="compute-chip"><?php echo html_escape($selectedJob->environment); ?></span><?php } ?>
-        </header>
-        <div class="compute-card-body">
-          <?php if ($selectedJob) {
-              $selectedCluster = isset($clusterById[$selectedJob->cluster_id]) ? $clusterById[$selectedJob->cluster_id] : NULL;
-          ?>
-            <dl class="compute-kv">
-              <dt>Cluster</dt><dd><?php echo html_escape($selectedCluster ? $selectedCluster->name : ('#'.$selectedJob->cluster_id)); ?></dd>
-              <dt>Runtime</dt><dd><?php echo html_escape($selectedCluster ? $selectedCluster->runtime_key : '&mdash;'); ?></dd>
-              <dt>Source</dt><dd><?php echo html_escape($selectedJob->source_type === 'inline' ? 'inline code' : $selectedJob->entry_point); ?></dd>
-              <dt>Args</dt><dd><?php echo html_escape($selectedJob->application_args ?: '&mdash;'); ?></dd>
-            </dl>
-            <?php
-            $capHost = isset($capacity['host']) ? $capacity['host'] : array();
-            $capDemand = isset($capacity['demand']) ? $capacity['demand'] : NULL;
-            if (! empty($capHost['available'])) {
-            ?>
-            <div class="compute-capacity" id="sparkCapacity"
-                 data-free-mem="<?php echo (int) $capHost['freeMemoryMb']; ?>" data-free-cpu="<?php echo (float) $capHost['freeCpus']; ?>">
-              <span>Host <strong><?php echo (float) $capHost['cpus']; ?></strong> vCPU / <strong><?php echo (int) round($capHost['memoryMb'] / 1024); ?></strong> GB</span>
-              <span>Free <strong><?php echo (float) $capHost['freeCpus']; ?></strong> vCPU / <strong><?php echo (int) $capHost['freeMemoryMb']; ?></strong> MB</span>
-              <?php if ($capDemand) { ?>
-                <span>This cluster max: <strong><?php echo (int) $capDemand['max']['cpus']; ?></strong> vCPU / <strong><?php echo (int) $capDemand['max']['memoryMb']; ?></strong> MB
-                  <?php echo empty($capDemand['fitsMax']) ? '<em class="compute-capacity-warn">&mdash; will be scaled down to fit</em>' : '<em class="compute-capacity-ok">&mdash; fits</em>'; ?></span>
-              <?php } ?>
-            </div>
-            <?php } ?>
-            <div class="compute-run-controls">
-              <label>Workers
-                <input type="number" id="runWorkers" min="1"
-                       max="<?php echo (int) ($selectedCluster ? max(1, $selectedCluster->max_workers) : 8); ?>"
-                       value="<?php echo (int) ($selectedCluster ? max(1, $selectedCluster->min_workers) : 2); ?>"
-                       class="form-control input-sm" style="width:70px">
-              </label>
-              <button class="btn btn-success btn-sm job-run" type="button" data-id="<?php echo (int) $selectedJob->id; ?>"<?php echo $engineHealthy ? '' : ' disabled'; ?>><i class="fa fa-play"></i> Run job</button>
-              <?php if (! empty($openVsCodeEnabled)) { ?>
-                <button class="btn btn-primary btn-sm" type="button" id="jobDevelop" data-id="<?php echo (int) $selectedJob->id; ?>"><i class="fa fa-code"></i> Develop</button>
-              <?php } ?>
-              <button class="btn btn-default btn-sm" type="button" id="jobEdit"><i class="fa fa-pencil"></i> Edit</button>
-              <button class="btn btn-danger btn-sm" type="button" id="jobDelete"><i class="fa fa-trash"></i></button>
-            </div>
-            <div id="runDrawer" hidden></div>
-            <table class="compute-table" style="margin-top:10px">
-              <thead><tr><th>Run</th><th>Status</th><th>Workers</th><th>Started</th></tr></thead>
-              <tbody id="recentRuns">
-              <?php if (empty($recentRuns)) { ?>
-                <tr><td colspan="4" class="compute-empty">No runs yet.</td></tr>
-              <?php } foreach ($recentRuns as $run) { ?>
-                <tr data-run-id="<?php echo (int) $run->id; ?>">
-                  <td><code><?php echo html_escape($run->run_key); ?></code></td>
-                  <td><span class="compute-status is-<?php echo strtolower($run->status); ?>"><?php echo html_escape($run->status); ?></span></td>
-                  <td><?php echo (int) $run->worker_count; ?></td>
-                  <td><span class="compute-sub" style="margin:0"><?php echo html_escape($run->started_at); ?></span></td>
+        <header><h2><i class="fa fa-fire"></i> Spark jobs <span class="compute-chip"><?php echo count($jobs); ?></span></h2></header>
+        <div class="compute-card-body is-flush">
+          <div class="compute-table-wrap">
+            <table class="compute-table">
+              <thead><tr><th>Name</th><th>Mode</th><th>Cluster</th><th></th></tr></thead>
+              <tbody>
+              <?php if (empty($jobs)) { ?>
+                <tr><td colspan="4" class="compute-empty">No Spark jobs yet. <a href="<?php echo base_url(); ?>jobCreation#runSparkJob">Create one &rarr;</a></td></tr>
+              <?php } foreach ($jobs as $j) {
+                  $editUrl = base_url().'jobCreation?sparkJob='.(int) $j->id.'#runSparkJob';
+                  $watchUrl = $j->jenkins_job_name
+                      ? base_url().'jobExecution?job='.rawurlencode($j->jenkins_job_name).'&environment='.rawurlencode($j->environment)
+                      : '';
+              ?>
+                <tr>
+                  <td>
+                    <a href="<?php echo $editUrl; ?>"><span class="compute-name"><?php echo html_escape($j->name); ?></span></a>
+                    <span class="compute-sub"><?php echo html_escape($j->environment); ?><?php echo $j->is_active ? '' : ' · inactive'; ?></span>
+                  </td>
+                  <td><span class="compute-chip"><?php echo html_escape(isset($j->mode) && $j->mode === 'interactive' ? 'Interactive' : 'Batch'); ?></span></td>
+                  <td><span class="compute-sub" style="margin:0"><?php echo html_escape(isset($j->cluster_name) ? $j->cluster_name : '—'); ?></span></td>
+                  <td class="compute-row-actions">
+                    <a class="btn btn-xs btn-default" href="<?php echo $editUrl; ?>" title="Edit in Create Job"><i class="fa fa-pencil"></i></a>
+                    <?php if ($watchUrl) { ?><a class="btn btn-xs btn-default" href="<?php echo $watchUrl; ?>" title="Watch in Job Execution"><i class="fa fa-play"></i></a><?php } ?>
+                  </td>
                 </tr>
               <?php } ?>
               </tbody>
             </table>
-          <?php } else { ?>
-            <p class="compute-empty">Select a job to see its run history, or start one with <strong>Run</strong>.</p>
-          <?php } ?>
+          </div>
+        </div>
+      </div>
+
+      <div class="compute-card">
+        <header><h2><i class="fa fa-history"></i> Recent runs</h2>
+          <span class="compute-sub" id="sparkRunsUpdated" style="margin:0"></span>
+        </header>
+        <div class="compute-card-body is-flush">
+          <div class="compute-table-wrap">
+            <table class="compute-table">
+              <thead><tr><th>Run</th><th>Job</th><th>Mode</th><th>Status</th><th>Duration</th><th>Started</th><th>By</th><th></th></tr></thead>
+              <tbody id="sparkRunsBody">
+              <?php if (empty($runs)) { ?>
+                <tr><td colspan="8" class="compute-empty">No runs recorded.</td></tr>
+              <?php } foreach ($runs as $r) {
+                  $isTerminal = in_array($r->status, $terminal, TRUE);
+                  $watchUrl = $r->jenkins_job_name
+                      ? base_url().'jobExecution?job='.rawurlencode($r->jenkins_job_name).'&environment='.rawurlencode($r->environment).($r->jenkins_build_number ? '&build='.(int) $r->jenkins_build_number : '')
+                      : '';
+                  $started = $r->started_at ? strtotime($r->started_at.' UTC') : 0;
+                  $dur = $started ? (($r->completed_at ? strtotime($r->completed_at.' UTC') : time()) - $started) : 0;
+              ?>
+                <tr class="spark-run-row" data-run-id="<?php echo (int) $r->id; ?>" data-terminal="<?php echo $isTerminal ? '1' : '0'; ?>">
+                  <td><code><?php echo html_escape($r->run_key); ?></code></td>
+                  <td><?php echo html_escape($r->job_name ? $r->job_name : ('#'.$r->job_id)); ?><span class="compute-sub" style="margin:0"><?php echo html_escape($r->environment); ?><?php echo isset($r->cluster_name) && $r->cluster_name ? ' · '.html_escape($r->cluster_name) : ''; ?></span></td>
+                  <td><span class="compute-chip"><?php echo isset($r->mode) && $r->mode === 'interactive' ? 'Interactive' : 'Batch'; ?></span></td>
+                  <td><span class="compute-status <?php echo spark_state_class($r->status); ?>"><?php echo html_escape($r->status); ?></span><?php echo ($r->exit_code !== NULL && (int) $r->exit_code !== 0) ? ' <span class="compute-sub" style="margin:0">exit '.(int) $r->exit_code.'</span>' : ''; ?></td>
+                  <td><?php echo spark_dur($dur); ?></td>
+                  <td class="compute-sub" style="margin:0"><?php echo html_escape($r->started_at); ?></td>
+                  <td class="compute-sub" style="margin:0"><?php echo html_escape($r->triggered_by); ?></td>
+                  <td class="compute-row-actions">
+                    <button type="button" class="btn btn-xs btn-default spark-run-open"><i class="fa fa-terminal"></i></button>
+                    <?php if ($watchUrl) { ?><a class="btn btn-xs btn-default" href="<?php echo $watchUrl; ?>" title="Open in Job Execution"><i class="fa fa-external-link"></i></a><?php } ?>
+                  </td>
+                </tr>
+              <?php } ?>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   </section>
 </div>
 
-<div id="jobModalRoot" hidden></div>
-
 <script>
-(function () {
+(function ($) {
+  'use strict';
   var BASE = <?php echo json_encode(base_url()); ?>;
-  var ENV = <?php echo json_encode($env); ?>;
-  var CLUSTERS = <?php echo json_encode(array_map(function ($c) {
-      return array('id' => (int) $c->id, 'name' => $c->name, 'runtime_key' => $c->runtime_key);
-  }, $clusters)); ?>;
-  var SAMPLES = <?php echo json_encode($samples); ?>;
-  var SELECTED_JOB = <?php echo json_encode($selectedJob ? array(
-      'id' => (int) $selectedJob->id, 'name' => $selectedJob->name, 'job_key' => $selectedJob->job_key,
-      'group_name' => $selectedJob->group_name, 'description' => $selectedJob->description,
-      'cluster_id' => (int) $selectedJob->cluster_id, 'source_type' => $selectedJob->source_type,
-      'entry_point' => $selectedJob->entry_point, 'application_args' => $selectedJob->application_args,
-      'inline_code' => $selectedJob->inline_code, 'spark_submit_conf_json' => $selectedJob->spark_submit_conf_json,
-      'is_active' => (int) $selectedJob->is_active,
-  ) : null); ?>;
+  var ENV_QUERY = <?php echo json_encode($envQuery); ?>;
   var TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT'];
-
-  function esc(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
-    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
-  }); }
-  function el(html) { var t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
-  function clusterOptions(selected) {
-    return CLUSTERS.map(function (c) {
-      return '<option value="' + c.id + '"' + (c.id === selected ? ' selected' : '') + '>' + esc(c.name) + '</option>';
-    }).join('');
-  }
+  var STATE_CLASS = { SUCCEEDED: 'is-succeeded', RUNNING: 'is-running', PROVISIONING: 'is-provisioning', QUEUED: 'is-queued',
+    FAILED: 'is-failed', TIMED_OUT: 'is-failed', CANCELLED: 'is-cancelled', STOPPED: 'is-stopped' };
   var CSRF = window.jobseekerCsrf || { name: '', hash: '' };
-  function post(path, params) {
-    var body = new URLSearchParams();
-    Object.keys(params).forEach(function (k) { body.set(k, params[k]); });
+
+  function esc(s) { return $('<i>').text(s == null ? '' : String(s)).html(); }
+  function fmtDur(s) { s = Math.max(0, s | 0); var h = s / 3600 | 0, m = (s % 3600) / 60 | 0; return h ? (h + 'h ' + m + 'm') : (m ? (m + 'm ' + (s % 60) + 's') : (s + 's')); }
+  function postForm(path, data) {
+    var body = new URLSearchParams(data || {});
     if (CSRF.name) { body.set(CSRF.name, CSRF.hash); }
     return fetch(BASE + path, { method: 'POST', body: body, headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(function (r) { return r.json(); });
   }
 
-  // --- run drawer + polling ------------------------------------------
-  var poller = null;
-  function stopPolling() { if (poller) { window.clearInterval(poller); poller = null; } }
+  var openRunId = null, runTimer = null, listTimer = null;
 
-  function renderDrawer(run) {
-    var drawer = document.getElementById('runDrawer');
-    if (!drawer) { return; }
-    drawer.hidden = false;
-    var canCancel = TERMINAL.indexOf(run.status) === -1;
-    drawer.innerHTML =
-      '<div class="compute-run-drawer">' +
-        '<header>' +
-          '<div><span class="compute-status is-' + esc(run.status.toLowerCase()) + '">' + esc(run.status) + '</span> ' +
-          '<span class="compute-run-meta">run ' + esc(run.run_key) + (run.exit_code != null ? ' &middot; exit ' + run.exit_code : '') + '</span></div>' +
-          (canCancel ? '<button type="button" class="btn btn-xs btn-danger" id="runCancel">Cancel</button>' : '') +
-        '</header>' +
-        (run.error_message ? '<div style="padding:8px 14px;color:#fca5a5;font-size:12px">' + esc(run.error_message) + '</div>' : '') +
-        '<div class="compute-cluster-panel" id="runCluster"></div>' +
-        '<pre class="compute-run-log" id="runLog">waiting for logs&hellip;</pre>' +
-      '</div>';
-    var cancelBtn = document.getElementById('runCancel');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', function () {
-        cancelBtn.disabled = true;
-        post('data-engineering/spark-jobs/cancel', { id: run.id }).then(function (payload) {
-          if (payload.run) { renderDrawer(payload.run); }
-        });
-      });
-    }
-  }
-
-  function refreshLog(runId) {
-    fetch(BASE + 'data-engineering/spark-jobs/logs/' + runId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-      .then(function (r) { return r.json(); })
-      .then(function (payload) {
-        var log = document.getElementById('runLog');
-        if (log && payload.ok) { log.textContent = payload.logs || '(no output yet)'; log.scrollTop = log.scrollHeight; }
-      });
-  }
-
-  function fmtBytes(n) {
-    n = Number(n) || 0;
-    var units = ['B', 'KB', 'MB', 'GB'];
-    var i = 0;
-    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-    return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
-  }
-
-  function renderCluster(stats) {
-    var panel = document.getElementById('runCluster');
-    if (!panel || !stats) { return; }
-    var rows = (stats.containers || []).map(function (c) {
-      var mem = c.memoryLimitBytes ? fmtBytes(c.memoryBytes) + ' / ' + fmtBytes(c.memoryLimitBytes) : fmtBytes(c.memoryBytes);
-      var cpuPct = Math.min(100, Number(c.cpuPercent) || 0);
-      var memPct = Math.min(100, Number(c.memoryPercent) || 0);
-      return '<tr>' +
-        '<td><span class="compute-role compute-role-' + esc(c.role) + '">' + esc(c.name) + '</span>' +
-          '<span class="compute-sub" style="margin:0">' + esc(c.state) + (c.running ? '' : (c.exitCode != null ? ' (exit ' + c.exitCode + ')' : '')) + '</span></td>' +
-        '<td class="compute-meter"><span>' + (Number(c.cpuPercent) || 0).toFixed(1) + '%</span><i style="width:' + cpuPct + '%"></i></td>' +
-        '<td class="compute-meter"><span>' + esc(mem) + '</span><i style="width:' + memPct + '%"></i></td>' +
-        '<td class="compute-sub" style="margin:0">&darr;' + fmtBytes(c.networkRxBytes) + ' &uarr;' + fmtBytes(c.networkTxBytes) + '</td>' +
-      '</tr>';
-    }).join('');
-    var agg = stats.aggregate || {};
-    panel.innerHTML =
-      '<table class="compute-cluster-table"><thead><tr><th>Container</th><th>CPU</th><th>Memory</th><th>Network</th></tr></thead>' +
-      '<tbody>' + (rows || '<tr><td colspan="4" class="compute-sub" style="padding:8px">no containers yet</td></tr>') + '</tbody>' +
-      (agg.total ? '<tfoot><tr><td>' + (agg.running || 0) + '/' + agg.total + ' running</td>' +
-        '<td>' + (Number(agg.cpuPercent) || 0).toFixed(1) + '%</td>' +
-        '<td>' + fmtBytes(agg.memoryBytes) + '</td><td></td></tr></tfoot>' : '') +
-      '</table>';
-  }
-
-  function refreshMonitor(runId) {
-    fetch(BASE + 'data-engineering/spark-jobs/monitor/' + runId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-      .then(function (r) { return r.json(); })
-      .then(function (payload) { if (payload.ok && !payload.terminal) { renderCluster(payload); } });
-  }
-
-  function track(run) {
-    stopPolling();
-    var lastStatus = run.status;
-    renderDrawer(run);
-    refreshLog(run.id);
-    refreshMonitor(run.id);
-    if (TERMINAL.indexOf(run.status) !== -1) { return; }
-    poller = window.setInterval(function () {
-      fetch(BASE + 'data-engineering/spark-jobs/status/' + run.id, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function (r) { return r.json(); })
-        .then(function (payload) {
-          if (!payload.ok) { return; }
-          if (payload.run.status !== lastStatus) { renderDrawer(payload.run); lastStatus = payload.run.status; }
-          refreshLog(run.id);
-          if (payload.run.terminal) { stopPolling(); } else { refreshMonitor(run.id); }
-        });
-    }, 2500);
-  }
-
-  document.querySelectorAll('.job-run').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      btn.disabled = true;
-      var workersInput = document.getElementById('runWorkers');
-      var params = { id: btn.getAttribute('data-id') };
-      if (workersInput && workersInput.value) { params.workers = workersInput.value; }
-      post('data-engineering/spark-jobs/run', params).then(function (payload) {
-        btn.disabled = false;
-        if (payload.message) { console.info('[spark run] ' + payload.message); }
-        if (!payload.ok || !payload.run) { window.alert(payload.message || 'Run failed to start.'); return; }
-        if (document.getElementById('runDrawer')) {
-          track(payload.run);
-        } else {
-          window.location = BASE + 'data-engineering/spark-jobs?environment=' + encodeURIComponent(ENV) + '&id=' + btn.getAttribute('data-id');
-        }
-      });
+  function renderAllPurpose(list) {
+    var $s = $('#allPurposeStrip');
+    if (!list || !list.length) { return; }
+    $s.empty();
+    list.forEach(function (c) {
+      var st = c.status || 'STOPPED';
+      var links = c.links || {};
+      var linksHtml = (st === 'RUNNING' && c.links)
+        ? '<div class="compute-sub" style="margin:6px 0 0"><a href="' + esc(links.jupyterLab) + '" target="_blank" rel="noopener">JupyterLab &#8599;</a> · <a href="' + esc(links.sparkUi) + '" target="_blank" rel="noopener">Spark UI &#8599;</a></div>'
+        : '';
+      $s.append(
+        '<div class="compute-ap-card">' +
+          '<div class="compute-ap-head"><b>' + esc(c.name) + '</b>' +
+            '<span class="compute-status ' + (STATE_CLASS[st] || 'is-stopped') + '">' + esc(st) + '</span></div>' +
+          '<div class="compute-sub" style="margin:4px 0 0">workers ' + (c.workerRunning || 0) + ' / ' + (c.workerTarget || 0) +
+            (c.uptimeSeconds ? ' · up ' + fmtDur(c.uptimeSeconds) : '') + '</div>' +
+          linksHtml +
+          '<div style="margin-top:8px"><button type="button" class="btn btn-xs btn-default ap-notebook" data-id="' + c.id + '"><i class="fa fa-book"></i> Open notebook</button></div>' +
+        '</div>'
+      );
     });
+  }
+
+  function renderRuns(runs) {
+    var $b = $('#sparkRunsBody');
+    if (!runs.length) { $b.html('<tr><td colspan="8" class="compute-empty">No runs recorded.</td></tr>'); return; }
+    // Preserve an open detail drawer across the 5s rebuild.
+    var wasOpen = openRunId;
+    if (runTimer) { clearInterval(runTimer); runTimer = null; }
+    openRunId = null;
+    $b.find('tr.spark-run-detail').remove();
+    $b.empty();
+    runs.forEach(function (r) {
+      var watchUrl = r.jenkins_job_name
+        ? BASE + 'jobExecution?job=' + encodeURIComponent(r.jenkins_job_name) + '&environment=' + encodeURIComponent(r.environment) + (r.jenkins_build_number ? '&build=' + r.jenkins_build_number : '')
+        : '';
+      var $tr = $('<tr class="spark-run-row">').attr('data-run-id', r.id).attr('data-terminal', r.terminal ? '1' : '0');
+      $tr.append('<td><code>' + esc(r.run_key) + '</code></td>');
+      $tr.append('<td>' + esc(r.job_name || ('#' + r.id)) + '<span class="compute-sub" style="margin:0">' + esc(r.environment) + (r.cluster_name ? ' · ' + esc(r.cluster_name) : '') + '</span></td>');
+      $tr.append('<td><span class="compute-chip">' + (r.mode === 'interactive' ? 'Interactive' : 'Batch') + '</span></td>');
+      $tr.append('<td><span class="compute-status ' + (STATE_CLASS[r.status] || 'is-cancelled') + '">' + esc(r.status) + '</span>' +
+        (r.exit_code != null && r.exit_code !== 0 ? ' <span class="compute-sub" style="margin:0">exit ' + r.exit_code + '</span>' : '') + '</td>');
+      $tr.append('<td>' + fmtDur(r.duration_seconds || 0) + '</td>');
+      $tr.append('<td class="compute-sub" style="margin:0">' + esc(r.started_at) + '</td>');
+      $tr.append('<td class="compute-sub" style="margin:0">' + esc(r.triggered_by) + '</td>');
+      var actions = '<button type="button" class="btn btn-xs btn-default spark-run-open"><i class="fa fa-terminal"></i></button> ';
+      if (watchUrl) { actions += '<a class="btn btn-xs btn-default" href="' + watchUrl + '"><i class="fa fa-external-link"></i></a>'; }
+      $tr.append('<td class="compute-row-actions">' + actions + '</td>');
+      $b.append($tr);
+    });
+    if (wasOpen != null && $b.find('tr.spark-run-row[data-run-id="' + wasOpen + '"]').length) { openRun(wasOpen); }
+  }
+
+  function refreshList() {
+    $.getJSON(BASE + 'data-engineering/spark-jobs/activity?environment=' + ENV_QUERY).done(function (r) {
+      if (!r || !r.ok) { return; }
+      renderRuns(r.runs || []);
+      renderAllPurpose(r.allPurpose || []);
+      var cap = r.capacity && r.capacity.host;
+      if (cap && cap.available) {
+        $('#capacityGauge').text('free ' + (Math.round(cap.freeCpus * 10) / 10) + ' vCPU / ' + cap.freeMemoryMb + ' MB of ' + Math.round(cap.cpus) + ' vCPU / ' + cap.memoryMb + ' MB');
+      } else { $('#capacityGauge').text('capacity: n/a'); }
+      $('#sparkRunsUpdated').text('updated ' + new Date().toLocaleTimeString());
+      if (openRunId != null) {
+        var still = (r.runs || []).some(function (x) { return x.id === openRunId && !x.terminal; });
+        if (!still && runTimer) { clearInterval(runTimer); runTimer = null; }
+      }
+    });
+  }
+
+  // ---- run detail drawer (inline) -----------------------------------
+  function closeRun() {
+    if (runTimer) { clearInterval(runTimer); runTimer = null; }
+    $('#sparkRunsBody tr.spark-run-detail').remove();
+    openRunId = null;
+  }
+  function openRun(id) {
+    if (openRunId === id) { closeRun(); return; }
+    closeRun();
+    var $row = $('#sparkRunsBody tr.spark-run-row[data-run-id="' + id + '"]');
+    if (!$row.length) { return; }
+    var terminal = $row.attr('data-terminal') === '1';
+    var $d = $('<tr class="spark-run-detail"><td colspan="8">' +
+      '<div class="compute-run-drawer"><header><span class="compute-run-meta">run ' + id + '</span>' +
+      (terminal ? '' : '<button type="button" class="btn btn-xs btn-danger spark-run-cancel">Cancel run</button>') +
+      '<button type="button" class="btn btn-xs btn-default spark-run-close">close</button></header>' +
+      '<pre class="compute-run-log">loading…</pre></div></td></tr>');
+    $row.after($d);
+    $d.find('.spark-run-close').on('click', closeRun);
+    $d.find('.spark-run-cancel').on('click', function () {
+      if (!window.confirm('Cancel run ' + id + '?')) { return; }
+      postForm('data-engineering/spark-jobs/cancel', { id: id }).then(function () { tickRun(id); refreshList(); });
+    });
+    openRunId = id;
+    tickRun(id);
+    if (!terminal) { runTimer = setInterval(function () { tickRun(id); }, 3000); }
+  }
+  function tickRun(id) {
+    $.getJSON(BASE + 'data-engineering/spark-jobs/logs/' + id).done(function (r) {
+      var $log = $('#sparkRunsBody tr.spark-run-detail .compute-run-log');
+      if (!$log.length || !r) { return; }
+      $log.text(r.logs || '(no output yet)');
+      if (r.terminal && runTimer) { clearInterval(runTimer); runTimer = null; }
+    });
+  }
+
+  $(document).on('click', '.spark-run-open', function (e) { e.stopPropagation(); openRun(+$(this).closest('tr').data('run-id')); });
+  $(document).on('click', 'tr.spark-run-row td:not(.compute-row-actions)', function () { openRun(+$(this).closest('tr').data('run-id')); });
+  $(document).on('click', '.ap-notebook', function () {
+    var btn = this; btn.disabled = true;
+    postForm('data-engineering/spark-clusters/notebook', { id: $(this).data('id') }).then(function (p) {
+      btn.disabled = false;
+      if (p.ok && p.url) { window.open(p.url, '_blank', 'noopener'); } else { window.alert(p.message || 'Could not open the notebook workspace.'); }
+    }).catch(function () { btn.disabled = false; window.alert('Network error.'); });
   });
 
-  var developBtn = document.getElementById('jobDevelop');
-  if (developBtn) {
-    developBtn.addEventListener('click', function () {
-      developBtn.disabled = true;
-      var original = developBtn.innerHTML;
-      developBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Opening&hellip;';
-      post('data-engineering/spark-jobs/develop', { id: developBtn.getAttribute('data-id') }).then(function (payload) {
-        developBtn.disabled = false;
-        developBtn.innerHTML = original;
-        if (!payload.ok) { window.alert(payload.message || 'Could not open the editor.'); return; }
-        window.open(payload.url, '_blank', 'noopener');
-        if (payload.starting) { window.alert('OpenVSCode is starting. If the tab shows an error, reload it in a few seconds.'); }
-      });
-    });
+  function setAutoRefresh(on) {
+    if (listTimer) { clearInterval(listTimer); listTimer = null; }
+    if (on) { listTimer = setInterval(refreshList, 5000); }
   }
+  $('#sparkAutoRefresh').on('change', function () { setAutoRefresh(this.checked); });
+  window.addEventListener('beforeunload', closeRun);
 
-  // --- job create / edit modal ------------------------------------
-  function openModal(job) {
-    var j = job || {};
-    var isEdit = !!j.id;
-    var root = document.getElementById('jobModalRoot');
-    root.hidden = false;
-    root.innerHTML = '';
-    var backdrop = el('<div class="compute-modal-backdrop"></div>');
-    var sourceType = j.source_type || 'repository';
-    var modal = el(
-      '<div class="compute-modal" role="dialog" aria-modal="true">' +
-        '<header><h3>' + (isEdit ? 'Edit Spark job' : 'New Spark job') + '</h3>' +
-        '<button type="button" class="btn btn-xs btn-default" data-close>&times;</button></header>' +
-        '<form class="compute-modal-body"><div class="compute-form-grid">' +
-          '<div><label>Name</label><input class="form-control input-sm" name="name" required value="' + esc(j.name || '') + '"></div>' +
-          '<div><label>Group</label><input class="form-control input-sm" name="group_name" value="' + esc(j.group_name || 'General') + '"></div>' +
-          '<div class="full"><label>Description</label><input class="form-control input-sm" name="description" maxlength="2000" value="' + esc(j.description || '') + '"></div>' +
-          '<div><label>Cluster</label><select class="form-control input-sm" name="cluster_id">' + clusterOptions(j.cluster_id) + '</select></div>' +
-          '<div><label>Source</label><select class="form-control input-sm" name="source_type">' +
-            '<option value="repository"' + (sourceType === 'repository' ? ' selected' : '') + '>Repository file</option>' +
-            '<option value="inline"' + (sourceType === 'inline' ? ' selected' : '') + '>Inline code</option></select></div>' +
-          '<div class="full" data-when="repository"><label>Entry point</label><input class="form-control input-sm" name="entry_point" placeholder="jobs/pi/main.py" value="' + esc(j.entry_point || '') + '"><div class="help">Path under repository/spark, e.g. <code>jobs/pi/main.py</code>.</div></div>' +
-          '<div class="full" data-when="inline"><label>Inline PySpark</label><textarea class="form-control code" name="inline_code">' + esc(j.inline_code || 'from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName("job").getOrCreate()\nprint(spark.range(5).count())\nspark.stop()\n') + '</textarea></div>' +
-          '<div class="full"><label>Application args</label><input class="form-control input-sm" name="application_args" value="' + esc(j.application_args || '') + '"></div>' +
-          '<div class="full"><label>spark-submit conf (JSON object, optional)</label><textarea class="form-control" name="spark_submit_conf_json">' + esc(j.spark_submit_conf_json || '') + '</textarea></div>' +
-          '<div><label><input type="checkbox" name="is_active_cb" ' + (j.is_active == 0 ? '' : 'checked') + '> Active</label></div>' +
-        '</div><p style="color:#c0392b" data-error hidden></p>' +
-        '<footer style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
-          '<button type="button" class="btn btn-default btn-sm" data-close>Cancel</button>' +
-          '<button type="submit" class="btn btn-primary btn-sm">' + (isEdit ? 'Save changes' : 'Create job') + '</button>' +
-        '</footer></form>' +
-      '</div>'
-    );
-    function close() { root.hidden = true; root.innerHTML = ''; }
-    function syncSource() {
-      var mode = modal.querySelector('[name="source_type"]').value;
-      modal.querySelectorAll('[data-when]').forEach(function (node) { node.hidden = node.getAttribute('data-when') !== mode; });
-    }
-    backdrop.addEventListener('click', close);
-    modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', close); });
-    modal.querySelector('[name="source_type"]').addEventListener('change', syncSource);
-    modal.querySelector('form').addEventListener('submit', function (event) {
-      event.preventDefault();
-      var form = event.target;
-      var errBox = form.querySelector('[data-error]');
-      errBox.hidden = true;
-      post('data-engineering/spark-jobs/save', {
-        id: j.id || 0, environment: ENV, job_key: j.job_key || '',
-        name: form.elements.name.value, group_name: form.elements.group_name.value,
-        description: form.elements.description.value, cluster_id: form.elements.cluster_id.value,
-        source_type: form.elements.source_type.value, entry_point: form.elements.entry_point.value,
-        inline_code: form.elements.inline_code.value, application_args: form.elements.application_args.value,
-        spark_submit_conf_json: form.elements.spark_submit_conf_json.value,
-        is_active: form.elements.is_active_cb.checked ? 1 : 0
-      }).then(function (payload) {
-        if (payload.ok) {
-          window.location = BASE + 'data-engineering/spark-jobs?environment=' + encodeURIComponent(ENV) + '&id=' + payload.id;
-          return;
-        }
-        errBox.textContent = payload.message || 'Save failed.';
-        errBox.hidden = false;
-      });
-    });
-    root.appendChild(backdrop);
-    root.appendChild(modal);
-    syncSource();
-  }
-
-  var newBtn = document.getElementById('jobNew');
-  if (newBtn) { newBtn.addEventListener('click', function () { openModal(null); }); }
-  var editBtn = document.getElementById('jobEdit');
-  if (editBtn && SELECTED_JOB) { editBtn.addEventListener('click', function () { openModal(SELECTED_JOB); }); }
-  var deleteBtn = document.getElementById('jobDelete');
-  if (deleteBtn && SELECTED_JOB) {
-    deleteBtn.addEventListener('click', function () {
-      if (!window.confirm('Delete job "' + SELECTED_JOB.name + '"?')) { return; }
-      post('data-engineering/spark-jobs/delete', { id: SELECTED_JOB.id }).then(function (payload) {
-        if (payload.ok) { window.location = BASE + 'data-engineering/spark-jobs?environment=' + encodeURIComponent(ENV); }
-        else { window.alert(payload.message || 'Delete failed.'); }
-      });
-    });
-  }
-
-  var sampleSelect = document.getElementById('sampleSelect');
-  if (sampleSelect) {
-    sampleSelect.addEventListener('change', function () {
-      var sample = SAMPLES.filter(function (s) { return s.key === sampleSelect.value; })[0];
-      sampleSelect.value = '';
-      if (!sample) { return; }
-      openModal({ name: sample.name, entry_point: sample.entry_point, application_args: sample.application_args,
-                  description: sample.description, source_type: 'repository',
-                  cluster_id: CLUSTERS.length ? CLUSTERS[0].id : 0, is_active: 1 });
-    });
-  }
-})();
+  refreshList();
+  setAutoRefresh(true);
+})(jQuery);
 </script>

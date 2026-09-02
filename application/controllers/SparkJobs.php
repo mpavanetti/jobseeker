@@ -28,6 +28,7 @@ class SparkJobs extends BaseController
         }
         $this->load->library('SparkClusterOrchestrator', array('model' => $this->spark), 'orchestrator');
         $this->load->library('OpenVsCodeWorkspace', array(), 'editor');
+        $this->load->library('SparkWorkspace', array(), 'workspace');
     }
 
     private function openVsCodeEnabled()
@@ -111,6 +112,11 @@ class SparkJobs extends BaseController
 
     // --- screen ---------------------------------------------------
 
+    /**
+     * Read-only Spark Activity dashboard. Authoring moved to Create Job; this
+     * screen watches runs across every Spark job and links out to Create Job
+     * (edit) and Job Execution (watch a live build).
+     */
     public function index()
     {
         if (! $this->canManage()) {
@@ -118,29 +124,114 @@ class SparkJobs extends BaseController
             return;
         }
         $environment = $this->selectedEnvironment();
-        $jobId = (int) $this->input->get('id');
-        $job = $jobId > 0 ? $this->spark->getJob($jobId) : NULL;
-        if ($job && $environment !== 'ALL' && $job->environment !== $environment) {
-            $job = NULL;
-        }
-        $jobCluster = $job ? $this->spark->getCluster((int) $job->cluster_id) : NULL;
         $data = array(
             'selectedEnvironment' => $environment,
             'environments' => $this->activeEnvironments(),
             'jobs' => $this->spark->listJobs($environment),
-            'clusters' => $this->spark->listClusters($environment),
-            'runtimes' => $this->spark->listRuntimes(TRUE),
-            'job' => $job,
-            'jobCluster' => $jobCluster,
-            'samples' => $this->samples,
-            'recentRuns' => $job ? $this->spark->recentSparkRuns($job->id, 12) : array(),
+            'runs' => $this->spark->recentSparkRunsAll($environment, 40),
             'engineHealthy' => $this->orchestrator->engineHealthy(),
             'driverName' => $this->orchestrator->driverName(),
-            'openVsCodeEnabled' => $this->openVsCodeEnabled(),
-            'capacity' => $this->orchestrator->capacity($jobCluster),
+            'capacity' => $this->orchestrator->capacity(NULL),
+            'allPurpose' => $this->allPurposeView($environment),
         );
-        $this->global['pageTitle'] = 'Job Seeker : Spark Jobs';
+        $this->global['pageTitle'] = 'Job Seeker : Spark Activity';
         $this->loadViews('sparkJobs', $this->global, $data, NULL);
+    }
+
+    /** All-Purpose clusters in an environment with their live state, for the activity strip. */
+    private function allPurposeView($environment)
+    {
+        $out = array();
+        foreach ($this->spark->listClusters($environment) as $cluster) {
+            if ($cluster->lifecycle !== 'persistent') {
+                continue;
+            }
+            $stats = $this->orchestrator->persistentStats($cluster);
+            $instance = isset($stats['instance']) ? $stats['instance'] : NULL;
+            $uptime = 0;
+            $running = 0;
+            if ($instance && $instance->status === 'RUNNING' && $instance->started_at) {
+                $uptime = max(0, time() - strtotime($instance->started_at.' UTC'));
+            }
+            foreach ($stats['containers'] as $c) {
+                if (($c['role'] ?? '') === 'worker' && ! empty($c['running'])) {
+                    $running++;
+                }
+            }
+            $links = NULL;
+            if ($instance && $instance->status === 'RUNNING') {
+                $base = rtrim(base_url(), '/');
+                $token = (string) $instance->jupyter_token;
+                $tq = $token !== '' ? '?token='.rawurlencode($token) : '';
+                $links = array(
+                    'jupyterLab' => $base.'/spark-persist/'.(int) $instance->jupyter_port.'/lab'.$tq,
+                    'sparkUi' => $base.'/spark-persist/'.(int) $instance->spark_ui_port.'/',
+                );
+            }
+            $out[] = array(
+                'id' => (int) $cluster->id,
+                'name' => (string) $cluster->name,
+                'status' => $stats['status'],
+                'uptimeSeconds' => $uptime,
+                'workerRunning' => $running,
+                'workerTarget' => $instance ? (int) $instance->worker_count : (int) $cluster->min_workers,
+                'links' => $links,
+            );
+        }
+        return $out;
+    }
+
+    private static function runDurationSeconds($run)
+    {
+        $started = $run->started_at ? strtotime($run->started_at.' UTC') : 0;
+        if (! $started) {
+            return 0;
+        }
+        $end = $run->completed_at ? strtotime($run->completed_at.' UTC') : time();
+        return max(0, $end - $started);
+    }
+
+    /** JSON feed for the Spark Activity dashboard's live refresh. */
+    public function activity()
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $environment = $this->selectedEnvironment();
+        $runs = array();
+        foreach ($this->spark->recentSparkRunsAll($environment, 40) as $run) {
+            $runs[] = array(
+                'id' => (int) $run->id,
+                'run_key' => (string) $run->run_key,
+                'status' => (string) $run->status,
+                'terminal' => in_array($run->status, SparkClusterOrchestrator::TERMINAL, TRUE),
+                'job_name' => (string) $run->job_name,
+                'job_key' => (string) $run->job_key,
+                'mode' => (string) $run->mode,
+                'jenkins_job_name' => (string) $run->jenkins_job_name,
+                'cluster_name' => (string) $run->cluster_name,
+                'cluster_lifecycle' => (string) $run->cluster_lifecycle,
+                'persistent_backed' => $run->persistent_cluster_id !== NULL,
+                'environment' => (string) $run->environment,
+                'worker_count' => (int) $run->worker_count,
+                'exit_code' => $run->exit_code === NULL ? NULL : (int) $run->exit_code,
+                'triggered_by' => (string) $run->triggered_by,
+                'jenkins_build_number' => $run->jenkins_build_number === NULL ? NULL : (int) $run->jenkins_build_number,
+                'started_at' => (string) $run->started_at,
+                'completed_at' => (string) $run->completed_at,
+                'duration_seconds' => self::runDurationSeconds($run),
+                'error_message' => (string) $run->error_message,
+            );
+        }
+        $this->jsonResponse(array(
+            'ok' => TRUE,
+            'environment' => $environment,
+            'engineHealthy' => $this->orchestrator->engineHealthy(),
+            'capacity' => $this->orchestrator->capacity(NULL),
+            'allPurpose' => $this->allPurposeView($environment),
+            'runs' => $runs,
+        ));
     }
 
     public function samples()
@@ -185,6 +276,7 @@ class SparkJobs extends BaseController
         $environment = $this->normalizeJobSeekerEnvironment($this->input->post('environment', TRUE));
         $name = trim((string) $this->input->post('name', TRUE));
         $clusterId = (int) $this->input->post('cluster_id');
+        $mode = $this->input->post('mode') === 'interactive' ? 'interactive' : 'batch';
         $sourceType = $this->input->post('source_type') === 'inline' ? 'inline' : 'repository';
         $entryPoint = ltrim(trim((string) $this->input->post('entry_point', TRUE)), '/');
         $inlineCode = (string) $this->input->post('inline_code');
@@ -200,6 +292,10 @@ class SparkJobs extends BaseController
         $cluster = $this->spark->getCluster($clusterId);
         if (! $cluster || $cluster->environment !== $environment) {
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Choose a cluster in the same environment.'), 422);
+            return;
+        }
+        if ($mode === 'interactive' && $cluster->lifecycle !== 'persistent') {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Interactive jobs need an All-Purpose cluster.'), 422);
             return;
         }
 
@@ -251,6 +347,7 @@ class SparkJobs extends BaseController
             'description' => trim((string) $this->input->post('description', TRUE)) ?: NULL,
             'environment' => $environment,
             'cluster_id' => $clusterId,
+            'mode' => $mode,
             'source_type' => $sourceType,
             'entry_point' => $entryPoint,
             'application_args' => $applicationArgs !== '' ? $applicationArgs : NULL,
@@ -333,6 +430,33 @@ class SparkJobs extends BaseController
         $this->jsonResponse(array('ok' => TRUE) + $this->orchestrator->runStats($run));
     }
 
+    /**
+     * Job Execution asks "is this Jenkins build a Spark run, and if so how is its
+     * cluster doing?" - given a Jenkins job name + build number.
+     */
+    public function monitorByBuild()
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $job = $this->spark->getJobByJenkinsName($this->input->get('job', TRUE));
+        if (! $job) {
+            $this->jsonResponse(array('ok' => TRUE, 'isSpark' => FALSE));
+            return;
+        }
+        $build = (int) $this->input->get('build');
+        $run = $build > 0 ? $this->spark->getRunByBuild($job->id, $build) : NULL;
+        if (! $run) {
+            $this->jsonResponse(array('ok' => TRUE, 'isSpark' => TRUE, 'run' => NULL, 'job_name' => (string) $job->name));
+            return;
+        }
+        $this->jsonResponse(array(
+            'ok' => TRUE, 'isSpark' => TRUE, 'run_id' => (int) $run->id, 'run_key' => (string) $run->run_key,
+            'status' => (string) $run->status, 'job_name' => (string) $job->name,
+        ) + $this->orchestrator->runStats($run));
+    }
+
     public function capacity()
     {
         if (! $this->canManage()) {
@@ -341,6 +465,28 @@ class SparkJobs extends BaseController
         }
         $cluster = $this->spark->getCluster((int) $this->input->get('cluster'));
         $this->jsonResponse(array('ok' => TRUE) + $this->orchestrator->capacity($cluster));
+    }
+
+    /** GET /data-engineering/spark-jobs/source/{id} — job.py contents for the panel preview. */
+    public function source($id)
+    {
+        if (! $this->canManage()) {
+            $this->jsonResponse(array('ok' => FALSE), 403);
+            return;
+        }
+        $job = $this->spark->getJob((int) $id);
+        if (! $job) {
+            $this->jsonResponse(array('ok' => FALSE, 'message' => 'Job not found.'), 404);
+            return;
+        }
+        $repoRoot = rtrim((string) (getenv('JOBSEEKER_COMPUTE_REPOSITORY_ROOT') ?: '/php/repository'), '/');
+        $key = preg_replace('/[^a-z0-9._-]+/', '-', strtolower((string) $job->job_key));
+        $onDisk = $repoRoot.'/spark/inline/'.$key.'/job.py';
+        $src = is_file($onDisk) ? (string) file_get_contents($onDisk) : (string) $job->inline_code;
+        if (trim($src) === '') {
+            $src = $this->workspace->starterJob($key);
+        }
+        $this->jsonResponse(array('ok' => TRUE, 'source' => $src, 'mode' => (string) $job->mode));
     }
 
     public function develop()
@@ -358,7 +504,6 @@ class SparkJobs extends BaseController
             return;
         }
         $cluster = $this->spark->getCluster((int) $job->cluster_id);
-        $runtime = $cluster ? $this->spark->getRuntime($cluster->runtime_key) : NULL;
 
         $runState = $this->editor->ensureRunning();
         if (empty($runState['available'])) {
@@ -374,25 +519,21 @@ class SparkJobs extends BaseController
             return;
         }
 
-        $sparkVersion = $runtime && $runtime->spark_version ? $runtime->spark_version : '4.0.0';
-        $entryArgs = trim((string) $job->application_args);
-        $starter = trim((string) $job->inline_code) !== ''
-            ? (string) $job->inline_code
-            : "\"\"\"".$job->name." - JobSeeker Spark job.\n\nJobSeeker runs this with:\n  spark-submit --master spark://master:7077 --deploy-mode client \\\n    /workspace/inline/".$key."/main.py".($entryArgs !== '' ? ' '.$entryArgs : '')."\n\"\"\"\n\nfrom pyspark.sql import SparkSession\n\n\ndef main() -> None:\n    spark = SparkSession.builder.appName(\"".$key."\").getOrCreate()\n    try:\n        df = spark.range(1000)\n        print(\"rows:\", df.count())\n    finally:\n        spark.stop()\n\n\nif __name__ == \"__main__\":\n    main()\n";
+        // Flush the panel's editor buffer into job.py if one was posted.
+        $posted = str_replace(array("\r\n", "\r"), "\n", (string) $this->input->post('inline_code'));
+        $jobSource = (strlen(trim($posted)) >= 1 && strlen($posted) <= 200000) ? $posted
+            : (trim((string) $job->inline_code) !== '' ? (string) $job->inline_code : '');
 
-        $this->writeWorkspaceFiles($dir, array(
-            'main.py' => $starter,
-            'pyproject.toml' => "[project]\nname = \"jobseeker-spark-".$key."\"\nversion = \"0.1.0\"\nrequires-python = \">=3.9\"\ndependencies = [\n  \"pyspark==".$sparkVersion."\",\n  \"pandas\",\n  \"pyarrow\",\n]\n\n[tool.ruff]\nline-length = 100\n",
-            'requirements.txt' => "pyspark==".$sparkVersion."\npandas\npyarrow\n",
-            'README.md' => "# ".$job->name."\n\nEdit `main.py`, save, then use **Run job** on the Spark Jobs screen.\n\n- Environment: ".$job->environment."\n- Cluster: ".($cluster ? $cluster->name : '(unset)')."\n- Runtime image: ".($runtime ? $runtime->image_repository.':'.$runtime->image_tag : '(unset)')."\n- Entry point: `inline/".$key."/main.py`\n- Args: `".($entryArgs !== '' ? $entryArgs : '(none)')."`\n\nJobSeeker mounts this folder read-only at `/workspace` inside the driver and runs:\n\n```\nspark-submit --master spark://master:7077 --deploy-mode client /workspace/inline/".$key."/main.py ".$entryArgs."\n```\n",
-            '.vscode/settings.json' => "{\n  \"python.analysis.typeCheckingMode\": \"basic\",\n  \"files.exclude\": { \"**/__pycache__\": true }\n}\n",
-        ));
+        $persist = $this->persistentClusterView($cluster);
+        $defaultMaster = $persist ? 'spark://master:7077' : '';
 
-        // A later Run should execute exactly what was edited here.
+        $this->workspace->scaffold($dir, $key, (string) $job->name, $defaultMaster, $persist, $jobSource);
+
+        // A later Run should execute exactly what is on disk now.
         $this->spark->saveJob(array(
             'source_type' => 'inline',
             'entry_point' => '',
-            'inline_code' => file_get_contents($dir.'/main.py'),
+            'inline_code' => (string) file_get_contents($dir.'/job.py'),
             'updated_at' => date('Y-m-d H:i:s'),
         ), (int) $job->id);
 
@@ -401,26 +542,41 @@ class SparkJobs extends BaseController
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Could not resolve the editor workspace path.'), 500);
             return;
         }
-        $this->jsonResponse(array('ok' => TRUE, 'url' => $url, 'starting' => ! empty($runState['started']), 'message' => $runState['message']));
+        $this->jsonResponse(array(
+            'ok' => TRUE,
+            'url' => $url,
+            'starting' => ! empty($runState['started']),
+            'persistent' => $persist ? TRUE : FALSE,
+            'jupyterVsCodeUrl' => $persist ? $persist['jupyterVsCodeUrl'] : NULL,
+            'message' => $runState['message'],
+        ));
     }
 
-    private function writeWorkspaceFiles($baseDir, array $files)
+    /**
+     * Running-persistent-cluster view for a job's cluster, or NULL. Provides the
+     * URLs the workspace README / notebook need.
+     */
+    private function persistentClusterView($cluster)
     {
-        foreach ($files as $relative => $content) {
-            $target = $baseDir.'/'.$relative;
-            $parent = dirname($target);
-            if (! is_dir($parent)) {
-                @mkdir($parent, 0775, TRUE);
-            }
-            // Never clobber main.py if it already holds the same content.
-            if ($relative === 'main.py' && is_file($target) && file_get_contents($target) === $content) {
-                continue;
-            }
-            if ($relative === 'main.py' && is_file($target)) {
-                continue;
-            }
-            @file_put_contents($target, $content);
+        if (! $cluster || (string) $cluster->lifecycle !== 'persistent') {
+            return NULL;
         }
+        $instance = $this->spark->getClusterInstance($cluster->id);
+        if (! $instance || $instance->status !== 'RUNNING') {
+            return NULL;
+        }
+        $base = rtrim(base_url(), '/');
+        $token = (string) $instance->jupyter_token;
+        $tokenQs = $token !== '' ? '?token='.rawurlencode($token) : '';
+        return array(
+            'name' => (string) $cluster->name,
+            'jupyterPort' => (int) $instance->jupyter_port,
+            'sparkUiPort' => (int) $instance->spark_ui_port,
+            'token' => $token,
+            'jupyterVsCodeUrl' => 'http://docker-runtime:'.(int) $instance->jupyter_port.'/'.$tokenQs,
+            'jupyterLabUrl' => $base.'/spark-persist/'.(int) $instance->jupyter_port.'/lab'.$tokenQs,
+            'sparkUiUrl' => $base.'/spark-persist/'.(int) $instance->spark_ui_port.'/',
+        );
     }
 
     public function status($runId)

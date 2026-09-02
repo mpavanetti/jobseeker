@@ -545,6 +545,8 @@
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
+<script type="text/javascript">window.jobseekerSparkExecMonitor = { baseUrl: <?php echo json_encode(base_url()); ?> };</script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/spark-execution-monitor.js?v=1"></script>
 
 <script type="text/javascript">
   $(document).ready(function() {
@@ -1538,7 +1540,7 @@
       );
 
       $('#executionTabContent').append(
-        '<div role="tabpanel" class="tab-pane ' + activeClass + '" id="pane-' + run.id + '">' +
+        '<div role="tabpanel" class="tab-pane ' + activeClass + '" id="pane-' + run.id + '" data-job="' + escapeAttribute(run.jobName) + '">' +
           '<div class="execution-pane-header">' +
             '<div>' +
               '<h4 style="margin-top: 0; margin-bottom: 4px;"><span class="run-job-name"></span></h4>' +
@@ -1571,6 +1573,7 @@
             '</div>' +
           '</div>' +
           '<div class="job-dependency-panel execution-dependency-panel" id="deps-' + run.id + '"></div>' +
+          '<div class="spark-cluster-panel" id="spark-' + run.id + '" style="display:none;"></div>' +
           '<div class="execution-console job-console-host" id="console-' + run.id + '"><div class="job-console-empty">Waiting for Jenkins to start this build...</div></div>' +
         '</div>'
       );

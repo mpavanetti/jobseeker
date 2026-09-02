@@ -1269,7 +1269,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </li>
               <li<?php echo $jobseekerSparkJobsActive ? ' class="active"' : ''; ?>>
                 <a href="<?php echo base_url(); ?>data-engineering/spark-jobs">
-                  <i class="fa fa-fire"></i> <span>Spark Jobs</span>
+                  <i class="fa fa-fire"></i> <span>Spark Activity</span>
                 </a>
               </li>
               <li<?php echo $jobseekerMlRuntimesActive ? ' class="active"' : ''; ?>>
