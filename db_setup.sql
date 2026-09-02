@@ -140,6 +140,30 @@ CREATE TABLE IF NOT EXISTS `job_pipeline_runs` (
   CONSTRAINT `job_pipeline_runs_pipeline_fk` FOREIGN KEY (`pipeline_id`) REFERENCES `job_pipelines` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
+-- Registry for removable synthetic performance-test batches created from the
+-- admin Dataset Generator or the command-line generator script.
+CREATE TABLE IF NOT EXISTS `generated_datasets` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `batch_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `profile` varchar(30) COLLATE utf8_unicode_ci NOT NULL,
+  `status` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'generating',
+  `tmf_rows` int(11) unsigned NOT NULL DEFAULT 0,
+  `error_rows` int(11) unsigned NOT NULL DEFAULT 0,
+  `job_count` int(11) unsigned NOT NULL DEFAULT 0,
+  `pipeline_count` int(11) unsigned NOT NULL DEFAULT 0,
+  `pipeline_run_rows` int(11) unsigned NOT NULL DEFAULT 0,
+  `seed_value` int(11) unsigned NOT NULL DEFAULT 1,
+  `include_jenkins` tinyint(1) NOT NULL DEFAULT 0,
+  `config_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `metrics_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `created_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `generated_dataset_batch` (`batch_key`),
+  KEY `generated_dataset_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Copiando estrutura para tabela jobseeker.email_settings
 CREATE TABLE IF NOT EXISTS `email_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
