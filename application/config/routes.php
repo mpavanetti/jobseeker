@@ -145,5 +145,98 @@ $route['updateGenericSetting'] = "GenericSettings/updateGenericSetting";
 
 
 
+# ---------------------------------------------------------------------------
+# Machine Learning platform
+# ---------------------------------------------------------------------------
+
+$route['machine-learning'] = 'MlOverview/index';
+$route['machine-learning/overview'] = 'MlOverview/index';
+$route['machine-learning/overview/pulse'] = 'MlOverview/pulse';
+
+$route['machine-learning/runtimes'] = 'MlRuntimes/index';
+$route['machine-learning/runtimes/list'] = 'MlRuntimes/listRuntimes';
+$route['machine-learning/runtimes/get/(:num)'] = 'MlRuntimes/get/$1';
+$route['machine-learning/runtimes/save'] = 'MlRuntimes/save';
+$route['machine-learning/runtimes/delete'] = 'MlRuntimes/delete';
+
+$route['machine-learning/samples'] = 'MlSamples/index';
+$route['machine-learning/samples/list'] = 'MlSamples/listSamples';
+$route['machine-learning/samples/get/(:num)'] = 'MlSamples/get/$1';
+$route['machine-learning/samples/save'] = 'MlSamples/save';
+$route['machine-learning/samples/delete'] = 'MlSamples/delete';
+
+$route['machine-learning/datasets'] = 'MlDatasets/index';
+$route['machine-learning/datasets/list'] = 'MlDatasets/listDatasets';
+$route['machine-learning/datasets/pick'] = 'MlDatasets/pick';
+$route['machine-learning/datasets/explore/(:num)'] = 'MlDatasets/explore/$1';
+$route['machine-learning/datasets/save'] = 'MlDatasets/save';
+$route['machine-learning/datasets/delete'] = 'MlDatasets/delete';
+$route['machine-learning/datasets/register-version'] = 'MlDatasets/registerVersion';
+$route['machine-learning/datasets/version/(:num)'] = 'MlDatasets/versionProfile/$1';
+$route['machine-learning/datasets/preview/(:num)'] = 'MlDatasets/preview/$1';
+$route['machine-learning/datasets/compare/(:num)'] = 'MlDatasets/compareVersions/$1';
+$route['machine-learning/datasets/download/(:num)'] = 'MlDatasets/download/$1';
+
+$route['machine-learning/jobs'] = 'MlJobs/index';
+$route['machine-learning/jobs/list'] = 'MlJobs/listJobs';
+$route['machine-learning/jobs/get/(:num)'] = 'MlJobs/get/$1';
+$route['machine-learning/jobs/introspect'] = 'MlJobs/introspect';
+$route['machine-learning/jobs/save'] = 'MlJobs/save';
+$route['machine-learning/jobs/delete'] = 'MlJobs/delete';
+$route['machine-learning/jobs/save-as-sample'] = 'MlJobs/saveAsSample';
+$route['machine-learning/jobs/develop'] = 'MlJobs/develop';
+$route['machine-learning/jobs/workspace/(:num)'] = 'MlJobs/workspaceFile/$1';
+$route['machine-learning/jobs/build-image'] = 'MlJobs/buildImage';
+$route['machine-learning/jobs/image-status/(:num)'] = 'MlJobs/imageStatus/$1';
+$route['machine-learning/jobs/run'] = 'MlJobs/run';
+$route['machine-learning/jobs/status/(:num)'] = 'MlJobs/status/$1';
+$route['machine-learning/jobs/logs/(:num)'] = 'MlJobs/logs/$1';
+$route['machine-learning/jobs/cancel'] = 'MlJobs/cancel';
+$route['machine-learning/jobs/capacity'] = 'MlJobs/capacity';
+
+$route['machine-learning/runs'] = 'MlRuns/index';
+$route['machine-learning/runs/active'] = 'MlRuns/active';
+$route['machine-learning/runs/detail/(:num)'] = 'MlRuns/detail/$1';
+$route['machine-learning/runs/status/(:num)'] = 'MlRuns/status/$1';
+$route['machine-learning/runs/compare/(:num)'] = 'MlRuns/compare/$1';
+$route['machine-learning/runs/register-model'] = 'MlRuns/registerModelFromRun';
+$route['machine-learning/experiments/save'] = 'MlRuns/saveExperiment';
+
+$route['machine-learning/models'] = 'MlModels/index';
+$route['machine-learning/models/version/(:num)'] = 'MlModels/version/$1';
+$route['machine-learning/models/save'] = 'MlModels/saveModel';
+$route['machine-learning/models/delete'] = 'MlModels/deleteModel';
+$route['machine-learning/models/transition'] = 'MlModels/transition';
+$route['machine-learning/models/notes'] = 'MlModels/updateVersionNotes';
+
+$route['machine-learning/monitoring'] = 'MlMonitoring/index';
+$route['machine-learning/monitoring/overview'] = 'MlMonitoring/overview';
+$route['machine-learning/monitoring/detail/(:num)'] = 'MlMonitoring/detail/$1';
+$route['machine-learning/monitoring/save'] = 'MlMonitoring/save';
+$route['machine-learning/monitoring/delete'] = 'MlMonitoring/delete';
+$route['machine-learning/monitoring/run'] = 'MlMonitoring/run';
+$route['machine-learning/monitoring/run-due'] = 'MlMonitoring/runDue';
+$route['machine-learning/monitoring/alert/ack'] = 'MlMonitoring/acknowledgeAlert';
+
+# Agent-callable runtime surface (bearer token, CSRF-excluded)
+$route['machine-learning/runtime/trigger'] = 'MlRuntime/trigger';
+$route['machine-learning/runtime/status/(:any)'] = 'MlRuntime/status/$1';
+$route['machine-learning/runtime/logs/(:any)'] = 'MlRuntime/logs/$1';
+$route['machine-learning/runtime/cancel'] = 'MlRuntime/cancel';
+$route['machine-learning/runtime/heartbeat'] = 'MlRuntime/heartbeat';
+$route['machine-learning/runtime/ingest'] = 'MlRuntime/ingest';
+$route['machine-learning/runtime/artifact'] = 'MlRuntime/artifact';
+$route['machine-learning/runtime/model'] = 'MlRuntime/model';
+$route['machine-learning/runtime/dataset'] = 'MlRuntime/dataset';
+$route['machine-learning/runtime/resolve-dataset'] = 'MlRuntime/resolveDataset';
+$route['machine-learning/runtime/resolve-model'] = 'MlRuntime/resolveModel';
+$route['machine-learning/runtime/dataset-download/(:num)'] = 'MlRuntime/datasetDownload/$1';
+$route['machine-learning/runtime/model-download/(:num)'] = 'MlRuntime/modelDownload/$1';
+$route['machine-learning/runtime/run-due-monitors'] = 'MlRuntime/runDueMonitors';
+
+# Create Job screen integration (authoring form is embedded; it posts to the
+# machine-learning/jobs/* endpoints above). This route only bootstraps the tab.
+$route['jobCreation/mlJobOptions'] = 'JobCreation/mlJobOptions';
+
 /* End of file routes.php */
 /* Location: ./application/config/routes.php */

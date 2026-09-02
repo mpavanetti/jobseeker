@@ -4,6 +4,7 @@ require APPPATH . '/libraries/BaseController.php';
 require APPPATH . '/controllers/concerns/JobCreationEmailTrait.php';
 require APPPATH . '/controllers/concerns/JobCreationExecutionTrait.php';
 require APPPATH . '/controllers/concerns/JenkinsRunnerTrait.php';
+require APPPATH . '/controllers/concerns/JobCreationMlTrait.php';
 
 
 class JobCreation extends BaseController
@@ -11,6 +12,7 @@ class JobCreation extends BaseController
   use JobCreationEmailTrait;
   use JobCreationExecutionTrait;
   use JenkinsRunnerTrait;
+  use JobCreationMlTrait;
 
     /**
      * This is default constructor of the class
