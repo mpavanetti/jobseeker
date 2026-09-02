@@ -16,7 +16,7 @@ const executionView = fs.readFileSync('application/views/jobExecution.php', 'utf
 // --- Scanner ---
 assert(scanner.includes('class DependencyScanner'));
 assert(scanner.includes('function scan(') && scanner.includes('function sourcesForJob('));
-['CONNECTOR_CALL', 'CONNECTOR_CLI', 'CONNECTOR_ENV', 'ASSET_CALL', 'ASSET_URI'].forEach((c) => {
+['CONNECTOR_CALL', 'CONNECTOR_CLI', 'CONNECTOR_ENV', 'ASSET_CALL', 'ASSET_CLI', 'ASSET_URI'].forEach((c) => {
   assert(scanner.includes("const " + c + " = "), 'DependencyScanner must define ' + c);
 });
 assert(scanner.includes("'.git', '.venv'"), 'transient directories must be skipped when reading job source');
