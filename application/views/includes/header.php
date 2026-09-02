@@ -86,8 +86,8 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=2" rel="stylesheet" type="text/css" />
   <!-- jQuery UI -->
-  <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.min.css" rel="stylesheet" type="text/css" />
-  <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui-1.12.1/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
   <style>
    .error{
     color:red;
@@ -98,8 +98,28 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   .jt-toggle .jt-btn + .jt-btn { border-left: 1px solid #c8d0da; }
   .jt-toggle .jt-btn.is-active { background: #3c8dbc; color: #fff; }
   .jt-toggle .jt-btn:focus { outline: 2px solid #8ab8d6; outline-offset: -2px; }
+  /* AdminLTE's logo box and sidebar assume a 50px top bar (.main-sidebar has
+     padding-top:50px). The environment selector was rendering ~55px, pushing
+     the navbar down and leaving the sidebar 5px out of line with the content.
+     Pin the navbar and both custom widgets to exactly 50px, vertically centred. */
+  .main-header .navbar { min-height: 50px; }
+  .navbar-custom-menu .navbar-nav > li.jobseeker-global-environment,
+  .navbar-custom-menu .navbar-nav > li.jobseeker-global-timezone {
+    height: 50px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+  }
+  .jobseeker-global-environment .jobseeker-env-control { min-height: 38px; }
+  .jobseeker-global-timezone .jobseeker-tz-inner { display: flex; align-items: center; gap: 8px; }
+  .jobseeker-global-timezone .jobseeker-tz-label { color: rgba(255,255,255,.86); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; line-height: 1; }
+  .jobseeker-global-timezone .jt-toggle { border-color: rgba(255,255,255,.45); }
+  .jobseeker-global-timezone .jt-toggle .jt-btn { background: rgba(255,255,255,.14); color: #fff; }
+  .jobseeker-global-timezone .jt-toggle .jt-btn + .jt-btn { border-left-color: rgba(255,255,255,.45); }
+  .jobseeker-global-timezone .jt-toggle .jt-btn.is-active { background: #fff; color: #2b3a4a; }
+  @media (max-width: 767px) { .jobseeker-global-timezone .jobseeker-tz-label { display: none; } }
 </style>
-<script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery-3.4.1.min.js"></script>
+<script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=4" type="text/javascript"></script>
 <script type="text/javascript">
@@ -108,7 +128,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     displayTimezone: <?php echo json_encode($this->config->item('jobseeker_display_timezone') ?: 'UTC'); ?>
   };
 </script>
-<script src="<?php echo base_url(); ?>assets/js/jobseeker-time.js?v=1" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/jobseeker-time.js?v=3" type="text/javascript"></script>
 <script type="text/javascript">
   var baseURL = "<?php echo base_url(); ?>";
   window.jobseekerUserId = <?php echo json_encode(isset($user_id) ? $user_id : ''); ?>;
@@ -613,6 +633,24 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       addJobseekerCsrfToForm(this);
     });
 
+    // Mount the global Local/UTC timestamp toggle in the top bar so every page,
+    // not just the dashboard, can switch how <time> values are rendered.
+    if (window.JobSeekerTime && window.JobSeekerTime.renderToggle) {
+      window.JobSeekerTime.renderToggle('#globalTimezoneToggle');
+
+      // When the mode flips, re-localize static <time> nodes and force every
+      // DataTable on the page (job lists, delete-job, executors, connectors, ...)
+      // to re-run its cell renderers so JS-built timestamps follow the toggle.
+      window.JobSeekerTime.onChange(function() {
+        window.JobSeekerTime.apply(document);
+        if (window.jQuery && jQuery.fn && jQuery.fn.dataTable && jQuery.fn.dataTable.tables) {
+          try {
+            jQuery.fn.dataTable.tables({ api: true }).rows().invalidate('data').draw(false);
+          } catch (e) { /* a table mid-load must not break the toggle */ }
+        }
+      });
+    }
+
     if (window.MutationObserver) {
       new MutationObserver(function(mutations) {
         $.each(mutations, function(index, mutation) {
@@ -621,6 +659,11 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               addJobseekerCsrfToForms(node);
               if (window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.syncControls) {
                 window.JobSeekerGlobalEnvironment.syncControls();
+              }
+              // Localize <time>/[data-utc] nodes injected by DataTables draws,
+              // AJAX partials and modal templates after the initial render.
+              if (window.JobSeekerTime && window.JobSeekerTime.apply) {
+                window.JobSeekerTime.apply(node);
               }
             }
           });
@@ -1023,6 +1066,12 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                 <i class="fa fa-angle-down jobseeker-env-caret"></i>
               </div>
             </li>
+            <li class="jobseeker-global-timezone">
+              <span class="jobseeker-tz-inner">
+                <span class="jobseeker-tz-label">Times</span>
+                <span id="globalTimezoneToggle"></span>
+              </span>
+            </li>
             <li class="dropdown tasks-menu">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown" aria-expanded="true">
                 <i class="fa fa-history"></i>
@@ -1291,6 +1340,12 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                 </a>
               </li>
             <?php } ?>
+            <li>
+              <a href="<?php echo base_url(); ?>dataset-generator">
+                <i class="fa fa-database"></i>
+                <span>Dataset Generator</span>
+              </a>
+            </li>
             <li>
               <a href="<?php echo base_url(); ?>userListing">
                 <i class="fa fa-user"></i>

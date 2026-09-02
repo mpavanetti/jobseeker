@@ -516,7 +516,13 @@ pre {
 
     function renderBuildTime(data) {
       var timestamp = parseInt(data, 10);
-      return timestamp ? moment(timestamp).format('YYYY-MM-DD HH:mm:ss') : '';
+      if (! timestamp) {
+        return '';
+      }
+      if (window.JobSeekerTime) {
+        return JobSeekerTime.format(timestamp);
+      }
+      return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
     }
 
     function renderDuration(data) {

@@ -3,6 +3,7 @@
 .env.connectors
 node_modules/
 assets/bower_components/
+assets/plugins/
 repository/
 json/result.json
 talend.sql

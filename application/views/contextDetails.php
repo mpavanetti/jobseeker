@@ -43,7 +43,7 @@ foreach ((array) $comparisonList as $comparisonRecord) {
     'value' => (int) $comparisonRecord->isEncrypted === 1 ? '' : (string) $comparisonRecord->ContextValue,
     'encrypted' => (int) $comparisonRecord->isEncrypted === 1,
     'active' => (int) $comparisonRecord->IsActive === 1,
-    'updated' => !empty($comparisonUpdated) ? date('Y-m-d H:i', strtotime($comparisonUpdated)) : '',
+    'updated' => !empty($comparisonUpdated) ? gmdate('c', strtotime((string) $comparisonUpdated)) : '',
     'owner' => !empty($comparisonRecord->ModifiedBy) ? (string) $comparisonRecord->ModifiedBy : (string) $comparisonRecord->CreatedBy
   );
 }
@@ -292,7 +292,7 @@ foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
                 <tr>
                   <td>
                     <span class="context-key"><?php echo html_escape($record->ContextKey); ?></span>
-                    <span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo html_escape($createdOn); ?></span>
+                    <span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span>
                     <?php if (trim((string) $record->Description) !== '') { ?><span class="context-description" title="<?php echo html_escape($record->Description); ?>"><?php echo html_escape($record->Description); ?></span><?php } ?>
                   </td>
                   <td>
@@ -306,7 +306,7 @@ foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
                   <td><?php echo html_escape($record->ProjectName); ?></td>
                   <td data-order="<?php echo (int) $record->IsActive; ?>"><span class="context-badge <?php echo (int) $record->IsActive === 1 ? 'context-badge-active' : 'context-badge-inactive'; ?>"><?php echo (int) $record->IsActive === 1 ? 'Active' : 'Inactive'; ?></span></td>
                   <td><?php if ((int) $record->isEncrypted === 1) { ?><span class="context-badge context-badge-secret"><i class="fa fa-lock"></i> Encrypted</span><?php } else { ?><span class="context-row-meta">Standard</span><?php } ?></td>
-                  <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo html_escape($updatedOn); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
+                  <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo js_time(!empty($record->ModifiedOn) ? $record->ModifiedOn : $record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
                   <td><?php echo html_escape($owner); ?><?php if (!empty($record->ModifiedBy)) { ?><span class="context-row-meta">Last editor</span><?php } ?></td>
                   <?php if ($role != 1) { ?>
                     <td class="text-nowrap">
@@ -371,4 +371,4 @@ window.contextDetailsConfig = {
   comparisonEnvironments: <?php echo json_encode($comparisonEnvironmentNames, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>
 };
 </script>
-<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=5"></script>
+<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=6"></script>

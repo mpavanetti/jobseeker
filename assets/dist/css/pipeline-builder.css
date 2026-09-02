@@ -1,12 +1,15 @@
-.pipeline-page { padding: 0 15px 20px; }
-.pipeline-shell { height: clamp(680px, calc(100vh - 160px), 820px); min-height: 680px; display: grid; grid-template-columns: 238px minmax(540px, 1fr) 270px; border: 1px solid #d7dde3; background: #fff; }
+.pipeline-page { padding: 15px 15px 20px; }
+.pipeline-page > .pipeline-global-warning { margin-bottom: 15px; }
+.pipeline-shell { height: clamp(660px, calc(100vh - 185px), 820px); min-height: 660px; display: grid; grid-template-columns: 238px minmax(540px, 1fr) 270px; border: 1px solid #d7dde3; border-radius: 4px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
 .pipeline-rail { min-width: 0; min-height: 0; overflow: hidden; background: #f5f7f9; border-right: 1px solid #d7dde3; display: flex; flex-direction: column; }
 .pipeline-rail-right { border-right: 0; border-left: 1px solid #d7dde3; }
-.pipeline-library-action { padding: 10px; border-bottom: 1px solid #d7dde3; background: #fff; }
-.pipeline-library-action .btn { min-height: 34px; padding-top: 7px; font-weight: 700; }
+/* Top band of every column is 54px so "Create job", the toolbar and the
+   Inspector header line up horizontally and everything below them shares a row. */
+.pipeline-library-action { height: 54px; box-sizing: border-box; padding: 9px 10px; border-bottom: 1px solid #d7dde3; background: #fff; display: flex; align-items: center; }
+.pipeline-library-action .btn { flex: 1; height: 34px; padding: 6px 10px; line-height: 20px; font-weight: 700; }
 .pipeline-library-footer { padding: 9px 11px; border-top: 1px solid #d7dde3; background: #fff; color: #71808c; font-size: 10px; text-align: center; }
 .pipeline-rail-left.is-emphasized { box-shadow: inset 0 0 0 2px rgba(22,125,141,.35); }
-.pipeline-rail-header { min-height: 48px; padding: 12px 14px; border-bottom: 1px solid #d7dde3; display: flex; align-items: center; gap: 8px; }
+.pipeline-rail-header { min-height: 54px; padding: 12px 14px; border-bottom: 1px solid #d7dde3; display: flex; align-items: center; gap: 8px; }
 .pipeline-rail-header h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 16px; font-weight: 700; }
 .pipeline-search { padding: 10px; border-bottom: 1px solid #e1e5e9; }
 .pipeline-list, .pipeline-job-list { min-height: 0; overflow: auto; flex: 1; }
@@ -29,8 +32,9 @@
 .pipeline-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 8px 10px; border-bottom: 1px solid #d7dde3; background: #f8fafb; }
 .pipeline-meta .form-group { margin: 0; }
 .pipeline-meta label { margin-bottom: 3px; color: #52606c; font-size: 11px; text-transform: uppercase; }
-.pipeline-schedule-control { display: flex; align-items: center; }
-.pipeline-schedule-toggle { width: 34px; height: 30px; margin: 0; border: 1px solid #d2d6de; border-right: 0; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pipeline-schedule-control { display: flex; align-items: stretch; }
+.pipeline-schedule-control .form-control { height: 30px; }
+.pipeline-schedule-toggle { flex: 0 0 34px; width: 34px; height: 30px; margin: 0; border: 1px solid #d2d6de; border-right: 0; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; box-sizing: border-box; }
 .pipeline-schedule-toggle input { position: absolute; opacity: 0; }
 .pipeline-schedule-toggle i { color: #8a98a4; font-size: 14px; }
 .pipeline-schedule-toggle:has(input:checked) { background: #167d8d; border-color: #167d8d; }
