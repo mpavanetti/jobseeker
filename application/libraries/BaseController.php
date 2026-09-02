@@ -34,7 +34,7 @@ class BaseController extends CI_Controller {
 	}
 
 	protected function requestJenkins($method, $path, $body = '', $contentType = NULL) {
-		if ($path === NULL || $path === '' || preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $path) || strpos($path, '..') !== FALSE) {
+		if ($path === NULL || $path === '' || preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $path) || strpos($path, '..') !== FALSE || preg_match('/[\r\n]/', (string) $path)) {
 			return array('status' => 400, 'content_type' => 'text/plain', 'body' => 'Invalid Jenkins path.', 'headers' => array());
 		}
 
@@ -121,6 +121,32 @@ class BaseController extends CI_Controller {
 		}
 
 		return array('status' => $statusCode, 'content_type' => $responseContentType, 'body' => $response, 'headers' => $responseHeaders);
+	}
+
+	/**
+	 * Ask Jenkins' own TimerTrigger descriptor to vet a cron <spec> and return its
+	 * verdict. Shared by Job Creation and Pipelines, which both validate the spec
+	 * offline first (JenkinsCronSchedule) and then use this as a best-effort
+	 * confirmation plus a source of the "previous / next run" hint.
+	 *
+	 * @param  string $spec  A five-field Jenkins cron spec (aliases like "@daily" are skipped by callers).
+	 * @return array{level:string,message:string}|null  null when Jenkins is unreachable or gives no verdict.
+	 */
+	protected function describeScheduleWithJenkins($spec) {
+		$spec = trim((string) $spec);
+		if ($spec === '') {
+			return NULL;
+		}
+
+		$check = $this->requestJenkins('GET', 'descriptorByName/hudson.triggers.TimerTrigger/checkSpec?value=' . rawurlencode($spec));
+		if ((int) $check['status'] === 200 && preg_match('#<div class="(ok|warning|error)">(.*?)</div>#s', (string) $check['body'], $matches)) {
+			return array(
+				'level'   => $matches[1],
+				'message' => trim(html_entity_decode(strip_tags($matches[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
+			);
+		}
+
+		return NULL;
 	}
 
 	protected function requestInternalHttp($baseUrl, $method, $path, $body = '', $timeout = 3) {
@@ -264,14 +290,22 @@ class BaseController extends CI_Controller {
 			return NULL;
 		}
 
-		$slotCheck = $this->checkJenkinsEnvironmentSlotsForBuildRequest($path, $body);
-		if (! $slotCheck['ok']) {
-			return array(
-				'status' => isset($slotCheck['status']) ? (int) $slotCheck['status'] : 429,
-				'content_type' => 'text/plain',
-				'body' => $slotCheck['message'],
-				'headers' => array()
-			);
+		// Concurrency is Jenkins' job: it queues a build when every executor is
+		// busy and starts it automatically when one frees up. JobSeeker no longer
+		// runs its own pre-flight "environment slot" gate on the trigger path -
+		// it only duplicated the queue and produced a confusing 429. The slot
+		// figures are still computed for the dashboard's read-only capacity card.
+		// Set JOBSEEKER_JENKINS_SLOT_GATE_ENFORCE=true to restore the hard gate.
+		if ($this->jenkinsSlotGateEnforced()) {
+			$slotCheck = $this->checkJenkinsEnvironmentSlotsForBuildRequest($path, $body);
+			if (! $slotCheck['ok']) {
+				return array(
+					'status' => isset($slotCheck['status']) ? (int) $slotCheck['status'] : 429,
+					'content_type' => 'text/plain',
+					'body' => $slotCheck['message'],
+					'headers' => array()
+				);
+			}
 		}
 
 		$routingCheck = $this->ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $body);
@@ -285,6 +319,15 @@ class BaseController extends CI_Controller {
 		}
 
 		return $this->requestJenkins('POST', $path, $body, $contentType);
+	}
+
+	/**
+	 * Opt back in to the pre-flight environment-slot gate that hard-refuses a
+	 * trigger (HTTP 429) once an environment is at its configured slot count.
+	 * Off by default - Jenkins' own queue handles a busy stack correctly.
+	 */
+	protected function jenkinsSlotGateEnforced() {
+		return filter_var(getenv('JOBSEEKER_JENKINS_SLOT_GATE_ENFORCE'), FILTER_VALIDATE_BOOLEAN);
 	}
 
 	protected function ensureJenkinsEnvironmentAgentAssignmentForBuildRequest($path, $body = '') {
@@ -365,11 +408,22 @@ class BaseController extends CI_Controller {
 				$updates++;
 				$routingUpdated = TRUE;
 			}
-		} else if ($configuredAgentLabel !== '') {
+		} else {
+			// Not pinning to an environment agent (agents disabled, or none is
+			// online for this environment). Make sure the job is plainly
+			// controller-routable and never left as canRoam=false with an empty
+			// assignedNode - that combination ties a freestyle job to the
+			// "built-in" node and produces the confusing
+			// "'jobseeker-dev-agent' doesn't have label 'built-in'" queue reason.
 			$assignedNode = $this->jenkinsDirectChildElement($root, 'assignedNode');
 			$canRoam = $this->jenkinsDirectChildElement($root, 'canRoam');
+			$currentLabel = $assignedNode ? trim((string) $assignedNode->nodeValue) : '';
+			$isJobSeekerAgentPin = $currentLabel !== '' && (
+				$currentLabel === $configuredAgentLabel
+				|| preg_match('/^jobseeker-env-[a-z0-9_-]+$/i', $currentLabel)
+			);
 
-			if ($assignedNode && trim((string) $assignedNode->nodeValue) === $configuredAgentLabel) {
+			if ($assignedNode && ($currentLabel === '' || $isJobSeekerAgentPin)) {
 				while ($assignedNode->firstChild) {
 					$assignedNode->removeChild($assignedNode->firstChild);
 				}
@@ -377,12 +431,16 @@ class BaseController extends CI_Controller {
 				$routingUpdated = TRUE;
 			}
 
-			if ($routingUpdated && $canRoam && $canRoam->nodeValue !== 'true') {
+			// If the job has no explicit label restriction, canRoam=false pins it
+			// to the controller only; normalize to true so it uses any executor.
+			$labelPinned = $assignedNode && trim((string) $assignedNode->nodeValue) !== '';
+			if (! $labelPinned && $canRoam && $canRoam->nodeValue !== 'true') {
 				while ($canRoam->firstChild) {
 					$canRoam->removeChild($canRoam->firstChild);
 				}
 				$canRoam->appendChild($dom->createTextNode('true'));
 				$updates++;
+				$routingUpdated = TRUE;
 			}
 		}
 
@@ -1718,10 +1776,15 @@ class BaseController extends CI_Controller {
 	}
 	
 	/**
-	 * This function is used to check the access
+	 * This function is used to check the access. Historical callers treat a
+	 * TRUE return as "access denied", so this must only be FALSE for the roles
+	 * that are allowed through (mirrors isManager()).
+	 *
+	 * The previous `!= ADMIN || != MANAGER` test was always TRUE (no single
+	 * value can equal both constants), so it denied everyone.
 	 */
 	function isTicketter() {
-		if ($this->role != ROLE_ADMIN || $this->role != ROLE_MANAGER) {
+		if ($this->role != ROLE_ADMIN && $this->role != ROLE_MANAGER) {
 			return true;
 		} else {
 			return false;
