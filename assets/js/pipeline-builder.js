@@ -265,8 +265,9 @@
       var html = '';
       state.jobs.forEach(function(job) {
         if (query && String(job.name).toLowerCase().indexOf(query) === -1 && String(job.label || '').toLowerCase().indexOf(query) === -1) return;
+        var mlTag = /^ml\//i.test(String(job.name)) ? ' <span class="label label-primary" style="font-size:9px">ML</span>' : '';
         html += '<button type="button" class="pipeline-job-item" draggable="true" data-job="' + escapeHtml(job.name) + '" data-label="' + escapeHtml(job.label || job.name) + '">' +
-          '<span class="pipeline-job-name">' + escapeHtml(job.label || job.name) + '</span>' +
+          '<span class="pipeline-job-name">' + escapeHtml(job.label || job.name) + mlTag + '</span>' +
           '<span class="pipeline-job-meta">' + escapeHtml(job.name) + '</span><span class="pipeline-job-add"><i class="fa fa-plus"></i></span></button>';
       });
       $('#pipelineJobList').html(html || '<div class="pipeline-empty">No jobs</div>');

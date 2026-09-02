@@ -357,6 +357,41 @@
                 });
 
                 container.html(html);
+                appendRunningMlRuns(container, environment);
+            }
+
+            // ML platform runs are not Jenkins builds; fetch and append them so
+            // the sidebar shows all in-flight work. Best-effort, additive.
+            function appendRunningMlRuns(container, environment) {
+                if (! container || ! container.length) {
+                    return;
+                }
+                var url = (window.baseURL || '/') + 'machine-learning/runs/active';
+                if (! isAllEnvironment(environment)) {
+                    url += '?environment=' + encodeURIComponent(normalizeEnvironment(environment));
+                }
+                $.getJSON(url).done(function(payload) {
+                    if (! payload || payload.ok !== true || ! payload.runs || ! payload.runs.length) {
+                        return;
+                    }
+                    var block = '<div class="jobseeker-sidebar-running-env">' +
+                        '<div class="jobseeker-sidebar-running-env-header">' +
+                          '<span class="label label-primary">ML</span>' +
+                          '<small>' + payload.runs.length + ' run' + (payload.runs.length === 1 ? '' : 's') + '</small>' +
+                        '</div>';
+                    $.each(payload.runs, function(index, run) {
+                        block += '<a class="jobseeker-sidebar-running-build" href="' + escapeHtml(run.url) + '" title="Open ML run">' +
+                            '<strong>' + escapeHtml(index + 1) + '. ' + escapeHtml(run.name || run.run_key) + '</strong>' +
+                            '<small>' + escapeHtml(run.run_type) + (run.queued ? ' - queued' : ' - running') + '</small>' +
+                          '</a>';
+                    });
+                    block += '</div>';
+                    if (container.find('.jobseeker-sidebar-running-empty').length) {
+                        container.html(block);
+                    } else {
+                        container.append(block);
+                    }
+                });
             }
 
             function refreshRunningJobs(environment, force) {

@@ -39,6 +39,9 @@ $jobseekerExecutorMonitorActive = $jobseekerCurrentController === 'jobexecution'
 $jobseekerDockerMonitorActive = $jobseekerCurrentController === 'dockermonitoring';
 $jobseekerTransactionMonitorActive = $jobseekerCurrentController === 'tmf';
 $jobseekerMonitoringActive = $jobseekerExecutorMonitorActive || $jobseekerDockerMonitorActive;
+$jobseekerMlControllers = array('mloverview', 'mlruntimes', 'mlsamples', 'mldatasets', 'mljobs', 'mlruns', 'mlmodels', 'mlmonitoring');
+$jobseekerMlActive = in_array($jobseekerCurrentController, $jobseekerMlControllers, TRUE);
+$jobseekerMlEnabled = strtolower((string) (getenv('JOBSEEKER_ML_PLATFORM_ENABLED') ?: 'true')) !== 'false';
 $jobseekerSelectedEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE);
 if (trim((string) $jobseekerSelectedEnvironment) === '') {
   $jobseekerPreferenceUserId = preg_replace('/[^0-9]/', '', (string) (isset($user_id) ? $user_id : ''));
@@ -1183,6 +1186,42 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
             </li>
           </ul>
         </li>
+        <?php if ($jobseekerMlEnabled && ($role == ROLE_ADMIN || $role == ROLE_MANAGER)) { ?>
+        <li class="treeview<?php echo $jobseekerMlActive ? ' active' : ''; ?>">
+          <a href="#">
+            <i class="fa fa-flask"></i> <span>Machine Learning</span>
+            <span class="pull-right-container">
+              <i class="fa fa-angle-left pull-right"></i>
+            </span>
+          </a>
+          <ul class="treeview-menu">
+            <li<?php echo $jobseekerCurrentController === 'mloverview' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/overview"><i class="fa fa-tachometer"></i> <span>Overview</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mldatasets' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/datasets"><i class="fa fa-table"></i> <span>Datasets</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mljobs' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/jobs"><i class="fa fa-cogs"></i> <span>Jobs</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mlruns' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/runs"><i class="fa fa-line-chart"></i> <span>Experiments &amp; Runs</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mlmodels' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/models"><i class="fa fa-cube"></i> <span>Models</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mlmonitoring' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/monitoring"><i class="fa fa-heartbeat"></i> <span>Monitoring</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mlruntimes' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/runtimes"><i class="fa fa-cubes"></i> <span>Runtimes</span></a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'mlsamples' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>machine-learning/samples"><i class="fa fa-magic"></i> <span>Samples</span></a>
+            </li>
+          </ul>
+        </li>
+        <?php } ?>
         <li class="treeview">
           <a href="#">
             <i class="fa fa-sitemap"></i> <span>Context Settings</span>

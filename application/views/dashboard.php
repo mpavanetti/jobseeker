@@ -150,9 +150,48 @@ $dashboardConfig = array(
           <div class="row"><div class="col-lg-8 col-xs-12"><h5 class="text-center"><b>Execution subjects · last 180 days</b></h5><div id="dashboardWorkloadWrap" class="dashboard-chart-wrap"><canvas id="dashboardWorkloadChart"></canvas></div><div id="dashboardWorkloadEmpty" class="dashboard-empty"><i class="fa fa-cubes"></i><strong>No classifiable workloads yet</strong></div></div><div class="col-lg-4 col-xs-12"><h5 class="text-center"><b>Active assets by format</b></h5><div id="dashboardAssetWrap" class="dashboard-chart-wrap"><canvas id="dashboardAssetChart"></canvas></div><div id="dashboardAssetEmpty" class="dashboard-empty"><i class="fa fa-file-o"></i><strong>No active assets in this scope</strong><span>Publish an input or output contract to populate this chart.</span></div></div></div>
         </div>
       </div>
+
+      <?php if (($role == ROLE_ADMIN || $role == ROLE_MANAGER) && strtolower((string) (getenv('JOBSEEKER_ML_PLATFORM_ENABLED') ?: 'true')) !== 'false') { ?>
+      <div class="box box-primary" id="dashboardMlBox" style="display:none">
+        <div class="box-header with-border"><h3 class="box-title"><i class="fa fa-flask text-blue"></i> Machine Learning</h3>
+          <div class="box-tools pull-right"><a href="<?php echo base_url('machine-learning/overview'); ?>" class="btn btn-box-tool"><i class="fa fa-external-link"></i> ML Overview</a></div></div>
+        <div class="box-body">
+          <div class="row dashboard-platform-summary">
+            <div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardMlRuns">0</strong><span>Active runs</span></div></div>
+            <div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardMlSuccess">—</strong><span>Run success · 30d</span></div></div>
+            <div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardMlModels">0</strong><span>Model versions</span></div></div>
+            <div class="col-sm-3 col-xs-6"><div class="dashboard-platform-stat"><strong id="dashboardMlAlerts">0</strong><span>Open alerts</span></div></div>
+          </div>
+        </div>
+      </div>
+      <?php } ?>
     </div>
   </section>
 </div>
+<script>
+jQuery(function ($) {
+  var $box = $('#dashboardMlBox');
+  if (! $box.length) { return; }
+  function pull() {
+    var url = (window.baseURL || '/') + 'machine-learning/overview/pulse';
+    var env = window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.current ? window.JobSeekerGlobalEnvironment.current() : null;
+    if (env && env !== 'all') { url += '?environment=' + encodeURIComponent(env); }
+    $.getJSON(url).done(function (r) {
+      if (! r || ! r.ok) { return; }
+      $box.show();
+      var c = r.statusCounts || {}, total = 0, ok = 0;
+      Object.keys(c).forEach(function (k) { total += c[k]; if (k === 'SUCCEEDED') { ok += c[k]; } });
+      $('#dashboardMlRuns').text((r.activeRuns || []).length);
+      $('#dashboardMlSuccess').text(total ? Math.round(ok / total * 100) + '%' : '—');
+      $('#dashboardMlModels').text(r.modelVersionCount || 0);
+      $('#dashboardMlAlerts').text(r.openAlertCount || 0);
+    });
+  }
+  pull();
+  setInterval(pull, 30000);
+  $(document).on('jobseeker:environment-change', pull);
+});
+</script>
 
 <script src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/bower_components/chart.js/Chart.min.js"></script>
