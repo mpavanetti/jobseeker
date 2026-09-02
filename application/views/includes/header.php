@@ -1292,6 +1292,12 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </li>
             <?php } ?>
             <li>
+              <a href="<?php echo base_url(); ?>dataset-generator">
+                <i class="fa fa-database"></i>
+                <span>Dataset Generator</span>
+              </a>
+            </li>
+            <li>
               <a href="<?php echo base_url(); ?>userListing">
                 <i class="fa fa-user"></i>
                 <span>Users</span>
