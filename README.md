@@ -13,6 +13,7 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 ### Job operations
 
 - Create and manage Jenkins jobs through guided forms for Python, Talend, Linux shell, and Windows command workloads.
+- Load curated simple, intermediate, and advanced shell or Python starters into the active execution editor, including multi-file JobSeeker SDK workspaces.
 - Save multiple browser-cached job drafts, compare their configuration, duplicate them, and chain drafts before creating jobs.
 - Run jobs immediately or schedule one-time, recurring, tag-based, and custom Jenkins cron triggers.
 - Send templated email notifications for successful, failed, and aborted builds.
@@ -107,6 +108,8 @@ Populate Jenkins and MariaDB with representative jobs, build states, TMF history
 
 The seed includes successful, failed, running, queued, disabled, and not-built jobs, plus Python SDK examples for Jenkins-agent and Docker execution.
 
+Job Creation also has a **Load Sample** library for reviewed shell and Python starters. Samples can be filtered by runtime, complexity, or platform integration, including TMF tracking, Context Settings, Data Assets, scoped connectors, pipelines, email metrics, Docker, and tests. The advanced platform pipeline combines these contracts in one adaptable JobSeeker job; loading a sample never saves or executes it automatically.
+
 Remove the seeded dataset with:
 
 ```bash
@@ -118,6 +121,25 @@ Customize a demo run with environment variables:
 ```bash
 DEMO_PREFIX=showcase DEMO_SLEEP_SECONDS=1200 DEMO_BLOCKER_COUNT=5 ./seed_demo_data.sh
 ```
+
+### Performance datasets
+
+Administrators can open **Dataset Generator** in the sidebar to create a named, seeded batch of TMF history, TMF errors, job identities, end-to-end pipeline definitions, and pipeline run history. Quick, performance, and stress profiles can be overridden, report database rows/second, and can optionally create matching Jenkins samples spanning runtime diagnostics, TMF/context, Data Assets, connectors, and pipeline-ready workloads without triggering them. Removing a batch deletes only records registered to that batch.
+
+The same generator is available for CI or repeatable profiling. It is a dry run unless `--apply` is present:
+
+```bash
+python3 scripts/generate-performance-dataset.py seed \
+  --profile performance --batch-key perf-ci
+
+python3 scripts/generate-performance-dataset.py seed \
+  --profile performance --batch-key perf-ci --jenkins --apply
+
+python3 scripts/generate-performance-dataset.py cleanup \
+  --batch-key perf-ci --apply
+```
+
+Use `--tmf-rows`, `--jobs`, `--pipelines`, `--pipeline-runs`, `--environments`, and `--seed` for a custom workload. Stress profiles are intended for disposable performance-test environments.
 
 ## Configuration
 

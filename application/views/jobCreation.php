@@ -1843,6 +1843,107 @@
     word-break: break-word;
   }
 
+  .job-sample-toolbar {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .job-sample-toolbar .form-group {
+    margin-bottom: 0;
+    min-width: 170px;
+  }
+
+  .job-sample-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    max-height: 430px;
+    overflow: auto;
+    padding: 2px;
+  }
+
+  .job-sample-card {
+    background: #fff;
+    border: 1px solid #d9e0e6;
+    border-radius: 6px;
+    color: #33404a;
+    cursor: pointer;
+    min-height: 150px;
+    padding: 14px;
+    text-align: left;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    width: 100%;
+  }
+
+  .job-sample-card:hover,
+  .job-sample-card:focus,
+  .job-sample-card.is-selected {
+    border-color: #3c8dbc;
+    box-shadow: 0 5px 15px rgba(60, 141, 188, .16);
+    outline: 0;
+    transform: translateY(-1px);
+  }
+
+  .job-sample-card.is-selected {
+    background: #f4faff;
+    box-shadow: inset 0 0 0 1px #3c8dbc, 0 5px 15px rgba(60, 141, 188, .16);
+  }
+
+  .job-sample-card-header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 9px;
+  }
+
+  .job-sample-card strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+
+  .job-sample-card p {
+    color: #66737d;
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0 0 10px;
+  }
+
+  .job-sample-tags .label {
+    display: inline-block;
+    font-weight: 500;
+    margin: 0 4px 4px 0;
+  }
+
+  .job-sample-integrations {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .job-sample-integrations .label {
+    display: inline-block;
+    font-weight: 600;
+    margin: 0 4px 4px 0;
+  }
+
+  .job-sample-empty {
+    border: 1px dashed #cfd8df;
+    color: #7b8791;
+    grid-column: 1 / -1;
+    padding: 35px;
+    text-align: center;
+  }
+
+  .job-sample-selection {
+    color: #65727d;
+    float: left;
+    font-size: 12px;
+    line-height: 30px;
+  }
+
 </style>
 <div class="content-wrapper">
   <section class="content-header">
@@ -2011,6 +2112,64 @@
   </div>
 </div>
 
+<div class="modal fade" id="jobSampleModal" tabindex="-1" role="dialog" aria-labelledby="jobSampleModalTitle">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="jobSampleModalTitle"><i class="fa fa-flask"></i> Job Sample Library</h4>
+        <p class="text-muted" style="margin:6px 0 0;">Choose a reviewed starter, then adapt it to your job. Loading replaces the active execution editor only.</p>
+      </div>
+      <div class="modal-body">
+        <div class="job-sample-toolbar">
+          <div class="form-group">
+            <label for="jobSampleFamily">Runtime</label>
+            <select class="form-control" id="jobSampleFamily">
+              <option value="all">All runtimes</option>
+              <option value="shell">Linux shell</option>
+              <option value="python">Python / JobSeeker SDK</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="jobSampleComplexity">Complexity</label>
+            <select class="form-control" id="jobSampleComplexity">
+              <option value="all">All levels</option>
+              <option value="simple">Simple</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="jobSampleIntegration">Platform integration</label>
+            <select class="form-control" id="jobSampleIntegration">
+              <option value="all">All integrations</option>
+              <option value="tmf">TMF tracking</option>
+              <option value="contexts">Context Settings</option>
+              <option value="data_assets">Data Assets</option>
+              <option value="connectors">Connectors</option>
+              <option value="email_metrics">Email metrics</option>
+              <option value="pipelines">Pipelines</option>
+              <option value="jenkins">Jenkins runtime</option>
+              <option value="docker">Docker</option>
+              <option value="tests">Automated tests</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1 1 240px;">
+            <label for="jobSampleSearch">Search</label>
+            <input type="search" class="form-control" id="jobSampleSearch" placeholder="TMF, connector, dataset, pipeline…">
+          </div>
+        </div>
+        <div class="job-sample-grid" id="jobSampleGrid"></div>
+      </div>
+      <div class="modal-footer">
+        <span class="job-sample-selection" id="jobSampleSelection">Select a sample to continue.</span>
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="loadSelectedJobSample" disabled><i class="fa fa-download"></i> Load Selected Sample</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php $this->load->helper("form"); ?>
 <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post">
 <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1" checked style="display: none;">
@@ -2104,6 +2263,7 @@
         <p>Select options, then edit one enabled section at a time.</p>
       </div>
       <div class="job-config-header-actions">
+        <button type="button" class="btn btn-primary btn-sm open-job-sample-library"><i class="fa fa-flask"></i> Load Sample</button>
         <span class="label label-default" id="jobOptionEnabledCount">0 enabled</span>
       </div>
     </div>
@@ -2262,6 +2422,7 @@
               <div class="box box-primary">
                 <div class="box-header with-border">
                   <div class="box-tools pull-right">
+                    <button type="button" class="btn btn-primary btn-xs open-job-sample-library" title="Browse shell and Python starters"><i class="fa fa-flask"></i> Samples</button>
                     <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                     <button id="hideLinuxCommand" type="button" class="btn btn-box-tool"><i class="fa fa-times"></i></button>
                   </div>
@@ -3442,6 +3603,20 @@
       var pythonDockerfileUserEdited = false;
       var defaultDockerPythonVersion = '3.13';
       var pythonInlineOpenVscodeEnabled = <?php $openvscodeFlag = getenv('JOBSEEKER_OPENVSCODE_ENABLED'); echo json_encode($openvscodeFlag === FALSE || trim((string) $openvscodeFlag) === '' || ! in_array(strtolower(trim((string) $openvscodeFlag)), array('0', 'false', 'no', 'off'), TRUE)); ?>;
+      var jobSampleCatalog = <?php echo json_encode(array_values(isset($job_samples) ? $job_samples : array()), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES); ?> || [];
+      var jobSampleIntegrationLabels = {
+        tmf: 'TMF',
+        contexts: 'Contexts',
+        data_assets: 'Data Assets',
+        connectors: 'Connectors',
+        email_metrics: 'Email Metrics',
+        pipelines: 'Pipelines',
+        jenkins: 'Jenkins',
+        environments: 'Environments',
+        docker: 'Docker',
+        tests: 'Tests'
+      };
+      var selectedJobSampleId = '';
       var environmentHelper = window.JobSeekerEnvironment || {
         detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName, fullName: jobName}); },
         detectFromJob: function(job) { return {environment: 'Unknown', source: 'Not detected', unknown: true}; },
@@ -3522,6 +3697,154 @@
           updateJobCreationReview();
         }
       }
+
+      function jobSampleById(sampleId) {
+        var match = null;
+        $.each(jobSampleCatalog, function(index, sample) {
+          if (sample.id === sampleId) {
+            match = sample;
+            return false;
+          }
+        });
+        return match;
+      }
+
+      function renderJobSampleLibrary() {
+        var family = $('#jobSampleFamily').val() || 'all';
+        var complexity = $('#jobSampleComplexity').val() || 'all';
+        var integration = $('#jobSampleIntegration').val() || 'all';
+        var search = $.trim($('#jobSampleSearch').val() || '').toLowerCase();
+        var cards = [];
+
+        $.each(jobSampleCatalog, function(index, sample) {
+          var sampleIntegrations = sample.integrations || [];
+          var integrationSearch = $.map(sampleIntegrations, function(key) {
+            return (jobSampleIntegrationLabels[key] || key);
+          }).join(' ');
+          var haystack = [sample.name, sample.description, (sample.tags || []).join(' '), integrationSearch].join(' ').toLowerCase();
+          if ((family !== 'all' && sample.family !== family) ||
+              (complexity !== 'all' && sample.complexity !== complexity) ||
+              (integration !== 'all' && $.inArray(integration, sampleIntegrations) === -1) ||
+              (search !== '' && haystack.indexOf(search) === -1)) {
+            return;
+          }
+
+          var integrations = $.map(sampleIntegrations, function(key) {
+            return '<span class="label label-success">' + escapeHtml(jobSampleIntegrationLabels[key] || key) + '</span>';
+          }).join('');
+          var tags = $.map(sample.tags || [], function(tag) {
+            return '<span class="label label-default">' + escapeHtml(tag) + '</span>';
+          }).join('');
+          var familyLabel = sample.family === 'python' ? 'Python' : 'Shell';
+          cards.push(
+            '<button type="button" class="job-sample-card' + (selectedJobSampleId === sample.id ? ' is-selected' : '') + '" data-job-sample-id="' + escapeAttribute(sample.id) + '">' +
+              '<span class="job-sample-card-header"><span class="label label-primary">' + familyLabel + '</span><span class="label label-info">' + escapeHtml(sample.complexity) + '</span></span>' +
+              '<strong>' + escapeHtml(sample.name) + '</strong>' +
+              '<p>' + escapeHtml(sample.description) + '</p>' +
+              '<span class="job-sample-integrations">' + integrations + '</span>' +
+              '<span class="job-sample-tags">' + tags + '</span>' +
+            '</button>'
+          );
+        });
+
+        if (! cards.length) {
+          cards.push('<div class="job-sample-empty"><i class="fa fa-search"></i> No samples match these filters.</div>');
+        }
+        $('#jobSampleGrid').html(cards.join(''));
+
+        var selected = jobSampleById(selectedJobSampleId);
+        $('#loadSelectedJobSample').prop('disabled', ! selected);
+        $('#jobSampleSelection').text(selected ? selected.name + ' — ' + selected.complexity : 'Select a sample to continue.');
+      }
+
+      function applyJobSample(sample) {
+        if (! sample) {
+          return;
+        }
+
+        $('#linuxCommand').prop('checked', true);
+        activeConfigPanel = '#runlinuxCommand';
+        if ($.trim($('#description').val() || '') === '' && sample.job_description) {
+          $('#description').val(sample.job_description);
+        }
+
+        if (sample.family === 'shell') {
+          $('#linuxExecutionStrategy').val('command');
+          $('#linuxScriptType').val('0');
+          $('#linuxCommandLine').val(sample.command || '');
+          syncLinuxExecutionControls(false);
+        } else {
+          stopPythonExternalSync(true);
+          $('#linuxExecutionStrategy').val('python_inline');
+          $('#linuxScriptType').val('0');
+          $('#pythonSourceMode').val('upload');
+          $('#pythonEntryPoint').val(sample.entry_point || 'main.py');
+          $('#pythonRuntimeMode').val(sample.runtime === 'docker' ? 'docker' : 'local');
+          $('#pythonDockerImage').val(sample.docker_image || dockerImageForPythonVersion());
+          $('#pythonUseDockerfile').prop('checked', !! sample.use_dockerfile);
+          $('#pythonRunTests').prop('checked', !! sample.run_tests);
+          $('#pythonInlineCode').val(sample.code || '');
+          $('#pythonRequirementsText').val(sample.requirements || '');
+          $('#pythonPyprojectText').val(sample.pyproject || '');
+          $('#pythonDockerfileText').val(sample.dockerfile || '');
+          $('#pythonWorkspaceSignature').val('');
+          pythonPyprojectUserEdited = !! sample.pyproject;
+          pythonDockerfileUserEdited = !! sample.dockerfile;
+          pythonInlineOpenPanes = { code: true, requirements: false, pyproject: false, dockerfile: false, extra: false };
+          pythonInlineActivePane = 'code';
+          pythonInlineActiveExtraPath = '';
+          loadPythonInlineFilesPayload({files: sample.files || [], directories: sample.directories || []});
+          syncLinuxExecutionControls(false);
+          updatePythonRuntimeControls();
+          if (sample.use_dockerfile) {
+            ensurePythonPyprojectText();
+            ensurePythonDockerfileText();
+          }
+          syncPythonInlineFilesInput(false);
+          updatePythonInlineEditor();
+          updatePythonRequirementsEditor();
+          updatePythonPyprojectEditor();
+          updatePythonDockerfileEditor();
+          renderPythonInlineWorkspace();
+        }
+
+        refreshJobOptionPanels();
+        updateJobCreationReview();
+        scheduleJobDraftCacheSave(0);
+        $('#jobSampleModal').modal('hide');
+        toastr.success(sample.name + ' loaded. Review names, context keys, assets, and connectors before saving.', 'Job Sample Loaded');
+      }
+
+      $(document).on('click', '.open-job-sample-library', function() {
+        selectedJobSampleId = '';
+        var currentFamily = $('#linuxCommand').is(':checked') ? currentExecutionFamily() : 'all';
+        $('#jobSampleFamily').val(currentFamily === 'python' || currentFamily === 'shell' ? currentFamily : 'all');
+        $('#jobSampleComplexity').val('all');
+        $('#jobSampleIntegration').val('all');
+        $('#jobSampleSearch').val('');
+        renderJobSampleLibrary();
+        $('#jobSampleModal').modal('show');
+      });
+
+      $('#jobSampleFamily, #jobSampleComplexity, #jobSampleIntegration').on('change', renderJobSampleLibrary);
+      $('#jobSampleSearch').on('input', renderJobSampleLibrary);
+
+      $(document).on('click', '.job-sample-card', function() {
+        selectedJobSampleId = String($(this).data('job-sample-id') || '');
+        renderJobSampleLibrary();
+      });
+
+      $('#loadSelectedJobSample').on('click', function() {
+        var sample = jobSampleById(selectedJobSampleId);
+        if (! sample) {
+          return;
+        }
+        var activeSource = sample.family === 'python' ? $('#pythonInlineCode').val() : $('#linuxCommandLine').val();
+        if ($.trim(activeSource || '') !== '' && ! window.confirm('Replace the active ' + sample.family + ' editor with “' + sample.name + '”?')) {
+          return;
+        }
+        applyJobSample(sample);
+      });
 
       function randomJobNameToken() {
         return ('000' + Math.floor(Math.random() * 46656).toString(36)).slice(-3);
