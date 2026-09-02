@@ -116,6 +116,17 @@ services:
       - JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS=${JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS:-DEV=2}
       - JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED=${JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED:-true}
       - JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS=${JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS:-DEV=jobseeker-env-dev,QA=jobseeker-env-qa,UAT=jobseeker-env-uat,PROD=jobseeker-env-prod}
+      # --- Machine Learning platform ---
+      - JOBSEEKER_ML_PLATFORM_ENABLED=${JOBSEEKER_ML_PLATFORM_ENABLED:-true}
+      - JOBSEEKER_ML_API_TOKEN=${JOBSEEKER_ML_API_TOKEN:-jobseeker-local-ml-token}
+      - JOBSEEKER_ML_RUNTIME_URL=http://nginx:8080/machine-learning/runtime
+      - JOBSEEKER_ML_COMPUTE_DRIVER=${JOBSEEKER_ML_COMPUTE_DRIVER:-docker}
+      - JOBSEEKER_ML_ARTIFACT_STORE=${JOBSEEKER_ML_ARTIFACT_STORE:-local}
+      - JOBSEEKER_ML_REPOSITORY_ROOT=/php/repository/ml
+      - JOBSEEKER_ML_ARTIFACT_ROOT=/php/repository/ml/artifacts
+      - JOBSEEKER_ML_BIND_SOURCE=/jobseeker/repository/ml
+      - JOBSEEKER_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_ML_MAX_CONCURRENT_RUNS=${JOBSEEKER_ML_MAX_CONCURRENT_RUNS:-3}
     healthcheck:
       test: ["CMD-SHELL", "php-fpm -t || exit 1"]
       interval: 30s
@@ -230,6 +241,9 @@ services:
       - DOCKER_TLS_CERTDIR=
     volumes:
       - jobseeker-docker-cache:/var/lib/docker
+      # ML job source is written by the php container under ./repository/ml and
+      # bind-mounted read-only into each run container as /workspace.
+      - ./repository/ml:/jobseeker/repository/ml
     networks:
       - internal
     healthcheck:

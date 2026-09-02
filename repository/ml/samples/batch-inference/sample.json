@@ -1,0 +1,17 @@
+{
+  "name": "Batch inference",
+  "category": "tabular",
+  "run_type": "batch_infer",
+  "runtime_key": "ml-cpu",
+  "description": "Loads a registered model (production stage by default), scores a bound 'inference_input' dataset, writes a 'predictions' dataset back to the registry with lineage, and logs prediction_count / output_mean for monitoring.",
+  "tags": ["inference", "scoring"],
+  "sort_order": 30,
+  "params_schema": {
+    "model": {"type": "str", "default": "tabular-classifier"},
+    "id_column": {"type": "str", "default": ""}
+  },
+  "dataset_roles": [
+    {"role": "inference_input", "direction": "input", "required": true},
+    {"role": "predictions", "direction": "output", "required": true}
+  ]
+}

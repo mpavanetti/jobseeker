@@ -562,6 +562,384 @@ FROM contextdetails cd, projectdetails pd, environment env
 WHERE cd.ProjectDetailsFK = pd.Id 
 AND cd.EnvironmentFK = env.Id ;
 
+-- ---------------------------------------------------------------------------
+-- Machine Learning platform.
+-- The Ml*_model classes run CREATE TABLE IF NOT EXISTS + seed at load, so a
+-- running stack self-heals; these statements only keep a fresh install
+-- schema-complete. Runtime images are built by scripts/build-ml-runtimes.sh and
+-- artifacts flow over HTTP (machine-learning/runtime/*), so no extra volumes are
+-- required here.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `ml_runtime` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `display_name` varchar(160) COLLATE utf8_unicode_ci NOT NULL,
+  `kind` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'cpu',
+  `image_repository` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `image_tag` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `base_image` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'continuumio/miniconda3',
+  `library_summary` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `description` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `default_cpu_limit` decimal(5,2) NOT NULL DEFAULT 1.00,
+  `default_memory_mb` int(11) NOT NULL DEFAULT 2048,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 100,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_runtime_key` (`runtime_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_sample` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `sample_key` varchar(96) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `category` varchar(48) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'tabular',
+  `run_type` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'train',
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `entry_point` varchar(400) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `code` longtext COLLATE utf8_unicode_ci NOT NULL,
+  `params_schema_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `dataset_roles_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `tags` varchar(400) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_builtin` tinyint(1) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 100,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_sample_key` (`sample_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_experiment` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `experiment_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `primary_metric` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `metric_goal` varchar(8) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'max',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_experiment_scope` (`experiment_key`,`environment`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_job` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `job_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `group_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'General',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `experiment_id` int(11) DEFAULT NULL,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `sample_key` varchar(96) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `source_type` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'inline',
+  `entry_point` varchar(400) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `entrypoint` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'main.py',
+  `inline_code` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `dependency_mode` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'requirements',
+  `requirements_txt` text COLLATE utf8_unicode_ci DEFAULT NULL,
+  `pyproject_text` text COLLATE utf8_unicode_ci DEFAULT NULL,
+  `dockerfile` text COLLATE utf8_unicode_ci DEFAULT NULL,
+  `image_tag` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `image_state` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'none',
+  `image_digest` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `image_built_at` datetime DEFAULT NULL,
+  `image_build_log` mediumtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `workspace_hash` varchar(32) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `application_args` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `params_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `dataset_bindings_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `env_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `run_type` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'unknown',
+  `run_type_source` varchar(12) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'auto',
+  `run_type_confidence` decimal(4,3) NOT NULL DEFAULT 0.000,
+  `introspection_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `cpu_limit` decimal(5,2) NOT NULL DEFAULT 1.00,
+  `memory_limit_mb` int(11) NOT NULL DEFAULT 2048,
+  `timeout_seconds` int(11) NOT NULL DEFAULT 3600,
+  `schedule_cron` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `jenkins_job_name` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_job_scope` (`job_key`,`environment`),
+  KEY `ml_job_environment` (`environment`),
+  KEY `ml_job_runtime` (`runtime_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_run` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `run_key` varchar(40) COLLATE utf8_unicode_ci NOT NULL,
+  `job_id` int(11) DEFAULT NULL,
+  `experiment_id` int(11) DEFAULT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `run_type` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'unknown',
+  `status` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'QUEUED',
+  `trigger_source` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'manual',
+  `triggered_by` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `runtime_key` varchar(64) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `image_ref` varchar(300) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `driver` varchar(24) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `container_id` varchar(96) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `params_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `tags_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `metrics_summary_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `cpu_limit` decimal(5,2) NOT NULL DEFAULT 1.00,
+  `memory_limit_mb` int(11) NOT NULL DEFAULT 2048,
+  `jenkins_build_number` int(10) unsigned DEFAULT NULL,
+  `exit_code` int(11) DEFAULT NULL,
+  `log_tail` mediumtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `error_message` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `queued_at` datetime NOT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `heartbeat_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_run_key` (`run_key`),
+  KEY `ml_run_job` (`job_id`,`id`),
+  KEY `ml_run_experiment` (`experiment_id`,`id`),
+  KEY `ml_run_status` (`status`,`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_run_metric` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `run_id` bigint(20) unsigned NOT NULL,
+  `metric_key` varchar(120) COLLATE utf8_unicode_ci NOT NULL,
+  `step` int(11) NOT NULL DEFAULT 0,
+  `value` double NOT NULL,
+  `recorded_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_run_metric_point` (`run_id`,`metric_key`,`step`),
+  KEY `ml_run_metric_run` (`run_id`,`metric_key`,`step`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_artifact` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `sha256` char(64) COLLATE utf8_unicode_ci NOT NULL,
+  `media_type` varchar(120) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'application/octet-stream',
+  `size_bytes` bigint(20) unsigned NOT NULL DEFAULT 0,
+  `storage_backend` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'local',
+  `storage_uri` varchar(1000) COLLATE utf8_unicode_ci NOT NULL,
+  `original_name` varchar(400) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_artifact_sha` (`sha256`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_run_artifact` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `run_id` bigint(20) unsigned NOT NULL,
+  `artifact_id` bigint(20) unsigned NOT NULL,
+  `role` varchar(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'artifact',
+  `path` varchar(700) COLLATE utf8_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_run_artifact_path` (`run_id`,`path`),
+  KEY `ml_run_artifact_run` (`run_id`),
+  KEY `ml_run_artifact_artifact` (`artifact_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_lineage_edge` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `src_kind` varchar(24) COLLATE utf8_unicode_ci NOT NULL,
+  `src_id` bigint(20) unsigned NOT NULL,
+  `dst_kind` varchar(24) COLLATE utf8_unicode_ci NOT NULL,
+  `dst_id` bigint(20) unsigned NOT NULL,
+  `role` varchar(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'uses',
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_lineage_edge_unique` (`src_kind`,`src_id`,`dst_kind`,`dst_id`,`role`),
+  KEY `ml_lineage_src` (`src_kind`,`src_id`),
+  KEY `ml_lineage_dst` (`dst_kind`,`dst_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- v2: the ML dataset registry is unified into the Data Assets store. Datasets
+-- are `data_assets` rows; immutable versions with schema/profile/fingerprint
+-- live in `data_asset_versions`. DataAssets_model also ALTERs `data_assets` to
+-- add `kind`, `source`, `tags`, `latest_version`, `schema_json`,
+-- `profile_status` at load; a fresh install gets them here.
+ALTER TABLE `data_assets`
+  ADD COLUMN IF NOT EXISTS `kind` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'file' AFTER `format`,
+  ADD COLUMN IF NOT EXISTS `source` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'manual' AFTER `kind`,
+  ADD COLUMN IF NOT EXISTS `tags` varchar(400) COLLATE utf8_unicode_ci DEFAULT NULL AFTER `description`,
+  ADD COLUMN IF NOT EXISTS `latest_version` int(11) NOT NULL DEFAULT 0 AFTER `version`,
+  ADD COLUMN IF NOT EXISTS `schema_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL AFTER `latest_version`,
+  ADD COLUMN IF NOT EXISTS `profile_status` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'none' AFTER `schema_json`;
+
+CREATE TABLE IF NOT EXISTS `data_asset_versions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `asset_id` int(11) NOT NULL,
+  `version` int(11) NOT NULL,
+  `source_type` varchar(24) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'upload',
+  `source_ref_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `storage_path` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `artifact_id` bigint(20) unsigned DEFAULT NULL,
+  `checksum` char(64) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `size_bytes` bigint(20) unsigned DEFAULT NULL,
+  `format` varchar(24) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `row_count` bigint(20) DEFAULT NULL,
+  `column_count` int(11) DEFAULT NULL,
+  `schema_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `profile_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `fingerprint_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `profile_status` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'pending',
+  `profile_error` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `produced_by_run_id` bigint(20) unsigned DEFAULT NULL,
+  `notes` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `created_by` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `data_asset_versions_scope` (`asset_id`,`version`),
+  KEY `data_asset_versions_run` (`produced_by_run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_model` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `model_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `task` varchar(48) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'classification',
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `primary_metric` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `metric_goal` varchar(8) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'max',
+  `tags` varchar(400) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `latest_version` int(11) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_model_scope` (`model_key`,`environment`),
+  KEY `ml_model_environment` (`environment`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_model_version` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `model_id` int(11) NOT NULL,
+  `version` int(11) NOT NULL,
+  `run_id` bigint(20) unsigned DEFAULT NULL,
+  `stage` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'none',
+  `artifact_id` bigint(20) unsigned DEFAULT NULL,
+  `framework` varchar(48) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `metrics_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `params_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `signature_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `training_dataset_version_id` bigint(20) unsigned DEFAULT NULL,
+  `notes` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `created_by` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_model_version_scope` (`model_id`,`version`),
+  KEY `ml_model_version_stage` (`model_id`,`stage`),
+  KEY `ml_model_version_run` (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_model_stage_event` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `model_version_id` bigint(20) unsigned NOT NULL,
+  `from_stage` varchar(16) COLLATE utf8_unicode_ci NOT NULL,
+  `to_stage` varchar(16) COLLATE utf8_unicode_ci NOT NULL,
+  `reason` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `actor` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ml_model_stage_event_version` (`model_version_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_monitor` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `monitor_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `model_id` int(11) NOT NULL,
+  `model_version_id` bigint(20) unsigned DEFAULT NULL,
+  `track_stage` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'production',
+  `baseline_dataset_version_id` bigint(20) unsigned DEFAULT NULL,
+  `config_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `schedule_cron` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `jenkins_job_name` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `status` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ok',
+  `last_run_at` datetime DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `ml_monitor_scope` (`monitor_key`,`environment`),
+  KEY `ml_monitor_model` (`model_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_monitor_run` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `monitor_id` int(11) NOT NULL,
+  `status` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'RUNNING',
+  `trigger_source` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'manual',
+  `current_dataset_version_id` bigint(20) unsigned DEFAULT NULL,
+  `summary_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `drift_score` double DEFAULT NULL,
+  `alerts_opened` int(11) NOT NULL DEFAULT 0,
+  `error_message` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `started_at` datetime NOT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ml_monitor_run_monitor` (`monitor_id`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_monitor_point` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `monitor_id` int(11) NOT NULL,
+  `monitor_run_id` bigint(20) unsigned DEFAULT NULL,
+  `recorded_at` datetime NOT NULL,
+  `metric_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `feature` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT '__overall__',
+  `value` double NOT NULL,
+  `breached` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `ml_monitor_point_series` (`monitor_id`,`metric_key`,`feature`,`recorded_at`),
+  KEY `ml_monitor_point_run` (`monitor_run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ml_alert` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `monitor_id` int(11) DEFAULT NULL,
+  `monitor_run_id` bigint(20) unsigned DEFAULT NULL,
+  `run_id` bigint(20) unsigned DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `severity` varchar(12) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'warning',
+  `category` varchar(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'drift',
+  `title` varchar(300) COLLATE utf8_unicode_ci NOT NULL,
+  `detail` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `metric_key` varchar(64) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `feature` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `observed_value` double DEFAULT NULL,
+  `threshold_value` double DEFAULT NULL,
+  `state` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'open',
+  `fingerprint` char(40) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `notified_at` datetime DEFAULT NULL,
+  `acknowledged_by` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `acknowledged_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ml_alert_state` (`state`,`created_at`),
+  KEY `ml_alert_monitor` (`monitor_id`,`state`),
+  KEY `ml_alert_fingerprint` (`fingerprint`,`state`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

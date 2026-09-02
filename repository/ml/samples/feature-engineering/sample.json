@@ -1,0 +1,14 @@
+{
+  "name": "Feature engineering",
+  "category": "tabular",
+  "run_type": "preprocess",
+  "runtime_key": "ml-cpu",
+  "description": "Reads a bound 'raw' dataset, imputes and scales numeric columns, one-hot encodes categoricals, and registers a 'features' dataset with lineage back to the run. No model is trained.",
+  "tags": ["preprocess", "features"],
+  "sort_order": 40,
+  "params_schema": {"drop_columns": {"type": "list", "default": []}},
+  "dataset_roles": [
+    {"role": "raw", "direction": "input", "required": true},
+    {"role": "features", "direction": "output", "required": true}
+  ]
+}

@@ -3,7 +3,16 @@
 .env.connectors
 node_modules/
 assets/bower_components/
-repository/
+repository/*
+# Machine Learning platform: track the SDK, samples and README; the jobs/ and
+# artifacts/ trees are runtime state written by JobSeeker.
+!repository/ml
+repository/ml/*
+!repository/ml/sdk
+!repository/ml/samples
+!repository/ml/README.md
+repository/ml/jobs/
+repository/ml/artifacts/
 json/result.json
 talend.sql
 old/cias.sql

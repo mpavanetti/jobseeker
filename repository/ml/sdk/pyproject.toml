@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobseeker-ml"
+version = "0.1.0"
+description = "JobSeeker ML platform runtime SDK: stream metrics, artifacts, models and datasets from a job back to JobSeeker."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+pandas = ["pandas"]
+
+[tool.setuptools]
+packages = ["jobseeker_ml"]

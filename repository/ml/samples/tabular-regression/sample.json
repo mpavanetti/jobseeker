@@ -1,0 +1,15 @@
+{
+  "name": "Tabular regression (GradientBoosting)",
+  "category": "tabular",
+  "run_type": "train",
+  "runtime_key": "ml-cpu",
+  "description": "Trains a GradientBoostingRegressor, logs RMSE / MAE / R2 and a per-iteration validation curve, and registers the model.",
+  "tags": ["regression", "sklearn"],
+  "sort_order": 20,
+  "params_schema": {
+    "n_estimators": {"type": "int", "default": 400},
+    "learning_rate": {"type": "float", "default": 0.05},
+    "target": {"type": "str", "default": "target"}
+  },
+  "dataset_roles": [{"role": "training", "direction": "input", "required": false}]
+}

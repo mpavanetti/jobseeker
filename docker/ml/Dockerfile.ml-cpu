@@ -1,0 +1,24 @@
+# JobSeeker ML runtime - CPU, scikit-learn / XGBoost.
+# Built by scripts/build-ml-runtimes.sh onto the compute engine as
+# jobseeker/ml-runtime:cpu. Jobs run as `python -u /workspace/<entry>` with the
+# repository/ml tree mounted read-only at /workspace and jobseeker_ml installed.
+FROM continuumio/miniconda3:24.9.2-0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg \
+    PIP_NO_CACHE_DIR=1
+
+RUN conda install -y -c conda-forge \
+        python=3.11 numpy pandas scikit-learn xgboost pyarrow matplotlib joblib scipy \
+    && conda clean -afy
+
+# The runtime SDK. Copied in at build time from repository/ml/sdk.
+COPY sdk /opt/jobseeker-ml-sdk
+RUN pip install --no-deps /opt/jobseeker-ml-sdk
+
+WORKDIR /workspace
+RUN useradd -m -u 10001 mljob && chown -R mljob /workspace
+USER mljob
+
+ENTRYPOINT ["python", "-u"]

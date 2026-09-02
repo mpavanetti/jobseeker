@@ -1,0 +1,18 @@
+{
+  "name": "Tabular classification (RandomForest)",
+  "category": "tabular",
+  "run_type": "train",
+  "runtime_key": "ml-cpu",
+  "description": "Trains a scikit-learn RandomForest classifier, logs accuracy / F1 / ROC-AUC, feature importances and a confusion matrix, and registers the model. Uses a bound 'training' dataset if present, otherwise a synthetic one.",
+  "tags": ["classification", "sklearn", "starter"],
+  "sort_order": 10,
+  "params_schema": {
+    "n_estimators": {"type": "int", "default": 300},
+    "max_depth": {"type": "int", "default": 8},
+    "test_size": {"type": "float", "default": 0.2},
+    "target": {"type": "str", "default": "target"}
+  },
+  "dataset_roles": [
+    {"role": "training", "direction": "input", "required": false}
+  ]
+}
