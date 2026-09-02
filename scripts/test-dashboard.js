@@ -82,13 +82,15 @@ assert(!controller.includes("date_default_timezone_set('America/Sao_Paulo')"), '
 const compose = fs.readFileSync(path.join(root, 'docker-compose.yml'), 'utf8');
 assert(compose.includes('--default-time-zone=+00:00'), 'The MariaDB service must run at +00:00.');
 
-// The shared timezone toggle is loaded globally and mounted on the dashboard.
+// The shared timezone toggle now lives in the global top bar (header.php) so it
+// applies to every view, not just the dashboard.
 const header = fs.readFileSync(path.join(root, 'application', 'views', 'includes', 'header.php'), 'utf8');
 assert(header.includes('assets/js/jobseeker-time.js'), 'jobseeker-time.js must be loaded for every page.');
 assert(header.includes('window.jobseekerTime') && header.includes('displayTimezone'), 'The display timezone must be passed to the client.');
 const jstime = fs.readFileSync(path.join(root, 'assets', 'js', 'jobseeker-time.js'), 'utf8');
 assert(jstime.includes('JobSeekerTime') && jstime.includes("timeZone = 'UTC'") && jstime.includes('renderToggle'), 'JobSeekerTime must expose a UTC/local renderer and toggle.');
-assert(view.includes('id="dashboardTimezoneToggle"'), 'The dashboard must host the timezone toggle.');
-assert(script.includes("JobSeekerTime.renderToggle('#dashboardTimezoneToggle')") && script.includes('JobSeekerTime.onChange'), 'The dashboard must mount the toggle and re-render on change.');
+assert(header.includes("id=\"globalTimezoneToggle\"") && header.includes("JobSeekerTime.renderToggle('#globalTimezoneToggle')"), 'The global top bar must mount the timezone toggle.');
+assert(!view.includes('id="dashboardTimezoneToggle"'), 'The dashboard must not carry its own timezone toggle any more (it is global).');
+assert(script.includes('JobSeekerTime.onChange'), 'The dashboard must still re-render its widgets when the timezone mode changes.');
 
 console.log('Dashboard metric and rendering tests passed.');

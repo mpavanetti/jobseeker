@@ -382,7 +382,8 @@
   $(function() {
     $('body').addClass('sidebar-collapse');
     if (window.JobSeekerTime) {
-      JobSeekerTime.renderToggle('#dashboardTimezoneToggle');
+      // The Local/UTC switch now lives in the global top bar (header.php);
+      // the dashboard only needs to re-render its JSON-built widgets on change.
       JobSeekerTime.onChange(function() {
         if (state.overview) renderOverview(state.overview);
       });

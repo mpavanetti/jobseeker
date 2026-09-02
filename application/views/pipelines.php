@@ -9,7 +9,7 @@ foreach ($pipelineList as $item) {
     $groups[$group][] = $item;
 }
 ?>
-<link href="<?php echo base_url(); ?>assets/dist/css/pipeline-builder.css?v=11" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/pipeline-builder.css?v=14" rel="stylesheet" type="text/css">
 <div class="content-wrapper">
   <section class="content-header">
     <h1>Pipelines <small>workflow orchestration</small></h1>

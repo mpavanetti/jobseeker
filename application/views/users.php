@@ -56,7 +56,7 @@
                         <td><?php echo html_escape($record->mobile); ?></td>
                         <td><?php echo html_escape($record->role); ?></td>
                         <td><?php echo html_escape($record->group); ?></td>
-                        <td><?php echo date("d-m-Y", strtotime($record->createdDtm)) ?></td>
+                        <td><?php echo js_time_date($record->createdDtm, array('format' => 'd-m-Y')) ?></td>
                         <td class="text-center">
                             <a class="btn btn-sm btn-primary" href="<?= base_url().'login-history/'.(int) $record->userId; ?>" title="Login history"><i class="fa fa-history"></i></a> |
                             <a class="btn btn-sm btn-info" href="<?php echo base_url().'editOld/'.(int) $record->userId; ?>" title="Edit"><i class="fa fa-pencil"></i></a>
