@@ -245,4 +245,15 @@ class MlCompute_model extends CI_Model
     {
         return (int) $this->db->where_not_in('status', self::RUN_TERMINAL)->count_all_results('ml_job_runs');
     }
+
+    public function staleActiveRuns($olderThanSeconds = 60)
+    {
+        $cutoff = date('Y-m-d H:i:s', time() - max(10, (int) $olderThanSeconds));
+        return $this->db->where_not_in('status', self::RUN_TERMINAL)
+            ->where('updated_at <', $cutoff)
+            ->order_by('id', 'ASC')
+            ->limit(25)
+            ->get('ml_job_runs')
+            ->result();
+    }
 }

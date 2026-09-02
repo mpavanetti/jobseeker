@@ -362,6 +362,39 @@ class ComputeEngineClient
     }
 
     /**
+     * Run a short command inside a running container and return its combined
+     * output. Used to reach services on a per-run bridge network the PHP
+     * container cannot route to (e.g. the Spark master web UI).
+     *
+     * @return array{ok:bool, output:string, exitCode:int|null}
+     */
+    public function exec($id, array $cmd, $timeoutSeconds = 6)
+    {
+        $create = $this->request('POST', '/containers/'.rawurlencode((string) $id).'/exec', array(
+            'AttachStdout' => TRUE,
+            'AttachStderr' => TRUE,
+            'Tty' => TRUE,
+            'Cmd' => array_values($cmd),
+        ), $timeoutSeconds);
+        if ($create['status'] < 200 || $create['status'] >= 300 || empty($create['json']['Id'])) {
+            return array('ok' => FALSE, 'output' => '', 'exitCode' => NULL);
+        }
+
+        $execId = (string) $create['json']['Id'];
+        $start = $this->request('POST', '/exec/'.rawurlencode($execId).'/start', array('Detach' => FALSE, 'Tty' => TRUE), $timeoutSeconds);
+        $output = $this->stripControlFrames((string) $start['body']);
+
+        $inspect = $this->request('GET', '/exec/'.rawurlencode($execId).'/json', NULL, 4);
+        $exit = isset($inspect['json']['ExitCode']) ? (int) $inspect['json']['ExitCode'] : NULL;
+
+        return array(
+            'ok' => $start['status'] >= 200 && $start['status'] < 300,
+            'output' => $output,
+            'exitCode' => $exit,
+        );
+    }
+
+    /**
      * List containers carrying a given label (optionally a specific value).
      *
      * @return array<int,array> raw Engine container summaries

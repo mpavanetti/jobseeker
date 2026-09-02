@@ -100,6 +100,21 @@ class KubernetesComputeDriver extends ComputeDriver
         // Teardown must never throw (called from failure paths); make it a no-op.
     }
 
+    public function provisionPersistentCluster(array $spec)
+    {
+        $this->notImplemented();
+    }
+
+    public function teardownByKey($key)
+    {
+        // Teardown must never throw; no-op until implemented.
+    }
+
+    public function removeSparkDriver(array $handle)
+    {
+        // No-op until implemented.
+    }
+
     public function runMlJob(array $spec)
     {
         $this->notImplemented();

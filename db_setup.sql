@@ -644,6 +644,7 @@ CREATE TABLE IF NOT EXISTS `spark_clusters` (
   `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
   `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
   `runtime_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `lifecycle` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'job',
   `driver_cores` int(11) NOT NULL DEFAULT 1,
   `driver_memory_mb` int(11) NOT NULL DEFAULT 1024,
   `worker_cores` int(11) NOT NULL DEFAULT 1,
@@ -674,12 +675,15 @@ CREATE TABLE IF NOT EXISTS `spark_jobs` (
   `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
   `cluster_id` int(11) NOT NULL,
   `source_type` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'repository',
+  `mode` varchar(16) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'batch',
   `entry_point` varchar(500) COLLATE utf8_unicode_ci NOT NULL,
   `application_args` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
   `inline_code` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
   `requirements_txt` text COLLATE utf8_unicode_ci DEFAULT NULL,
   `spark_submit_conf_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
   `schedule_cron` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `workers` int(11) DEFAULT NULL,
+  `jenkins_job_name` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `version` int(11) NOT NULL DEFAULT 1,
   `created_at` datetime NOT NULL,
@@ -695,6 +699,7 @@ CREATE TABLE IF NOT EXISTS `spark_jobs` (
 CREATE TABLE IF NOT EXISTS `spark_job_runs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `job_id` int(11) NOT NULL,
+  `persistent_cluster_id` int(11) DEFAULT NULL,
   `run_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
   `status` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'QUEUED',
   `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
@@ -703,6 +708,8 @@ CREATE TABLE IF NOT EXISTS `spark_job_runs` (
   `master_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
   `driver_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
   `worker_container_ids_json` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `jenkins_build_number` int(10) unsigned DEFAULT NULL,
+  `jenkins_queue_id` bigint(20) unsigned DEFAULT NULL,
   `worker_count` int(11) NOT NULL DEFAULT 0,
   `exit_code` int(11) DEFAULT NULL,
   `log_tail` mediumtext COLLATE utf8_unicode_ci DEFAULT NULL,
@@ -716,6 +723,34 @@ CREATE TABLE IF NOT EXISTS `spark_job_runs` (
   KEY `spark_job_run_job` (`job_id`,`id`),
   KEY `spark_job_run_status` (`status`,`updated_at`),
   CONSTRAINT `spark_job_runs_job_fk` FOREIGN KEY (`job_id`) REFERENCES `spark_jobs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- One row per persistent Spark cluster: its live containers, published host
+-- ports (reachable in-stack as docker-runtime:<port>) and idle clock.
+CREATE TABLE IF NOT EXISTS `spark_cluster_instances` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `cluster_id` int(11) NOT NULL,
+  `cluster_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `status` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'STOPPED',
+  `network` varchar(120) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `master_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `worker_container_ids_json` varchar(4000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `jupyter_container_id` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `jupyter_port` int(11) DEFAULT NULL,
+  `jupyter_token` varchar(80) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `spark_ui_port` int(11) DEFAULT NULL,
+  `master_port` int(11) DEFAULT NULL,
+  `worker_count` int(11) NOT NULL DEFAULT 0,
+  `error_message` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `triggered_by` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `last_seen_at` datetime DEFAULT NULL,
+  `stopped_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `spark_cluster_instance_cluster` (`cluster_id`),
+  KEY `spark_cluster_instance_status` (`status`,`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `ml_jobs` (

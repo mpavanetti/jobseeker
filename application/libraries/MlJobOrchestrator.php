@@ -67,6 +67,7 @@ class MlJobOrchestrator
         if (! $job || ! $runtime) {
             return array('ok' => FALSE, 'run' => NULL, 'message' => 'Job and runtime are required.');
         }
+        $this->reapStaleRuns();
         if ($this->model->activeMlRunCount() >= $this->maxConcurrentRuns()) {
             return array('ok' => FALSE, 'run' => NULL, 'message' => 'Too many ML runs are already in flight ('.$this->maxConcurrentRuns().' max).');
         }
@@ -210,6 +211,19 @@ class MlJobOrchestrator
     public function capacity()
     {
         return array('host' => $this->driver->capacitySnapshot(), 'demand' => NULL);
+    }
+
+    /** See SparkClusterOrchestrator::reapStaleRuns - same reasoning, single container. */
+    private function reapStaleRuns()
+    {
+        foreach ($this->model->staleActiveRuns(300) as $run) {
+            $this->driver->teardownMl($this->handleFromRun($run));
+            $this->model->updateMlRun($run->id, array(
+                'status' => 'FAILED',
+                'error_message' => 'No status poll was received for over 5 minutes; the run was reaped.',
+                'completed_at' => date('Y-m-d H:i:s'),
+            ));
+        }
     }
 
     // --- internals ---------------------------------------------------

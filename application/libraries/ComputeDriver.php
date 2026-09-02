@@ -86,6 +86,39 @@ abstract class ComputeDriver
     /** Remove driver, workers, master and the per-run network. Idempotent. */
     abstract public function teardownSpark(array $handle);
 
+    /**
+     * Persistent (long-lived) Spark cluster: network + master + workers + a
+     * JupyterLab container, with the master's 7077/8080 and Jupyter's 8888
+     * published on the engine so the app + editor can reach them in-stack.
+     *
+     * @param array $spec run_key (hex), job_name, environment, image, worker_count,
+     *                    worker_cores, worker_memory_mb, spark_conf, env, bind_source,
+     *                    jupyter_image, jupyter_token, publish_ports {containerPort:hostPort}
+     * @return array handle merged with jupyter_id + published_ports
+     * @throws RuntimeException
+     */
+    abstract public function provisionPersistentCluster(array $spec);
+
+    /** Tear a persistent cluster down by its stable key. Idempotent. */
+    abstract public function teardownByKey($key);
+
+    /**
+     * Remove only the spark-submit driver container for a run that ran against a
+     * persistent cluster (leaves master / workers / jupyter up). Idempotent.
+     */
+    abstract public function removeSparkDriver(array $handle);
+
+    /**
+     * Spark standalone master state (alive workers, cores/memory used vs total,
+     * active apps) for the rich run monitor. NULL when unavailable.
+     *
+     * @return array|null
+     */
+    public function sparkMasterState(array $handle)
+    {
+        return NULL;
+    }
+
     // --- Machine Learning single-container jobs ---------------------------
 
     /**
@@ -308,8 +341,19 @@ class DockerComputeDriver extends ComputeDriver
             'master_id' => '',
             'worker_ids' => array(),
             'driver_id' => '',
+            'jupyter_id' => '',
             'bind_source' => $this->assertBindSource($spec, 'spark'),
         );
+
+        // Persistent clusters publish the master (7077 client + 8080 UI) and a
+        // JupyterLab port so the app + editor can reach them in-stack.
+        $publishPorts = isset($spec['publish_ports']) && is_array($spec['publish_ports']) ? $spec['publish_ports'] : array();
+        $masterPublish = array();
+        foreach (array(7077, 8080) as $containerPort) {
+            if (! empty($publishPorts[$containerPort])) {
+                $masterPublish[$containerPort] = (int) $publishPorts[$containerPort];
+            }
+        }
 
         try {
             $masterCmd = array(
@@ -324,7 +368,7 @@ class DockerComputeDriver extends ComputeDriver
                 'js-'.$runKey.'-master', $image, $masterCmd,
                 $this->envList($spec['env'] ?? array()),
                 $labels + array(self::LABEL_ROLE => 'master'),
-                $networkName, 'master', 1.0, 1024, $workspaceBind
+                $networkName, 'master', 1.0, 1024, $workspaceBind, $masterPublish
             );
 
             for ($i = 1; $i <= $workerCount; $i++) {
@@ -342,12 +386,76 @@ class DockerComputeDriver extends ComputeDriver
                     $networkName, 'worker-'.$i, $workerCores, $workerMemMb, $workspaceBind
                 );
             }
+
+            if (! empty($spec['with_jupyter'])) {
+                $jupyterImage = $this->assertImage($spec['jupyter_image'] ?? $image);
+                $jupyterToken = preg_replace('/[^A-Za-z0-9._-]/', '', (string) ($spec['jupyter_token'] ?? ''));
+                if ($jupyterToken === '') {
+                    $jupyterToken = bin2hex(random_bytes(8));
+                }
+                $jupyterPort = ! empty($publishPorts[8888]) ? (int) $publishPorts[8888] : 0;
+                $jupyterCmd = array(
+                    'jupyter', 'lab', '--ip=0.0.0.0', '--port=8888', '--no-browser',
+                    '--ServerApp.token='.$jupyterToken,
+                    '--ServerApp.allow_origin=*',
+                    '--ServerApp.disable_check_xsrf=True',
+                    '--ServerApp.root_dir=/tmp',
+                );
+                // The spark image's runtime user has HOME=/nonexistent; point
+                // Jupyter's config / runtime / data dirs at a writable path.
+                $jupyterEnv = $this->envList(array_merge(
+                    is_array($spec['env'] ?? NULL) ? $spec['env'] : array(),
+                    array(
+                        'HOME' => '/tmp',
+                        'JUPYTER_CONFIG_DIR' => '/tmp/.jupyter',
+                        'JUPYTER_RUNTIME_DIR' => '/tmp/jupyter/runtime',
+                        'JUPYTER_DATA_DIR' => '/tmp/jupyter/data',
+                        'IPYTHONDIR' => '/tmp/.ipython',
+                    )
+                ));
+                $handle['jupyter_id'] = $this->createComputeContainer(
+                    'js-'.$runKey.'-jupyter', $jupyterImage, $jupyterCmd,
+                    $jupyterEnv,
+                    $labels + array(self::LABEL_ROLE => 'jupyter'),
+                    $networkName, 'jupyter', 1.0, 1536, $workspaceBind,
+                    $jupyterPort > 0 ? array(8888 => $jupyterPort) : array()
+                );
+                $handle['jupyter_token'] = $jupyterToken;
+            }
         } catch (RuntimeException $exception) {
             $this->teardownSpark($handle);
             throw $exception;
         }
 
         return $handle;
+    }
+
+    public function provisionPersistentCluster(array $spec)
+    {
+        $spec['with_jupyter'] = TRUE;
+        $handle = $this->provisionSparkCluster($spec);
+        $handle['published_ports'] = isset($spec['publish_ports']) && is_array($spec['publish_ports'])
+            ? $spec['publish_ports'] : array();
+        return $handle;
+    }
+
+    public function teardownByKey($key)
+    {
+        $key = strtolower(trim((string) $key));
+        if (! preg_match('/^[a-f0-9]{8,32}$/', $key)) {
+            return;
+        }
+        $this->teardownSpark(array('run_key' => $key, 'network' => 'js-'.$key));
+    }
+
+    public function removeSparkDriver(array $handle)
+    {
+        if (! empty($handle['driver_id'])) {
+            $this->engine->removeContainer($handle['driver_id'], TRUE);
+        }
+        // The driver is the only container tagged with this run's key when the
+        // run executed against a persistent cluster; the sweep is safe.
+        $this->sweepRun($handle);
     }
 
     public function submitSparkJob(array $handle, array $spec)
@@ -464,6 +572,9 @@ class DockerComputeDriver extends ComputeDriver
         if (! empty($handle['driver_id'])) {
             $targets[] = array('role' => 'driver', 'name' => 'driver', 'id' => (string) $handle['driver_id']);
         }
+        if (! empty($handle['jupyter_id'])) {
+            $targets[] = array('role' => 'jupyter', 'name' => 'jupyter', 'id' => (string) $handle['jupyter_id']);
+        }
 
         return $this->collectStats($targets);
     }
@@ -473,6 +584,40 @@ class DockerComputeDriver extends ComputeDriver
     {
         $id = (string) ($handle['container_id'] ?? '');
         return $this->collectStats($id === '' ? array() : array(array('role' => 'job', 'name' => 'job', 'id' => $id)));
+    }
+
+    /**
+     * Scrape the Spark standalone master's web UI JSON from inside the master
+     * container (the PHP process cannot route to the per-run bridge network).
+     */
+    public function sparkMasterState(array $handle)
+    {
+        $masterId = (string) ($handle['master_id'] ?? '');
+        if ($masterId === '') {
+            return NULL;
+        }
+        $res = $this->engine->exec($masterId, array('curl', '-s', '--max-time', '3', 'http://localhost:8080/json/'), 6);
+        if (empty($res['ok'])) {
+            return NULL;
+        }
+        $json = json_decode(trim((string) $res['output']), TRUE);
+        if (! is_array($json)) {
+            return NULL;
+        }
+        $workers = isset($json['workers']) && is_array($json['workers']) ? $json['workers'] : array();
+        $alive = isset($json['aliveworkers'])
+            ? (int) $json['aliveworkers']
+            : count(array_filter($workers, function ($w) { return isset($w['state']) && $w['state'] === 'ALIVE'; }));
+        return array(
+            'status' => isset($json['status']) ? (string) $json['status'] : 'ALIVE',
+            'workers' => count($workers),
+            'aliveworkers' => $alive,
+            'cores' => isset($json['cores']) ? (int) $json['cores'] : 0,
+            'coresused' => isset($json['coresused']) ? (int) $json['coresused'] : 0,
+            'memory' => isset($json['memory']) ? (int) $json['memory'] : 0,
+            'memoryused' => isset($json['memoryused']) ? (int) $json['memoryused'] : 0,
+            'activeapps' => isset($json['activeapps']) && is_array($json['activeapps']) ? count($json['activeapps']) : 0,
+        );
     }
 
     private function collectStats(array $targets)
@@ -515,7 +660,7 @@ class DockerComputeDriver extends ComputeDriver
     public function teardownSpark(array $handle)
     {
         foreach (array_merge(
-            array($handle['driver_id'] ?? ''),
+            array($handle['driver_id'] ?? '', $handle['jupyter_id'] ?? ''),
             is_array($handle['worker_ids'] ?? NULL) ? $handle['worker_ids'] : array(),
             array($handle['master_id'] ?? '')
         ) as $containerId) {
@@ -636,10 +781,11 @@ class DockerComputeDriver extends ComputeDriver
      * @param float       $cores      cpu limit
      * @param int         $memoryMb   memory limit (MiB)
      * @param string|null $bind       "src:dst:ro" bind, or null
+     * @param array       $publishPorts {containerPort:int => hostPort:int} to publish on the engine
      * @return string container id
      * @throws RuntimeException
      */
-    private function createComputeContainer($name, $image, array $cmd, array $env, array $labels, $network, $alias, $cores, $memoryMb, $bind)
+    private function createComputeContainer($name, $image, array $cmd, array $env, array $labels, $network, $alias, $cores, $memoryMb, $bind, array $publishPorts = array())
     {
         $hostConfig = array(
             'NetworkMode' => $network,
@@ -653,6 +799,22 @@ class DockerComputeDriver extends ComputeDriver
             $hostConfig['Binds'] = array($bind);
         }
 
+        $exposedPorts = array();
+        $portBindings = array();
+        foreach ($publishPorts as $containerPort => $hostPort) {
+            $containerPort = (int) $containerPort;
+            $hostPort = (int) $hostPort;
+            if ($containerPort < 1 || $containerPort > 65535 || $hostPort < 1 || $hostPort > 65535) {
+                continue;
+            }
+            $key = $containerPort.'/tcp';
+            $exposedPorts[$key] = (object) array();
+            $portBindings[$key] = array(array('HostIp' => '0.0.0.0', 'HostPort' => (string) $hostPort));
+        }
+        if ($portBindings) {
+            $hostConfig['PortBindings'] = $portBindings;
+        }
+
         $spec = array(
             'Image' => $image,
             'Cmd' => array_values($cmd),
@@ -661,6 +823,9 @@ class DockerComputeDriver extends ComputeDriver
             'Tty' => TRUE,
             'HostConfig' => $hostConfig,
         );
+        if ($exposedPorts) {
+            $spec['ExposedPorts'] = $exposedPorts;
+        }
         if ($network !== 'none' && $alias !== NULL) {
             $spec['NetworkingConfig'] = array('EndpointsConfig' => array(
                 $network => array('Aliases' => array($alias)),
