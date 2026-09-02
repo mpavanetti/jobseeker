@@ -37,10 +37,13 @@ assert(/addEventListener\('submit'[\s\S]*editor\.updateElement\(\)/.test(editor)
 assert((controller.match(/\$msg = \$this->input->post\('msg'\);/g) || []).length === 2, 'Create and update must read email HTML without XSS rewriting.');
 assert(!controller.includes("xss_clean($this->input->post('msg'))"), 'Email HTML must not be rewritten by the generic XSS cleaner.');
 
-assert(assetSync.includes("copyDirectory(fromPackage('ckeditor')"), 'CKEditor must be restored into frontend assets.');
+assert(assetSync.includes("copyDirectory(fromPackage('ckeditor4')"), 'CKEditor must be restored into frontend assets.');
 assert(!assetSync.includes("fromPackage('codemirror')"), 'The CodeMirror sync step must be removed.');
 assert(!assetSync.includes("js-beautify"), 'The js-beautify sync step must be removed.');
-assert.strictEqual(packageJson.dependencies.ckeditor, '4.12.1');
+// Pinned to the maintained CKEditor 4 LTS package (the unmaintained `ckeditor`
+// npm package stopped at 4.12.1, which carries known XSS advisories).
+assert.strictEqual(packageJson.dependencies.ckeditor4, '4.25.2');
+assert(!packageJson.dependencies.ckeditor, 'The unmaintained `ckeditor` package must be replaced by `ckeditor4`.');
 assert(!packageJson.dependencies.codemirror, 'codemirror must be removed from dependencies.');
 assert(!packageJson.dependencies['js-beautify'], 'js-beautify must be removed from dependencies.');
 
