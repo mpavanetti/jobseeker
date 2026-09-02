@@ -29,7 +29,11 @@ class JobCreation extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Job Creation';
-      $data = array('job_creation_dates' => $this->readJobCreationDates());
+      $jobSamples = require APPPATH . 'config/job_samples.php';
+      $data = array(
+        'job_creation_dates' => $this->readJobCreationDates(),
+        'job_samples' => is_array($jobSamples) ? $jobSamples : array()
+      );
         
       $this->loadViews("jobCreation", $this->global, $data, NULL);
 

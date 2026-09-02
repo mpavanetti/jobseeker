@@ -20,6 +20,9 @@ class DependencyScanner
     /** Data asset references: js.asset("x"), js.dataset('x'), get_asset("x"). */
     const ASSET_CALL = '/(?<![A-Za-z0-9_])(?:get_)?(?:asset|dataset)\s*\(\s*(["\'])([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
 
+    /** jobseeker-asset ASSET_KEY references used by shell jobs. */
+    const ASSET_CLI = '/(?:^|[;&|(`]|\b(?:if|then|do)\s+)[ \t]*(?:jobseeker-asset|JOBSEEKER_ASSET_HELPER"?)\s+(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/m';
+
     /** jobseeker://<environment>/<asset-key>[/...] runtime URIs. */
     const ASSET_URI = '#jobseeker://[A-Za-z0-9._-]+/([A-Za-z0-9][A-Za-z0-9._-]{0,127})#';
 
@@ -43,6 +46,7 @@ class DependencyScanner
                 $this->collect($pattern, $text, $from, $connectors, TRUE);
             }
             $this->collect(self::ASSET_CALL, $text, $from, $datasets, TRUE);
+            $this->collect(self::ASSET_CLI, $text, $from, $datasets, TRUE);
             $this->collect(self::ASSET_URI, $text, $from, $datasets, FALSE);
         }
 
