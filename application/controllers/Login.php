@@ -58,9 +58,20 @@ class Login extends CI_Controller
         {
             $email = strtolower($this->security->xss_clean($this->input->post('email')));
             $password = $this->input->post('password');
-            
+            $clientIp = $this->input->ip_address();
+
+            $throttle = $this->login_model->loginThrottleState($email, $clientIp);
+            if($throttle['blocked'])
+            {
+                $this->session->set_flashdata('error', 'Too many failed sign-in attempts. Try again in about '.$throttle['retry_after'].' minutes.');
+                log_message('error', 'Login throttled for '.$email.' from '.$clientIp.'.');
+                $this->index();
+                return;
+            }
+
             $result = $this->login_model->loginMe($email, $password);
-            
+            $this->login_model->recordLoginAttempt($email, $clientIp, !empty($result));
+
             if(!empty($result))
             {
                 $lastLogin = $this->login_model->lastLoginInfo($result->userId);

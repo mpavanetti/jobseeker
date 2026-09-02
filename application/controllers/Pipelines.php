@@ -683,16 +683,13 @@ class Pipelines extends BaseController
         );
 
         if ($cron['ok'] && $cron['spec'] !== '' && strpos($cron['spec'], '@') !== 0) {
-            $check = $this->requestJenkins('GET', 'descriptorByName/hudson.triggers.TimerTrigger/checkSpec?value=' . rawurlencode($cron['spec']));
-            if ((int) $check['status'] === 200 && preg_match('#<div class="(ok|warning|error)">(.*?)</div>#s', (string) $check['body'], $m)) {
-                $payload['jenkins'] = array(
-                    'level'   => $m[1],
-                    'message' => trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
-                );
-                if ($m[1] === 'error') {
+            $jenkins = $this->describeScheduleWithJenkins($cron['spec']);
+            if ($jenkins !== NULL) {
+                $payload['jenkins'] = $jenkins;
+                if ($jenkins['level'] === 'error') {
                     $payload['ok'] = FALSE;
                     if ($payload['error'] === '') {
-                        $payload['error'] = $payload['jenkins']['message'];
+                        $payload['error'] = $jenkins['message'];
                     }
                 }
             }

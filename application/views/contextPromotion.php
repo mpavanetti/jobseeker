@@ -525,13 +525,14 @@ foreach($promotionJobs as $workload) {
                 $color = isset($job['color']) ? $job['color'] : '';
                 $statusClass = strpos($color, 'blue') === 0 || strpos($color, 'green') === 0 ? 'success' : (strpos($color, 'red') === 0 ? 'danger' : 'default');
                 $lastBuild = 'Never';
+                $lastBuildAtSeconds = 0;
                 if (!empty($job['lastBuild']) && isset($job['lastBuild']->number)) {
                   $lastBuild = '#'.(int) $job['lastBuild']->number;
                   if (isset($job['lastBuild']->result) && $job['lastBuild']->result !== NULL) {
                     $lastBuild .= ' '.(string) $job['lastBuild']->result;
                   }
                   if (isset($job['lastBuild']->timestamp) && (int) $job['lastBuild']->timestamp > 0) {
-                    $lastBuild .= ' at '.date('Y-m-d H:i', floor(((int) $job['lastBuild']->timestamp) / 1000));
+                    $lastBuildAtSeconds = (int) floor(((int) $job['lastBuild']->timestamp) / 1000);
                   }
                 }
               ?>
@@ -541,7 +542,7 @@ foreach($promotionJobs as $workload) {
                 <td><span class="promotion-inventory-environment"><span class="label label-default">Detecting</span></span></td>
                 <td><span class="label label-<?php echo $statusClass; ?>"><?php echo html_escape($color !== '' ? $color : 'unknown'); ?></span></td>
                 <td><?php echo $job['buildable'] ? '<span class="label label-success">Yes</span>' : '<span class="label label-default">No</span>'; ?></td>
-                <td><?php echo html_escape($lastBuild); ?></td>
+                <td><?php echo html_escape($lastBuild); ?><?php if ($lastBuildAtSeconds > 0) { echo ' at '.js_time($lastBuildAtSeconds, array('format' => 'Y-m-d H:i')); } ?></td>
               </tr>
               <?php } ?>
             </tbody>
@@ -574,7 +575,7 @@ foreach($promotionJobs as $workload) {
                   }
                 ?>
                 <tr>
-                  <td data-order="<?php echo html_escape(isset($history['created_at']) ? $history['created_at'] : ''); ?>"><?php echo html_escape(isset($history['created_at']) && $history['created_at'] !== '' ? date('Y-m-d H:i:s', strtotime($history['created_at'])) : 'Unknown'); ?></td>
+                  <td data-order="<?php echo html_escape(isset($history['created_at']) ? $history['created_at'] : ''); ?>"><?php echo js_time(isset($history['created_at']) ? $history['created_at'] : null, array('empty' => 'Unknown')); ?></td>
                   <td><?php echo html_escape(isset($history['created_by']) && $history['created_by'] !== '' ? $history['created_by'] : 'Unknown'); ?></td>
                   <td><span class="label label-default"><?php echo html_escape(isset($history['source_environment']) ? $history['source_environment'] : ''); ?></span> <i class="fa fa-long-arrow-right"></i> <span class="label label-primary"><?php echo html_escape(isset($history['target_environment']) ? $history['target_environment'] : ''); ?></span></td>
                   <td class="promotion-history-detail">

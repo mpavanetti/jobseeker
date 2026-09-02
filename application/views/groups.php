@@ -78,7 +78,7 @@
                         <td><?php echo (int) $record->id ?></td>
                         <td><?php echo html_escape($record->name) ?></td>
                         <td><?php echo html_escape($record->owner) ?></td>
-                        <td><?php echo html_escape(date("d-m-Y", strtotime($record->creation_date))) ?></td>
+                        <td><?php echo js_time_date($record->creation_date, array('format' => 'd-m-Y')) ?></td>
                         <td class="text-center"> 
                             <a class="btn btn-sm btn-danger deleteUser" href="#" data-userid="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></a>
                         </td>
