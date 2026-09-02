@@ -427,6 +427,18 @@ INSERT INTO `tbl_last_login` (`id`, `userId`, `sessionData`, `machineIp`, `userA
 	(360, 1, '{"role":"1","roleText":"System Administrator","name":"System Administrator"}', '::1', 'Chrome 92.0.4515.131', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36', 'Windows 10', '2021-08-11 14:37:07');
 /*!40000 ALTER TABLE `tbl_last_login` ENABLE KEYS */;
 
+-- Estrutura para tabela jobseeker.tbl_login_attempts (brute-force throttle for the sign-in form)
+CREATE TABLE IF NOT EXISTS `tbl_login_attempts` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `email` varchar(190) COLLATE utf8_unicode_ci NOT NULL,
+  `ip_address` varchar(45) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `successful` tinyint(1) NOT NULL DEFAULT 0,
+  `attempted_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `login_attempts_email` (`email`,`attempted_at`),
+  KEY `login_attempts_ip` (`ip_address`,`attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Copiando estrutura para tabela jobseeker.tbl_reset_password
 CREATE TABLE IF NOT EXISTS `tbl_reset_password` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
