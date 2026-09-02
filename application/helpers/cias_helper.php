@@ -194,4 +194,75 @@ if(!function_exists('setFlashData'))
     }
 }
 
+if(!function_exists('js_time'))
+{
+    /**
+     * Render a stored-in-UTC timestamp as a <time> element that
+     * assets/js/jobseeker-time.js localizes in the browser according to the
+     * per-viewer Local/UTC toggle in the top bar. The element's text content is
+     * a plain UTC fallback so the value is still readable with JavaScript off.
+     *
+     * The application stores and computes every timestamp in UTC (PHP timezone
+     * and the MariaDB session are both UTC), so a bare "Y-m-d H:i:s" string
+     * coming out of the database is treated as UTC here.
+     *
+     * @param string|int|null $value   DB datetime string, ISO-8601 string, or epoch seconds.
+     * @param array           $options relative  => bool  render "3 minutes ago" and keep it live
+     *                                 date_only => bool  drop the time part
+     *                                 empty     => string shown when $value is blank/zero/invalid (default "-")
+     *                                 format    => date() format for the no-JS fallback
+     * @return string HTML
+     */
+    function js_time($value, $options = array())
+    {
+        $empty = array_key_exists('empty', $options) ? (string) $options['empty'] : '-';
+
+        if ($value === null || $value === '' || $value === '0000-00-00 00:00:00' || $value === '0000-00-00') {
+            return html_escape($empty);
+        }
+
+        $timestamp = is_numeric($value) ? (int) $value : strtotime((string) $value);
+        if ($timestamp === false || $timestamp <= 0) {
+            return html_escape((string) $value);
+        }
+
+        $dateOnly = ! empty($options['date_only']);
+        $relative = ! empty($options['relative']);
+        $fallbackFormat = array_key_exists('format', $options)
+            ? (string) $options['format']
+            : ($dateOnly ? 'Y-m-d' : 'Y-m-d H:i:s');
+
+        $iso = gmdate('Y-m-d\TH:i:s\Z', $timestamp);
+        $fallback = gmdate($fallbackFormat, $timestamp).($dateOnly ? '' : ' UTC');
+
+        $attributes = ' datetime="'.html_escape($iso).'"';
+        if ($relative) {
+            $attributes .= ' data-time-relative';
+        }
+        if ($dateOnly) {
+            $attributes .= ' data-time-date-only';
+        }
+
+        return '<time'.$attributes.'>'.html_escape($fallback).'</time>';
+    }
+}
+
+if(!function_exists('js_time_date'))
+{
+    function js_time_date($value, $options = array())
+    {
+        $options['date_only'] = true;
+        return js_time($value, $options);
+    }
+}
+
+if(!function_exists('js_time_from_now'))
+{
+    function js_time_from_now($value, $options = array())
+    {
+        $options['relative'] = true;
+        return js_time($value, $options);
+    }
+}
+
 ?>

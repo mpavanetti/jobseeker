@@ -31,8 +31,8 @@
           <div class="box-body context-card-body">
             <div class="settings-edit-meta">
               <div><strong>Environment ID</strong>#<?php echo (int) $environment->Id; ?></div>
-              <div><strong>Created</strong><?php echo !empty($environment->CreatedOn) ? html_escape(date('Y-m-d H:i', strtotime($environment->CreatedOn))) : 'Unknown'; ?></div>
-              <div><strong>Last modified</strong><?php echo !empty($environment->ModifiedOn) ? html_escape(date('Y-m-d H:i', strtotime($environment->ModifiedOn))) : 'Never'; ?></div>
+              <div><strong>Created</strong><?php echo js_time($environment->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Unknown')); ?></div>
+              <div><strong>Last modified</strong><?php echo js_time($environment->ModifiedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Never')); ?></div>
             </div>
             <div class="context-form-grid">
               <div class="context-field settings-field-name"><label for="name">Environment name <span class="text-danger">*</span></label><input id="name" type="text" name="name" value="<?php echo html_escape($environment->Environment); ?>" class="form-control" maxlength="100" autocomplete="off" required><span class="context-help">Use a stable deployment-stage name.</span></div>

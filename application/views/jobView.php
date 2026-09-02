@@ -120,19 +120,32 @@
 
   .job-compare-table {
     margin-bottom: 0;
+    /* Fixed layout so the job columns split the remaining width evenly instead
+       of being sized by whichever job has the longest command line. */
+    table-layout: fixed;
+    width: 100%;
+    min-width: 640px;
   }
 
   .job-compare-table th:first-child,
   .job-compare-table td:first-child {
     background: #f9fafc;
-    min-width: 150px;
-    width: 150px;
+    width: 160px;
   }
 
   .job-compare-table th:not(:first-child),
   .job-compare-table td:not(:first-child) {
-    min-width: 240px;
     vertical-align: top !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .job-compare-table pre {
+    margin: 0;
+    max-width: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
   }
 
   .job-view-list {
@@ -697,11 +710,33 @@
         return 'Not available';
       }
 
+      if (window.JobSeekerTime) {
+        return JobSeekerTime.format(timestamp);
+      }
+
       if (typeof moment === 'function') {
         return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
       }
 
       return new Date(timestamp).toLocaleString();
+    }
+
+    // HTML variant returning a <time> element that jobseeker-time.js keeps
+    // localized as the global Local/UTC toggle changes.
+    function formatTimeHtml(timestamp) {
+      var n = parseInt(timestamp, 10);
+      if (! n) {
+        return 'Not available';
+      }
+      return window.JobSeekerTime ? JobSeekerTime.tag(n) : escapeHtml(formatTime(timestamp));
+    }
+
+    function formatJobCreationDateHtml(jobName) {
+      var n = jobCreationTimestamp(jobName);
+      if (! n) {
+        return 'Created: Not tracked';
+      }
+      return 'Created: ' + (window.JobSeekerTime ? JobSeekerTime.tag(n) : escapeHtml(formatJobCreationDate(jobName).replace(/^Created:\s*/, '')));
     }
 
     function jobCreationTimestamp(jobName) {
@@ -716,6 +751,10 @@
 
       if (! timestamp) {
         return 'Created: Not tracked';
+      }
+
+      if (window.JobSeekerTime) {
+        return 'Created: ' + JobSeekerTime.format(timestamp);
       }
 
       if (typeof moment === 'function') {
@@ -1035,7 +1074,7 @@
       }
 
       var result = build.building === true ? 'Running' : (build.result || 'No result');
-      return '<strong>#' + escapeHtml(build.number) + '</strong> ' + statusLabel(result) + '<br><small>' + escapeHtml(formatTime(build.timestamp)) + ' / ' + escapeHtml(formatDuration(build.duration)) + '</small><br><small>Worker: ' + escapeHtml(workerNodeLabel(build)) + '</small>';
+      return '<strong>#' + escapeHtml(build.number) + '</strong> ' + statusLabel(result) + '<br><small>' + formatTimeHtml(build.timestamp) + ' / ' + escapeHtml(formatDuration(build.duration)) + '</small><br><small>Worker: ' + escapeHtml(workerNodeLabel(build)) + '</small>';
     }
 
     function workerNodeLabel(build) {
@@ -1445,7 +1484,7 @@
           '<span class="job-view-job-name">' + escapeHtml(name) + '</span>' +
           '<span class="pull-right">' + renderJobStateLabel(job) + '</span>' +
           renderJobEnvironment(job) +
-          '<span class="job-view-job-created"><i class="fa fa-calendar-o"></i> ' + escapeHtml(formatJobCreationDate(name)) + '</span>' +
+          '<span class="job-view-job-created"><i class="fa fa-calendar-o"></i> ' + formatJobCreationDateHtml(name) + '</span>' +
         '</label>';
       });
 
@@ -1776,7 +1815,7 @@
           '<td><strong>#' + escapeHtml(build.number || '') + '</strong></td>' +
           '<td>' + statusLabel(build.building === true ? 'Running' : (build.result || 'No result')) + '</td>' +
           '<td>' + escapeHtml(workerNodeLabel(build)) + '</td>' +
-          '<td>' + escapeHtml(formatTime(build.timestamp)) + '</td>' +
+          '<td>' + formatTimeHtml(build.timestamp) + '</td>' +
           '<td>' + escapeHtml(formatDuration(build.duration)) + '</td>' +
         '</tr>';
       });

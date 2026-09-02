@@ -67,7 +67,7 @@ $providerLabels = array('pbi' => 'Microsoft Power BI', 'tbl' => 'Tableau', 'tblP
                 <td><span class="viz-pill viz-pill-neutral"><?php echo html_escape($provider); ?></span></td>
                 <td><strong><?php echo html_escape($record->users === '*' ? 'Everyone' : $record->users); ?></strong><br><small class="text-muted"><?php echo html_escape($record->groups); ?></small></td>
                 <td><?php echo html_escape($record->owner); ?></td>
-                <td><?php echo html_escape(date('M j, Y', strtotime($record->creation_date))); ?></td>
+                <td><?php echo js_time_date($record->creation_date, array('format' => 'M j, Y')); ?></td>
                 <td class="text-right"><button type="button" class="viz-btn viz-btn-light viz-preview-report" data-reportid="<?php echo (int) $record->id; ?>"><i class="fa fa-eye"></i></button> <button type="button" class="viz-btn viz-btn-danger viz-delete-report" data-reportid="<?php echo (int) $record->id; ?>"><i class="fa fa-trash"></i></button></td>
               </tr>
               <?php } ?>
