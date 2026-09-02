@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Frontend vendor libraries are restored into assets/bower_components by
+  # scripts/sync-frontend-assets.js from these npm pins. Keeping them current is
+  # the main way client-side CVEs (jQuery UI, CKEditor, Select2, ...) get fixed
+  # in this project, since the built assets are not committed.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      frontend-assets:
+        patterns:
+          - "*"
