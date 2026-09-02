@@ -1520,15 +1520,24 @@ private function rewritePromotionAgentAssignment($dom, $sourceEnvironment, $targ
   $canRoam = $this->directChildElement($root, 'canRoam');
 
   if ($agentLabel === '') {
+    // No online target agent: make the job plainly controller-routable and
+    // never leave it canRoam=false with an empty assignedNode (that ties a
+    // freestyle job to the "built-in" node and yields the confusing
+    // "doesn't have label 'built-in'" queue reason).
     $currentLabel = $assignedNode ? trim((string) $assignedNode->nodeValue) : '';
-    if ($assignedNode && $currentLabel !== '' && in_array($currentLabel, array($sourceAgentLabel, $targetAgentLabel), TRUE)) {
+    $isJobSeekerPin = $currentLabel !== '' && (
+      in_array($currentLabel, array($sourceAgentLabel, $targetAgentLabel), TRUE)
+      || preg_match('/^jobseeker-env-[a-z0-9_-]+$/i', $currentLabel)
+    );
+    if ($assignedNode && ($currentLabel === '' || $isJobSeekerPin)) {
       while ($assignedNode->firstChild) {
         $assignedNode->removeChild($assignedNode->firstChild);
       }
+      $currentLabel = '';
       $updates++;
     }
 
-    if ($updates > 0 && $canRoam && $canRoam->nodeValue !== 'true') {
+    if ($currentLabel === '' && $canRoam && $canRoam->nodeValue !== 'true') {
       while ($canRoam->firstChild) {
         $canRoam->removeChild($canRoam->firstChild);
       }
