@@ -118,6 +118,11 @@ services:
       - JOBSEEKER_SPARK_MAX_WORKERS=${JOBSEEKER_SPARK_MAX_WORKERS:-8}
       - JOBSEEKER_COMPUTE_RUN_TIMEOUT_SECONDS=${JOBSEEKER_COMPUTE_RUN_TIMEOUT_SECONDS:-1800}
       - JOBSEEKER_COMPUTE_MAX_CONCURRENT_RUNS=${JOBSEEKER_COMPUTE_MAX_CONCURRENT_RUNS:-3}
+      # Persistent Spark clusters (Start/Stop + JupyterLab dev loop)
+      - JOBSEEKER_SPARK_PERSISTENT_MAX=${JOBSEEKER_SPARK_PERSISTENT_MAX:-2}
+      - JOBSEEKER_SPARK_PERSISTENT_IDLE_MINUTES=${JOBSEEKER_SPARK_PERSISTENT_IDLE_MINUTES:-120}
+      - JOBSEEKER_SPARK_PERSISTENT_PORT_BASE=${JOBSEEKER_SPARK_PERSISTENT_PORT_BASE:-18000}
+      - JOBSEEKER_SPARK_TRIGGER_TOKEN=${JOBSEEKER_SPARK_TRIGGER_TOKEN:-jobseeker-local-spark-trigger-token}
       - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
       - JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS=${JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS:-1}
@@ -267,8 +272,9 @@ services:
       - ./docker:/context/docker:ro
     working_dir: /context
     command: >
-      sh -lc "docker build -t jobseeker/spark-runtime:4.0.0-python -f docker/spark/Dockerfile.spark-4.0-python docker/spark &&
-              docker build -t jobseeker/spark-runtime:4.0.0-scala  -f docker/spark/Dockerfile.spark-4.0-scala  docker/spark"
+      sh -lc "docker build -t jobseeker/spark-runtime:4.0.0-python          -f docker/spark/Dockerfile.spark-4.0-python          docker/spark &&
+              docker build -t jobseeker/spark-runtime:4.0.0-python-notebook -f docker/spark/Dockerfile.spark-4.0-python-notebook docker/spark &&
+              docker build -t jobseeker/spark-runtime:4.0.0-scala           -f docker/spark/Dockerfile.spark-4.0-scala           docker/spark"
     networks:
       - internal
 
@@ -329,6 +335,8 @@ services:
       - JOBSEEKER_DB_NAME=${JOBSEEKER_DB_NAME:-jobseeker}
       - JOBSEEKER_CONNECTOR_API_URL=http://nginx:8080/connector-runtime
       - JOBSEEKER_CONNECTOR_API_TOKEN=${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      - JOBSEEKER_SPARK_TRIGGER_URL=http://nginx:8080/spark-runtime
+      - JOBSEEKER_SPARK_TRIGGER_TOKEN=${JOBSEEKER_SPARK_TRIGGER_TOKEN:-jobseeker-local-spark-trigger-token}
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
@@ -368,6 +376,8 @@ services:
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      JOBSEEKER_SPARK_TRIGGER_URL: http://nginx:8080/spark-runtime
+      JOBSEEKER_SPARK_TRIGGER_TOKEN: ${JOBSEEKER_SPARK_TRIGGER_TOKEN:-jobseeker-local-spark-trigger-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
@@ -398,6 +408,8 @@ services:
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      JOBSEEKER_SPARK_TRIGGER_URL: http://nginx:8080/spark-runtime
+      JOBSEEKER_SPARK_TRIGGER_TOKEN: ${JOBSEEKER_SPARK_TRIGGER_TOKEN:-jobseeker-local-spark-trigger-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
@@ -428,6 +440,8 @@ services:
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      JOBSEEKER_SPARK_TRIGGER_URL: http://nginx:8080/spark-runtime
+      JOBSEEKER_SPARK_TRIGGER_TOKEN: ${JOBSEEKER_SPARK_TRIGGER_TOKEN:-jobseeker-local-spark-trigger-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
@@ -458,6 +472,8 @@ services:
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      JOBSEEKER_SPARK_TRIGGER_URL: http://nginx:8080/spark-runtime
+      JOBSEEKER_SPARK_TRIGGER_TOKEN: ${JOBSEEKER_SPARK_TRIGGER_TOKEN:-jobseeker-local-spark-trigger-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}

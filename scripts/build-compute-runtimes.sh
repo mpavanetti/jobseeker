@@ -21,6 +21,7 @@ cd "$ROOT_DIR"
 # name|dockerfile|context|tag
 RUNTIMES=(
   "spark-4.0-python|docker/spark/Dockerfile.spark-4.0-python|docker/spark|jobseeker/spark-runtime:4.0.0-python"
+  "spark-4.0-python-notebook|docker/spark/Dockerfile.spark-4.0-python-notebook|docker/spark|jobseeker/spark-runtime:4.0.0-python-notebook"
   "spark-4.0-scala|docker/spark/Dockerfile.spark-4.0-scala|docker/spark|jobseeker/spark-runtime:4.0.0-scala"
   "ml-cpu|docker/ml/Dockerfile.ml-cpu|docker/ml|jobseeker/ml-runtime:cpu"
   "ml-dl-cpu|docker/ml/Dockerfile.ml-dl-cpu|docker/ml|jobseeker/ml-runtime:dl-cpu"
@@ -40,7 +41,7 @@ for entry in "${RUNTIMES[@]}"; do
 done
 
 if [ "$BUILT" -eq 0 ]; then
-  echo "no runtime matched '${WANT}'. known: all spark-4.0-python spark-4.0-scala ml-cpu ml-dl-cpu" >&2
+  echo "no runtime matched '${WANT}'. known: all spark-4.0-python spark-4.0-python-notebook spark-4.0-scala ml-cpu ml-dl-cpu" >&2
   exit 2
 fi
 

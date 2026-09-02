@@ -1,0 +1,24 @@
+# JobSeeker Spark 4.0 notebook runtime image.
+#   docker build -t jobseeker/spark-runtime:4.0.0-python-notebook \
+#     -f docker/spark/Dockerfile.spark-4.0-python-notebook docker/spark
+#
+# The PySpark runtime plus JupyterLab. A *persistent* Spark cluster runs one
+# container from this image on the cluster network; a notebook opened in
+# OpenVSCode connects to it as a remote Jupyter server and drives the live
+# cluster (spark://master:7077). Job containers keep using the lean
+# jobseeker/spark-runtime:4.0.0-python image.
+FROM jobseeker/spark-runtime:4.0.0-python
+
+USER root
+
+# Pinned so image builds are reproducible. Bump deliberately.
+RUN set -eux; \
+    python3 -m pip install --no-cache-dir \
+        "jupyterlab==4.2.5" \
+        "ipykernel==6.29.5"
+
+LABEL com.jobseeker.runtime="spark-4.0-python-notebook" \
+      com.jobseeker.runtime.kind="spark-notebook" \
+      com.jobseeker.spark.version="4.0.0"
+
+USER spark
