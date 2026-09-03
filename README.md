@@ -55,6 +55,7 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 
 - Manage users, roles, projects, environments, context variables, uploads, SMTP, email templates, and runtime settings.
 - Monitor Jenkins executors, environment slots, worker nodes, Docker containers, images, volumes, and job resource usage.
+- Deploy the control plane on Kubernetes, autoscale the stateless web tier, and launch isolated Jenkins agent pods on demand per environment.
 
 ## Quick Start
 
@@ -80,6 +81,38 @@ For non-Docker jobs on smaller development machines, use the lightweight overrid
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.light.yml up -d --build
 ```
+
+For a clustered deployment, the [Kubernetes guide](deploy/kubernetes/README.md)
+provides Kustomize resources, namespace-scoped RBAC, HPA/PDB policies, shared
+repository storage, Kubernetes-managed OpenVSCode, and dynamic Jenkins agents.
+
+### Deployment modes
+
+The default `multi` mode is the current all-in-one control plane: DEV, QA, UAT,
+PROD, and any custom environments share the application, database, Jenkins,
+global environment selector, and promotion workflow.
+
+For regulated or independently operated environments, use `standalone` mode.
+Each installation has one immutable environment scope, its own data and
+secrets, and one matching worker pool. Browser parameters, cookies, connector
+requests, and job forms cannot broaden that scope. Cross-environment promotion
+buttons are removed; promote the same reviewed release through the separately
+managed deployments instead.
+
+Start a standalone Compose installation like this:
+
+```bash
+export JOBSEEKER_STANDALONE_ENVIRONMENT=PROD
+docker compose -p jobseeker-prod \
+  -f docker-compose.yml -f docker-compose.standalone.yml \
+  up -d --build
+```
+
+Use a different host or checkout, persistent storage, Compose project name,
+ports, credentials, encryption key, connector token, and editor token for each
+environment. Existing databases are supported: the configured environment is
+created/activated when needed, while records for other environments are left
+untouched and inaccessible until the installation returns to `multi` mode.
 
 Service | Default URL
 --- | ---
@@ -153,6 +186,8 @@ Use `--tmf-rows`, `--jobs`, `--pipelines`, `--pipeline-runs`, `--environments`, 
 
 Variable | Purpose
 --- | ---
+`JOBSEEKER_DEPLOYMENT_MODE` | Chooses `multi` (default) or the server-enforced `standalone` topology.
+`JOBSEEKER_STANDALONE_ENVIRONMENT` | Mandatory environment name for a standalone installation, such as `DEV` or `PROD`.
 `JOBSEEKER_ENCRYPTION_KEY` | Encrypts application-managed secrets and governed data-source credentials.
 `JOBSEEKER_DB_PASSWORD` / `JOBSEEKER_MYSQL_ROOT_PASSWORD` | Protect the application and root database accounts.
 `JENKINS_ADMIN_PASSWORD` | Configures the Jenkins account used by JobSeeker's server-side proxy.
@@ -195,7 +230,7 @@ Component | Responsibility
 Nginx | Serves the web application and routes PHP requests.
 PHP-FPM | Runs JobSeeker, authorization, configuration, orchestration, and API proxy logic.
 MariaDB | Stores users, settings, contexts, pipeline definitions, TMF records, and analytics metadata.
-Jenkins | Schedules and executes jobs and pipelines, and retains build history and console output.
+Jenkins | Schedules jobs and pipelines, retains history and console output, and can create disposable Kubernetes agents for execution.
 Docker runtime | Builds and runs isolated Docker workloads without exposing its daemon directly to the application.
 OpenVSCode Server | Provides full project workspaces for inline Docker Python jobs.
 Mailpit | Captures local email notifications during development and evaluation.
@@ -228,6 +263,7 @@ Transaction Monitoring Framework | [doc/jobseeker/TransactionMonitoring/README.m
 Insight Studio and connected BI | [doc/jobseeker/DataVisualization/README.md](doc/jobseeker/DataVisualization/README.md)
 Python ETL | [doc/Python/README.MD](doc/Python/README.MD)
 Lightweight runtime assessment | [doc/jobseeker/Architecture/lightweight-runtime.md](doc/jobseeker/Architecture/lightweight-runtime.md)
+Kubernetes deployment and scaling | [deploy/kubernetes/README.md](deploy/kubernetes/README.md)
 Talend ETL | [doc/Talend/README.md](doc/Talend/README.md)
 Jenkins notes | [doc/Jenkins/README.md](doc/Jenkins/README.md)
 

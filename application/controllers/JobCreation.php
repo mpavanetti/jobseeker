@@ -13,6 +13,12 @@ class JobCreation extends BaseController
   use JenkinsRunnerTrait;
 
     /**
+     * Cron triggers change rarely, so the whole job list shares one reading of
+     * them. Keep this short enough that a schedule edit shows up promptly.
+     */
+    const JOB_SCHEDULE_CACHE_TTL = 120;
+
+    /**
      * This is default constructor of the class
      */
     public function __construct()
@@ -41,6 +47,7 @@ class JobCreation extends BaseController
           ->order_by('environment', 'ASC')
           ->get()
           ->result();
+		$gitCredentials = $this->jobSeekerFilterEnvironmentRows($gitCredentials, 'environment', TRUE);
       }
       $data = array(
         'job_creation_dates' => $this->readJobCreationDates(),
@@ -341,11 +348,16 @@ class JobCreation extends BaseController
 
         if ($jobName !== '' && strpos((string) $jobName, '__jobseeker_') !== 0 && $this->isRunnableAvailableJob($job)) {
           $environment = $this->jenkinsEnvironmentFromJobData($job, $jobName);
+          // A parameter-declared environment is the same signal the browser would
+          // read back out of config.xml, so flag it and let the job list skip a
+          // per-job config.xml round trip for this job.
+          $parameterEnvironment = $this->normalizeJobSeekerEnvironment($this->jenkinsEnvironmentFromJobProperty($job));
 
           if ($environmentFilter === '' || $environmentFilter === 'ALL' || $environment === $environmentFilter) {
             $job->environment = $environment;
             $job->jobseekerEnvironment = $environment;
             $job->environmentSource = $environment === '' ? 'Not detected' : 'Jenkins metadata';
+            $job->environmentFromParameter = $environment !== '' && $parameterEnvironment === $environment;
 
             if (isset($job->jobs)) {
               unset($job->jobs);
@@ -410,7 +422,9 @@ class JobCreation extends BaseController
 
       @set_time_limit(180);
 
-      $environment = trim((string) $this->input->post('environment'));
+	      $environment = $this->jobSeekerIsStandaloneDeployment()
+	        ? $this->jobSeekerStandaloneEnvironment()
+	        : trim((string) $this->input->post('environment'));
       if ($environment === '' || $environment === '0' || strtoupper($environment) === 'ALL') {
         $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Select a concrete runtime environment before running the inline Python preview.'), 400);
         return;
@@ -1190,6 +1204,29 @@ class JobCreation extends BaseController
 
       private function openVsCodeRuntimeState($startIfStopped = FALSE) {
         $idleTimeoutMinutes = $this->openVsCodeIdleTimeoutMinutes();
+        if ($this->envFlag('JOBSEEKER_OPENVSCODE_MANAGED_EXTERNALLY', FALSE)) {
+          $internalUrl = trim((string) getenv('JOBSEEKER_OPENVSCODE_INTERNAL_URL'));
+          if ($internalUrl === '') {
+            $internalUrl = 'http://openvscode:3000';
+          }
+          $token = trim((string) getenv('JOBSEEKER_OPENVSCODE_TOKEN'));
+          $health = $this->requestInternalHttp($internalUrl, 'GET', '/?'.http_build_query(array('tkn' => $token), '', '&', PHP_QUERY_RFC3986), '', 3);
+          $ready = $health['status'] >= 200 && $health['status'] < 400;
+
+          return array(
+            'available' => TRUE,
+            'running' => $ready,
+            'ready' => $ready,
+            'starting' => ! $ready,
+            'started' => FALSE,
+            'status' => $ready ? 'ready' : 'unavailable',
+            'idleShutdownMinutes' => $idleTimeoutMinutes,
+            'message' => $ready
+              ? 'OpenVSCode is ready.'
+              : 'The externally managed OpenVSCode service is not ready. Check its Kubernetes Deployment and Service.'
+          );
+        }
+
         $monitorUrl = trim((string) getenv('JOBSEEKER_DOCKER_MONITOR_URL'));
         if ($monitorUrl === '') {
           $monitorUrl = 'http://docker-monitor-proxy:8080';
@@ -3029,6 +3066,9 @@ class JobCreation extends BaseController
       }
 
       private function dependencyEnvironment() {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+		  return $this->jobSeekerStandaloneEnvironment();
+		}
         $environment = trim((string) $this->input->post('environment', TRUE));
         if ($environment === '') {
           $environment = trim((string) $this->input->get('environment', TRUE));
@@ -3371,6 +3411,136 @@ class JobCreation extends BaseController
         }
       }
 
+      /**
+       * Job schedules for the whole job list, in one request.
+       *
+       * A cron trigger only exists in a job's config.xml; Jenkins does not expose
+       * it through the REST API tree. The job list used to fetch config.xml from
+       * the browser for every job, which meant one proxied Jenkins round trip per
+       * job. Against a PHP-FPM pool of a dozen workers, a single job list view
+       * saturated the pool and blocked every other request.
+       *
+       * Collecting them here costs one Jenkins call per job on a warm internal
+       * connection, shared by every viewer through the cache, instead of one
+       * browser round trip per job per page view.
+       */
+      public function jobSchedules() {
+        if (! $this->canManageJobs()) {
+          $this->output->set_status_header(403);
+          $this->output->set_content_type('application/json');
+          echo json_encode(array('schedules' => new stdClass(), 'error' => 'Access denied.'));
+          return;
+        }
+
+        $this->load->driver('cache', array('adapter' => 'file'));
+        $cacheKey = 'job_schedules';
+        $fresh = in_array((string) $this->input->get('fresh'), array('1', 'true', 'yes'), TRUE);
+        $schedules = $fresh ? FALSE : $this->cache->get($cacheKey);
+        $fromCache = ($schedules !== FALSE);
+
+        if (! $fromCache) {
+          $schedules = $this->collectJobSchedules();
+
+          if ($schedules === NULL) {
+            $this->output->set_status_header(502);
+            $this->output->set_content_type('application/json');
+            echo json_encode(array('schedules' => new stdClass(), 'error' => 'Jenkins returned an invalid jobs payload.'));
+            return;
+          }
+
+          $this->cache->save($cacheKey, $schedules, self::JOB_SCHEDULE_CACHE_TTL);
+        }
+
+        $this->output->set_status_header(200);
+        $this->output
+          ->set_header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0')
+          ->set_content_type('application/json', 'utf-8')
+          ->set_output(json_encode(array(
+            'ok' => TRUE,
+            'fromCache' => $fromCache,
+            'cacheTtl' => self::JOB_SCHEDULE_CACHE_TTL,
+            'schedules' => empty($schedules) ? new stdClass() : $schedules
+          )));
+      }
+
+      /** Read every job's cron spec and parameter-declared environment. */
+      private function collectJobSchedules() {
+        $response = $this->requestJenkins('GET', 'api/json?tree='.$this->availableJobsTree(3));
+
+        if ((int) $response['status'] !== 200) {
+          return NULL;
+        }
+
+        $payload = json_decode($response['body']);
+        if (! is_object($payload) || ! isset($payload->jobs) || ! is_array($payload->jobs)) {
+          return NULL;
+        }
+
+        $availableJobs = array();
+        $this->collectAvailableJobs($payload->jobs, $availableJobs, '');
+
+        $jobNames = array();
+        foreach ($availableJobs as $job) {
+          $jobName = isset($job->fullName) && $job->fullName !== '' ? $job->fullName : (isset($job->name) ? $job->name : '');
+          if ($jobName !== '') {
+            $jobNames[$jobName] = $job;
+          }
+        }
+
+        $paths = array();
+        foreach (array_keys($jobNames) as $jobName) {
+          $paths[$jobName] = $this->jenkinsJobConfigPath($jobName);
+        }
+
+        $bodies = $this->requestJenkinsMany(array_values($paths));
+
+        $schedules = array();
+        foreach ($jobNames as $jobName => $job) {
+          $body = isset($bodies[$paths[$jobName]]) ? $bodies[$paths[$jobName]] : '';
+          $schedules[$jobName] = array(
+            'spec' => $this->cronSpecFromJobConfig($body),
+            'environment' => isset($job->environment) ? $job->environment : '',
+            'environmentFromParameter' => ! empty($job->environmentFromParameter)
+          );
+        }
+
+        return $schedules;
+      }
+
+      private function jenkinsJobConfigPath($jobName) {
+        return 'job/'.implode('/job/', array_map('rawurlencode', explode('/', trim((string) $jobName, '/')))).'/config.xml';
+      }
+
+      /**
+       * The raw text of a job's first cron trigger, or '' when it has none. The
+       * browser still decides how to summarize and schedule it, so the wording in
+       * the job list stays defined in one place.
+       */
+      private function cronSpecFromJobConfig($configXml) {
+        if (trim((string) $configXml) === '') {
+          return '';
+        }
+
+        $previous = libxml_use_internal_errors(TRUE);
+        $xml = simplexml_load_string($configXml);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        if ($xml === FALSE) {
+          return '';
+        }
+
+        $specs = $xml->xpath('//triggers//spec');
+        foreach (is_array($specs) ? $specs : array() as $spec) {
+          $value = trim((string) $spec);
+          if ($value !== '') {
+            return $value;
+          }
+        }
+
+        return '';
+      }
+
       public function availableJobs() {
         if (! $this->canManageJobs()) {
           $this->output->set_status_header(403);
@@ -3383,7 +3553,7 @@ class JobCreation extends BaseController
         if ($requestedEnvironment === '') {
           $requestedEnvironment = $this->jobSeekerEnvironmentPreference();
         }
-        $environmentFilter = $this->normalizeJobSeekerEnvironment($requestedEnvironment);
+		$environmentFilter = $this->jobSeekerEffectiveEnvironment($requestedEnvironment, '');
         $response = $this->requestJenkins('GET', 'api/json?tree='.$this->availableJobsTree(3));
         $this->output->set_status_header((int) $response['status']);
         $this->output->set_content_type('application/json');
@@ -3481,7 +3651,9 @@ class JobCreation extends BaseController
                 $windowsCommandLine = $this->input->post('windowsCommandLine');
 
                 //Environment
-                $environment = trim((string) $this->input->post('environment'));
+				$environment = $this->jobSeekerIsStandaloneDeployment()
+				  ? $this->jobSeekerStandaloneEnvironment()
+				  : trim((string) $this->input->post('environment'));
                 $checkEnvironment = $this->security->xss_clean($this->input->post('checkEnvironment'));
 
                 if ($environment === '' || $environment === '0') {

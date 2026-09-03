@@ -91,11 +91,14 @@ class DbSettings extends BaseController
         if (! $this->db->table_exists('environment')) {
             return array();
         }
-        return $this->db->select('Environment')->from('environment')->where('IsActive', 1)->order_by('Environment', 'ASC')->get()->result();
+        return $this->jobSeekerFilterEnvironmentRows($this->db->select('Environment')->from('environment')->where('IsActive', 1)->order_by('Environment', 'ASC')->get()->result());
     }
 
     private function selectedGlobalEnvironment()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         $value = trim((string) $this->input->get('environment', TRUE));
         if ($value === '') {
             $value = $this->jobSeekerEnvironmentPreference();

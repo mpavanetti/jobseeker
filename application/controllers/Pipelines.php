@@ -46,7 +46,7 @@ class Pipelines extends BaseController
         if (! $this->db->table_exists('environment')) {
             return array();
         }
-        $rows = $this->db->select('Environment')->from('environment')->where('IsActive', 1)->get()->result();
+        $rows = $this->jobSeekerFilterEnvironmentRows($this->db->select('Environment')->from('environment')->where('IsActive', 1)->get()->result());
         return array_values(array_unique(array_map(function($row) {
             return $this->normalizeJobSeekerEnvironment($row->Environment);
         }, $rows)));
@@ -54,6 +54,9 @@ class Pipelines extends BaseController
 
     private function selectedEnvironment()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         $value = trim((string) $this->input->get('environment', TRUE));
         if ($value === '') {
             $value = $this->jobSeekerEnvironmentPreference();
@@ -866,6 +869,13 @@ class Pipelines extends BaseController
         if (! $this->requireManagerPost()) {
             return;
         }
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			$this->jsonResponse(array(
+				'ok' => FALSE,
+				'message' => 'Cross-environment deployment is disabled in standalone mode. Promote the release through each environment deployment instead.'
+			), 409);
+			return;
+		}
         $sourceEnvironment = $this->selectedEnvironment();
         $source = $this->pipelines->getPipeline((int) $this->input->post('id'));
         $targetEnvironment = $this->normalizeJobSeekerEnvironment($this->input->post('target_environment'));

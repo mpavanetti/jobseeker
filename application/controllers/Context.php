@@ -19,6 +19,9 @@ class Context extends BaseController
 
     private function selectedContextEnvironment()
     {
+	  if ($this->jobSeekerIsStandaloneDeployment()) {
+		return $this->jobSeekerStandaloneEnvironment();
+	  }
       $environment = trim((string) $this->input->get('environment', TRUE));
       if ($environment === '') {
         $environment = $this->jobSeekerEnvironmentPreference();
@@ -74,9 +77,10 @@ class Context extends BaseController
     $this->global['pageTitle'] = 'Job Seeker : Environment Config';
     $user = $this->global['name'];
 
-    $data["list"] = $this->model->listEnvironments();
-    $data["environments"] = $this->model->listAvailableEnvironments();
-    $data["activeEnvironments"] = $this->model->listActiveEnvironments();
+	$environmentRows = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironments());
+    $data["list"] = $environmentRows;
+    $data["environments"] = count($environmentRows);
+    $data["activeEnvironments"] = count(array_filter($environmentRows, function($row) { return (int) $row->IsActive === 1; }));
     $data["role"] = $this->isManager();
 
     $this->loadViews("environment", $this->global, $data, NULL);
@@ -89,7 +93,7 @@ public function fetchEnvironments() {
 
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
-         $listJobsJson["data"] = $this->model->listEnvironments();
+         $listJobsJson["data"] = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironments());
          echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
 
      }
@@ -109,9 +113,12 @@ public function contextDetails() {
 
     $data["user"] = $user;
     $data["list"] = $this->model->listContexts($selectedEnvironment);
-    $data["comparisonList"] = $this->model->listContexts('ALL');
+	$data["comparisonList"] = $this->model->listContexts('ALL');
+	if ($this->jobSeekerIsStandaloneDeployment()) {
+	  $data["comparisonList"] = $this->model->listContexts($selectedEnvironment);
+	}
     $data["listProjects"] = $this->model->listProjects();
-    $data["comparisonEnvironments"] = $this->model->listEnvironments();
+	$data["comparisonEnvironments"] = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironments());
     $data["listEnvironments"] = $data["comparisonEnvironments"];
     if ($selectedEnvironment !== 'ALL') {
       $data["listEnvironments"] = array_values(array_filter($data["listEnvironments"], function($row) use ($selectedEnvironment) {
@@ -129,6 +136,12 @@ public function contextDetails() {
 }
 
 public function promotion() {
+
+  if ($this->jobSeekerIsStandaloneDeployment()) {
+    $this->session->set_flashdata('error', 'Cross-environment promotion is managed between standalone deployments.');
+    redirect('Context/contextDetails');
+    return;
+  }
 
   if($this->isManager() == TRUE)
   {
@@ -154,6 +167,10 @@ public function promotion() {
 }
 
 public function promotionJobs() {
+	if ($this->jobSeekerIsStandaloneDeployment()) {
+	  $this->output->set_status_header(409)->set_content_type('application/json')->set_output(json_encode(array('jobs' => array(), 'error' => 'Cross-environment promotion is disabled in standalone mode.')));
+	  return;
+	}
   if($this->isManager() == TRUE)
   {
     $this->output->set_status_header(403)->set_content_type('application/json')->set_output(json_encode(array('jobs' => array(), 'error' => 'Access denied.')));
@@ -200,6 +217,11 @@ public function promoteContext() {
 public function previewJobPromotion() {
 
   header('Content-type:application/json;charset=utf-8');
+	if ($this->jobSeekerIsStandaloneDeployment()) {
+	  $this->output->set_status_header(409);
+	  echo json_encode(array('ok' => FALSE, 'message' => 'Cross-environment promotion is disabled in standalone mode.'));
+	  return;
+	}
 
   if($this->isManager() == TRUE)
   {
@@ -217,6 +239,10 @@ public function previewJobPromotion() {
 }
 
 public function promoteJob() {
+	if ($this->jobSeekerIsStandaloneDeployment()) {
+	  $this->output->set_status_header(409)->set_content_type('application/json')->set_output(json_encode(array('ok' => FALSE, 'message' => 'Cross-environment promotion is disabled in standalone mode.')));
+	  return;
+	}
 
   if($this->isManager() == TRUE)
   {
@@ -266,6 +292,10 @@ public function promoteJob() {
 }
 
 public function rollbackJobPromotion() {
+	if ($this->jobSeekerIsStandaloneDeployment()) {
+	  $this->output->set_status_header(409)->set_content_type('application/json')->set_output(json_encode(array('ok' => FALSE, 'message' => 'Cross-environment promotion is disabled in standalone mode.')));
+	  return;
+	}
 
   if($this->isManager() == TRUE)
   {
@@ -2165,6 +2195,12 @@ public function addProject() {
 
 public function addEnvironment() {
 
+  if ($this->jobSeekerIsStandaloneDeployment()) {
+    $this->session->set_flashdata('error', 'Environment definitions are fixed by standalone deployment configuration.');
+    redirect('Context/environment');
+    return;
+  }
+
   if($this->isManager() == TRUE)
   {
     $this->loadThis();
@@ -2352,6 +2388,12 @@ public function addContext() {
 
   public function deleteEnvironment() {
 
+    if ($this->jobSeekerIsStandaloneDeployment()) {
+      $this->output->set_status_header(409);
+      echo(json_encode(array('status'=>FALSE, 'message'=>'Environment definitions are fixed by standalone deployment configuration.')));
+      return;
+    }
+
     if($this->isManager() == TRUE)
     {
       echo(json_encode(array('status'=>'access')));
@@ -2441,6 +2483,11 @@ public function addContext() {
      */
      function editEnvironment($id = NULL)
      {
+	  if ($this->jobSeekerIsStandaloneDeployment()) {
+		$this->session->set_flashdata('error', 'Environment definitions are fixed by standalone deployment configuration.');
+		redirect('Context/environment');
+		return;
+	  }
       if($this->isManager() == TRUE )
       {
         $this->loadThis();
@@ -2579,6 +2626,12 @@ public function addContext() {
   }
 
   public function editEnvironmentUpdate() {
+
+  if ($this->jobSeekerIsStandaloneDeployment()) {
+    $this->session->set_flashdata('error', 'Environment definitions are fixed by standalone deployment configuration.');
+    redirect('Context/environment');
+    return;
+  }
 
   if($this->isManager() == TRUE)
   {

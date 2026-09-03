@@ -230,7 +230,7 @@ class Visualization extends BaseController
         $dimension = trim((string) $this->input->get('dimension', TRUE));
         $measure = trim((string) $this->input->get('measure', TRUE));
         $dateRange = trim((string) $this->input->get('date_range', TRUE));
-        $environment = trim((string) $this->input->get('environment', TRUE));
+		$environment = $this->jobSeekerEffectiveEnvironment(trim((string) $this->input->get('environment', TRUE)), '');
         $limit = (int) $this->input->get('limit', TRUE);
         $allowedRanges = array('7d', '30d', '90d', '180d', 'all');
 

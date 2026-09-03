@@ -45,6 +45,9 @@ class DatasetGenerator extends BaseController
 
     private function submittedEnvironments()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return array($this->jobSeekerStandaloneEnvironment());
+		}
         $raw = preg_split('/[\s,;]+/', strtoupper((string) $this->input->post('environments')));
         $environments = array();
         foreach ($raw as $value) {
