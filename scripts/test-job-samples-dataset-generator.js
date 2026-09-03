@@ -39,6 +39,8 @@ assert(jobView.includes('jobSampleFamily') && jobView.includes('jobSampleComplex
 assert(jobView.includes('jobSampleIntegrationLabels') && jobView.includes('sample.integrations || []'), 'Sample cards must make their platform integrations visible.');
 assert(jobView.includes("database: 'Database'") && jobView.includes('<option value="database">'), 'The sample library must expose the database-connector integration filter.');
 assert(jobView.includes("loadPythonInlineFilesPayload({files: sample.files || []"), 'Python samples must be able to load full workspaces.');
+assert(jobView.includes("if (sample.docker_image)"), 'Samples must be able to select a Docker image that provides their declared runtime tools.');
+assert((samples.match(/'docker_image'\s*=>\s*'python:3\.13-alpine'/g) || []).length >= 3, 'Shell samples that require Python tooling must select a compatible Docker image.');
 
 assert(generatorController.includes('return $this->role == ROLE_ADMIN;'), 'Dataset generation must be restricted to administrators.');
 assert(generatorController.includes("$this->input->method(TRUE) !== 'POST'"), 'Dataset mutations must reject non-POST requests.');

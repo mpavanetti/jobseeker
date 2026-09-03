@@ -2614,8 +2614,8 @@
                             <span id="containerResourceSummary" class="container-resource-summary" aria-live="polite">1 CPU / 512 MB</span>
                           </div>
                           <div class="row">
-                            <div class="col-sm-6"><div class="form-group"><label for="containerCpuLimit"><i class="fa fa-microchip"></i> CPU limit</label><div class="input-group"><input type="number" class="form-control" id="containerCpuLimit" name="containerCpuLimit" min="0.1" max="64" step="0.1" value="1" inputmode="decimal"><span class="input-group-addon">cores</span></div><span class="help-block">0.1 to 64 cores per run</span></div></div>
-                            <div class="col-sm-6"><div class="form-group"><label for="containerMemoryLimitMb"><i class="fa fa-tasks"></i> Memory limit</label><div class="input-group"><input type="number" class="form-control" id="containerMemoryLimitMb" name="containerMemoryLimitMb" min="64" max="262144" step="64" value="512" inputmode="numeric"><span class="input-group-addon">MB</span></div><span class="help-block">64 MB to 256 GB per run</span></div></div>
+                            <div class="col-sm-6"><div class="form-group"><label for="containerCpuLimit"><i class="fa fa-microchip"></i> CPU limit</label><div class="input-group"><input type="number" class="form-control" id="containerCpuLimit" name="containerCpuLimit" min="0.1" max="64" step="0.1" value="1" inputmode="decimal"><span class="input-group-addon">cores</span></div><span class="help-block">Maximum CPU available to this job container; fractional cores are supported.</span></div></div>
+                            <div class="col-sm-6"><div class="form-group"><label for="containerMemoryLimitMb"><i class="fa fa-tasks"></i> Memory limit</label><div class="input-group"><input type="number" class="form-control" id="containerMemoryLimitMb" name="containerMemoryLimitMb" min="64" max="262144" step="64" value="512" inputmode="numeric"><span class="input-group-addon">MB</span></div><span class="help-block">Maximum memory available to this job container.</span></div></div>
                           </div>
                           <label>Allocation preset</label>
                           <div class="container-limit-presets" role="group" aria-label="Container limit presets">
@@ -3799,6 +3799,9 @@
           $('#linuxExecutionStrategy').val('command');
           $('#linuxScriptType').val('0');
           $('#linuxCommandLine').val(sample.command || '');
+          if (sample.docker_image) {
+            $('#pythonDockerImage').val(sample.docker_image);
+          }
           syncLinuxExecutionControls(false);
         } else {
           stopPythonExternalSync(true);

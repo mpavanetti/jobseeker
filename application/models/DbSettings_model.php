@@ -154,12 +154,34 @@ class DbSettings_model extends CI_Model
         if (! $this->db->table_exists('database_settings')) {
             return;
         }
-        $exists = $this->db->from('database_settings')
+        $builtin = $this->db->from('database_settings')
             ->where('connector_key', self::BUILTIN_MARIADB_KEY)
             ->where('environment', 'ALL')
             ->where('job_name', '*')
-            ->count_all_results();
-        if ($exists > 0) {
+            ->limit(1)
+            ->get()
+            ->row_array();
+        if ($builtin) {
+            // The built-in connector is derived from the application's own DB
+            // credentials, so it is safe to recreate only its system-managed
+            // secret after a local encryption-key rotation. User-managed rows
+            // must continue to fail closed instead of being overwritten.
+            if ((string) $builtin['owner'] === 'system'
+                && (string) $builtin['secret_backend'] === 'local'
+                && $this->decryptLocalSecret($builtin['secret_encrypted']) === FALSE) {
+                $encrypted = $this->encryptSecretValues(array(
+                    'username' => (string) ($this->db->username !== '' ? $this->db->username : (getenv('JOBSEEKER_DB_USER') ?: 'mysql')),
+                    'password' => (string) ($this->db->password !== '' ? $this->db->password : (getenv('JOBSEEKER_DB_PASSWORD') ?: 'mysql'))
+                ));
+                if ($encrypted !== FALSE && $encrypted !== NULL) {
+                    $this->db->where('id', (int) $builtin['id'])->update('database_settings', array(
+                        'secret_encrypted' => $encrypted,
+                        'updated_at' => date('Y-m-d H:i:s')
+                    ));
+                } else {
+                    log_message('error', 'Could not repair the built-in jobseeker-mariadb connector secret.');
+                }
+            }
             return;
         }
 

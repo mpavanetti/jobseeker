@@ -108,6 +108,7 @@ SHELL
         'tags' => array('data asset', 'contract', 'validation'),
         'integrations' => array('data_assets', 'jenkins', 'environments'),
         'job_description' => 'Resolves and validates a published JobSeeker Data Asset from a shell job.',
+        'docker_image' => 'python:3.13-alpine',
         'command' => <<<'SHELL'
 set -eu
 
@@ -164,10 +165,20 @@ trap cleanup EXIT INT TERM
 
 echo "Fetching $source_url"
 while : ; do
-  if curl --fail --show-error --silent --location \
-       --connect-timeout 10 --max-time 60 \
-       --header 'Accept: application/json' \
-       --output "$temporary_file" "$source_url"; then
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --show-error --silent --location \
+      --connect-timeout 10 --max-time 60 \
+      --header 'Accept: application/json' \
+      --output "$temporary_file" "$source_url" && download_ok=1 || download_ok=0
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -T 60 --header='Accept: application/json' \
+      -O "$temporary_file" "$source_url" && download_ok=1 || download_ok=0
+  else
+    echo "This sample requires curl or wget." >&2
+    exit 127
+  fi
+
+  if [ "$download_ok" -eq 1 ]; then
     break
   fi
 
@@ -204,6 +215,7 @@ SHELL
         'tags' => array('connector', 'database', 'sql'),
         'integrations' => array('connectors', 'database', 'jenkins', 'environments'),
         'job_description' => 'Resolves the built-in JobSeeker database connector and runs a guarded query from a shell job.',
+        'docker_image' => 'python:3.13-alpine',
         'command' => <<<'SHELL'
 set -eu
 
@@ -212,6 +224,11 @@ connector_key="${JOBSEEKER_DB_CONNECTOR:-jobseeker-mariadb}"
 if ! command -v jobseeker-connector >/dev/null 2>&1; then
   echo "The JobSeeker connector helper is not installed on this Jenkins worker." >&2
   exit 78
+fi
+
+if ! python3 -c 'import mysql.connector' >/dev/null 2>&1; then
+  echo "Installing the sample's MySQL client in the disposable container..."
+  python3 -m pip install --quiet --disable-pip-version-check 'mysql-connector-python>=9.4,<10'
 fi
 
 echo "Connector test: $connector_key"
@@ -262,6 +279,7 @@ SHELL
         'tags' => array('connector', 'data asset', 'secure runtime'),
         'integrations' => array('connectors', 'database', 'data_assets', 'jenkins', 'environments'),
         'job_description' => 'An end-to-end shell handoff using JobSeeker connector and Data Asset runtime helpers.',
+        'docker_image' => 'python:3.13-alpine',
         'command' => <<<'SHELL'
 set -eu
 
@@ -272,6 +290,11 @@ command -v jobseeker-connector >/dev/null 2>&1 || {
   echo "jobseeker-connector is not installed on this Jenkins worker." >&2
   exit 127
 }
+
+if ! python3 -c 'import mysql.connector' >/dev/null 2>&1; then
+  echo "Installing the sample's MySQL client in the disposable container..."
+  python3 -m pip install --quiet --disable-pip-version-check 'mysql-connector-python>=9.4,<10'
+fi
 
 # The helper reports sanitized connection status and never prints credentials.
 jobseeker-connector test "$connector_key" --json
