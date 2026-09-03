@@ -516,6 +516,7 @@ pre {
   var jobListRefreshTimer = null;
   var jobListRefreshIntervalMs = 5000;
   var jobListLoadGeneration = 0;
+  var jobScheduleIndexRequest = null;
   var jobMonitorFilter = 'all';
   var jobMonitorFilterRegistered = false;
   var jobDataTablesErrorModeConfigured = false;
@@ -528,6 +529,7 @@ pre {
   var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
   var deleteJobsUrl = <?php echo json_encode(base_url() . 'delete-job/jobs'); ?>;
   var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
+  var jobSchedulesUrl = <?php echo json_encode(base_url() . 'jobCreation/jobSchedules'); ?>;
   var jobExecutionUrl = <?php echo json_encode(base_url() . 'jobExecution'); ?>;
   var environmentHelper = window.JobSeekerEnvironment || {
     detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
@@ -1365,6 +1367,10 @@ pre {
     });
 
     jobScheduleRequests = {};
+    // A reload must re-read the shared schedule index too, otherwise a schedule
+    // edited elsewhere would stay hidden behind the resolved promise.
+    jobScheduleIndexRequest = null;
+    availableJobsRequest = null;
 
     $.each(jobScheduleCache, function(key, value) {
       if (value && value.loading) {
@@ -1374,6 +1380,16 @@ pre {
   }
 
   function hydrateJobSchedules(table, jenkinsUrl, headers, generation) {
+    // Wait for the shared index first. Without this the visible page would race
+    // ahead and re-request config.xml for rows the index is about to answer.
+    jobScheduleIndex().done(function() {
+      if (generation === jobListLoadGeneration) {
+        hydrateVisibleJobSchedules(table, jenkinsUrl, headers, generation);
+      }
+    });
+  }
+
+  function hydrateVisibleJobSchedules(table, jenkinsUrl, headers, generation) {
     table.rows({page: 'current'}).every(function() {
       var row = this.data();
       var key = scheduleCacheKey(row);
@@ -1425,7 +1441,116 @@ pre {
     });
   }
 
+  // One reading of every job's cron trigger, shared by all three tables.
+  //
+  // Jenkins only keeps a cron trigger in a job's config.xml, so this page used to
+  // request config.xml from the browser once per job. On a list of sixty jobs that
+  // was sixty proxied round trips per page view, enough to occupy every PHP worker
+  // and stall the rest of the application. The server now reads them together and
+  // caches the result, so the whole list costs one request.
+  // The three tables on this page (all jobs, failed builds, successful builds)
+  // render different views of one job list. They used to request it separately,
+  // so a single page load fetched the same ~100 KB payload three times, and
+  // three times again on every refresh.
+  //
+  // Share one response between them, but only briefly: the tables are reloaded
+  // on a timer, and holding a resolved response any longer than it takes all
+  // three to ask for it would freeze the list on whatever it showed first.
+  var availableJobsRequest = null;
+  var availableJobsRequestKey = '';
+  var availableJobsRequestStartedAt = 0;
+  var availableJobsShareWindowMs = 1000;
+
+  function loadAvailableJobs() {
+    var environment = String(jobEnvironmentRequestValue());
+    var now = new Date().getTime();
+    var inFlight = !! availableJobsRequest && availableJobsRequest.state() === 'pending';
+    var stillShareable = !! availableJobsRequest
+      && availableJobsRequestKey === environment
+      && (inFlight || (now - availableJobsRequestStartedAt) < availableJobsShareWindowMs);
+
+    if (! stillShareable) {
+      availableJobsRequestKey = environment;
+      availableJobsRequestStartedAt = now;
+      availableJobsRequest = $.ajax({
+        url: availableJobsUrl,
+        method: 'GET',
+        dataType: 'json',
+        data: {environment: environment}
+      });
+    }
+
+    return availableJobsRequest;
+  }
+
+  function jobScheduleIndex() {
+    if (! jobScheduleIndexRequest) {
+      jobScheduleIndexRequest = $.ajax({url: jobSchedulesUrl, method: 'GET', dataType: 'json'})
+        .then(function(payload) {
+          return payload && payload.schedules ? payload.schedules : {};
+        }, function() {
+          // Fall back to per-job requests below rather than losing the column.
+          return {};
+        });
+    }
+
+    return jobScheduleIndexRequest;
+  }
+
+  function scheduleInfoFromIndexEntry(entry, row) {
+    var spec = firstCronLine(entry.spec || '');
+
+    return {
+      summary: summarizeCronSpec(spec),
+      spec: spec || 'No cron trigger',
+      nextRunText: estimateNextRun(spec),
+      environmentInfo: {
+        environment: environmentHelper.normalize(entry.environment),
+        source: 'Jenkins parameter',
+        unknown: false
+      },
+      error: false
+    };
+  }
+
   function hydrateJobEnvironmentCache(jobs, jenkinsUrl, headers, generation) {
+    jobScheduleIndex().done(function(index) {
+      if (generation !== jobListLoadGeneration) {
+        return;
+      }
+
+      var applied = false;
+      $.each(jobs || [], function(idx, row) {
+        var key = scheduleCacheKey(row);
+        var entry = key ? index[key] : null;
+
+        // Only the server's parameter-derived environment is as authoritative as
+        // parsing config.xml here. Anything else still falls through to the
+        // per-job request, which can also read an environment out of the command.
+        if (! key || ! entry || ! entry.environmentFromParameter || jobScheduleCache[key] || jobScheduleRequests[key]) {
+          return;
+        }
+
+        jobScheduleCache[key] = scheduleInfoFromIndexEntry(entry, row);
+        applied = true;
+      });
+
+      if (applied) {
+        // Summarize the job list we were handed. Reading it back off the table
+        // would race the draw that is still being handed the same rows.
+        updateMonitorSummary(jobs || []);
+
+        if ($.fn.DataTable.isDataTable('#listTable')) {
+          $('#listTable').DataTable().rows().invalidate('data').draw(false);
+          drawEnvironmentFilteredBuildTables();
+        }
+      }
+
+      hydrateRemainingJobEnvironments(jobs, jenkinsUrl, headers, generation);
+    });
+  }
+
+  function hydrateRemainingJobEnvironments(jobs, jenkinsUrl, headers, generation) {
     $.each(jobs || [], function(index, row) {
       var key = scheduleCacheKey(row);
 
@@ -1703,19 +1828,24 @@ pre {
           // Most-recently-built jobs first (column 10 = last build time).
           "order": [[ 10, "desc" ]],
           "scrollX": true,
-          "ajax": {
-            "url": availableJobsUrl,
-            "type": 'GET',
-            "data": function(request) {
-              request.environment = jobEnvironmentRequestValue();
-            },
-            "dataSrc": function(json) {
+          "ajax": function(request, callback) {
+            loadAvailableJobs().done(function(json) {
+              // A shared response cannot be aborted per table the way DataTables
+              // aborts its own request, so drop anything that outlived its reload.
+              if (currentGeneration !== jobListLoadGeneration) {
+                return;
+              }
+
               var jobs = jobsFromJenkinsResponse(json);
               pruneSelectedJobBuilds(jobs);
               updateMonitorSummary(jobs);
               hydrateJobEnvironmentCache(jobs, jenkins_url, jobListHeaders, currentGeneration);
-              return jobs;
-            }
+              callback({data: jobs});
+            }).fail(function() {
+              if (currentGeneration === jobListLoadGeneration) {
+                callback({data: []});
+              }
+            });
           },
           "columns": [
           {"data": null, "defaultContent": "", "orderable": false, "searchable": false, "className": "job-select-cell", "render": function(data, type, row){
@@ -1807,13 +1937,16 @@ pre {
           "pageLength": 20,
           "order": [[ 4, "desc" ]],
           "scrollX": true,
-          "ajax": {
-            "url": availableJobsUrl,
-            "type": 'GET',
-            "data": function(request) {
-              request.environment = jobEnvironmentRequestValue();
-            },
-            "dataSrc": function(json){ return jobsWithBuild(json, 'lastFailedBuild'); }
+          "ajax": function(request, callback) {
+            loadAvailableJobs().done(function(json) {
+              if (currentGeneration === jobListLoadGeneration) {
+                callback({data: jobsWithBuild(json, 'lastFailedBuild')});
+              }
+            }).fail(function() {
+              if (currentGeneration === jobListLoadGeneration) {
+                callback({data: []});
+              }
+            });
           },
           "columns": [
           {"data": "name", "defaultContent": ""},
@@ -1854,13 +1987,16 @@ pre {
           "pageLength": 20,
           "order": [[ 4, "desc" ]],
           "scrollX": true,
-          "ajax": {
-            "url": availableJobsUrl,
-            "type": 'GET',
-            "data": function(request) {
-              request.environment = jobEnvironmentRequestValue();
-            },
-            "dataSrc": function(json){ return jobsWithBuild(json, 'lastStableBuild'); }
+          "ajax": function(request, callback) {
+            loadAvailableJobs().done(function(json) {
+              if (currentGeneration === jobListLoadGeneration) {
+                callback({data: jobsWithBuild(json, 'lastStableBuild')});
+              }
+            }).fail(function() {
+              if (currentGeneration === jobListLoadGeneration) {
+                callback({data: []});
+              }
+            });
           },
           "columns": [
           {"data": "name", "defaultContent": ""},
