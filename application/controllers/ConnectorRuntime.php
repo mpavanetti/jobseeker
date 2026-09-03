@@ -101,26 +101,39 @@ class ConnectorRuntime extends CI_Controller
 
         try {
             $connectors = array();
+            $unavailable = array();
             $this->connectors->pruneRuntimeAccessLogs();
             foreach ($this->connectors->runtimeSettings($environment, $jobName) as $row) {
+                // Isolate a per-connector resolution failure (for example an
+                // undecryptable local secret or a missing cloud reference) so a
+                // single broken or wildcard-scoped connector cannot take down
+                // every job that asks for its catalog. The connector is dropped
+                // from the catalog and reported; a job that genuinely needs it
+                // still fails, but with a precise "connector unavailable" error
+                // from its own step instead of a blanket HTTP 500 here.
                 try {
                     $connectors[] = $this->connectorPayload($row);
                     $this->connectors->logRuntimeAccess($row, $environment, $jobName, 'granted');
                 } catch (Exception $exception) {
                     $this->connectors->logRuntimeAccess($row, $environment, $jobName, 'failed');
-                    throw $exception;
+                    $unavailable[] = (string) $row['connector_key'];
+                    log_message('error', 'Connector runtime skipped "'.$row['connector_key'].'" for job "'.$jobName.'" ('.$environment.'): '.$exception->getMessage());
                 }
             }
-            $this->jsonResponse(array(
+            $response = array(
                 'schema_version' => 1,
                 'generated_at' => gmdate('c'),
                 'environment' => $environment,
                 'job' => $jobName,
                 'connectors' => $connectors
-            ));
+            );
+            if (! empty($unavailable)) {
+                $response['unavailable'] = array_values(array_unique($unavailable));
+            }
+            $this->jsonResponse($response);
         } catch (Exception $exception) {
             log_message('error', 'Connector runtime materialization failed: '.$exception->getMessage());
-            $this->jsonResponse(array('error' => 'One or more connector secrets could not be resolved.'), 500);
+            $this->jsonResponse(array('error' => 'The connector catalog could not be built.'), 500);
         }
     }
 }
