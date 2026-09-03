@@ -461,6 +461,7 @@ class Connector:
     config: Mapping[str, Any]
     secrets: Mapping[str, str]
     description: str = ""
+    runtime_directory: str = ""
 
     def value(self, name: str, default: Any = None, required: bool = False) -> Any:
         value = self.secrets.get(name, self.config.get(name, default))
@@ -576,6 +577,7 @@ class ConnectorCatalog:
                 config=dict(item.get("config") or {}),
                 secrets=secrets,
                 description=str(item.get("description") or ""),
+                runtime_directory=self.directory,
             )
             self._connectors[connector.key] = connector
         return self._connectors

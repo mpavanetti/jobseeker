@@ -42,7 +42,15 @@ RUN set -eux; \
 	chown -R openvscode-server:openvscode-server /home/workspace/.cache /home/workspace/.local /home/workspace/.openvscode-server; \
 	rm -rf /var/lib/apt/lists/*
 
+# Keep this small, frequently edited helper after the expensive Python/tooling
+# layer so Git-auth hardening changes do not invalidate the full IDE build.
+COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
+
 USER openvscode-server
+
+# Declare the optional extension switch after the expensive base-tool layer so
+# toggling local AI reuses the Python/OpenVSCode build cache.
+ARG JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED=false
 
 RUN set -eux; \
 	mkdir -p /home/workspace/.openvscode-server/extensions /home/workspace/.openvscode-server/data; \
@@ -66,6 +74,12 @@ RUN set -eux; \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \
 		--install-extension detachhead.basedpyright@1.39.10; \
+	if [ "$JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED" = "true" ]; then \
+		"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
+			--extensions-dir /home/workspace/.openvscode-server/extensions \
+			--user-data-dir /home/workspace/.openvscode-server/data \
+			--install-extension Continue.continue@2.0.0; \
+	fi; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \

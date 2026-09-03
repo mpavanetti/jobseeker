@@ -19,6 +19,7 @@ x-jobseeker-jenkins-agent-base: &jobseeker-jenkins-agent-base
 volumes:
   jobseeker-docker-cache: {}
   openvscode-server-data: {}
+  ollama-models: {}
   jenkins-agent-dev-workdir: {}
   jenkins-agent-qa-workdir: {}
   jenkins-agent-uat-workdir: {}
@@ -110,6 +111,7 @@ services:
       - JOBSEEKER_DOCKER_MONITOR_URL=http://docker-monitor-proxy:8080
       - JOBSEEKER_DOCKER_RUNTIME_URL=http://docker-runtime:2375
       - JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION=${JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION:-3.13}
+      - JOBSEEKER_TMF_RESULT_LIMIT=${JOBSEEKER_TMF_RESULT_LIMIT:-1000}
       - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
       - JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS=${JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS:-1}
@@ -156,9 +158,10 @@ services:
 
   openvscode-data-init:
     image: alpine:3.20
-    command: sh -lc "mkdir -p /openvscode/data /openvscode/python && chown -R 1000:1000 /openvscode/data /openvscode/python"
+    command: sh -lc "mkdir -p /openvscode/data /openvscode/python /openvscode/continue && if [ ! -f /openvscode/continue/config.yaml ]; then cp /defaults/continue-config.yaml /openvscode/continue/config.yaml; fi && chown -R 1000:1000 /openvscode/data /openvscode/python /openvscode/continue"
     volumes:
       - openvscode-server-data:/openvscode
+      - ./docker/openvscode/continue-config.yaml:/defaults/continue-config.yaml:ro
     networks:
       - internal
 
@@ -167,6 +170,8 @@ services:
     build:
       context: .
       dockerfile: docker/openvscode_image
+      args:
+        JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED: ${JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED:-false}
     image: jobseeker-openvscode:local
     init: true
     depends_on:
@@ -200,6 +205,11 @@ services:
         target: /home/workspace/.openvscode-server/python
         volume:
           subpath: python
+      - type: volume
+        source: openvscode-server-data
+        target: /home/workspace/.continue
+        volume:
+          subpath: continue
     networks:
       - internal
     healthcheck:
@@ -207,6 +217,23 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 20s
+
+  ollama:
+    image: ollama/ollama:0.13.0
+    profiles:
+      - local-ai
+    ports:
+      - "${JOBSEEKER_OLLAMA_HOST:-127.0.0.1}:${JOBSEEKER_OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
       start_period: 20s
 
   docker-monitor-proxy:

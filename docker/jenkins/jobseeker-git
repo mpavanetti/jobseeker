@@ -1,0 +1,170 @@
+#!/bin/sh
+# Clone or inspect a Git repository with a materialized JobSeeker connector.
+# Secrets are consumed through GIT_ASKPASS or an ephemeral SSH directory and
+# are never placed in the repository URL, process arguments, or console output.
+set -eu
+
+usage() {
+  echo "Usage: jobseeker-git {clone|ls-remote} --connector-dir DIR [--branch REF] -- URL [TARGET]" >&2
+  exit 2
+}
+
+command_name=${1:-}
+[ "$command_name" = "clone" ] || [ "$command_name" = "ls-remote" ] || usage
+shift
+
+connector_dir=
+branch=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --connector-dir)
+      [ "$#" -ge 2 ] || usage
+      connector_dir=$2
+      shift 2
+      ;;
+    --branch)
+      [ "$#" -ge 2 ] || usage
+      branch=$2
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *) usage ;;
+  esac
+done
+
+[ -n "$connector_dir" ] || { echo "A Git credential connector directory is required." >&2; exit 2; }
+[ -d "$connector_dir" ] || { echo "The selected Git credential connector is not available to this job." >&2; exit 78; }
+[ "$#" -ge 1 ] || usage
+repository_url=$1
+shift
+
+if [ "$command_name" = "clone" ]; then
+  [ "$#" -eq 1 ] || usage
+  target=$1
+else
+  [ "$#" -eq 0 ] || usage
+fi
+
+case "$repository_url" in
+  http://*|https://*)
+    transport=http
+    authority=${repository_url#*://}
+    authority=${authority%%/*}
+    case "$authority" in *@*) echo "Git repository URLs must not contain credentials." >&2; exit 2;; esac
+    url_host=${authority%%:*}
+    ;;
+  ssh://*)
+    transport=ssh
+    authority=${repository_url#ssh://}
+    authority=${authority%%/*}
+    url_host=${authority##*@}
+    url_host=${url_host%%:*}
+    ;;
+  *@*:* )
+    transport=ssh
+    authority=${repository_url%%:*}
+    url_host=${authority##*@}
+    ;;
+  *)
+    echo "Only HTTP(S) and SSH Git repository URLs are supported." >&2
+    exit 2
+    ;;
+esac
+
+connector_host=
+[ ! -f "$connector_dir/host" ] || connector_host=$(tr '[:upper:]' '[:lower:]' < "$connector_dir/host" | tr -d '[:space:]')
+url_host=$(printf '%s' "$url_host" | tr '[:upper:]' '[:lower:]' | tr -d '[]')
+[ -n "$connector_host" ] || { echo "The Git credential connector must declare its provider host." >&2; exit 78; }
+[ "$url_host" = "$connector_host" ] || {
+  echo "The selected Git credential is scoped to $connector_host, not $url_host." >&2
+  exit 78
+}
+
+auth_type=none
+[ ! -f "$connector_dir/auth_type" ] || auth_type=$(tr '[:upper:]' '[:lower:]' < "$connector_dir/auth_type" | tr -d '[:space:]')
+temporary_dir=$(mktemp -d "/tmp/jobseeker-git.XXXXXX")
+chmod 700 "$temporary_dir"
+cleanup() {
+  rm -rf "$temporary_dir"
+}
+trap cleanup EXIT HUP INT TERM
+
+export GIT_TERMINAL_PROMPT=0
+
+case "$auth_type" in
+  token|api_key|username_password)
+    [ "$transport" = "http" ] || {
+      echo "Token and username/password Git connectors require an HTTP(S) repository URL." >&2
+      exit 78
+    }
+    username_file="$connector_dir/username"
+    password_file="$connector_dir/password"
+    if [ "$auth_type" = "token" ]; then
+      [ -f "$connector_dir/token" ] && password_file="$connector_dir/token"
+      [ -f "$connector_dir/username" ] || {
+        username_file="$temporary_dir/username"
+        printf '%s' 'x-access-token' > "$username_file"
+        chmod 600 "$username_file"
+      }
+    elif [ "$auth_type" = "api_key" ]; then
+      [ -f "$connector_dir/api_key" ] && password_file="$connector_dir/api_key"
+      [ -f "$connector_dir/username" ] || {
+        username_file="$temporary_dir/username"
+        printf '%s' 'x-access-token' > "$username_file"
+        chmod 600 "$username_file"
+      }
+    fi
+    [ -f "$username_file" ] && [ -f "$password_file" ] || {
+      echo "The selected Git connector is missing its username or token/password." >&2
+      exit 78
+    }
+    askpass="$temporary_dir/askpass"
+    cat > "$askpass" <<'EOF'
+#!/bin/sh
+case "${1:-}" in
+  *sername*) cat "$JOBSEEKER_GIT_USERNAME_FILE" ;;
+  *) cat "$JOBSEEKER_GIT_PASSWORD_FILE" ;;
+esac
+EOF
+    chmod 700 "$askpass"
+    export JOBSEEKER_GIT_USERNAME_FILE=$username_file
+    export JOBSEEKER_GIT_PASSWORD_FILE=$password_file
+    export GIT_ASKPASS=$askpass
+    ;;
+  ssh_key)
+    [ "$transport" = "ssh" ] || {
+      echo "SSH-key Git connectors require an SSH repository URL." >&2
+      exit 78
+    }
+    key_file="$connector_dir/private_key"
+    [ -f "$key_file" ] || key_file="$connector_dir/ssh_key"
+    [ -f "$key_file" ] || { echo "The selected Git connector has no SSH private key." >&2; exit 78; }
+    [ -f "$connector_dir/known_hosts" ] || {
+      echo "SSH Git connectors require a pinned known_hosts value." >&2
+      exit 78
+    }
+    cp "$key_file" "$temporary_dir/private_key"
+    cp "$connector_dir/known_hosts" "$temporary_dir/known_hosts"
+    chmod 600 "$temporary_dir/private_key" "$temporary_dir/known_hosts"
+    export GIT_SSH_COMMAND="ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$temporary_dir/known_hosts -i $temporary_dir/private_key"
+    ;;
+  none) ;;
+  *) echo "Unsupported Git connector authentication type: $auth_type" >&2; exit 78 ;;
+esac
+
+if [ "$command_name" = "clone" ]; then
+  if [ -n "$branch" ]; then
+    git -c credential.helper= clone --depth 1 --branch "$branch" -- "$repository_url" "$target"
+  else
+    git -c credential.helper= clone --depth 1 -- "$repository_url" "$target"
+  fi
+else
+  if [ -n "$branch" ]; then
+    git -c credential.helper= ls-remote --exit-code --refs "$repository_url" "$branch" >/dev/null
+  else
+    git -c credential.helper= ls-remote --exit-code --refs "$repository_url" HEAD >/dev/null
+  fi
+fi

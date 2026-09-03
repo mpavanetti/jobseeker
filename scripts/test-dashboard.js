@@ -10,6 +10,10 @@ const controller = fs.readFileSync(path.join(root, 'application', 'controllers',
 const jenkinsProxy = fs.readFileSync(path.join(root, 'application', 'controllers', 'JenkinsProxy.php'), 'utf8');
 const baseController = fs.readFileSync(path.join(root, 'application', 'libraries', 'BaseController.php'), 'utf8');
 const routes = fs.readFileSync(path.join(root, 'application', 'config', 'routes.php'), 'utf8');
+const tmfModel = fs.readFileSync(path.join(root, 'application', 'models', 'Tmf_model.php'), 'utf8');
+const tmfController = fs.readFileSync(path.join(root, 'application', 'controllers', 'Tmf.php'), 'utf8');
+const tmfView = fs.readFileSync(path.join(root, 'application', 'views', 'tmf.php'), 'utf8');
+const schema = fs.readFileSync(path.join(root, 'db_setup.sql'), 'utf8');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -92,5 +96,17 @@ assert(jstime.includes('JobSeekerTime') && jstime.includes("timeZone = 'UTC'") &
 assert(header.includes("id=\"globalTimezoneToggle\"") && header.includes("JobSeekerTime.renderToggle('#globalTimezoneToggle')"), 'The global top bar must mount the timezone toggle.');
 assert(!view.includes('id="dashboardTimezoneToggle"'), 'The dashboard must not carry its own timezone toggle any more (it is global).');
 assert(script.includes('JobSeekerTime.onChange'), 'The dashboard must still re-render its widgets when the timezone mode changes.');
+
+// TMF result pages must remain bounded. Rendering an unbounded stress dataset
+// previously produced a 31 MB response and exhausted PHP memory for all envs.
+assert(tmfModel.includes('$this->resultLimit + 1'), 'TMF must use one look-ahead row to detect a truncated result window.');
+assert(tmfModel.includes('min(10000, (int) $configuredLimit)'), 'TMF result configuration must retain a hard safety cap.');
+assert(!tmfModel.includes("where('UPPER(TRIM("), 'Normal TMF environment filters must not wrap indexed columns.');
+assert(!tmfModel.includes("where('LOWER(status)"), 'TMF status filters must not wrap the indexed status column.');
+assert(tmfController.includes('addResultWindowMetadata'), 'TMF controllers must expose truncation metadata to the result page.');
+assert(tmfView.includes('resultsTruncated') && tmfView.includes('JOBSEEKER_TMF_RESULT_LIMIT'), 'TMF must tell users when only the newest result window is shown.');
+['tmf_results_environment', 'tmf_results_status', 'tmf_results_job', 'tmf_instance', 'tmf_error_instance'].forEach((indexName) => {
+  assert(schema.includes(indexName) && tmfModel.includes(indexName), `TMF index ${indexName} must exist for fresh and upgraded databases.`);
+});
 
 console.log('Dashboard metric and rendering tests passed.');

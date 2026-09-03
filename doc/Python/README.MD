@@ -213,6 +213,39 @@ Inline Python opens a small workspace with the entry script, optional `requireme
 
 Python jobs can run on Jenkins agent `python3` or inside a Docker image such as `python:3.12-slim`. Use Docker when a job needs a specific Python version or system packages. For ZIP/path/Git sources, put `requirements.txt` and optional `Dockerfile` at the source root or beside the entry script.
 
+### Private Git repositories
+
+Create a **Git repository** connector under **Connectors**, give it the provider hostname (for example `github.com`), and choose token, username/password, or SSH-key authentication. SSH connectors also require a pinned `known_hosts` entry. Scope the connector to the environments and job names that may use it. Put a representative private repository URL in **Test repository URL** if the connector's **Test** action should verify authentication with `git ls-remote` rather than only validate its configuration.
+
+In Job Creation, choose **Git Repository URL** and select the connector in **Git Credential**. JobSeeker resolves the credential only when the build starts. HTTPS secrets are passed through an ephemeral `GIT_ASKPASS` file and SSH keys through an ephemeral strict-host-key-checking directory; neither is inserted into the repository URL, command arguments, or generated Jenkins configuration. The helper also refuses to use a connector against a hostname other than the connector's declared provider.
+
+Public Git repositories remain credential-free. Existing jobs that use public `git clone` commands continue to load in the editor.
+
+### OpenVSCode, local repositories, and local AI
+
+The bundled OpenVSCode Server can edit JobSeeker inline workspaces and any additional host project mounted into the container. For example, create a local override without changing the tracked Compose file:
+
+```yaml
+# compose.projects.yml
+services:
+  openvscode:
+    volumes:
+      - /absolute/path/to/projects:/home/workspace/projects
+```
+
+Start it with `docker compose -f docker-compose.yml -f compose.projects.yml up -d openvscode`, then use **File > Open Folder** for `/home/workspace/projects/<repo>`. Keep host SSH-agent or credential-helper integration in an untracked local override; JobSeeker does not mount a developer's home directory or private keys by default.
+
+An optional fully local coding assistant uses the open-source Continue extension with Ollama. It is excluded from normal builds and starts no model unless explicitly enabled:
+
+```bash
+JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED=true docker compose build openvscode
+docker compose --profile local-ai up -d ollama openvscode
+docker compose exec ollama ollama pull qwen2.5-coder:7b
+docker compose exec ollama ollama pull qwen2.5-coder:1.5b
+```
+
+The 7B model handles chat/edit requests and the 1.5B model handles low-latency autocomplete. Inline workspaces receive `.continue/rules/jobseeker.md`, which points the assistant at the current job and bundled JobSeeker SDK and tells it to preserve TMF, context, Data Asset, connector, test, and secret-handling contracts. Local-model quality and speed depend heavily on available RAM, CPU, and GPU; use a compatible larger code model in `docker/openvscode/continue-config.yaml` when the host permits it.
+
 ## Demo Seed Jobs
 
 The root [seed_demo_data.sh](../../seed_demo_data.sh) script stages the bundled SDK package into `repository/python/lib/jobseeker-sdk` and creates two runnable Python SDK demo jobs:

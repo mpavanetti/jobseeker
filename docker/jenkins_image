@@ -9,7 +9,7 @@ RUN mkdir /var/jenkins_files/ && chown -R jenkins /var/jenkins_files
 
 # Install Python dependencies used by demo and ETL jobs.
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3-pip python3-venv curl \
+	&& apt-get install -y --no-install-recommends python3-pip python3-venv curl git openssh-client \
 	&& rm -rf /var/lib/apt/lists/*
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
@@ -17,6 +17,7 @@ COPY application/third_party/python/jobseeker_sdk /var/jenkins_files/jobseeker_s
 COPY docker/jenkins/requirements.txt /var/jenkins_files/
 RUN python3 -m pip install --no-cache-dir --break-system-packages /var/jenkins_files/jobseeker_sdk
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r /var/jenkins_files/requirements.txt
+COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
 
 # Set jenkins configurations.
 USER jenkins
@@ -29,4 +30,3 @@ COPY docker/jenkins/plugins.txt /var/jenkins_files/
 RUN jenkins-plugin-cli --plugin-file /var/jenkins_files/plugins.txt
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 CMD curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1
-

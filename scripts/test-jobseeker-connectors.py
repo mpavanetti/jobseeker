@@ -347,6 +347,42 @@ def test_connection_tester():
         http_server.shutdown()
         http_server.server_close()
 
+    # Git connectors delegate the live access check to the same helper used by
+    # builds; credentials therefore stay in materialized files, not argv.
+    with tempfile.TemporaryDirectory() as directory:
+        fake_bin = os.path.join(directory, "bin")
+        runtime = os.path.join(directory, "runtime")
+        connector_directory = os.path.join(runtime, "private-source")
+        os.makedirs(fake_bin)
+        os.makedirs(connector_directory)
+        helper = os.path.join(fake_bin, "jobseeker-git")
+        capture = os.path.join(directory, "git-arguments")
+        with open(helper, "w", encoding="utf-8") as handle:
+            handle.write("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$JOBSEEKER_GIT_TEST_CAPTURE\"\n")
+        os.chmod(helper, 0o700)
+        previous_path = os.environ.get("PATH", "")
+        previous_capture = os.environ.get("JOBSEEKER_GIT_TEST_CAPTURE")
+        os.environ["PATH"] = fake_bin + os.pathsep + previous_path
+        os.environ["JOBSEEKER_GIT_TEST_CAPTURE"] = capture
+        try:
+            result = Connector(
+                key="private-source", type="git_repository", environment="DEV", job="*",
+                config={"host": "github.example.test", "port": 443, "database": "https://github.example.test/acme/private.git"},
+                secrets={"token": "must-not-be-an-argument"}, runtime_directory=runtime,
+            ).test(timeout=2)
+        finally:
+            os.environ["PATH"] = previous_path
+            if previous_capture is None:
+                os.environ.pop("JOBSEEKER_GIT_TEST_CAPTURE", None)
+            else:
+                os.environ["JOBSEEKER_GIT_TEST_CAPTURE"] = previous_capture
+        assert result.status == conntest.PASSED and result.ok, result.to_dict()
+        with open(capture, "r", encoding="utf-8") as handle:
+            git_arguments = handle.read()
+        assert "must-not-be-an-argument" not in git_arguments
+        assert connector_directory in git_arguments
+        assert "https://github.example.test/acme/private.git" in git_arguments
+
     # CLI: python -m jobseeker.conntest --json against a materialized catalog dir
     with tempfile.TemporaryDirectory() as directory:
         os.makedirs(os.path.join(directory, "vault-key"))

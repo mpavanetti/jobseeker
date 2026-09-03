@@ -58,6 +58,8 @@ assert(conntest.includes('class ConnectionTestResult'));
 assert(conntest.includes('def test_connector('));
 assert(/def _test_mysql\(/.test(conntest) && /def _test_pgsql\(/.test(conntest));
 assert(conntest.includes('DRIVER_MISSING') && conntest.includes('_tcp_probe'));
+assert(conntest.includes('def _test_git(') && conntest.includes('"git_repository": _test_git'));
+assert(conntest.includes('jobseeker-git') && conntest.includes('subprocess.DEVNULL'));
 assert(conntest.includes('def _sanitize('), 'connection-test messages must be scrubbed of secrets');
 assert(sdk.includes('def test(self, timeout'), 'Connector must expose a live .test() method');
 assert(sdk.includes('_load_conntest()'));

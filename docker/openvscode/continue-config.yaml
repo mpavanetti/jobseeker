@@ -1,0 +1,25 @@
+name: JobSeeker Local Python
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Qwen2.5 Coder 7B
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://ollama:11434
+    roles:
+      - chat
+      - edit
+      - apply
+  - name: Qwen2.5 Coder 1.5B Autocomplete
+    provider: ollama
+    model: qwen2.5-coder:1.5b
+    apiBase: http://ollama:11434
+    roles:
+      - autocomplete
+
+context:
+  - provider: code
+  - provider: diff
+  - provider: terminal
+  - provider: problems

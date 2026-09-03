@@ -3,6 +3,81 @@
 
 class Tmf_model extends CI_Model
 {
+    private $resultLimit = 1000;
+    private $lastResultTruncated = false;
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        $configuredLimit = filter_var(getenv('JOBSEEKER_TMF_RESULT_LIMIT'), FILTER_VALIDATE_INT);
+        if ($configuredLimit !== false && $configuredLimit > 0) {
+            $this->resultLimit = min(10000, (int) $configuredLimit);
+        }
+
+        $this->ensureResultIndexes();
+    }
+
+    private function ensureResultIndexes()
+    {
+        if (! $this->db->table_exists('tmf')) {
+            return;
+        }
+
+        $indexes = array();
+        foreach ($this->db->query('SHOW INDEX FROM `tmf`')->result_array() as $row) {
+            if (isset($row['Key_name'])) {
+                $indexes[$row['Key_name']] = TRUE;
+            }
+        }
+
+        $requiredIndexes = array(
+            'tmf_results_environment' => '(`environment`,`id`)',
+            'tmf_results_status' => '(`status`,`id`)',
+            'tmf_results_job' => '(`job_name`,`id`)',
+            'tmf_instance' => '(`instance_id`)'
+        );
+        foreach ($requiredIndexes as $name => $columns) {
+            if (! isset($indexes[$name])) {
+                $this->db->query('ALTER TABLE `tmf` ADD INDEX `'.$name.'` '.$columns);
+            }
+        }
+
+        if ($this->db->table_exists('tmf_error')) {
+            $errorIndexes = array();
+            foreach ($this->db->query('SHOW INDEX FROM `tmf_error`')->result_array() as $row) {
+                if (isset($row['Key_name'])) {
+                    $errorIndexes[$row['Key_name']] = TRUE;
+                }
+            }
+            if (! isset($errorIndexes['tmf_error_instance'])) {
+                $this->db->query('ALTER TABLE `tmf_error` ADD INDEX `tmf_error_instance` (`tmf_id`)');
+            }
+        }
+    }
+
+    private function boundedResults()
+    {
+        $this->lastResultTruncated = false;
+        $this->db->limit($this->resultLimit + 1);
+        $results = $this->db->get()->result();
+        if (count($results) > $this->resultLimit) {
+            array_pop($results);
+            $this->lastResultTruncated = true;
+        }
+
+        return $results;
+    }
+
+    public function resultLimit()
+    {
+        return $this->resultLimit;
+    }
+
+    public function lastResultWasTruncated()
+    {
+        return $this->lastResultTruncated;
+    }
 
     private function selectTmfRows() {
         $this->db->select('tmf.*, tmf.job_name AS jenkins_job_name', FALSE);
@@ -65,16 +140,9 @@ class Tmf_model extends CI_Model
             return;
         }
 
-        $values = $this->environmentFilterValues($environment);
-        $this->db->group_start();
-        foreach ($values as $index => $value) {
-            if ($index === 0) {
-                $this->db->where('UPPER(TRIM('.$column.')) =', $value);
-            } else {
-                $this->db->or_where('UPPER(TRIM('.$column.')) =', $value);
-            }
-        }
-        $this->db->group_end();
+        // TMF uses a case-insensitive collation. Keeping the indexed column bare
+        // lets MariaDB use the environment indexes instead of scanning every row.
+        $this->db->where_in($column, $this->environmentFilterValues($environment));
     }
 
     private function parseFilterDate($value, $endOfDay)
@@ -161,15 +229,7 @@ class Tmf_model extends CI_Model
                   if (! $includeAllEnvironments && (! empty($environmentValues) || $includeUnknownEnvironment)) {
                       $this->db->group_start();
                       if (! empty($environmentValues)) {
-                          $this->db->group_start();
-                          foreach ($environmentValues as $index => $environmentValue) {
-                              if ($index === 0) {
-                                  $this->db->where('UPPER(TRIM(tmf.environment)) =', $environmentValue);
-                              } else {
-                                  $this->db->or_where('UPPER(TRIM(tmf.environment)) =', $environmentValue);
-                              }
-                          }
-                          $this->db->group_end();
+                          $this->db->where_in('tmf.environment', $environmentValues);
                       }
 
                       if ($includeUnknownEnvironment) {
@@ -207,8 +267,7 @@ class Tmf_model extends CI_Model
        
 
         $this->db->order_by('id', 'DESC');
-        $query = $this->db->get();
-        return $query->result();
+        return $this->boundedResults();
         
     }
 
@@ -219,8 +278,7 @@ class Tmf_model extends CI_Model
         $this->hideInternalJobs();
         $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
-        $query = $this->db->get();
-        return $query->result();
+        return $this->boundedResults();
     }
 
     function listId($id, $environment = '') {
@@ -278,11 +336,10 @@ class Tmf_model extends CI_Model
         $this->selectTmfRows();
         $this->db->from('tmf');
         $this->hideInternalJobs();
-        $this->db->where('LOWER(status) =', strtolower((string) $status));
+        $this->db->where('status', strtolower((string) $status));
         $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
-        $query = $this->db->get();
-        return $query->result();
+        return $this->boundedResults();
     }
 
     function fetchDataJobName($jobName, $environment = '') {
@@ -293,8 +350,7 @@ class Tmf_model extends CI_Model
         $this->db->where('job_name', $jobName);
         $this->applyEnvironmentFilter($environment);
         $this->db->order_by('id', 'DESC');
-        $query = $this->db->get();
-        return $query->result();
+        return $this->boundedResults();
     }
 
     function listStatus($environment = '') {
