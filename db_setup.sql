@@ -545,7 +545,11 @@ CREATE TABLE IF NOT EXISTS `tmf` (
   `msg` text COLLATE utf8_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `tmf_dashboard_activity` (`last_activity`,`status`,`environment`),
-  KEY `tmf_dashboard_environment` (`environment`,`last_activity`,`status`)
+  KEY `tmf_dashboard_environment` (`environment`,`last_activity`,`status`),
+  KEY `tmf_results_environment` (`environment`,`id`),
+  KEY `tmf_results_status` (`status`,`id`),
+  KEY `tmf_results_job` (`job_name`,`id`),
+  KEY `tmf_instance` (`instance_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1234 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando dados para a tabela jobseeker.tmf: ~0 rows (aproximadamente)
@@ -562,7 +566,8 @@ CREATE TABLE IF NOT EXISTS `tmf_error` (
   `origin` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
   `message` varchar(5000) COLLATE utf8_unicode_ci DEFAULT NULL,
   `code` int(11) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `tmf_error_instance` (`tmf_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=878 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando dados para a tabela jobseeker.tmf_error: ~0 rows (aproximadamente)

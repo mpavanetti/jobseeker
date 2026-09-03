@@ -17,6 +17,9 @@ class DependencyScanner
     /** Explicit JOBSEEKER_CONNECTOR_KEY=KEY assignment in a shell step. */
     const CONNECTOR_ENV = '/(?<![A-Za-z0-9_])JOBSEEKER_CONNECTOR_KEY\s*=\s*(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
 
+    /** Git source credential selected by a generated JobSeeker shell step. */
+    const GIT_CONNECTOR_ENV = '/(?<![A-Za-z0-9_])JOBSEEKER_GIT_CREDENTIAL_KEY\s*=\s*(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
+
     /** Data asset references: js.asset("x"), js.dataset('x'), get_asset("x"). */
     const ASSET_CALL = '/(?<![A-Za-z0-9_])(?:get_)?(?:asset|dataset)\s*\(\s*(["\'])([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
 
@@ -42,7 +45,7 @@ class DependencyScanner
                 continue;
             }
 
-            foreach (array(self::CONNECTOR_CALL, self::CONNECTOR_CLI, self::CONNECTOR_ENV) as $pattern) {
+            foreach (array(self::CONNECTOR_CALL, self::CONNECTOR_CLI, self::CONNECTOR_ENV, self::GIT_CONNECTOR_ENV) as $pattern) {
                 $this->collect($pattern, $text, $from, $connectors, TRUE);
             }
             $this->collect(self::ASSET_CALL, $text, $from, $datasets, TRUE);

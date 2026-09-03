@@ -1,5 +1,7 @@
 <?php
 $jobs = isset($jobs) ? (array) $jobs : array();
+$resultsTruncated = ! empty($resultsTruncated);
+$resultLimit = isset($resultLimit) ? (int) $resultLimit : count($jobs);
 $ready = 0;
 $error = 0;
 $warning = 0;
@@ -439,8 +441,11 @@ pre {
       <div class="container-fluid tmf-results-shell">
         <div class="tmf-results-toolbar">
           <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning"><i class="fa fa-arrow-left"></i> Back to Query</a>
-          <span class="tmf-refresh-note"><i class="fa fa-database"></i> <?php echo number_format($totalJobs); ?> rows returned &middot; latest <?php echo $latestActivityLabel; /* js_time() output or the static 'No activity' string, both HTML-safe */ ?></span>
+          <span class="tmf-refresh-note"><i class="fa fa-database"></i> <?php echo number_format($totalJobs); ?><?php echo $resultsTruncated ? '+' : ''; ?> rows matched &middot; latest <?php echo $latestActivityLabel; /* js_time() output or the static 'No activity' string, both HTML-safe */ ?></span>
         </div>
+        <?php if ($resultsTruncated) { ?>
+          <div class="alert alert-info"><i class="fa fa-info-circle"></i> Showing the newest <?php echo number_format($resultLimit); ?> matching rows. Refine the query to inspect older results; operators can raise <code>JOBSEEKER_TMF_RESULT_LIMIT</code> up to 10,000.</div>
+        <?php } ?>
         <div class="tmf-workbench animated fadeIn">
           <div class="tmf-result-signals">
             <span class="tmf-signal"><strong><?php echo number_format($totalJobs); ?></strong> rows</span>

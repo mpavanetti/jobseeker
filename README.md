@@ -75,6 +75,12 @@ docker compose up -d --build
 
 The first start builds the application and Jenkins images, restores frontend assets, initializes MariaDB, and waits for the services to become healthy.
 
+For non-Docker jobs on smaller development machines, use the lightweight override. It keeps Jenkins scheduling but omits Docker-in-Docker, Docker monitoring, and OpenVSCode until requested:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.light.yml up -d --build
+```
+
 Service | Default URL
 --- | ---
 JobSeeker | http://localhost/
@@ -155,6 +161,8 @@ Variable | Purpose
 `JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS` | Overrides limits by environment, for example `DEV=2,QA=1,PROD=2`.
 `JOBSEEKER_OPENVSCODE_TOKEN` | Protects the browser-based Python workspace.
 `JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES` | Stops an unused editor automatically; use `0` to keep it running.
+`JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED` | Adds the optional Continue local-AI extension to the OpenVSCode image.
+`JOBSEEKER_TMF_RESULT_LIMIT` | Bounds the newest TMF rows rendered in one response (default 1,000, maximum 10,000).
 `JOBSEEKER_TIMEZONE` | The app always stores and computes time in UTC; this only sets which side of the per-browser UI timezone toggle a first-time viewer starts on (`UTC` by default, or any PHP timezone identifier to start on local time).
 `JOBSEEKER_COMMAND_GUARD_ENFORCE` | When `true`, a critical/high `CommandGuard` finding blocks job creation instead of only warning.
 
@@ -219,6 +227,7 @@ ETL connectors | [doc/jobseeker/ETL/connectors/README.md](doc/jobseeker/ETL/conn
 Transaction Monitoring Framework | [doc/jobseeker/TransactionMonitoring/README.md](doc/jobseeker/TransactionMonitoring/README.md)
 Insight Studio and connected BI | [doc/jobseeker/DataVisualization/README.md](doc/jobseeker/DataVisualization/README.md)
 Python ETL | [doc/Python/README.MD](doc/Python/README.MD)
+Lightweight runtime assessment | [doc/jobseeker/Architecture/lightweight-runtime.md](doc/jobseeker/Architecture/lightweight-runtime.md)
 Talend ETL | [doc/Talend/README.md](doc/Talend/README.md)
 Jenkins notes | [doc/Jenkins/README.md](doc/Jenkins/README.md)
 

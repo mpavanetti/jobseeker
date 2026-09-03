@@ -1,0 +1,31 @@
+# Lightweight local runtime: retain JobSeeker's current scheduling contract,
+# but omit Docker-in-Docker, Docker monitoring, and the browser IDE. Use the
+# base Compose file instead when those capabilities are needed.
+services:
+  php:
+    depends_on: !override
+      mariadb:
+        condition: service_healthy
+    environment:
+      JOBSEEKER_OPENVSCODE_ENABLED: "false"
+      JOBSEEKER_DOCKER_MONITOR_URL: ""
+      JOBSEEKER_DOCKER_RUNTIME_URL: ""
+
+  jenkins:
+    depends_on: !override
+      jenkins-home-init:
+        condition: service_completed_successfully
+    environment:
+      DOCKER_HOST: ""
+
+  docker-monitor-proxy:
+    profiles: [full]
+
+  docker-runtime:
+    profiles: [full]
+
+  openvscode-data-init:
+    profiles: [full]
+
+  openvscode:
+    profiles: [full]

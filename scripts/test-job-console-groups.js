@@ -133,4 +133,36 @@ const legacyDockerCleanup = consoleGroups.parse([
 assert.deepStrictEqual(legacyDockerCleanup.sections.map((section) => section.kind), ['python', 'cleanup', 'result']);
 assert(legacyDockerCleanup.sections.find((section) => section.kind === 'cleanup').text.includes('[ 0 -ne 0 ]'));
 
+const explicitRuntimeMarkers = consoleGroups.parse([
+  'Started by user jobseeker',
+  '[JobSeeker] Git source checkout',
+  'Cloning into /tmp/source',
+  '[JobSeeker] Docker image build',
+  '#1 DONE 0.1s',
+  '[JobSeeker] Docker container execution',
+  'container output',
+  '[JobSeeker] Cleanup',
+  'removed build context',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.deepStrictEqual(explicitRuntimeMarkers.sections.map((section) => section.kind), [
+  'jenkins',
+  'source',
+  'docker-build',
+  'docker-execution',
+  'cleanup',
+  'result'
+]);
+assert(explicitRuntimeMarkers.sections.find((section) => section.kind === 'source').text.includes('Cloning into'));
+assert(explicitRuntimeMarkers.sections.find((section) => section.kind === 'docker-execution').text.includes('container output'));
+
+const explicitShellMarker = consoleGroups.parse([
+  '[JobSeeker] Shell execution',
+  'first shell line',
+  'second shell line',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.deepStrictEqual(explicitShellMarker.sections.map((section) => section.kind), ['shell', 'result']);
+assert(explicitShellMarker.sections[0].text.includes('second shell line'));
+
 console.log('Job console grouping tests passed.');

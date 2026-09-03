@@ -68,6 +68,12 @@ class Tmf extends BaseController
         return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
     }
 
+    private function addResultWindowMetadata(&$data)
+    {
+        $data['resultLimit'] = $this->model->resultLimit();
+        $data['resultsTruncated'] = $this->model->lastResultWasTruncated();
+    }
+
     /**
      * Index Page for this controller.
      */
@@ -96,6 +102,7 @@ class Tmf extends BaseController
 
         $environment = $this->selectedEnvironmentFilter();
         $data["jobs"] = $this->model->list($environment);
+        $this->addResultWindowMetadata($data);
         $data["role"] = $this->role;
         $data["selectedEnvironment"] = $environment;
         $this->global['selectedEnvironment'] = $environment;
@@ -126,6 +133,7 @@ class Tmf extends BaseController
             }
 
             $data["jobs"] = $this->model->listJobs($status,$job_name,$dimension,$reprocess,$eventText,$fromDate,$toDate,$environment);
+            $this->addResultWindowMetadata($data);
             $data["role"] = $this->role;
             $data["selectedEnvironment"] = $globalEnvironment !== 'all' ? $globalEnvironment : $this->selectedEnvironmentFromSelection($environment);
 
@@ -139,6 +147,7 @@ class Tmf extends BaseController
     {
             $environment = $this->selectedEnvironmentFilter();
             $data["jobs"] = $this->model->fetchDataStatus($status, $environment);
+            $this->addResultWindowMetadata($data);
             $data["role"] = $this->role;
             $data["selectedEnvironment"] = $environment;
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
@@ -151,6 +160,7 @@ class Tmf extends BaseController
     {
             $environment = $this->selectedEnvironmentFilter();
             $data["jobs"] = $this->model->fetchDataJobName($jobName, $environment);
+            $this->addResultWindowMetadata($data);
             $data["role"] = $this->role;
             $data["selectedEnvironment"] = $environment;
             $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';

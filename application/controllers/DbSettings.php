@@ -46,6 +46,7 @@ class DbSettings extends BaseController
             'azure_blob' => 'Azure Blob Storage',
             'azure_data_lake' => 'Azure Data Lake',
             'gcs' => 'Google Cloud Storage',
+            'git_repository' => 'Git repository credentials',
             'generic_secret' => 'Generic credential'
         );
     }
@@ -292,6 +293,13 @@ class DbSettings extends BaseController
             $this->session->set_flashdata('error', 'Provide the required Oracle service name or SID.');
             redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
         }
+        if ($dbType === 'git_repository') {
+            if (! preg_match('/^(?:[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?)$/i', $address)
+                || ! in_array($authType, array('token', 'api_key', 'username_password', 'ssh_key', 'none'), TRUE)) {
+                $this->session->set_flashdata('error', 'Git connectors require a provider hostname and token, username/password, SSH key, or no authentication.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            }
+        }
         $availableEnvironments = array_map(function($row) { return strtoupper($row->Environment); }, $this->environments());
         if ($environment !== 'ALL' && ! in_array($environment, $availableEnvironments, TRUE)) {
             $this->session->set_flashdata('error', 'Select an environment configured in Context Settings.');
@@ -344,6 +352,17 @@ class DbSettings extends BaseController
                 $this->session->set_flashdata('error', $clearLocalSecrets
                     ? 'Username/password authentication cannot clear its required values. Provide both values or select another authentication type.'
                     : 'Username/password authentication requires both values.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            }
+            if ($dbType === 'git_repository' && $authType === 'ssh_key'
+                && ((! isset($secretValues['private_key']) && ! isset($secretValues['ssh_key']))
+                    || ! isset($secretValues['known_hosts']))) {
+                $this->session->set_flashdata('error', 'SSH Git authentication requires private_key and known_hosts in the additional local secret fields.');
+                redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+            }
+            if ($dbType === 'git_repository' && in_array($authType, array('token', 'api_key'), TRUE)
+                && ! isset($secretValues[$authType]) && ! isset($secretValues['password'])) {
+                $this->session->set_flashdata('error', 'Git token authentication requires a token/api_key additional field or the password field.');
                 redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
             }
             $encryptedSecret = $this->model->encryptSecretValues($secretValues);
