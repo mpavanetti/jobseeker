@@ -63,6 +63,7 @@ class JobView extends BaseController
         if ($environment === '') {
             $environment = $this->jobSeekerEnvironmentPreference();
         }
+		$environment = $this->jobSeekerEffectiveEnvironment($environment);
         if ($jobName === '' || strlen($jobName) > 400) {
             $this->output->set_status_header(400);
             echo json_encode(array('ok' => FALSE, 'message' => 'A job name is required.'));

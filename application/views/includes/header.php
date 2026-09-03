@@ -14,6 +14,10 @@ if (! function_exists('jobseeker_normalize_global_environment')) {
   }
 }
 
+$jobseekerDeploymentMode = isset($deployment_mode) && $deployment_mode === 'standalone' ? 'standalone' : 'multi';
+$jobseekerStandaloneEnvironment = $jobseekerDeploymentMode === 'standalone'
+  ? jobseeker_normalize_global_environment(isset($standalone_environment) ? $standalone_environment : '')
+  : '';
 $jobseekerGlobalEnvironmentOptions = array();
 if (class_exists('CI_Model')) {
   $CI =& get_instance();
@@ -32,6 +36,9 @@ if (class_exists('CI_Model')) {
 
 $jobseekerGlobalEnvironmentOptions = array_values(array_unique($jobseekerGlobalEnvironmentOptions));
 sort($jobseekerGlobalEnvironmentOptions);
+$jobseekerGlobalEnvironmentOptions = $jobseekerDeploymentMode === 'standalone'
+  ? array($jobseekerStandaloneEnvironment)
+  : $jobseekerGlobalEnvironmentOptions;
 $jobseekerGlobalEnvironmentOptionValues = array_values(array_unique(array_map('jobseeker_normalize_global_environment', $jobseekerGlobalEnvironmentOptions)));
 $jobseekerCurrentController = strtolower((string) $this->router->fetch_class());
 $jobseekerCurrentMethod = strtolower((string) $this->router->fetch_method());
@@ -39,7 +46,9 @@ $jobseekerExecutorMonitorActive = $jobseekerCurrentController === 'jobexecution'
 $jobseekerDockerMonitorActive = $jobseekerCurrentController === 'dockermonitoring';
 $jobseekerTransactionMonitorActive = $jobseekerCurrentController === 'tmf';
 $jobseekerMonitoringActive = $jobseekerExecutorMonitorActive || $jobseekerDockerMonitorActive;
-$jobseekerSelectedEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE);
+$jobseekerSelectedEnvironment = $jobseekerDeploymentMode === 'standalone'
+  ? $jobseekerStandaloneEnvironment
+  : (isset($selectedEnvironment) ? $selectedEnvironment : $this->input->get('environment', TRUE));
 if (trim((string) $jobseekerSelectedEnvironment) === '') {
   $jobseekerPreferenceUserId = preg_replace('/[^0-9]/', '', (string) (isset($user_id) ? $user_id : ''));
   $jobseekerPreferenceUserId = $jobseekerPreferenceUserId === '' ? 'anonymous' : $jobseekerPreferenceUserId;
@@ -141,6 +150,8 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   window.jobseekerRunningBuildsUrl = <?php echo json_encode(base_url() . 'jenkins/runningBuilds'); ?>;
   window.jobseekerGlobalEnvironmentOptions = <?php echo json_encode($jobseekerGlobalEnvironmentOptions); ?>;
   window.jobseekerDashboardEnvironment = <?php echo json_encode($jobseekerSelectedEnvironment); ?>;
+  window.jobseekerDeploymentMode = <?php echo json_encode($jobseekerDeploymentMode); ?>;
+  window.jobseekerStandaloneEnvironment = <?php echo json_encode($jobseekerStandaloneEnvironment); ?>;
 
   function addJobseekerCsrfToForm(form) {
     if (! window.jobseekerCsrf || ! window.jobseekerCsrf.name || ! window.jobseekerCsrf.hash) {
@@ -202,8 +213,10 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     var storageKey = 'jobseeker.global.environment.user.' + preferenceUserId;
     var cookieName = 'jobseeker_global_environment_user_' + preferenceUserId;
     var applying = false;
-    var retryTimer = null;
-    var dashboardRedirecting = false;
+	var retryTimer = null;
+	var dashboardRedirecting = false;
+	var standaloneMode = window.jobseekerDeploymentMode === 'standalone';
+	var standaloneEnvironment = normalize(window.jobseekerStandaloneEnvironment || '');
 
     function configuredEnvironmentNames() {
       var names = [];
@@ -218,15 +231,21 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       return names;
     }
 
-    function readStored() {
-      try {
+	function readStored() {
+	  if (standaloneMode) {
+		return standaloneEnvironment;
+	  }
+	  try {
         return window.localStorage.getItem(storageKey) || 'all';
       } catch (error) {
         return 'all';
       }
     }
 
-    function store(value) {
+	function store(value) {
+	  if (standaloneMode) {
+		value = standaloneEnvironment;
+	  }
       try {
         window.localStorage.setItem(storageKey, value || 'all');
       } catch (error) {
@@ -253,15 +272,15 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       return raw.toUpperCase();
     }
 
-    function hasGlobalOption(value) {
-      value = normalize(value);
-      return value === 'all' || $.inArray(value, configuredEnvironmentNames()) !== -1;
-    }
+	function hasGlobalOption(value) {
+	  value = normalize(value);
+	  return (! standaloneMode && value === 'all') || $.inArray(value, configuredEnvironmentNames()) !== -1;
+	}
 
-    function coerceToOption(value) {
-      value = normalize(value);
-      return hasGlobalOption(value) ? value : 'all';
-    }
+	function coerceToOption(value) {
+	  value = normalize(value);
+	  return hasGlobalOption(value) ? value : (standaloneMode ? standaloneEnvironment : 'all');
+	}
 
     function isConfiguredEnvironment(value) {
       value = normalize(value);
@@ -1056,14 +1075,14 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                 <span class="jobseeker-env-icon"><i class="fa fa-globe"></i></span>
                 <div class="jobseeker-env-copy">
                   <label for="globalEnvironmentSelector">Environment</label>
-                  <select id="globalEnvironmentSelector" class="form-control input-sm" title="Global environment selector">
-                    <option value="all">All environments</option>
+                  <select id="globalEnvironmentSelector" class="form-control input-sm" title="<?php echo $jobseekerDeploymentMode === 'standalone' ? 'Environment fixed by this standalone deployment' : 'Global environment selector'; ?>"<?php echo $jobseekerDeploymentMode === 'standalone' ? ' disabled' : ''; ?>>
+                    <?php if ($jobseekerDeploymentMode !== 'standalone') { ?><option value="all">All environments</option><?php } ?>
                     <?php foreach ($jobseekerGlobalEnvironmentOptions as $jobseekerGlobalEnvironmentOption) { ?>
-                      <option value="<?php echo html_escape(jobseeker_normalize_global_environment($jobseekerGlobalEnvironmentOption)); ?>"><?php echo html_escape($jobseekerGlobalEnvironmentOption); ?></option>
+                      <option value="<?php echo html_escape(jobseeker_normalize_global_environment($jobseekerGlobalEnvironmentOption)); ?>"><?php echo html_escape($jobseekerGlobalEnvironmentOption); ?><?php echo $jobseekerDeploymentMode === 'standalone' ? ' · standalone' : ''; ?></option>
                     <?php } ?>
                   </select>
                 </div>
-                <i class="fa fa-angle-down jobseeker-env-caret"></i>
+				<?php if ($jobseekerDeploymentMode !== 'standalone') { ?><i class="fa fa-angle-down jobseeker-env-caret"></i><?php } ?>
               </div>
             </li>
             <li class="jobseeker-global-timezone">
@@ -1243,7 +1262,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
             <li><a href="<?php echo base_url(); ?>Context/projectDetails"><i class="fa fa-table"></i><span>Project Details</span></a></li>
             <li><a href="<?php echo base_url(); ?>Context/environment"><i class="fa fa-globe"></i><span>Environment Details</span></a></li>
             <li><a href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-sliders"></i><span>Context Details</span></a></li>
-            <li><a href="<?php echo base_url(); ?>Context/promotion"><i class="fa fa-level-up"></i><span>Environment Deployment</span></a></li>
+			<?php if ($jobseekerDeploymentMode !== 'standalone') { ?><li><a href="<?php echo base_url(); ?>Context/promotion"><i class="fa fa-level-up"></i><span>Environment Deployment</span></a></li><?php } ?>
           </ul>
         </li>
         <?php  if ($jenkins_enabled == true) { 

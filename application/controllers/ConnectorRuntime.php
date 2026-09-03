@@ -1,11 +1,14 @@
 <?php if(!defined('BASEPATH')) exit('No direct script access allowed');
 
-class ConnectorRuntime extends CI_Controller
+require APPPATH . '/libraries/BaseController.php';
+
+class ConnectorRuntime extends BaseController
 {
     public function __construct()
     {
         parent::__construct();
         $this->load->model('DbSettings_model', 'connectors');
+		$this->ensureJobSeekerStandaloneEnvironmentRecord();
     }
 
     private function jsonResponse($payload, $status = 200)
@@ -98,6 +101,11 @@ class ConnectorRuntime extends CI_Controller
             $this->jsonResponse(array('error' => 'A valid environment and job_name are required.'), 422);
             return;
         }
+		if (! $this->jobSeekerEnvironmentIsAllowed($environment)) {
+			$this->jsonResponse(array('error' => 'This standalone deployment only exposes '.$this->jobSeekerStandaloneEnvironment().' connectors.'), 409);
+			return;
+		}
+		$environment = $this->jobSeekerEffectiveEnvironment($environment);
 
         try {
             $connectors = array();

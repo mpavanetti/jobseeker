@@ -2,6 +2,7 @@
 $pipelineId = $pipeline ? (int) $pipeline->id : 0;
 $environmentQuery = rawurlencode($selectedEnvironment);
 $currentRunId = ! empty($recentRuns) ? (int) $recentRuns[0]->id : 0;
+$standaloneDeployment = isset($deployment_mode) && $deployment_mode === 'standalone';
 $groups = array();
 foreach ($pipelineList as $item) {
     $group = trim((string) $item->group_name) ?: 'General';
@@ -57,7 +58,7 @@ foreach ($pipelineList as $item) {
           <button type="button" class="btn btn-default btn-sm" id="pipelineAutoLayout" title="Auto layout"><i class="fa fa-sitemap"></i></button>
           <span class="pipeline-toolbar-spacer"></span>
           <span class="pipeline-environment"><i class="fa fa-cube"></i> <?php echo html_escape($selectedEnvironment); ?></span>
-          <button type="button" class="btn btn-info btn-sm" id="pipelineDeploy" title="Deploy to environment"<?php echo $pipelineId <= 0 ? ' disabled' : ''; ?>><i class="fa fa-cloud-upload"></i></button>
+		  <?php if (! $standaloneDeployment) { ?><button type="button" class="btn btn-info btn-sm" id="pipelineDeploy" title="Deploy to environment"<?php echo $pipelineId <= 0 ? ' disabled' : ''; ?>><i class="fa fa-cloud-upload"></i></button><?php } ?>
           <button type="button" class="btn btn-success btn-sm" id="pipelineRun" title="Run pipeline"<?php echo $pipelineId <= 0 || ! $pipeline->is_active ? ' disabled' : ''; ?>><i class="fa fa-play"></i></button>
           <button type="button" class="btn btn-warning btn-sm" id="pipelineStop" title="Stop run" disabled><i class="fa fa-stop"></i></button>
           <button type="button" class="btn btn-danger btn-sm" id="pipelineDelete" title="Delete pipeline"<?php echo $pipelineId <= 0 ? ' disabled' : ''; ?>><i class="fa fa-trash"></i></button>
@@ -147,7 +148,7 @@ foreach ($pipelineList as $item) {
   </section>
 </div>
 
-<div class="modal fade" id="pipelineDeployModal" tabindex="-1" role="dialog" aria-labelledby="pipelineDeployTitle">
+<?php if (! $standaloneDeployment) { ?><div class="modal fade" id="pipelineDeployModal" tabindex="-1" role="dialog" aria-labelledby="pipelineDeployTitle">
   <div class="modal-dialog pipeline-deploy-dialog" role="document">
     <div class="modal-content">
       <div class="modal-header">
@@ -181,6 +182,7 @@ foreach ($pipelineList as $item) {
     </div>
   </div>
 </div>
+<?php } ?>
 <script>
 window.JobSeekerPipelineConfig = <?php echo json_encode(array(
   'baseUrl' => base_url(),

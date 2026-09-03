@@ -33,7 +33,9 @@ class JobExecution extends BaseController
                     'job_creation_dates' => $this->readJobCreationDates(),
                     'resume_job' => trim((string) $this->security->xss_clean($this->input->get('job'))),
                     'resume_build' => $resumeBuild,
-                    'resume_environment' => trim((string) $this->security->xss_clean($this->input->get('environment')))
+					'resume_environment' => $this->jobSeekerIsStandaloneDeployment()
+						? $this->jobSeekerStandaloneEnvironment()
+						: trim((string) $this->security->xss_clean($this->input->get('environment')))
                 );
         
                 $this->loadViews("jobExecution", $this->global, $data, NULL);
@@ -58,6 +60,7 @@ class JobExecution extends BaseController
         if ($environment === '') {
             $environment = $this->jobSeekerEnvironmentPreference();
         }
+		$environment = $this->jobSeekerEffectiveEnvironment($environment);
         if ($jobName === '' || strlen($jobName) > 400) {
             $this->output->set_status_header(400);
             echo json_encode(array('ok' => FALSE, 'message' => 'A job name is required.'));

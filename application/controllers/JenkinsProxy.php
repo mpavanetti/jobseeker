@@ -25,6 +25,9 @@ class JenkinsProxy extends BaseController
 
     private function requestedEnvironment()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         $environment = trim((string) $this->input->get('environment', TRUE));
         return $environment !== '' ? $environment : $this->jobSeekerEnvironmentPreference();
     }
@@ -581,10 +584,10 @@ class JenkinsProxy extends BaseController
 
         $commands = $mode === 'kubernetes'
             ? array(
-                'Configure Jenkins controller executors to '.$controllerExecutors.'.',
-                'Create Jenkins Kubernetes pod templates with the labels in JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS.',
-                'Use one executor per pod and set each pod-template instance cap to the recommended slot limit.',
-                'Roll the JobSeeker app after setting the environment variables.'
+                'Build and publish the JobSeeker images listed in deploy/kubernetes/README.md.',
+                'Set the environment pod caps in deploy/kubernetes/base/config.yaml to the recommended slot limits.',
+                'kubectl apply -k deploy/kubernetes/base',
+                'kubectl -n jobseeker rollout status statefulset/jenkins && kubectl -n jobseeker get pods -w'
             )
             : array(
                 'docker compose up -d --force-recreate php jenkins',
@@ -614,6 +617,7 @@ class JenkinsProxy extends BaseController
             'notes' => array(
                 'Use this as a CPU-heavy starting point. I/O-heavy jobs can often tolerate more executors than CPU cores.',
                 'JobSeeker slots should usually match the runnable agent capacity for that environment.',
+                $mode === 'kubernetes' ? 'The bundled Kubernetes cloud creates one isolated Jenkins agent pod per build and deletes it afterward.' : 'Compose agents are long-lived containers and may run more than one executor each.',
                 'Existing jobs are now reconciled to the target label when they are triggered through JobSeeker. Direct Jenkins UI/API triggers bypass that safety check.'
             )
         );

@@ -50,6 +50,9 @@ class DataAssets extends BaseController
 
     private function selectedEnvironment()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         $environment = trim((string) $this->input->get('environment', TRUE));
         if ($environment === '') {
             $environment = $this->jobSeekerEnvironmentPreference();
@@ -281,7 +284,9 @@ class DataAssets extends BaseController
         $name = trim((string) $this->input->post('name'));
         $direction = trim((string) $this->input->post('direction'));
         $format = strtolower(trim((string) $this->input->post('format')));
-        $environment = $this->normalizeEnvironment($this->input->post('environment'));
+        $environment = $this->jobSeekerIsStandaloneDeployment()
+			? $this->jobSeekerStandaloneEnvironment()
+			: $this->normalizeEnvironment($this->input->post('environment'));
         $selectedEnvironment = $this->selectedEnvironment();
         $jobName = $this->normalizeJobName($this->input->post('job_name'));
         $description = trim((string) $this->input->post('description'));
