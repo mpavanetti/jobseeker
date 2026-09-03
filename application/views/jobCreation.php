@@ -2147,6 +2147,7 @@
               <option value="contexts">Context Settings</option>
               <option value="data_assets">Data Assets</option>
               <option value="connectors">Connectors</option>
+              <option value="database">Database connector</option>
               <option value="email_metrics">Email metrics</option>
               <option value="pipelines">Pipelines</option>
               <option value="jenkins">Jenkins runtime</option>
@@ -3609,6 +3610,7 @@
         contexts: 'Contexts',
         data_assets: 'Data Assets',
         connectors: 'Connectors',
+        database: 'Database',
         email_metrics: 'Email Metrics',
         pipelines: 'Pipelines',
         jenkins: 'Jenkins',
