@@ -6,6 +6,8 @@ services:
     depends_on: !override
       mariadb:
         condition: service_healthy
+      repository-data-init:
+        condition: service_completed_successfully
     environment:
       JOBSEEKER_OPENVSCODE_ENABLED: "false"
       JOBSEEKER_DOCKER_MONITOR_URL: ""
@@ -14,6 +16,8 @@ services:
   jenkins:
     depends_on: !override
       jenkins-home-init:
+        condition: service_completed_successfully
+      repository-data-init:
         condition: service_completed_successfully
     environment:
       DOCKER_HOST: ""
