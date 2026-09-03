@@ -40,6 +40,22 @@ assert(jobView.includes('jobSampleIntegrationLabels') && jobView.includes('sampl
 assert(jobView.includes("database: 'Database'") && jobView.includes('<option value="database">'), 'The sample library must expose the database-connector integration filter.');
 assert(jobView.includes("loadPythonInlineFilesPayload({files: sample.files || []"), 'Python samples must be able to load full workspaces.');
 assert(jobView.includes("if (sample.docker_image)"), 'Samples must be able to select a Docker image that provides their declared runtime tools.');
+
+// Loading a sample must not discard the runtime the operator already picked.
+assert(!/\$\('#pythonRuntimeMode'\)\.val\(sample\.runtime === 'docker' \? 'docker' : 'local'\)/.test(jobView), 'Loading a sample must not reset an operator-selected Docker runtime back to the Jenkins agent.');
+assert(/var sampleRequiresDocker = sample\.runtime === 'docker' \|\| !! sample\.use_dockerfile;/.test(jobView), 'Sample loading must decide the runtime from what the sample content actually requires.');
+assert(/if \(sampleRequiresDocker\) \{\s*\$\('#pythonRuntimeMode'\)\.val\('docker'\);\s*\}/.test(jobView), 'A Docker-only sample must still pin the Docker runtime.');
+assert(/keepSelectedDockerRuntime && pythonWorkspaceAllowsInlineCode\(\)/.test(jobView), 'A preserved Docker runtime must keep the Dockerfile-backed build behind the Dockerfile tab and Open in VS Code.');
+assert(/if \(\$\('#pythonUseDockerfile'\)\.is\(':checked'\)\) \{\s*ensurePythonPyprojectText\(\);\s*ensurePythonDockerfileText\(\);/.test(jobView), 'Dockerfile and pyproject text must be seeded from the resolved checkbox state, not only from the sample payload.');
+
+// Only samples whose content needs Docker may declare it; the rest stay runtime-neutral.
+samples.split(/\n    array\(/).forEach(block => {
+  const id = (block.match(/'id'\s*=>\s*'([^']+)'/) || [])[1];
+  if (!id || !/'family'\s*=>\s*'python'/.test(block)) return;
+  if (/'runtime'\s*=>\s*'docker'/.test(block)) {
+    assert(/'use_dockerfile'\s*=>\s*TRUE/.test(block) && /'docker_image'\s*=>/.test(block), `Sample ${id} pins the Docker runtime, so it must declare the Dockerfile build and image it needs.`);
+  }
+});
 assert((samples.match(/'docker_image'\s*=>\s*'python:3\.13-alpine'/g) || []).length >= 3, 'Shell samples that require Python tooling must select a compatible Docker image.');
 
 assert(generatorController.includes('return $this->role == ROLE_ADMIN;'), 'Dataset generation must be restricted to administrators.');
