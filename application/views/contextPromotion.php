@@ -630,6 +630,8 @@ foreach($promotionJobs as $workload) {
     var sourceJobOptions = [];
     var sourceJobEnvironmentRequests = {};
     var sourceJobEnvironmentInfo = {};
+    var jobSchedulesUrl = <?php echo json_encode(base_url().'jobCreation/jobSchedules'); ?>;
+    var jobEnvironmentIndexRequest = null;
     var sourceEnvironmentOptionList = [];
     var environmentHelper = window.JobSeekerEnvironment || {
       detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
@@ -937,23 +939,79 @@ foreach($promotionJobs as $workload) {
       setTimeout(adjustPromotionInventoryTable, 0);
     }
 
+    // Every promotion-history row's environment, from one request.
+    //
+    // This table used to pull config.xml straight from Jenkins for each row, with
+    // no caching and no de-duplication, so a history of sixty rows meant sixty
+    // proxied round trips every time the page opened. The server resolves the
+    // same parameter declaration while listing the jobs.
+    function jobEnvironmentIndex() {
+      if (! jobEnvironmentIndexRequest) {
+        jobEnvironmentIndexRequest = $.ajax({url: jobSchedulesUrl, method: 'GET', dataType: 'json'})
+          .then(function(payload) {
+            return payload && payload.schedules ? payload.schedules : {};
+          }, function() {
+            return {};
+          });
+      }
+
+      return jobEnvironmentIndexRequest;
+    }
+
     function hydrateInventoryEnvironments() {
+      var rows = [];
+
       $('tr[data-promotion-job]').each(function() {
         var $row = $(this);
         var jobName = $row.data('promotion-job') || '';
 
-        if (!jobName) {
+        if (! jobName) {
           return;
         }
 
         setInventoryEnvironment($row, environmentHelper.detectFromJob({name: jobName, fullName: jobName}));
+        rows.push({row: $row, jobName: jobName});
+      });
 
-        $.ajax({
-          url: jenkinsBaseUrl() + jenkinsJobPath(jobName) + '/config.xml',
-          method: 'GET',
-          dataType: 'text'
-        }).done(function(xmlText) {
-          setInventoryEnvironment($row, environmentHelper.detectFromConfig(xmlText || '', jobName));
+      if (! rows.length) {
+        return;
+      }
+
+      jobEnvironmentIndex().done(function(index) {
+        var pending = {};
+
+        $.each(rows, function(idx, entry) {
+          var indexed = index[entry.jobName];
+
+          // Only a parameter-declared environment is as authoritative here as
+          // reading config.xml; anything else still reads its own config.
+          if (indexed && indexed.environmentFromParameter) {
+            setInventoryEnvironment(entry.row, {
+              environment: environmentHelper.normalize(indexed.environment),
+              source: 'Jenkins parameter',
+              unknown: false
+            });
+            return;
+          }
+
+          // The same job can appear on several history rows; read it once.
+          if (! pending[entry.jobName]) {
+            pending[entry.jobName] = [];
+          }
+          pending[entry.jobName].push(entry.row);
+        });
+
+        $.each(pending, function(jobName, targets) {
+          $.ajax({
+            url: jenkinsBaseUrl() + jenkinsJobPath(jobName) + '/config.xml',
+            method: 'GET',
+            dataType: 'text'
+          }).done(function(xmlText) {
+            var info = environmentHelper.detectFromConfig(xmlText || '', jobName);
+            $.each(targets, function(idx, $row) {
+              setInventoryEnvironment($row, info);
+            });
+          });
         });
       });
     }

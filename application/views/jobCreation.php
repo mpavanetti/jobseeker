@@ -7694,6 +7694,22 @@
         return;
       }
 
+      // The job list used to fetch config.xml for every job just to read its
+      // environment, which cost one Jenkins round trip per job on every page
+      // load. When the server already resolved the environment from a Jenkins
+      // parameter it read the very same declaration config.xml would give us,
+      // so trust it and skip the request. Jobs the server could not resolve
+      // still fall through and are parsed from config.xml below.
+      if (item.row.environmentFromParameter && item.row.environment) {
+        item.row.environmentInfo = {
+          environment: environmentHelper.normalize(item.row.environment),
+          source: 'Jenkins parameter',
+          unknown: false
+        };
+        item.row.environmentHydrated = true;
+        return;
+      }
+
       availableJobEnvironmentRequests[item.name] = $.ajax({
         url: jenkins_url + jenkinsJobPath(item.name) + '/config.xml',
         method: 'GET',

@@ -55,4 +55,21 @@ assert(!controller.includes("'/images/prune'"), 'Image prune must remain outside
 assert(!controller.includes("'/volumes/prune'"), 'Volume prune must remain outside cache cleanup.');
 assert(/location = \/build\/prune\s*\{[\s\S]*?limit_except POST/.test(proxy), 'The host socket proxy must expose an exact POST-only build prune route.');
 
+// --- Storage reading is shared, not recomputed per view ---------------------
+// Docker computes disk usage by walking every layer, volume and build-cache
+// record. That took seconds and held a PHP worker for the whole walk on every
+// page load, so the reading is cached briefly and shared.
+assert(/const STORAGE_CACHE_KEY = '[^']+';/.test(controller) && /const STORAGE_CACHE_TTL = \d+;/.test(controller),
+  'The Docker storage reading must declare a cache key and TTL.');
+assert(/\$payload = \$fresh \? FALSE : \$this->cache->get\(self::STORAGE_CACHE_KEY\);/.test(controller),
+  'The storage endpoint must serve a recent reading unless a fresh one is requested.');
+assert(/\$this->cache->save\(self::STORAGE_CACHE_KEY, \$payload, self::STORAGE_CACHE_TTL\);/.test(controller),
+  'A freshly computed storage reading must be cached for the next viewer.');
+assert(/\$this->cache->delete\(self::STORAGE_CACHE_KEY\);/.test(controller),
+  'Reclaiming build cache must invalidate the storage reading, or the freed space would not show.');
+const pruneBody = controller.slice(controller.indexOf('public function pruneCache'));
+const deleteAt = pruneBody.indexOf('cache->delete(self::STORAGE_CACHE_KEY)');
+assert(deleteAt > pruneBody.indexOf('pruneEngineBuildCache') && deleteAt < pruneBody.indexOf('totalSpaceReclaimedBytes'),
+  'The storage reading must be invalidated after the prune runs and before its result is reported.');
+
 console.log('Docker monitor health tests passed.');
