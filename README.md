@@ -13,7 +13,7 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 ### Job operations
 
 - Create and manage Jenkins jobs through guided forms for Python, Talend, Linux shell, and Windows command workloads.
-- Load curated simple, intermediate, and advanced shell or Python starters into the active execution editor, including multi-file JobSeeker SDK workspaces.
+- Load curated simple, intermediate, and advanced shell or Python starters into the active execution editor, including multi-file JobSeeker SDK workspaces and database-connector ETL jobs that run out of the box.
 - Save multiple browser-cached job drafts, compare their configuration, duplicate them, and chain drafts before creating jobs.
 - Run jobs immediately or schedule one-time, recurring, tag-based, and custom Jenkins cron triggers.
 - Send templated email notifications for successful, failed, and aborted builds.
@@ -108,7 +108,7 @@ Populate Jenkins and MariaDB with representative jobs, build states, TMF history
 
 The seed includes successful, failed, running, queued, disabled, and not-built jobs, plus Python SDK examples for Jenkins-agent and Docker execution.
 
-Job Creation also has a **Load Sample** library for reviewed shell and Python starters. Samples can be filtered by runtime, complexity, or platform integration, including TMF tracking, Context Settings, Data Assets, scoped connectors, pipelines, email metrics, Docker, and tests. The advanced platform pipeline combines these contracts in one adaptable JobSeeker job; loading a sample never saves or executes it automatically.
+Job Creation also has a **Load Sample** library for reviewed shell and Python starters. Samples can be filtered by runtime, complexity, or platform integration, including TMF tracking, Context Settings, Data Assets, scoped connectors, the built-in database connector, pipelines, email metrics, Docker, and tests. Every sample is POSIX-`sh` safe and runs on a fresh stack with nothing pre-provisioned: connector samples resolve the seeded `jobseeker-mariadb` connector, and samples that can use a governed Data Asset or Context value degrade with an actionable hint when one is not registered. The database ETL workspace and the platform pipeline combine these contracts in one adaptable JobSeeker job; loading a sample never saves or executes it automatically.
 
 Remove the seeded dataset with:
 
