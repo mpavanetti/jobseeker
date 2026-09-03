@@ -105,6 +105,8 @@ services:
       #- ./logs/php.log:/var/log/fpm-php.www.log
     environment:
       - CI_ENV=${CI_ENV:-production}
+      - JOBSEEKER_DEPLOYMENT_MODE=${JOBSEEKER_DEPLOYMENT_MODE:-multi}
+      - JOBSEEKER_STANDALONE_ENVIRONMENT=${JOBSEEKER_STANDALONE_ENVIRONMENT:-}
       - JOBSEEKER_DB_HOST=mariadb
       - JOBSEEKER_DB_USER=${JOBSEEKER_DB_USER:-mysql}
       - JOBSEEKER_DB_PASSWORD=${JOBSEEKER_DB_PASSWORD:-mysql}

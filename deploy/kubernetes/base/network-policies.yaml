@@ -1,0 +1,67 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mariadb-ingress
+  labels:
+    app.kubernetes.io/name: jobseeker
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: mariadb
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: ["php", "jenkins", "jenkins-agent"]
+      ports:
+        - protocol: TCP
+          port: 3306
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: php-ingress
+  labels:
+    app.kubernetes.io/name: jobseeker
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: php
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: nginx
+      ports:
+        - protocol: TCP
+          port: 9000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jenkins-ingress
+  labels:
+    app.kubernetes.io/name: jobseeker
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: jenkins
+  policyTypes: ["Ingress"]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: jenkins-agent
+      ports:
+        - protocol: TCP
+          port: 50000

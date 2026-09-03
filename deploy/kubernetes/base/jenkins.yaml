@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jenkins
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: jenkins
+spec:
+  serviceName: jenkins
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: jenkins
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jobseeker
+        app.kubernetes.io/component: jenkins
+    spec:
+      serviceAccountName: jobseeker-jenkins
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: jenkins
+          image: jobseeker-jenkins:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: agent
+              containerPort: 50000
+          envFrom:
+            - configMapRef:
+                name: jobseeker-config
+          env:
+            - name: CASC_JENKINS_CONFIG
+              value: /var/jenkins_files/casc.yaml,/var/jenkins_files/casc-kubernetes.yaml
+            - name: JENKINS_NUM_EXECUTORS
+              value: "0"
+            - name: JENKINS_AGENT_PORT
+              value: "50000"
+            - name: JENKINS_ADMIN_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: jenkins-admin-user
+            - name: JENKINS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: jenkins-admin-password
+            - name: JOBSEEKER_CONNECTOR_API_URL
+              value: http://nginx:8080/connector-runtime
+            - name: JOBSEEKER_CONNECTOR_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: connector-api-token
+            - name: JOBSEEKER_SMTP_HOST
+              value: mailpit
+            - name: JOBSEEKER_SMTP_PORT
+              value: "1025"
+            - name: JOBSEEKER_SMTP_SSL
+              value: "false"
+            - name: JOBSEEKER_SMTP_REPLY_TO
+              value: jobseeker@localhost
+            - name: JOBSEEKER_JENKINS_ROOT_URL
+              value: https://jenkins.jobseeker.example/
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          startupProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: home
+              mountPath: /var/jenkins_home
+            - name: repository
+              mountPath: /php/repository
+      volumes:
+        - name: home
+          persistentVolumeClaim:
+            claimName: jobseeker-jenkins-home
+        - name: repository
+          persistentVolumeClaim:
+            claimName: jobseeker-repository
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: jenkins
+spec:
+  selector:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: jenkins
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: agent
+      port: 50000
+      targetPort: agent

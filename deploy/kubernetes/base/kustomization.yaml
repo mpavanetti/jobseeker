@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jobseeker
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - config.yaml
+  - storage.yaml
+  - rbac.yaml
+  - mariadb.yaml
+  - app.yaml
+  - jenkins.yaml
+  - openvscode.yaml
+  - mailpit.yaml
+  - network-policies.yaml
+images:
+  - name: jobseeker-php
+    newName: jobseeker-php
+    newTag: local
+  - name: jobseeker-nginx
+    newName: jobseeker-nginx
+    newTag: local
+  - name: jobseeker-jenkins
+    newName: jobseeker-jenkins
+    newTag: local
+  - name: jobseeker-jenkins-kubernetes-agent
+    newName: jobseeker-jenkins-kubernetes-agent
+    newTag: local
+  - name: jobseeker-mariadb
+    newName: jobseeker-mariadb
+    newTag: local
+  - name: jobseeker-openvscode
+    newName: jobseeker-openvscode
+    newTag: local

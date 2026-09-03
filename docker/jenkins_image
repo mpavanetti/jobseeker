@@ -22,11 +22,14 @@ COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
 # Set jenkins configurations.
 USER jenkins
 ENV JAVA_OPTS=-Djenkins.install.runSetupWizard=false
-COPY docker/jenkins/casc.yaml /var/jenkins_files/
-ENV CASC_JENKINS_CONFIG=/var/jenkins_files/casc.yaml
 
 # Install pinned plugins for reproducible local builds.
 COPY docker/jenkins/plugins.txt /var/jenkins_files/
 RUN jenkins-plugin-cli --plugin-file /var/jenkins_files/plugins.txt
+
+COPY docker/jenkins/casc.yaml /var/jenkins_files/
+COPY docker/jenkins/casc-kubernetes.yaml /var/jenkins_files/
+COPY docker/jenkins/casc-kubernetes-standalone.yaml /var/jenkins_files/
+ENV CASC_JENKINS_CONFIG=/var/jenkins_files/casc.yaml
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 CMD curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1

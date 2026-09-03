@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openvscode
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: openvscode
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: openvscode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jobseeker
+        app.kubernetes.io/component: openvscode
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: openvscode
+          image: jobseeker-openvscode:local
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/jobseeker-openvscode"]
+          args: ["/home/workspace/repository"]
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: JOBSEEKER_OPENVSCODE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: openvscode-token
+            - name: JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES
+              value: "0"
+            - name: UV_PYTHON_INSTALL_DIR
+              value: /tmp/jobseeker-python
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: repository
+              mountPath: /home/workspace/repository
+            - name: editor-data
+              mountPath: /home/workspace/.openvscode-server/data
+      volumes:
+        - name: repository
+          persistentVolumeClaim:
+            claimName: jobseeker-repository
+        - name: editor-data
+          persistentVolumeClaim:
+            claimName: jobseeker-openvscode-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openvscode
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: openvscode
+spec:
+  selector:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: openvscode
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

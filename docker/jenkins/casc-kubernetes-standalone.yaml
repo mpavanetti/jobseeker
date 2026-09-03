@@ -1,0 +1,104 @@
+jenkins:
+  clouds:
+    - kubernetes:
+        name: "jobseeker-kubernetes"
+        serverUrl: "${JOBSEEKER_KUBERNETES_SERVER_URL}"
+        namespace: "${JOBSEEKER_KUBERNETES_AGENT_NAMESPACE}"
+        jenkinsUrl: "${JOBSEEKER_KUBERNETES_JENKINS_URL}"
+        jenkinsTunnel: "${JOBSEEKER_KUBERNETES_JENKINS_TUNNEL}"
+        containerCapStr: "${JOBSEEKER_KUBERNETES_CONTAINER_CAP}"
+        connectTimeout: 5
+        readTimeout: 15
+        retentionTimeout: 5
+        waitForPodSec: 300
+        maxRequestsPerHostStr: "32"
+        webSocket: false
+        directConnection: false
+        skipTlsVerify: false
+        addMasterProxyEnvVars: false
+        activeContainers: true
+        restrictedPssSecurityContext: true
+        templates:
+          - name: "jobseeker-standalone"
+            namespace: "${JOBSEEKER_KUBERNETES_AGENT_NAMESPACE}"
+            label: "jobseeker jobseeker-env-standalone standalone ${JOBSEEKER_STANDALONE_ENVIRONMENT}"
+            nodeUsageMode: EXCLUSIVE
+            instanceCap: "${JOBSEEKER_KUBERNETES_STANDALONE_AGENT_CAP}"
+            idleMinutes: 0
+            slaveConnectTimeout: 180
+            activeDeadlineSeconds: 7200
+            serviceAccount: "jobseeker-agent"
+            agentContainer: "jnlp"
+            agentInjection: true
+            showRawYaml: false
+            podRetention: "never"
+            yamlMergeStrategy: "override"
+            yaml: |-
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                labels:
+                  app.kubernetes.io/name: jobseeker
+                  app.kubernetes.io/component: jenkins-agent
+                  jobseeker.io/environment: ${JOBSEEKER_STANDALONE_ENVIRONMENT}
+              spec:
+                automountServiceAccountToken: false
+                terminationGracePeriodSeconds: 30
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  fsGroup: 1000
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: jnlp
+                    image: ${JOBSEEKER_KUBERNETES_AGENT_IMAGE}
+                    imagePullPolicy: ${JOBSEEKER_KUBERNETES_AGENT_IMAGE_PULL_POLICY}
+                    env:
+                      - name: JOBSEEKER_ENVIRONMENT
+                        value: ${JOBSEEKER_STANDALONE_ENVIRONMENT}
+                      - name: JOBSEEKER_CONNECTOR_API_URL
+                        value: http://nginx:8080/connector-runtime
+                      - name: JOBSEEKER_CONNECTOR_API_TOKEN
+                        valueFrom:
+                          secretKeyRef:
+                            name: jobseeker-secrets
+                            key: connector-api-token
+                      - name: JOBSEEKER_DB_HOST
+                        value: mariadb
+                      - name: JOBSEEKER_DB_PORT
+                        value: "3306"
+                      - name: JOBSEEKER_DB_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: jobseeker-secrets
+                            key: database-user
+                      - name: JOBSEEKER_DB_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: jobseeker-secrets
+                            key: database-password
+                      - name: JOBSEEKER_DB_NAME
+                        valueFrom:
+                          secretKeyRef:
+                            name: jobseeker-secrets
+                            key: database-name
+                    resources:
+                      requests:
+                        cpu: ${JOBSEEKER_KUBERNETES_AGENT_REQUEST_CPU}
+                        memory: ${JOBSEEKER_KUBERNETES_AGENT_REQUEST_MEMORY}
+                      limits:
+                        cpu: ${JOBSEEKER_KUBERNETES_AGENT_LIMIT_CPU}
+                        memory: ${JOBSEEKER_KUBERNETES_AGENT_LIMIT_MEMORY}
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: repository
+                        mountPath: /php/repository
+                volumes:
+                  - name: repository
+                    persistentVolumeClaim:
+                      claimName: ${JOBSEEKER_KUBERNETES_REPOSITORY_CLAIM}

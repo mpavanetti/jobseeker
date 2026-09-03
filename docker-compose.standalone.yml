@@ -1,0 +1,58 @@
+volumes:
+  jenkins-agent-standalone-workdir: {}
+
+services:
+  php:
+    environment:
+      JOBSEEKER_DEPLOYMENT_MODE: standalone
+      JOBSEEKER_STANDALONE_ENVIRONMENT: ${JOBSEEKER_STANDALONE_ENVIRONMENT:?Set JOBSEEKER_STANDALONE_ENVIRONMENT, for example DEV}
+      JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS: "${JOBSEEKER_STANDALONE_ENVIRONMENT:?Set JOBSEEKER_STANDALONE_ENVIRONMENT}=${JOBSEEKER_STANDALONE_EXECUTORS:-2}"
+      JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS: "${JOBSEEKER_STANDALONE_ENVIRONMENT:?Set JOBSEEKER_STANDALONE_ENVIRONMENT}=jobseeker-env-standalone"
+
+  jenkins:
+    environment:
+      JOBSEEKER_DEPLOYMENT_MODE: standalone
+      JOBSEEKER_STANDALONE_ENVIRONMENT: ${JOBSEEKER_STANDALONE_ENVIRONMENT:?Set JOBSEEKER_STANDALONE_ENVIRONMENT, for example DEV}
+
+  jenkins-agent-standalone:
+    build:
+      context: .
+      dockerfile: docker/jenkins_agent_image
+    image: jobseeker-jenkins-agent:local
+    depends_on:
+      docker-runtime:
+        condition: service_healthy
+      jenkins:
+        condition: service_healthy
+    networks:
+      - internal
+    env_file:
+      - path: ./.env.connectors
+        required: false
+    environment:
+      JENKINS_URL: http://jenkins:8080/
+      JENKINS_USER: ${JENKINS_ADMIN_ID:-jobseeker}
+      JENKINS_TOKEN: ${JENKINS_ADMIN_PASSWORD:-jobseeker}
+      JENKINS_AGENT_NAME: ${JOBSEEKER_JENKINS_STANDALONE_AGENT_NAME:-jobseeker-standalone-agent}
+      JENKINS_AGENT_DESCRIPTION: "JobSeeker ${JOBSEEKER_STANDALONE_ENVIRONMENT:?Set JOBSEEKER_STANDALONE_ENVIRONMENT} standalone worker"
+      JENKINS_AGENT_EXECUTORS: ${JOBSEEKER_STANDALONE_EXECUTORS:-2}
+      JENKINS_AGENT_LABELS: "jobseeker jobseeker-env-standalone standalone ${JOBSEEKER_STANDALONE_ENVIRONMENT:?Set JOBSEEKER_STANDALONE_ENVIRONMENT}"
+      JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
+      JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
+      DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
+      JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_FEDERATED_TOKEN_FILE: ${AZURE_FEDERATED_TOKEN_FILE:-}
+      AZURE_AUTHORITY_HOST: ${AZURE_AUTHORITY_HOST:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_ROLE_ARN: ${AWS_ROLE_ARN:-}
+      AWS_WEB_IDENTITY_TOKEN_FILE: ${AWS_WEB_IDENTITY_TOKEN_FILE:-}
+    volumes:
+      - ./repository:/php/repository
+      - jenkins-agent-standalone-workdir:/home/jenkins/agent
