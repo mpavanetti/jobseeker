@@ -3809,9 +3809,21 @@
           $('#linuxScriptType').val('0');
           $('#pythonSourceMode').val('upload');
           $('#pythonEntryPoint').val(sample.entry_point || 'main.py');
-          $('#pythonRuntimeMode').val(sample.runtime === 'docker' ? 'docker' : 'local');
+          // A sample pins the runtime only when its own content needs Docker: a
+          // Dockerfile-backed build or a pinned image. Every other sample is plain
+          // Python that runs on either runtime, so keep the runtime the user already
+          // selected instead of silently resetting the form back to the agent.
+          var sampleRequiresDocker = sample.runtime === 'docker' || !! sample.use_dockerfile;
+          var keepSelectedDockerRuntime = ! sampleRequiresDocker && $('#pythonRuntimeMode').val() == 'docker';
+          if (sampleRequiresDocker) {
+            $('#pythonRuntimeMode').val('docker');
+          }
           $('#pythonDockerImage').val(sample.docker_image || dockerImageForPythonVersion());
-          $('#pythonUseDockerfile').prop('checked', !! sample.use_dockerfile);
+          // Mirror the manual runtime switch: a Docker workspace the sample did not
+          // describe still needs the Dockerfile-backed build that powers the
+          // Dockerfile tab and Open in VS Code.
+          $('#pythonUseDockerfile').prop('checked',
+            !! sample.use_dockerfile || (keepSelectedDockerRuntime && pythonWorkspaceAllowsInlineCode()));
           $('#pythonRunTests').prop('checked', !! sample.run_tests);
           $('#pythonInlineCode').val(sample.code || '');
           $('#pythonRequirementsText').val(sample.requirements || '');
@@ -3826,7 +3838,7 @@
           loadPythonInlineFilesPayload({files: sample.files || [], directories: sample.directories || []});
           syncLinuxExecutionControls(false);
           updatePythonRuntimeControls();
-          if (sample.use_dockerfile) {
+          if ($('#pythonUseDockerfile').is(':checked')) {
             ensurePythonPyprojectText();
             ensurePythonDockerfileText();
           }
