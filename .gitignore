@@ -16,6 +16,8 @@ json/result.json
 application/cache/job_creation_dates.json
 application/cache/*.json
 application/cache/dashboard_overview_*
+application/cache/job_schedules
+application/cache/docker_monitor_storage
 application/cache/promotion_rollbacks/
 repository/Talend/input/jobInfo.xlsx
 xml/

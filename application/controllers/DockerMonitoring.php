@@ -4,6 +4,13 @@ require APPPATH . '/libraries/BaseController.php';
 
 class DockerMonitoring extends BaseController
 {
+    /**
+     * Docker's disk-usage walk is expensive and its result changes slowly, so a
+     * short shared reading keeps the panel responsive without going stale.
+     */
+    const STORAGE_CACHE_KEY = 'docker_monitor_storage';
+    const STORAGE_CACHE_TTL = 60;
+
     public function __construct()
     {
         parent::__construct();
@@ -467,16 +474,37 @@ class DockerMonitoring extends BaseController
             return;
         }
 
-        $hostUrl = trim((string) getenv('JOBSEEKER_DOCKER_MONITOR_URL')) ?: 'http://docker-monitor-proxy:8080';
-        $runtimeUrl = trim((string) getenv('JOBSEEKER_DOCKER_RUNTIME_URL')) ?: 'http://docker-runtime:2375';
-        $this->jsonResponse(array(
-            'ok' => TRUE,
-            'generatedAt' => gmdate('c'),
-            'engines' => array(
-                $this->engineStorageSnapshot('Application host', $hostUrl),
-                $this->engineStorageSnapshot('Job runtime', $runtimeUrl)
-            )
-        ));
+        // Docker computes disk usage by walking every image layer, volume and
+        // build-cache record, which takes seconds on a busy engine and blocks a
+        // PHP worker for all of it. The number moves slowly, so serve a recent
+        // reading and let a caller ask for a fresh one.
+        $this->load->driver('cache', array('adapter' => 'file'));
+        $fresh = in_array((string) $this->input->get('fresh'), array('1', 'true', 'yes'), TRUE);
+        $payload = $fresh ? FALSE : $this->cache->get(self::STORAGE_CACHE_KEY);
+
+        if ($payload === FALSE) {
+            $hostUrl = trim((string) getenv('JOBSEEKER_DOCKER_MONITOR_URL')) ?: 'http://docker-monitor-proxy:8080';
+            $runtimeUrl = trim((string) getenv('JOBSEEKER_DOCKER_RUNTIME_URL')) ?: 'http://docker-runtime:2375';
+            $payload = array(
+                'ok' => TRUE,
+                'generatedAt' => gmdate('c'),
+                'engines' => array(
+                    $this->engineStorageSnapshot('Application host', $hostUrl),
+                    $this->engineStorageSnapshot('Job runtime', $runtimeUrl)
+                )
+            );
+            // Never pin a failure in place: an engine that was briefly unreachable
+            // would otherwise keep reporting "unavailable" long after it recovered.
+            $measured = array_filter($payload['engines'], function($engine) {
+                return ! empty($engine['available']);
+            });
+
+            if (! empty($measured)) {
+                $this->cache->save(self::STORAGE_CACHE_KEY, $payload, self::STORAGE_CACHE_TTL);
+            }
+        }
+
+        $this->jsonResponse($payload);
     }
 
     public function pruneCache()
@@ -511,6 +539,11 @@ class DockerMonitoring extends BaseController
             @flock($lock, LOCK_UN);
             @fclose($lock);
         }
+
+        // The whole point of pruning is the freed space, so never report it from
+        // a reading taken before the prune ran.
+        $this->load->driver('cache', array('adapter' => 'file'));
+        $this->cache->delete(self::STORAGE_CACHE_KEY);
 
         $successful = array_values(array_filter($engines, function($engine) {
             return ! empty($engine['ok']);
