@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jobseeker
+  namespace: jobseeker
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["jobseeker.example", "jenkins.jobseeker.example", "vscode.jobseeker.example"]
+      secretName: jobseeker-tls
+  rules:
+    - host: jobseeker.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx
+                port:
+                  number: 8080
+    - host: jenkins.jobseeker.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jenkins
+                port:
+                  number: 8080
+    - host: vscode.jobseeker.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openvscode
+                port:
+                  number: 3000

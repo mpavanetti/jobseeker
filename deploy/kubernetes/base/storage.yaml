@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jobseeker-repository
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: repository
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jobseeker-app-state
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: app-state
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jobseeker-jenkins-home
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: jenkins
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jobseeker-mariadb-data
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: mariadb
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jobseeker-openvscode-data
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: openvscode
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi

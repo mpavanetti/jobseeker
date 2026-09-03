@@ -19,6 +19,15 @@ RUN mkdir -p /php/data /php/repository \
 	&& chown -R myuser:mygroup /php /var/www \
 	&& chmod -R 775 /php
 
+# Compose bind mounts these paths for live development. Baking the application
+# into the image as well makes the same image usable by Kubernetes and other
+# immutable-container runtimes.
+COPY --chown=myuser:mygroup application /var/www/html/application
+COPY --chown=myuser:mygroup assets /var/www/html/assets
+COPY --chown=myuser:mygroup system /var/www/html/system
+COPY --chown=myuser:mygroup .project /var/www/html/.project
+COPY --chown=myuser:mygroup index.php /var/www/html/index.php
+
 USER myuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD php-fpm -t || exit 1

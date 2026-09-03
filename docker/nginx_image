@@ -6,10 +6,22 @@ RUN adduser  --system --no-create-home --disabled-password --uid 1000 --ingroup 
 
 WORKDIR /var/www/html
 
-RUN sed -i 's|pid .*|pid        /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+RUN sed -e '/resolver 127\.0\.0\.11/d' \
+		-e '/set \$php_upstream php:9000;/d' \
+		-e 's/fastcgi_pass \$php_upstream;/fastcgi_pass php:9000;/' \
+		/etc/nginx/conf.d/default.conf > /etc/nginx/default.kubernetes.conf \
+	&& sed -i 's|pid .*|pid        /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
 	&& sed -i 's|^user .*|# user directive disabled for rootless runtime;|' /etc/nginx/nginx.conf \
 	&& touch /tmp/nginx.pid \
-	&& chown -R myuser:mygroup /var/www/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d /tmp/nginx.pid
+	&& chown -R myuser:mygroup /var/www/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d /tmp/nginx.pid /etc/nginx/default.kubernetes.conf
+
+# Keep Compose's source bind mounts for development, while also producing a
+# self-contained image that can be replicated by Kubernetes.
+COPY --chown=myuser:mygroup application /var/www/html/application
+COPY --chown=myuser:mygroup assets /var/www/html/assets
+COPY --chown=myuser:mygroup system /var/www/html/system
+COPY --chown=myuser:mygroup .project /var/www/html/.project
+COPY --chown=myuser:mygroup index.php /var/www/html/index.php
 
 USER myuser
 
