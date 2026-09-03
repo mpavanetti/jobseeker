@@ -35,6 +35,9 @@ class Tmf extends BaseController
 
     private function selectedEnvironmentFilter()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         $environment = trim((string) $this->input->get('environment', TRUE));
         if ($environment === '') {
             $environment = $this->jobSeekerEnvironmentPreference();
@@ -45,6 +48,9 @@ class Tmf extends BaseController
 
     private function selectedEnvironmentFromSelection($environment)
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         if (! is_array($environment)) {
             return $this->normalizeEnvironmentSelectionValue($environment);
         }
@@ -87,7 +93,7 @@ class Tmf extends BaseController
           $data["listJobName"] = $this->model->listJobName($selectedEnvironment);
           $data["listDimension"] = $this->model->listDimension($selectedEnvironment);
           $data["listReprocess"] = $this->model->listReprocess($selectedEnvironment);
-          $data["listEnvironment"] = $this->model->listEnvironment();
+		  $data["listEnvironment"] = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironment(), 'environment');
           $data["selectedEnvironment"] = $selectedEnvironment;
           $this->global['selectedEnvironment'] = $data["selectedEnvironment"];
 

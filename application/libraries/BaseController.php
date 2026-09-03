@@ -15,6 +15,7 @@ class BaseController extends CI_Controller {
 	protected $global = array ();
 	protected $lastLogin = '';
 	private $jenkinsOnlineEnvironmentAgentCapacityCache = array();
+	private $standaloneEnvironmentRecordEnsured = FALSE;
 
 	protected function getRuntimeConfig() {
 		if (! is_readable(JOBSEEKER_CONFIG_PATH)) {
@@ -31,6 +32,99 @@ class BaseController extends CI_Controller {
 		}
 
 		return $config;
+	}
+
+	/**
+	 * Fetch several Jenkins GET paths at once.
+	 *
+	 * Reading one small document per job is unavoidable for data Jenkins does not
+	 * expose through its API tree. Doing it serially makes that cost the sum of
+	 * every round trip, so issue them in bounded parallel and keep one PHP worker
+	 * busy for the length of the slowest batch rather than the whole queue.
+	 * Returns a path => body map; a path that failed maps to ''. Falls back to the
+	 * serial path when ext-curl is unavailable.
+	 */
+	protected function requestJenkinsMany($paths, $concurrency = 8) {
+		$results = array();
+		$paths = array_values(array_unique(array_filter((array) $paths, 'strlen')));
+
+		if (empty($paths)) {
+			return $results;
+		}
+
+		if (! function_exists('curl_multi_init')) {
+			foreach ($paths as $path) {
+				$response = $this->requestJenkins('GET', $path);
+				$results[$path] = (int) $response['status'] === 200 ? (string) $response['body'] : '';
+			}
+
+			return $results;
+		}
+
+		$config = $this->getRuntimeConfig();
+
+		if (empty($config->jenkins->enabled)) {
+			foreach ($paths as $path) {
+				$results[$path] = '';
+			}
+
+			return $results;
+		}
+
+		$jenkinsUrl = rtrim(getenv('JOBSEEKER_JENKINS_INTERNAL_URL') ?: $config->jenkins->url, '/');
+		$jenkinsUsername = getenv('JOBSEEKER_JENKINS_USER') ?: $config->jenkins->username;
+		$jenkinsToken = getenv('JOBSEEKER_JENKINS_TOKEN') ?: $config->jenkins->token;
+		$authorizationHeader = 'Authorization: Basic ' . base64_encode($jenkinsUsername . ':' . $jenkinsToken);
+		$concurrency = max(1, min(16, (int) $concurrency));
+
+		foreach (array_chunk($paths, $concurrency) as $chunk) {
+			$multi = curl_multi_init();
+			$handles = array();
+
+			foreach ($chunk as $path) {
+				// Same guard as requestJenkins: never let a caller escape the Jenkins root.
+				if (preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $path) || strpos($path, '..') !== FALSE || preg_match('/[\r\n]/', (string) $path)) {
+					$results[$path] = '';
+					continue;
+				}
+
+				$handle = curl_init($jenkinsUrl . '/' . ltrim($path, '/'));
+				curl_setopt_array($handle, array(
+					CURLOPT_RETURNTRANSFER => TRUE,
+					CURLOPT_HTTPHEADER => array($authorizationHeader),
+					CURLOPT_CONNECTTIMEOUT => 5,
+					CURLOPT_TIMEOUT => 30,
+					CURLOPT_FOLLOWLOCATION => FALSE
+				));
+				curl_multi_add_handle($multi, $handle);
+				$handles[$path] = $handle;
+			}
+
+			if (empty($handles)) {
+				curl_multi_close($multi);
+				continue;
+			}
+
+			$running = NULL;
+			do {
+				curl_multi_exec($multi, $running);
+				if ($running > 0) {
+					curl_multi_select($multi, 1.0);
+				}
+			} while ($running > 0);
+
+			foreach ($handles as $path => $handle) {
+				$status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+				$body = curl_multi_getcontent($handle);
+				$results[$path] = $status === 200 && is_string($body) ? $body : '';
+				curl_multi_remove_handle($multi, $handle);
+				curl_close($handle);
+			}
+
+			curl_multi_close($multi);
+		}
+
+		return $results;
 	}
 
 	protected function requestJenkins($method, $path, $body = '', $contentType = NULL) {
@@ -209,6 +303,102 @@ class BaseController extends CI_Controller {
 	}
 
 	/**
+	 * Deployment topology is intentionally independent from CI_ENV. CI_ENV is
+	 * CodeIgniter's runtime profile; this setting controls whether one JobSeeker
+	 * installation owns every environment or is permanently scoped to one.
+	 */
+	protected function jobSeekerDeploymentMode() {
+		$mode = strtolower(trim((string) getenv('JOBSEEKER_DEPLOYMENT_MODE')));
+		if ($mode === '' || in_array($mode, array('multi', 'all', 'combined'), TRUE)) {
+			return 'multi';
+		}
+		if (in_array($mode, array('standalone', 'single'), TRUE)) {
+			return 'standalone';
+		}
+
+		log_message('error', 'Invalid JOBSEEKER_DEPLOYMENT_MODE: '.$mode);
+		show_error('JOBSEEKER_DEPLOYMENT_MODE must be either multi or standalone.', 500);
+		return 'multi';
+	}
+
+	protected function jobSeekerIsStandaloneDeployment() {
+		return $this->jobSeekerDeploymentMode() === 'standalone';
+	}
+
+	protected function jobSeekerStandaloneEnvironment() {
+		if (! $this->jobSeekerIsStandaloneDeployment()) {
+			return '';
+		}
+
+		$environment = $this->normalizeJobSeekerEnvironment(getenv('JOBSEEKER_STANDALONE_ENVIRONMENT'));
+		if ($environment === '' || $environment === 'ALL' || $environment === 'UNKNOWN'
+			|| ! preg_match('/^[A-Z][A-Z0-9._-]{0,99}$/', $environment)) {
+			log_message('error', 'Standalone deployment requires a valid JOBSEEKER_STANDALONE_ENVIRONMENT.');
+			show_error('A standalone deployment requires JOBSEEKER_STANDALONE_ENVIRONMENT.', 500);
+			return '';
+		}
+
+		return $environment;
+	}
+
+	/** Resolve an optional browser/form environment inside the deployment scope. */
+	protected function jobSeekerEffectiveEnvironment($environment = '', $allValue = 'ALL') {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
+
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		return $environment === '' || $environment === '*' || $environment === 'ALL' ? $allValue : $environment;
+	}
+
+	protected function jobSeekerEnvironmentIsAllowed($environment, $allowAll = FALSE) {
+		if (! $this->jobSeekerIsStandaloneDeployment()) {
+			return TRUE;
+		}
+
+		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		return $environment === $this->jobSeekerStandaloneEnvironment()
+			|| ($allowAll && ($environment === '' || $environment === '*' || $environment === 'ALL'));
+	}
+
+	protected function jobSeekerFilterEnvironmentRows($rows, $field = 'Environment', $allowAll = FALSE) {
+		if (! $this->jobSeekerIsStandaloneDeployment()) {
+			return is_array($rows) ? $rows : array();
+		}
+
+		return array_values(array_filter(is_array($rows) ? $rows : array(), function($row) use ($field, $allowAll) {
+			$value = is_array($row) ? (isset($row[$field]) ? $row[$field] : '') : (isset($row->{$field}) ? $row->{$field} : '');
+			return $this->jobSeekerEnvironmentIsAllowed($value, $allowAll);
+		}));
+	}
+
+	/** Ensure custom standalone names can be used as foreign-key scopes. */
+	protected function ensureJobSeekerStandaloneEnvironmentRecord() {
+		if (! $this->jobSeekerIsStandaloneDeployment() || $this->standaloneEnvironmentRecordEnsured
+			|| ! $this->db->table_exists('environment')) {
+			return;
+		}
+
+		$environment = $this->jobSeekerStandaloneEnvironment();
+		$row = $this->db->select('Id,IsActive')->from('environment')->where('Environment', $environment)->limit(1)->get()->row();
+		if (! $row) {
+			$this->db->insert('environment', array(
+				'Environment' => $environment,
+				'Description' => 'Managed by standalone deployment configuration.',
+				'IsActive' => 1,
+				'CreatedOn' => date('Y-m-d H:i:s')
+			));
+		} elseif ((int) $row->IsActive !== 1) {
+			$this->db->where('Id', (int) $row->Id)->update('environment', array(
+				'IsActive' => 1,
+				'ModifiedOn' => date('Y-m-d H:i:s')
+			));
+		}
+
+		$this->standaloneEnvironmentRecordEnsured = TRUE;
+	}
+
+	/**
 	 * Browser preferences must not leak between users sharing a browser. Keep
 	 * the user identifier in the cookie name so server-rendered views resolve
 	 * the same environment as the user-scoped localStorage key.
@@ -223,6 +413,9 @@ class BaseController extends CI_Controller {
 	}
 
 	protected function jobSeekerEnvironmentPreference() {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
 		return trim((string) $this->input->cookie($this->jobSeekerUserPreferenceCookieName('global_environment'), TRUE));
 	}
 
@@ -343,6 +536,18 @@ class BaseController extends CI_Controller {
 	protected function ensureJenkinsJobEnvironmentAgentAssignment($jobName, $environment) {
 		$jobName = trim((string) $jobName);
 		$environment = $this->normalizeJobSeekerEnvironment($environment);
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			$standaloneEnvironment = $this->jobSeekerStandaloneEnvironment();
+			if (! in_array($environment, array('', '0', 'ALL', 'UNKNOWN', $standaloneEnvironment), TRUE)) {
+				return array(
+					'ok' => FALSE,
+					'updated' => FALSE,
+					'status' => 409,
+					'message' => 'This standalone deployment only executes '.$standaloneEnvironment.' jobs.'
+				);
+			}
+			$environment = $standaloneEnvironment;
+		}
 		$agentCapacity = $this->jenkinsOnlineEnvironmentAgentCapacity($environment);
 		$configuredAgentLabel = $agentCapacity['label'];
 		$agentLabel = (int) $agentCapacity['executors'] > 0 ? $configuredAgentLabel : '';
@@ -639,6 +844,13 @@ class BaseController extends CI_Controller {
 		if ($envConfig !== FALSE && trim($envConfig) !== '') {
 			$this->mergeJenkinsEnvironmentSlotConfig($limits, $envConfig);
 		}
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			$environment = $this->jobSeekerStandaloneEnvironment();
+			return array(
+				'DEFAULT' => $defaultLimit,
+				$environment => isset($limits[$environment]) ? (int) $limits[$environment] : $defaultLimit
+			);
+		}
 
 		return $limits;
 	}
@@ -729,6 +941,10 @@ class BaseController extends CI_Controller {
 		$envConfig = getenv('JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS');
 		if ($envConfig !== FALSE && trim($envConfig) !== '') {
 			$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $envConfig);
+		}
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			$environment = $this->jobSeekerStandaloneEnvironment();
+			return array($environment => isset($labels[$environment]) ? $labels[$environment] : 'jobseeker-env-standalone');
 		}
 
 		return $labels;
@@ -1303,6 +1519,13 @@ class BaseController extends CI_Controller {
 		return '';
 	}
 
+	/**
+	 * The parameter names JobSeeker treats as an environment declaration. This
+	 * must stay in step with detectFromParameters() in assets/js/job-environment.js
+	 * so the server and the browser resolve a job to the same environment.
+	 */
+	const JENKINS_ENVIRONMENT_PARAMETER_NAMES = '/^(ENVIRONMENT|ENV|CONTEXT|JOB_CONTEXT|JOBSEEKER_ENVIRONMENT|TARGET_ENVIRONMENT|CONTEXT_ENVIRONMENT)$/';
+
 	protected function jenkinsEnvironmentFromJobProperty($job) {
 		if (! isset($job->property) || ! is_array($job->property)) {
 			return '';
@@ -1314,12 +1537,18 @@ class BaseController extends CI_Controller {
 			}
 
 			foreach ($property->parameterDefinitions as $definition) {
-				if (! isset($definition->name) || $definition->name !== 'ENVIRONMENT') {
+				if (! isset($definition->name)
+					|| ! preg_match(self::JENKINS_ENVIRONMENT_PARAMETER_NAMES, strtoupper(trim((string) $definition->name)))) {
 					continue;
 				}
 
 				if (isset($definition->defaultParameterValue) && isset($definition->defaultParameterValue->value)) {
-					return (string) $definition->defaultParameterValue->value;
+					$value = (string) $definition->defaultParameterValue->value;
+					// An empty default is not a declaration; keep looking so job-name
+					// detection can still resolve the environment.
+					if (trim($value) !== '') {
+						return $value;
+					}
 				}
 			}
 		}
@@ -1721,6 +1950,9 @@ class BaseController extends CI_Controller {
 			$this->global ['role'] = $this->role;
 			$this->global ['role_text'] = $this->roleText;
 			$this->global ['last_login'] = $this->lastLogin;
+			$this->global ['deployment_mode'] = $this->jobSeekerDeploymentMode();
+			$this->global ['standalone_environment'] = $this->jobSeekerStandaloneEnvironment();
+			$this->ensureJobSeekerStandaloneEnvironmentRecord();
 
 			// load json config file
 			$jsonToArray = $this->getRuntimeConfig();

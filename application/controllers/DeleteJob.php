@@ -22,6 +22,9 @@ class DeleteJob extends BaseController
 
     private function requestedEnvironment()
     {
+		if ($this->jobSeekerIsStandaloneDeployment()) {
+			return $this->jobSeekerStandaloneEnvironment();
+		}
         $environment = trim((string) $this->input->post('environment'));
         return $environment !== '' ? $environment : $this->jobSeekerEnvironmentPreference();
     }

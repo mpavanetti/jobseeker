@@ -1,6 +1,7 @@
 <?php
 $environmentRows = !empty($list) ? $list : array();
 $inactiveEnvironments = max(0, (int) $environments - (int) $activeEnvironments);
+$standaloneDeployment = isset($deployment_mode) && $deployment_mode === 'standalone';
 ?>
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=1">
@@ -47,7 +48,9 @@ $inactiveEnvironments = max(0, (int) $environments - (int) $activeEnvironments);
       <?php if ($error) { ?><div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button><?php echo html_escape($error); ?></div><?php } ?>
       <?php if ($success) { ?><div class="alert alert-success alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button><?php echo html_escape($success); ?></div><?php } ?>
       <?php echo validation_errors('<div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>', '</div>'); ?>
+	  <?php if ($standaloneDeployment) { ?><div class="alert alert-info"><i class="fa fa-lock"></i> This installation is fixed to <b><?php echo html_escape($standalone_environment); ?></b>. Change the deployment configuration to rename or replace its environment.</div><?php } ?>
 
+	  <?php if (! $standaloneDeployment) { ?>
       <div class="box box-primary context-card animated fadeIn">
         <div class="box-header with-border context-card-header">
           <div class="context-card-title"><span class="context-card-title-icon"><i class="fa fa-plus"></i></span><div><h3>Add an environment</h3><p>Create a deployment stage for jobs and context variables.</p></div></div>
@@ -77,6 +80,7 @@ $inactiveEnvironments = max(0, (int) $environments - (int) $activeEnvironments);
           </div>
         </form>
       </div>
+	  <?php } ?>
 
       <div class="box box-primary context-card">
         <div class="box-header with-border context-card-header">
@@ -94,7 +98,7 @@ $inactiveEnvironments = max(0, (int) $environments - (int) $activeEnvironments);
 
         <div class="context-table-wrap">
           <table id="settingsDetailsTable" class="table table-hover context-table">
-            <thead><tr><th>Environment</th><th>Description</th><th>Status</th><th>Updated</th><?php if ($role != 1) { ?><th class="settings-actions-column">Actions</th><?php } ?></tr></thead>
+			<thead><tr><th>Environment</th><th>Description</th><th>Status</th><th>Updated</th><?php if ($role != 1 && ! $standaloneDeployment) { ?><th class="settings-actions-column">Actions</th><?php } ?></tr></thead>
             <tbody>
               <?php foreach ($environmentRows as $record) {
                 $createdOn = !empty($record->CreatedOn) ? date('Y-m-d H:i', strtotime($record->CreatedOn)) : '';
@@ -106,7 +110,7 @@ $inactiveEnvironments = max(0, (int) $environments - (int) $activeEnvironments);
                   <td><?php echo trim((string) $record->Description) !== '' ? html_escape($record->Description) : '<span class="settings-empty-value">No description</span>'; ?></td>
                   <td><span class="context-badge <?php echo (int) $record->IsActive === 1 ? 'context-badge-active' : 'context-badge-inactive'; ?>"><?php echo (int) $record->IsActive === 1 ? 'Active' : 'Inactive'; ?></span></td>
                   <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo js_time(!empty($record->ModifiedOn) ? $record->ModifiedOn : $record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
-                  <?php if ($role != 1) { ?><td class="settings-actions"><a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editEnvironment/'.(int) $record->Id; ?>" title="Edit <?php echo html_escape($record->Environment); ?>"><i class="fa fa-pencil"></i></a><button type="button" class="btn btn-sm btn-danger delete-setting" data-setting-id="<?php echo (int) $record->Id; ?>" data-setting-name="<?php echo html_escape($record->Environment); ?>" title="Delete <?php echo html_escape($record->Environment); ?>"><i class="fa fa-trash"></i></button></td><?php } ?>
+				  <?php if ($role != 1 && ! $standaloneDeployment) { ?><td class="settings-actions"><a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editEnvironment/'.(int) $record->Id; ?>" title="Edit <?php echo html_escape($record->Environment); ?>"><i class="fa fa-pencil"></i></a><button type="button" class="btn btn-sm btn-danger delete-setting" data-setting-id="<?php echo (int) $record->Id; ?>" data-setting-name="<?php echo html_escape($record->Environment); ?>" title="Delete <?php echo html_escape($record->Environment); ?>"><i class="fa fa-trash"></i></button></td><?php } ?>
                 </tr>
               <?php } ?>
             </tbody>
