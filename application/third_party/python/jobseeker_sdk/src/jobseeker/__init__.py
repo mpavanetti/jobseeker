@@ -799,8 +799,15 @@ case "$command_name" in
         done
         exec "$@"
         ;;
+    test)
+        key=${2:-}; shift 2
+        case "$key" in ''|*[!A-Za-z0-9_-]*) echo "Invalid connector key." >&2; exit 2;; esac
+        [ -d "$root/$key" ] || { echo "Connector not found: $key" >&2; exit 2; }
+        command -v python3 >/dev/null 2>&1 || { echo "Connector tests require a Python-capable Docker image." >&2; exit 127; }
+        PYTHONPATH="$root/.jobseeker-sdk/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m jobseeker.conntest --directory "$root" --key "$key" "$@"
+        ;;
     *)
-        echo "Usage: jobseeker-connector {list|get KEY FIELD|exec KEY -- COMMAND...}" >&2
+        echo "Usage: jobseeker-connector {list|get KEY FIELD|exec KEY -- COMMAND...|test KEY [OPTIONS]}" >&2
         exit 2
         ;;
 esac

@@ -25,8 +25,11 @@ assert(jobCreation.includes('unset "$JOBSEEKER_SECRET_VARIABLE"'));
 assert(jobCreation.includes('JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro'));
 assert(jobCreation.includes('docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME"'));
 assert(jobCreation.includes('rm -rf "$JOBSEEKER_CONNECTORS_DIR"'));
+assert(jobCreation.includes('JOBSEEKER_CONNECTORS_DIR/jobseeker-asset'), 'Docker jobs must receive the Data Asset runtime helper.');
+assert(jobCreation.includes('JOBSEEKER_CONNECTORS_DIR/.jobseeker-sdk'), 'Docker jobs must receive the read-only runtime SDK used by helper commands.');
 assert.strictEqual((jobCreation.match(/JOBSEEKER_CONNECTORS_DIR=\/run\/jobseeker-connectors/g) || []).length, 3);
 assert.strictEqual((jobCreation.match(/JOBSEEKER_CONNECTORS_VOLUME:\/run\/jobseeker-connectors:ro/g) || []).length, 3);
+assert.strictEqual((jobCreation.match(/export PATH=\"\$JOBSEEKER_CONNECTORS_DIR:\$PATH\"/g) || []).length, 3, 'Every Docker runtime must expose the materialized connector helper on PATH.');
 assert(!jobCreation.includes('jobseeker-local-connector-token'));
 
 assert(controller.includes("hash_equals($expected"));
@@ -65,6 +68,7 @@ assert(sdk.includes('def test(self, timeout'), 'Connector must expose a live .te
 assert(sdk.includes('_load_conntest()'));
 assert(sdk.includes('"ConnectionTestResult"') && sdk.includes('"test_connector"'), 'conntest helpers must be re-exported');
 assert(sdk.includes('commands.add_parser("test"'), 'jobseeker-connector must offer a test subcommand');
+assert(sdk.includes('test KEY [OPTIONS]'), 'The portable Docker connector helper must expose connection tests.');
 
 // --- Worker-run connector test trigger (PHP) ---
 assert(runnerTrait.includes('trait JenkinsRunnerTrait'));
@@ -81,6 +85,8 @@ assert(settingsController.includes("$mode === 'quick'"), 'the fast TCP probe mus
 // --- Built-in + Insight Studio merge (model) ---
 assert(model.includes('BUILTIN_MARIADB_KEY') && model.includes("'jobseeker-mariadb'"));
 assert(model.includes('function ensureBuiltinConnectors'));
+assert(model.includes("(string) $builtin['owner'] === 'system'"), 'Only the system-managed built-in connector may repair itself after encryption-key rotation.');
+assert(model.includes('Could not repair the built-in jobseeker-mariadb connector secret.'));
 assert(model.includes('function migrateVisualizationConnections'));
 assert(model.includes('migrated_connector_id'));
 assert(vizModel.includes("from('database_settings connection')") || vizModel.includes("join('database_settings connection'"));

@@ -48,9 +48,10 @@ trait JobCreationExecutionTrait
       private function dockerConnectorSetupLines($dockerImage, $imageIsVariable = FALSE) {
         $imageArgument = $imageIsVariable ? '"$JOBSEEKER_DOCKER_RUN_IMAGE"' : escapeshellarg($dockerImage);
         return array(
+          'if [ -d "$JOBSEEKER_REPOSITORY_ROOT/python/lib/jobseeker-sdk/src/jobseeker" ]; then rm -rf "$JOBSEEKER_CONNECTORS_DIR/.jobseeker-sdk"; cp -R "$JOBSEEKER_REPOSITORY_ROOT/python/lib/jobseeker-sdk" "$JOBSEEKER_CONNECTORS_DIR/.jobseeker-sdk"; printf \'%s\\n\' \'#!/bin/sh\' \'set -eu\' \'root=${JOBSEEKER_CONNECTORS_DIR:-/run/jobseeker-connectors}\' \'command -v python3 >/dev/null 2>&1 || { echo "jobseeker-asset requires a Python-capable Docker image." >&2; exit 127; }\' \'PYTHONPATH="$root/.jobseeker-sdk/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -c "from jobseeker import asset_cli; asset_cli()" "$@"\' > "$JOBSEEKER_CONNECTORS_DIR/jobseeker-asset"; chmod 0700 "$JOBSEEKER_CONNECTORS_DIR/jobseeker-asset"; fi',
           'JOBSEEKER_CONNECTORS_VOLUME="$(printf "jobseeker-connectors-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"',
           'docker volume create "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null',
-          'tar -C "$JOBSEEKER_CONNECTORS_DIR" -cf - . | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors" '.$imageArgument.' -c "cd /run/jobseeker-connectors && tar -xf - && find . -type d -exec chmod 0555 {} + && find . -type f ! -name jobseeker-connector -exec chmod 0444 {} + && chmod 0555 ./jobseeker-connector"'
+          'tar -C "$JOBSEEKER_CONNECTORS_DIR" -cf - . | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors" '.$imageArgument.' -c "cd /run/jobseeker-connectors && tar -xf - && find . -type d -exec chmod 0555 {} + && find . -type f ! -name jobseeker-connector ! -name jobseeker-asset -exec chmod 0444 {} + && chmod 0555 ./jobseeker-connector && if [ -f ./jobseeker-asset ]; then chmod 0555 ./jobseeker-asset; fi"'
         );
       }
 
@@ -132,7 +133,7 @@ trait JobCreationExecutionTrait
         $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = '  sh -lc \'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"; printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
         $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
@@ -157,6 +158,7 @@ trait JobCreationExecutionTrait
 
         $dockerScript = implode("\n", array(
           'set -e',
+          'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"',
           'mkdir -p /tmp/jobseeker-context',
           'tar -C /tmp/jobseeker-context -xf -',
           'cd /tmp/jobseeker-context/source',
@@ -266,6 +268,7 @@ trait JobCreationExecutionTrait
         if ($runtimeMode === 'docker') {
           $dockerScriptLines = array(
             'set -e',
+            'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"',
             'mkdir -p /tmp/jobseeker-context',
             'tar -C /tmp/jobseeker-context -xf -',
             'cd /tmp/jobseeker-context/source',
