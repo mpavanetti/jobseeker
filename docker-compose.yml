@@ -27,6 +27,21 @@ volumes:
 
 services:
 
+  repository-data-init:
+    image: alpine:3.20
+    network_mode: none
+    command: >-
+      sh -lc "set -eu;
+      mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash/jobs /repository/batch/jobs /repository/talend/jobs;
+      tar -C /bundled-sdk --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' -cf - . | tar -C /repository/python/lib/jobseeker-sdk -xf -;
+      chown 1000:1000 /repository /repository/python /repository/python/lib;
+      chown -R 1000:1000 /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend;
+      chmod 0775 /repository /repository/python /repository/python/lib;
+      chmod -R u+rwX,g+rwX /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend"
+    volumes:
+      - ./repository:/repository
+      - ./application/third_party/python/jobseeker_sdk:/bundled-sdk:ro
+
   assets:
     image: node:20-alpine
     user: "${JOBSEEKER_HOST_UID:-1000}:${JOBSEEKER_HOST_GID:-1000}"
@@ -75,6 +90,8 @@ services:
         condition: service_healthy
       docker-monitor-proxy:
         condition: service_healthy
+      repository-data-init:
+        condition: service_completed_successfully
     networks:
       - internal
       - monitoring
@@ -176,6 +193,8 @@ services:
     init: true
     depends_on:
       openvscode-data-init:
+        condition: service_completed_successfully
+      repository-data-init:
         condition: service_completed_successfully
     entrypoint:
       - /usr/local/bin/jobseeker-openvscode
@@ -282,6 +301,8 @@ services:
       docker-runtime:
         condition: service_healthy
       jenkins-home-init:
+        condition: service_completed_successfully
+      repository-data-init:
         condition: service_completed_successfully
     ports:
       - "${JENKINS_HTTP_PORT:-8080}:8080"

@@ -7,6 +7,7 @@ const view = fs.readFileSync(viewPath, 'utf8');
 const controller = fs.readFileSync(path.join(__dirname, '..', 'application', 'controllers', 'JobCreation.php'), 'utf8');
 const emailConcern = fs.readFileSync(path.join(__dirname, '..', 'application', 'controllers', 'concerns', 'JobCreationEmailTrait.php'), 'utf8');
 const executionConcern = fs.readFileSync(path.join(__dirname, '..', 'application', 'controllers', 'concerns', 'JobCreationExecutionTrait.php'), 'utf8');
+const compose = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.yml'), 'utf8');
 const start = view.indexOf('function handleCodeEditorTab');
 const end = view.indexOf('function updatePythonInlineEditor', start);
 
@@ -66,6 +67,10 @@ function assert(condition, message) {
 assert(controller.includes('use JobCreationEmailTrait;') && controller.includes('use JobCreationExecutionTrait;'), 'JobCreation must compose its focused implementation concerns.');
 assert(!controller.includes('private function buildPythonExecutionCommand(') && executionConcern.includes('private function buildPythonExecutionCommand('), 'Execution command generation must remain isolated from the main controller.');
 assert(!controller.includes('private function defaultFailureEmailBody(') && emailConcern.includes('private function defaultFailureEmailBody('), 'Email XML generation must remain isolated from the main controller.');
+assert(compose.includes('repository-data-init:'), 'Compose must initialize the writable shared job repository before PHP and OpenVSCode start.');
+assert(compose.includes('mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs'), 'Repository initialization must create the inline Python workspace root.');
+assert(compose.includes("tar -C /bundled-sdk --exclude='__pycache__'"), 'Repository initialization must seed the SDK without copying transient Python caches or relying on Docker to create a root-owned bind path.');
+assert((compose.match(/repository-data-init:\n\s+condition: service_completed_successfully/g) || []).length >= 3, 'PHP, Jenkins, and OpenVSCode must wait for repository initialization.');
 
 let editor = textarea('if ready:', 9);
 context.handlePythonCodeEditorKey(key('Enter'), editor);
