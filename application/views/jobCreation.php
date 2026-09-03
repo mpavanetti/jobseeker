@@ -3511,6 +3511,14 @@
 
       $('#pythonRuntimeMode').on('change', function() {
         if ($('#pythonRuntimeMode').val() == 'docker') {
+          // Manually switching an inline Python workspace to the Docker runtime
+          // should land on the Dockerfile-backed build that powers the Dockerfile
+          // tab and Open in VS Code. Samples that intentionally want an
+          // image-only Docker build set this checkbox themselves and never reach
+          // this handler, so only re-arm the default when it is currently off.
+          if (pythonWorkspaceAllowsInlineCode() && ! $('#pythonUseDockerfile').is(':checked')) {
+            $('#pythonUseDockerfile').prop('checked', true);
+          }
           ensurePythonPyprojectText();
           ensurePythonDockerfileText();
         } else {
