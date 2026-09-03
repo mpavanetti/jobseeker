@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobseeker-config
+  labels:
+    app.kubernetes.io/name: jobseeker
+data:
+  CI_ENV: production
+  JOBSEEKER_DEPLOYMENT_MODE: multi
+  JOBSEEKER_STANDALONE_ENVIRONMENT: ""
+  JOBSEEKER_COOKIE_SECURE: "true"
+  JOBSEEKER_TIMEZONE: UTC
+  JOBSEEKER_COMMAND_GUARD_ENFORCE: "true"
+  JOBSEEKER_DB_HOST: mariadb
+  JOBSEEKER_JENKINS_INTERNAL_URL: http://jenkins:8080/
+  JOBSEEKER_JENKINS_PUBLIC_URL: https://jenkins.jobseeker.example/
+  JOBSEEKER_JENKINS_DEFAULT_ENVIRONMENT_SLOTS: "1"
+  JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS: DEV=5,QA=3,UAT=2,PROD=5
+  JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED: "true"
+  JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS: DEV=jobseeker-env-dev,QA=jobseeker-env-qa,UAT=jobseeker-env-uat,PROD=jobseeker-env-prod
+  JOBSEEKER_OPENVSCODE_ENABLED: "true"
+  JOBSEEKER_OPENVSCODE_MANAGED_EXTERNALLY: "true"
+  JOBSEEKER_OPENVSCODE_INTERNAL_URL: http://openvscode:3000
+  JOBSEEKER_OPENVSCODE_PUBLIC_URL: https://vscode.jobseeker.example/
+  JOBSEEKER_OPENVSCODE_WORKSPACE: /home/workspace
+  JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES: "0"
+  JOBSEEKER_TMF_RESULT_LIMIT: "1000"
+  JOBSEEKER_KUBERNETES_AGENT_NAMESPACE: jobseeker
+  JOBSEEKER_KUBERNETES_SERVER_URL: https://kubernetes.default.svc
+  JOBSEEKER_KUBERNETES_JENKINS_URL: http://jenkins:8080/
+  JOBSEEKER_KUBERNETES_JENKINS_TUNNEL: jenkins:50000
+  JOBSEEKER_KUBERNETES_CONTAINER_CAP: "15"
+  JOBSEEKER_KUBERNETES_STANDALONE_AGENT_CAP: "5"
+  JOBSEEKER_KUBERNETES_DEV_AGENT_CAP: "5"
+  JOBSEEKER_KUBERNETES_QA_AGENT_CAP: "3"
+  JOBSEEKER_KUBERNETES_UAT_AGENT_CAP: "2"
+  JOBSEEKER_KUBERNETES_PROD_AGENT_CAP: "5"
+  JOBSEEKER_KUBERNETES_AGENT_IMAGE: jobseeker-jenkins-kubernetes-agent:local
+  JOBSEEKER_KUBERNETES_AGENT_IMAGE_PULL_POLICY: IfNotPresent
+  JOBSEEKER_KUBERNETES_AGENT_REQUEST_CPU: 250m
+  JOBSEEKER_KUBERNETES_AGENT_REQUEST_MEMORY: 512Mi
+  JOBSEEKER_KUBERNETES_AGENT_LIMIT_CPU: "2"
+  JOBSEEKER_KUBERNETES_AGENT_LIMIT_MEMORY: 2Gi
+  JOBSEEKER_KUBERNETES_REPOSITORY_CLAIM: jobseeker-repository
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobseeker-runtime-config
+  labels:
+    app.kubernetes.io/name: jobseeker
+data:
+  config.json: |
+    {
+      "jenkins": {
+        "enabled": true,
+        "url": "https://jenkins.jobseeker.example/",
+        "username": "jobseeker",
+        "token": "provided-by-JOBSEEKER_JENKINS_TOKEN",
+        "authorization": "Basic",
+        "jenkins_home": "/php",
+        "environment_slots": {"default": 1, "DEV": 5, "QA": 3, "UAT": 2, "PROD": 5},
+        "environment_agents_enabled": true,
+        "environment_agent_labels": {
+          "DEV": "jobseeker-env-dev",
+          "QA": "jobseeker-env-qa",
+          "UAT": "jobseeker-env-uat",
+          "PROD": "jobseeker-env-prod"
+        }
+      },
+      "setup": {"enabled": true, "env": "production"}
+    }

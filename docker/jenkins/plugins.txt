@@ -9,6 +9,7 @@ email-ext:2038.v7b_8817a_499d9
 git:5.10.1
 mailer:534.v1b_36f5864073
 matrix-auth:3.3
+kubernetes:4547.v52f3080db_8cd
 pam-auth:1.12
 ssh-slaves:3.1097.v868116049892
 timestamper:1.30
