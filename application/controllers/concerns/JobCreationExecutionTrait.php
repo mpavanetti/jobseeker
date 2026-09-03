@@ -98,6 +98,7 @@ trait JobCreationExecutionTrait
 
         if ($runtimeMode !== 'docker') {
           $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
+          $runtimeLines[] = 'printf "%s\n" "[JobSeeker] Shell execution"';
           $runtimeLines[] = $commandText;
           return implode("\n", $runtimeLines);
         }
@@ -116,6 +117,7 @@ trait JobCreationExecutionTrait
         $lines[] = 'jobseeker_asset_cleanup() { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
         $lines[] = 'trap jobseeker_asset_cleanup EXIT';
         $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
+        $lines[] = 'printf "%s\n" "[JobSeeker] Docker container execution"';
         $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
         $lines[] = 'docker run --rm -i \\';
         $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
@@ -131,6 +133,7 @@ trait JobCreationExecutionTrait
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc \'printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
         $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
 
@@ -147,6 +150,7 @@ trait JobCreationExecutionTrait
 
         if ($runtimeMode !== 'docker') {
           $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
+          $runtimeLines[] = 'printf "%s\n" "[JobSeeker] '.($execution['scriptType'] === 'talend' ? 'Talend execution' : 'Shell execution').'"';
           $runtimeLines[] = 'sh '.escapeshellarg($execution['scriptPath']).($argumentString !== '' ? ' '.$argumentString : '');
           return implode("\n", $runtimeLines);
         }
@@ -184,6 +188,7 @@ trait JobCreationExecutionTrait
         $lines[] = 'jobseeker_linux_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; }';
         $lines[] = 'trap jobseeker_linux_docker_cleanup EXIT';
         $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
+        $lines[] = 'printf "%s\n" "[JobSeeker] Docker container execution"';
         $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
         $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
         $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
@@ -199,6 +204,7 @@ trait JobCreationExecutionTrait
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
         $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
 
@@ -217,17 +223,26 @@ trait JobCreationExecutionTrait
         $lines = array_merge(array('set -e'), $this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
 
         if ($execution['mode'] === 'git') {
-          $cloneCommand = 'git clone --depth 1';
-          if ($execution['branch'] !== '') {
-            $cloneCommand .= ' --branch '.escapeshellarg($execution['branch']);
-          }
-          $cloneCommand .= ' '.escapeshellarg($execution['repositoryUrl']).' "$WORKSPACE/jobseeker-python-source"';
-
+          $lines[] = 'printf "%s\n" "[JobSeeker] Git source checkout"';
+          $lines[] = 'export JOBSEEKER_GIT_REPOSITORY_URL='.escapeshellarg($execution['repositoryUrl']);
+          $lines[] = 'export JOBSEEKER_GIT_REPOSITORY_BRANCH='.escapeshellarg($execution['branch']);
+          $lines[] = 'export JOBSEEKER_GIT_CREDENTIAL_KEY='.escapeshellarg(isset($execution['credentialKey']) ? $execution['credentialKey'] : '');
           $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
+          if (! empty($execution['credentialKey'])) {
+            $lines[] = 'command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; }';
+            $cloneCommand = 'JOBSEEKER_CONNECTOR_KEY='.escapeshellarg($execution['credentialKey']).' jobseeker-git clone --connector-dir "$JOBSEEKER_CONNECTORS_DIR/$JOBSEEKER_GIT_CREDENTIAL_KEY"';
+          } else {
+            $cloneCommand = 'git clone --depth 1';
+          }
+          if ($execution['branch'] !== '') {
+            $cloneCommand .= ' --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH"';
+          }
+          $cloneCommand .= ' -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source"';
           $lines[] = $cloneCommand;
           $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
           $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
           $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
+          $lines[] = '[ -f "$JOBSEEKER_SCRIPT_PATH" ] || { echo "Python entry point was not found after the Git checkout: $JOBSEEKER_ENTRYPOINT" >&2; exit 66; }';
         } else {
           $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
           $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
@@ -304,6 +319,7 @@ trait JobCreationExecutionTrait
 
           $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
           $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
+          $lines[] = 'printf "%s\n" "[JobSeeker] Docker image build"';
           $lines[] = 'echo "Preparing Python Docker build context..."';
           $lines[] = 'JOBSEEKER_RESTORE_XTRACE=0; case "$-" in *x*) JOBSEEKER_RESTORE_XTRACE=1; set +x ;; esac';
           if (trim($requirementsText) !== '') {
@@ -353,6 +369,7 @@ trait JobCreationExecutionTrait
           $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
           $lines = array_merge($lines, $this->dockerConnectorSetupLines('', TRUE));
           $lines[] = 'tar -C "$JOBSEEKER_REPOSITORY_ROOT" -cf - data-assets | docker run --rm -i --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "cd /jobseeker-repository && tar -xf - && chmod -R a+rwX data-assets"';
+          $lines[] = 'printf "%s\n" "[JobSeeker] Docker container execution"';
           $lines[] = 'JOBSEEKER_DOCKER_STATUS=0';
           $lines[] = 'tar -C "$JOBSEEKER_DOCKER_CONTEXT" -cf - . | docker run --rm -i \\';
           $lines = array_merge($lines, $this->dockerJobRunIdentityOptions());
@@ -377,6 +394,7 @@ trait JobCreationExecutionTrait
           $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
           $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
         } else {
+          $lines[] = 'printf "%s\n" "[JobSeeker] Python environment"';
           $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
           $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
           $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
@@ -393,6 +411,7 @@ trait JobCreationExecutionTrait
           $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"';
           $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'fi';
+          $lines[] = 'printf "%s\n" "[JobSeeker] Python execution"';
           $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
         }
 

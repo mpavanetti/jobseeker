@@ -14,11 +14,14 @@
   var SECTION_META = {
     jobseeker: { title: 'JobSeeker events', icon: 'fa-bolt' },
     jenkins: { title: 'Jenkins runtime', icon: 'fa-cogs' },
+    source: { title: 'Source checkout', icon: 'fa-code-fork' },
     'docker-build': { title: 'Docker image build', icon: 'fa-cube' },
     'docker-runtime': { title: 'Docker container setup', icon: 'fa-archive' },
+    'docker-execution': { title: 'Docker execution', icon: 'fa-play-circle' },
     'python-environment': { title: 'Python environment', icon: 'fa-wrench' },
     'python-tests': { title: 'Python tests', icon: 'fa-check-square-o' },
     python: { title: 'Python execution', icon: 'fa-code' },
+    shell: { title: 'Shell execution', icon: 'fa-terminal' },
     email: { title: 'Email notification', icon: 'fa-envelope-o' },
     cleanup: { title: 'Cleanup', icon: 'fa-trash-o' },
     result: { title: 'Build result', icon: 'fa-flag-checkered' }
@@ -53,6 +56,22 @@
   }
 
   function explicitSectionKind(line) {
+    if (/^\[JobSeeker\]\s+Git source checkout\s*$/i.test(line)) {
+      return 'source';
+    }
+
+    if (/^\[JobSeeker\]\s+Docker image build\s*$/i.test(line)) {
+      return 'docker-build';
+    }
+
+    if (/^\[JobSeeker\]\s+Docker container (?:execution|run)\s*$/i.test(line)) {
+      return 'docker-execution';
+    }
+
+    if (/^\[JobSeeker\]\s+Python environment\s*$/i.test(line)) {
+      return 'python-environment';
+    }
+
     if (/^\[JobSeeker\]\s+Python tests\s*$/i.test(line)) {
       return 'python-tests';
     }
@@ -63,6 +82,10 @@
 
     if (/^\[JobSeeker\]\s+Cleanup\s*$/i.test(line)) {
       return 'cleanup';
+    }
+
+    if (/^\[JobSeeker\]\s+(?:Shell|Bash|Talend) execution\s*$/i.test(line)) {
+      return 'shell';
     }
 
     return '';
@@ -123,7 +146,7 @@
       return 'email';
     }
 
-    if (currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'cleanup' || currentKind === 'result') {
+    if (currentKind === 'source' || currentKind === 'docker-execution' || currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'shell' || currentKind === 'cleanup' || currentKind === 'result') {
       return currentKind;
     }
 
@@ -235,7 +258,7 @@
   }
 
   function defaultOpen(section, index, total, options) {
-    return section.hasError || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'email' || section.kind === 'cleanup' ||
+    return section.hasError || section.kind === 'docker-execution' || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'shell' || section.kind === 'email' || section.kind === 'cleanup' ||
       section.kind === 'result' || total === 1 || (!! options.live && index === total - 1);
   }
 

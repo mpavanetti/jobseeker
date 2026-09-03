@@ -30,9 +30,22 @@ class JobCreation extends BaseController
 
         $this->global['pageTitle'] = 'Job Seeker : Job Creation';
       $jobSamples = require APPPATH . 'config/job_samples.php';
+      $gitCredentials = array();
+      if ($this->db->table_exists('database_settings')) {
+        $gitCredentials = $this->db
+          ->select('connector_key,environment,job_name,address,auth_type')
+          ->from('database_settings')
+          ->where('db_type', 'git_repository')
+          ->where('is_active', 1)
+          ->order_by('connector_key', 'ASC')
+          ->order_by('environment', 'ASC')
+          ->get()
+          ->result();
+      }
       $data = array(
         'job_creation_dates' => $this->readJobCreationDates(),
-        'job_samples' => is_array($jobSamples) ? $jobSamples : array()
+        'job_samples' => is_array($jobSamples) ? $jobSamples : array(),
+        'git_credentials' => $gitCredentials
       );
         
       $this->loadViews("jobCreation", $this->global, $data, NULL);
@@ -2238,9 +2251,23 @@ class JobCreation extends BaseController
             'ms-python.python',
             'charliermarsh.ruff',
             'ms-python.mypy-type-checker',
-            'detachhead.basedpyright'
+            'detachhead.basedpyright',
+            'Continue.continue'
           )
         );
+        $continueRules = implode("\n", array(
+          '# JobSeeker Python workspace',
+          '',
+          'Write production Python for this job, not application PHP or Jenkins configuration.',
+          'Use the files in this workspace as the source of truth and preserve user-authored code.',
+          'Before inventing JobSeeker APIs, inspect the bundled SDK at `/home/workspace/repository/python/lib/jobseeker-sdk/src/jobseeker`.',
+          'Use `from jobseeker import JobSeeker`; keep the environment argument and TMF task lifecycle intact.',
+          'Resolve data through JobSeeker contexts, Data Assets, and scoped connectors instead of embedding credentials or host paths.',
+          'Never print connector values, tokens, passwords, private keys, or environment secrets.',
+          'Keep the entry point runnable with the generated Poetry environment and add or update pytest coverage for behavior changes.',
+          'Run the provided Ruff, mypy, pytest, and current-file tasks before declaring a change complete.',
+          ''
+        ));
         $bootstrapScript = implode("\n", array(
           '#!/bin/sh',
           'set -eu',
@@ -2472,7 +2499,8 @@ class JobCreation extends BaseController
           array('.vscode/settings.json', json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
           array('.vscode/extensions.json', json_encode($extensions, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
           array('.vscode/tasks.json', json_encode($tasks, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
-          array('.vscode/launch.json', json_encode($launch, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE)
+          array('.vscode/launch.json', json_encode($launch, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
+          array('.continue/rules/jobseeker.md', $continueRules, FALSE)
         );
 
         foreach ($writes as $write) {
@@ -2522,6 +2550,13 @@ class JobCreation extends BaseController
         }
 
         if (filter_var($repositoryUrl, FILTER_VALIDATE_URL) !== FALSE) {
+          $parts = parse_url($repositoryUrl);
+          $scheme = isset($parts['scheme']) ? strtolower((string) $parts['scheme']) : '';
+          if (! in_array($scheme, array('http', 'https', 'ssh'), TRUE) || empty($parts['host'])
+            || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+            || (in_array($scheme, array('http', 'https'), TRUE) && isset($parts['user']))) {
+            return FALSE;
+          }
           return $repositoryUrl;
         }
 
@@ -2538,23 +2573,56 @@ class JobCreation extends BaseController
           return '';
         }
 
-        return preg_match('/^[A-Za-z0-9._\/-]+$/', $branch) ? $branch : FALSE;
+        if (! preg_match('/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,199}$/', $branch)
+          || strpos($branch, '..') !== FALSE || strpos($branch, '//') !== FALSE
+          || strpos($branch, '@{') !== FALSE || substr($branch, -5) === '.lock'
+          || substr($branch, -1) === '/' || substr($branch, -1) === '.') {
+          return FALSE;
+        }
+
+        return $branch;
       }
 
-      private function resolveGitPythonExecution($repositoryUrl, $branch, $entryPoint) {
+      private function cleanPythonGitCredentialKey($credentialKey) {
+        $credentialKey = strtolower(trim((string) $credentialKey));
+        if ($credentialKey === '') {
+          return '';
+        }
+
+        return preg_match('/^[a-z0-9][a-z0-9-]{0,127}$/', $credentialKey) ? $credentialKey : FALSE;
+      }
+
+      private function resolveGitPythonExecution($repositoryUrl, $branch, $entryPoint, $credentialKey = '') {
         $repositoryUrl = $this->cleanPythonRepositoryUrl($repositoryUrl);
         $branch = $this->cleanPythonRepositoryBranch($branch);
         $entryPoint = $this->cleanPythonEntryPoint($entryPoint, TRUE);
+        $credentialKey = $this->cleanPythonGitCredentialKey($credentialKey);
 
-        if ($repositoryUrl === FALSE || $branch === FALSE || $entryPoint === FALSE) {
+        if ($repositoryUrl === FALSE || $branch === FALSE || $entryPoint === FALSE || $credentialKey === FALSE) {
           return FALSE;
+        }
+        if ($credentialKey !== '') {
+          if (! $this->db->table_exists('database_settings')) {
+            return FALSE;
+          }
+          $credentialExists = $this->db
+            ->from('database_settings')
+            ->where('connector_key', $credentialKey)
+            ->where('db_type', 'git_repository')
+            ->where('is_active', 1)
+            ->limit(1)
+            ->count_all_results() > 0;
+          if (! $credentialExists) {
+            return FALSE;
+          }
         }
 
         return array(
           'mode' => 'git',
           'repositoryUrl' => $repositoryUrl,
           'branch' => $branch,
-          'entryPoint' => $entryPoint
+          'entryPoint' => $entryPoint,
+          'credentialKey' => $credentialKey
         );
       }
 
@@ -3520,6 +3588,7 @@ class JobCreation extends BaseController
                 $pythonSourcePath = $this->input->post('pythonSourcePath');
                 $pythonRepositoryUrl = $this->input->post('pythonRepositoryUrl');
                 $pythonRepositoryBranch = $this->input->post('pythonRepositoryBranch');
+                $pythonGitCredentialKey = $this->input->post('pythonGitCredentialKey');
                 $pythonEntryPointRaw = $this->input->post('pythonEntryPoint');
                 $pythonInlineCode = $this->input->post('pythonInlineCode');
                 $pythonRequirementsText = $this->cleanPythonRequirementsText($this->input->post('pythonRequirementsText'));
@@ -3755,7 +3824,7 @@ class JobCreation extends BaseController
                           if ($pythonSourceMode === 'path') {
                             $pythonExecution = $this->resolvePathPythonExecution($repositoryRoot, $pythonSourcePath, $pythonEntryPoint);
                           } else if ($pythonSourceMode === 'git') {
-                            $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw);
+                            $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw, $pythonGitCredentialKey);
                           } else if ($pythonSourceMode === 'inline') {
                             $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsTextForInlineSave, $pythonDockerfileTextForInlineSave, $pythonInlineFiles, $pythonPyprojectTextForInlineSave);
                           } else {

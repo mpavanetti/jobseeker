@@ -2529,16 +2529,33 @@
                       </div>
                     </div>
                     <div class="row pythonGitSourceForm" style="display: none;">
-                      <div class="col-md-8">
+                      <div class="col-md-6">
                         <div class="form-group">
                           <label for="pythonRepositoryUrl">Git Repository URL</label>
                           <input type="text" class="form-control" id="pythonRepositoryUrl" name="pythonRepositoryUrl" maxlength="1000" autocomplete="off" placeholder="https://github.com/org/project.git">
                         </div>
                       </div>
-                      <div class="col-md-4">
+                      <div class="col-md-3">
                         <div class="form-group">
                           <label for="pythonRepositoryBranch">Branch or Tag</label>
                           <input type="text" class="form-control" id="pythonRepositoryBranch" name="pythonRepositoryBranch" maxlength="200" autocomplete="off" placeholder="main">
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-group">
+                          <label for="pythonGitCredentialKey">Git Credential</label>
+                          <select class="form-control" id="pythonGitCredentialKey" name="pythonGitCredentialKey">
+                            <option value="">Public repository</option>
+                            <?php foreach ((array) (isset($git_credentials) ? $git_credentials : array()) as $gitCredential) {
+                              $credentialKey = isset($gitCredential->connector_key) ? (string) $gitCredential->connector_key : '';
+                              $credentialScope = isset($gitCredential->environment) ? (string) $gitCredential->environment : 'ALL';
+                              $credentialHost = isset($gitCredential->address) ? (string) $gitCredential->address : '';
+                              if ($credentialKey === '') { continue; }
+                            ?>
+                              <option value="<?php echo html_escape($credentialKey); ?>"><?php echo html_escape($credentialKey.' · '.$credentialHost.' · '.$credentialScope); ?></option>
+                            <?php } ?>
+                          </select>
+                          <p class="help-block">Create scoped credentials under Connectors; secrets never enter the clone URL or log.</p>
                         </div>
                       </div>
                     </div>
@@ -3634,7 +3651,7 @@
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -6175,6 +6192,7 @@
           pythonSourcePath: '',
           pythonRepositoryUrl: '',
           pythonRepositoryBranch: '',
+          pythonGitCredentialKey: '',
           pythonInlineCode: '',
           pythonRequirementsText: '',
           pythonPyprojectText: '',
@@ -6770,7 +6788,7 @@
 
         var meaningfulTextFields = [
           'job_name', 'description', 'windowsCommandLine', 'linuxCommandLine',
-          'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch',
+          'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey',
           'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText',
           'recipients'
         ];
@@ -8115,6 +8133,21 @@
       $('.pythonSourceForm').show();
       hydratePythonRuntime(command);
 
+      var gitRepositoryUrl = shellExportValue(command, 'JOBSEEKER_GIT_REPOSITORY_URL');
+      if (gitRepositoryUrl !== '') {
+        setSelectValue('#linuxScriptType', 'python');
+        setSelectValue('#pythonSourceMode', 'git');
+        $('#pythonRepositoryUrl').val(gitRepositoryUrl);
+        $('#pythonRepositoryBranch').val(shellExportValue(command, 'JOBSEEKER_GIT_REPOSITORY_BRANCH'));
+        setSelectValue('#pythonGitCredentialKey', shellExportValue(command, 'JOBSEEKER_GIT_CREDENTIAL_KEY'));
+        $('#pythonEntryPoint').val(shellExportValue(command, 'JOBSEEKER_ENTRYPOINT'));
+        $('.pythonGitSourceForm').show();
+        $('.pythonPathSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
+        updatePythonSourceControls();
+        hydrateEnvironmentFromPythonCommand(command);
+        return workspaceRequest;
+      }
+
       var cloneLine = '';
       $.each(command.split(/\r?\n/), function(index, line) {
         if (line.indexOf('git clone --depth 1') === 0) {
@@ -8129,6 +8162,7 @@
         setSelectValue('#pythonSourceMode', 'git');
         $('#pythonRepositoryUrl').val(urlMatch ? urlMatch[1] : '');
         $('#pythonRepositoryBranch').val(branchMatch ? branchMatch[1] : '');
+        setSelectValue('#pythonGitCredentialKey', '');
         $('#pythonEntryPoint').val(shellExportValue(command, 'JOBSEEKER_ENTRYPOINT'));
         $('.pythonGitSourceForm').show();
         $('.pythonPathSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();

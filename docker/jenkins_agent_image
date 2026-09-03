@@ -5,7 +5,7 @@ FROM jenkins/inbound-agent:latest-jdk21
 USER root
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends python3-pip python3-venv curl ca-certificates \
+	&& apt-get install -y --no-install-recommends python3-pip python3-venv curl ca-certificates git openssh-client \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
@@ -16,6 +16,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages /opt/jobseeker
 	&& python3 -m pip install --no-cache-dir --break-system-packages -r /opt/jobseeker/requirements.txt
 
 COPY docker/jenkins/agent-entrypoint.sh /usr/local/bin/jobseeker-agent-entrypoint
+COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
 RUN chmod +x /usr/local/bin/jobseeker-agent-entrypoint
 
 USER jenkins

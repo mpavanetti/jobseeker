@@ -19,9 +19,12 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import os
 import re
+import shutil
 import socket
 import ssl
+import subprocess
 import sys
 import time
 import urllib.error
@@ -753,6 +756,68 @@ def _classify_db_error(
     return result.finish(UNREACHABLE, "Could not connect: %s" % text)
 
 
+def _test_git(connector: "Connector", result: ConnectionTestResult, timeout: float) -> ConnectionTestResult:
+    """Verify Git repository access through JobSeeker's secret-safe helper."""
+
+    repository_url = str(connector.database or "").strip()
+    if not repository_url:
+        result.add("repository", False, "no test repository URL configured")
+        return result.finish(
+            UNSUPPORTED,
+            "Set the connector resource to a repository URL to verify Git authentication.",
+        )
+
+    helper = shutil.which("jobseeker-git")
+    connector_root = str(getattr(connector, "runtime_directory", "") or "")
+    connector_directory = os.path.join(connector_root, connector.key) if connector_root else ""
+    if not helper or not connector_directory or not os.path.isdir(connector_directory):
+        result.add("helper", False, "secure Git helper or connector directory unavailable")
+        return result.finish(
+            DRIVER_MISSING,
+            "The Jenkins worker does not have the secure JobSeeker Git helper.",
+        )
+
+    started = time.monotonic()
+    try:
+        completed = subprocess.run(
+            [helper, "ls-remote", "--connector-dir", connector_directory, "--", repository_url],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        result.latency_ms = int((time.monotonic() - started) * 1000)
+        result.add("git", False, "repository check timed out")
+        return result.finish(UNREACHABLE, "The Git provider did not respond before the timeout.")
+    except OSError:
+        result.add("helper", False, "secure Git helper could not be started")
+        return result.finish(DRIVER_MISSING, "The secure JobSeeker Git helper could not be started.")
+
+    result.latency_ms = int((time.monotonic() - started) * 1000)
+    if completed.returncode == 0:
+        result.add("git", True, "repository HEAD is readable")
+        return result.finish(PASSED, "Git repository authentication and read access succeeded.")
+
+    error_text = str(completed.stderr or "").lower()
+    auth_failure = any(token in error_text for token in (
+        "authentication failed",
+        "permission denied",
+        "access denied",
+        "could not read username",
+        "repository not found",
+        "access rights",
+    ))
+    result.add("git", False, "repository access was denied" if auth_failure else "repository check failed")
+    return result.finish(
+        AUTH_FAILED if auth_failure else UNREACHABLE,
+        "Git credentials were rejected or repository access was denied."
+        if auth_failure else "The Git repository could not be reached.",
+    )
+
+
 _HANDLERS = {
     "mysql": _test_mysql,
     "mariadb": _test_mysql,
@@ -777,6 +842,7 @@ _HANDLERS = {
     "kafka": _test_kafka,
     "rabbitmq": _test_rabbitmq,
     "amqp": _test_rabbitmq,
+    "git_repository": _test_git,
 }
 
 

@@ -113,7 +113,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
                 </select>
               </div>
               <div class="form-group span-2">
-                <label for="address">Endpoint / host</label>
+                <label for="address" id="connectorAddressLabel">Endpoint / host</label>
                 <input class="form-control" id="address" name="address" maxlength="255" value="<?php echo html_escape($value('address')); ?>">
               </div>
               <div class="form-group">
@@ -121,7 +121,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
                 <input class="form-control" type="number" id="port" name="port" min="0" max="65535" value="<?php echo html_escape($value('port', '3306')); ?>">
               </div>
               <div class="form-group">
-                <label for="schema">Database / resource</label>
+                <label for="schema" id="connectorResourceLabel">Database / resource</label>
                 <input class="form-control" id="schema" name="schema" maxlength="200" value="<?php echo html_escape($value('schema')); ?>">
               </div>
               <div class="form-group span-2 oracle-field" data-oracle-type="oracle_service">
@@ -162,7 +162,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
               <div class="connector-form-grid">
                 <div class="form-group span-2"><label for="login">Username</label><input class="form-control" id="login" name="login" maxlength="500" autocomplete="off"></div>
                 <div class="form-group span-2"><label for="password">Password</label><input class="form-control" type="password" id="password" name="password" maxlength="2000" autocomplete="new-password"></div>
-                <div class="form-group span-4"><label for="local_secret_fields">Additional secret fields</label><textarea class="form-control" id="local_secret_fields" name="local_secret_fields" rows="4" spellcheck="false" placeholder="api_key=...&#10;sas_token=...&#10;connection_string=..."></textarea></div>
+                <div class="form-group span-4"><label for="local_secret_fields">Additional secret fields</label><textarea class="form-control" id="local_secret_fields" name="local_secret_fields" rows="4" spellcheck="false" placeholder="token=...&#10;private_key=...&#10;known_hosts=..."></textarea><p class="help-block git-credential-help" style="display:none">For HTTPS, save <code>token</code> (and optionally a provider username). For SSH, save <code>private_key</code> and pinned <code>known_hosts</code> values. Secrets are never added to a clone URL or console command.</p></div>
                 <?php if ($isEditing && $editing->secret_backend === 'local') { ?>
                   <div class="form-group span-4"><label><input type="checkbox" name="clear_local_secrets" value="1"> Clear all stored local values</label><p class="help-block">Use this when the selected authentication type does not require a saved credential. Otherwise, blank fields preserve the current encrypted values.</p></div>
                 <?php } ?>
@@ -303,8 +303,14 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     });
     var endpointOptional = $.inArray(type, ['aws_s3', 'azure_blob', 'azure_data_lake', 'gcs', 'generic_secret']) !== -1;
     $('#address').prop('required', ! endpointOptional);
+    var isGit = type === 'git_repository';
+    $('#connectorAddressLabel').text(isGit ? 'Provider host' : 'Endpoint / host');
+    $('#connectorResourceLabel').text(isGit ? 'Test repository URL (optional)' : 'Database / resource');
+    $('#address').attr('placeholder', isGit ? 'github.com' : '');
+    $('#schema').attr('placeholder', isGit ? 'https://github.com/org/repository.git' : '');
+    $('.git-credential-help').toggle(isGit);
     if (updatePort) {
-      var defaults = {mysql:3306, pgsql:5432, sqlserver:1433, oracle_service:1521, oracle_sid:1521, mongodb:27017, redis:6379, snowflake:443, databricks:443, kafka:9092, rabbitmq:5672, elasticsearch:9200, sftp:22, http_api:443};
+      var defaults = {mysql:3306, pgsql:5432, sqlserver:1433, oracle_service:1521, oracle_sid:1521, mongodb:27017, redis:6379, snowflake:443, databricks:443, kafka:9092, rabbitmq:5672, elasticsearch:9200, sftp:22, http_api:443, git_repository:443};
       var knownPorts = ['0','22','443','1433','1521','3306','5432','5672','6379','9092','9200','27017'];
       var current = String($('#port').val() || '0');
       if ($.inArray(current, knownPorts) !== -1) {
@@ -389,6 +395,14 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     $('#connectorHelpAuth').text(auth);
     $('#connectorHelpBackend').text(backend);
     $('#connectorHelpBackendNote').text(backendNotes[backend] || 'The Jenkins worker resolves this secret source when the build starts.');
+    if (type === 'git_repository') {
+      $('#connectorPythonCode').text('# Select this credential in Job Creation > Python > Git Source.\n# JobSeeker uses GIT_ASKPASS or an ephemeral SSH key directory;\n# the token/key is never embedded in the repository URL.');
+      $('#connectorShellCode').text('jobseeker-git clone --connector-dir "$JOBSEEKER_CONNECTORS_DIR/' + key + '" -- https://HOST/ORG/REPO.git ./source');
+      $('#connectorTalendCode').text('Git repository credentials are consumed before the Python source is executed.');
+      $('#connectorFileCode').text('$JOBSEEKER_CONNECTORS_DIR/' + key + '/token\n$JOBSEEKER_CONNECTORS_DIR/' + key + '/private_key\n$JOBSEEKER_CONNECTORS_DIR/' + key + '/known_hosts\n\n# Runtime files are mode 0600 and removed after the build.');
+      $('#connectorHelpModal').modal('show');
+      return;
+    }
     $('#connectorPythonCode').text('from jobseeker import JobSeeker\n\nwith JobSeeker() as js:\n    connector = js.connector("' + key + '")\n    host = connector.host\n    token = connector.value("token", required=True)\n    # Pass connector values to the driver or client owned by this job.');
     $('#connectorShellCode').text('"$JOBSEEKER_CONNECTOR_HELPER" exec ' + key + ' -- ./run-etl.sh\n\n# run-etl.sh receives JOBSEEKER_CONNECTOR_HOST,\n# JOBSEEKER_CONNECTOR_PORT, and mapped JOBSEEKER_CONNECTOR_* values.');
     $('#connectorTalendCode').text('"$JOBSEEKER_CONNECTOR_HELPER" exec ' + key + ' -- ./run-talend.sh\n\n# run-talend.sh\n./MyJob_run.sh \\\n  --context_param host="$JOBSEEKER_CONNECTOR_HOST" \\\n  --context_param username="$JOBSEEKER_CONNECTOR_USERNAME" \\\n  --context_param password="$JOBSEEKER_CONNECTOR_PASSWORD"');
