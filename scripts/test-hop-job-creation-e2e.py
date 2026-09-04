@@ -467,6 +467,16 @@ def main() -> int:
     check("the Jenkins console contains the Hop runner output",
           "[JobSeeker] Apache Hop container run" in console and "[JobSeeker] Completed" in console,
           console[-500:] if console else "empty console")
+    check("the created DEV job passes DEV into the Hop pipeline",
+          "environment = DEV" in console,
+          console[-1000:] if console else "empty console")
+    check("the created DEV job resolves Context Details from DEV",
+          "custom_context = This is a custom context from jobseeker DEV" in console
+          and "${Custom}" not in console,
+          console[-1000:] if console else "empty console")
+    check("platform variables are fully resolved in the created job",
+          "${JOBSEEKER_" not in console,
+          console[-1000:] if console else "empty console")
 
     print("\nuploading and publishing a standalone Hop pipeline")
     pipeline_source = os.path.join(

@@ -137,6 +137,12 @@ assert(sdk.includes('if with_tmf or context_names'),
   '--no-tmf must not disable Context variables requested by a Hop project');
 assert(sdk.includes('Unavailable in this JobSeeker run scope'),
   'an unresolved platform reference must not survive as a literal ${NAME} value');
+assert(sdk.includes('def _runtime_environment') && sdk.includes('resolved_environment = _runtime_environment(environment)'),
+  'one normalized environment must scope the complete Hop run');
+['materialize_connectors(', 'DataAssetCatalog(', 'JobSeeker(', 'build_run_variables('].forEach(call =>
+  assert(sdk.includes(call), 'the resolved Hop environment must feed ' + call));
+assert(sdk.includes('Hop parameters cannot replace JobSeeker runtime variables'),
+  'job parameters must not override the Jenkins-selected environment or other platform values');
 // Monitoring must never be able to fail the job it is monitoring, whether
 // constructing the shared client or opening the transaction is what fails.
 assert(/monitoring must never block execution/.test(sdk));
@@ -214,6 +220,10 @@ assert(jobCreationView.includes('requestedHopEntry') && jobCreationView.includes
 // Filters, because both tables grow without bound.
 assert(hopView.includes('hopRunSearch') && hopView.includes('hopRunState') && hopView.includes('hopRunSource'));
 assert(hopView.includes('hopProjectEnvironment') && hopView.includes('hopProjectHealth'));
+assert((hopView.match(/pageLength:\s*25/g) || []).length >= 2,
+  'Hop Server executions and projects must both paginate with DataTables');
+assert(hopView.includes("$(function()") && hopView.includes("$('#hopExecutionsTable').DataTable"),
+  'Hop DataTables must initialize after the shared footer plugin is loaded');
 
 // The Apache Hop GUI leaves a new file's internal name as "New workflow", so
 // every run of it would otherwise pile up under one meaningless label.
