@@ -1,0 +1,15 @@
+{
+  "assets": [],
+  "connectors": [
+    "jobseeker-mariadb"
+  ],
+  "context": [],
+  "description": "Reads Transaction Monitoring history through the seeded jobseeker-mariadb connector, exposed to Hop as a database connection of the same name.",
+  "engine": "container",
+  "entry_file": "workflows/main.hwf",
+  "log_level": "Basic",
+  "parameters": {},
+  "project": "connector-inventory",
+  "run_config": "local",
+  "schema_version": 1
+}

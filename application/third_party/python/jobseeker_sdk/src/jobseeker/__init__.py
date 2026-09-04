@@ -1496,14 +1496,24 @@ class JobSeeker:
             print("[Transaction Finished] 1 record updated.")
         return ok
 
-    def error(self, msg: str = "", origin: str = "Python Method", code: int = 1) -> bool:
+    def error(
+        self,
+        msg: str = "",
+        origin: str = "Python Method",
+        code: int = 1,
+        type: str = "Python Exception",  # noqa: A002 - the TMF column is named "type"
+    ) -> bool:
+        """Record a failure. ``type`` names the runtime that raised it, so a
+        non-Python runtime such as Apache Hop is not filed as a Python
+        exception in the Transaction Monitoring error list."""
+
         payload = self._base_payload()
         payload.update(
             {
                 "message": msg,
                 "origin": origin,
                 "code": code,
-                "type": "Python Exception",
+                "type": type or "Python Exception",
                 "event_text": "Error(s) Found",
             }
         )

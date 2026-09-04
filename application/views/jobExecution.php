@@ -537,11 +537,79 @@
               <div class="tab-content" id="executionTabContent" style="padding-top: 15px;"></div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
   </section>
 </div>
+
+<?php if (! empty($hop_jobs)) { ?>
+<div class="modal fade" id="hopCanvasModal" tabindex="-1" role="dialog" aria-labelledby="hopCanvasModalTitle">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="hopCanvasModalTitle"><i class="fa fa-random"></i> Apache Hop canvas</h4>
+        <div id="hopExecutionCanvasState" class="text-muted hop-canvas-state"></div>
+      </div>
+      <div class="modal-body">
+        <div class="execution-toolbar hop-canvas-modal-toolbar">
+          <strong id="hopCanvasJobLabel"></strong>
+          <span class="text-muted" id="hopCanvasFileLabel"></span>
+          <span class="hop-canvas-modal-spacer"></span>
+          <label class="checkbox-inline"><input type="checkbox" id="hopCanvasLive" checked> Follow live run</label>
+          <button type="button" class="btn btn-default btn-sm" id="hopCanvasReload"><i class="fa fa-refresh"></i> Reload</button>
+        </div>
+        <div id="hopExecutionCanvas"></div>
+        <div id="hopExecutionCanvasDetail" class="text-muted hop-canvas-detail">Select a transform or action to inspect its run metrics.</div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-default pull-left" id="hopCanvasCatalogLink" href="<?php echo base_url(); ?>hop"><i class="fa fa-folder-open-o"></i> Open Hop catalog</a>
+        <button type="button" class="btn btn-primary" data-dismiss="modal">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+  .execution-hop-job-link { color: #3c8dbc; cursor: pointer; text-decoration: none; }
+  .execution-hop-job-link:hover, .execution-hop-job-link:focus { color: #23527c; text-decoration: underline; }
+  button.execution-hop-job-link { background: transparent; border: 0; font: inherit; padding: 0; text-align: left; }
+  .hop-canvas-state { font-size: 12px; margin-top: 3px; }
+  .hop-canvas-modal-toolbar { margin-bottom: 10px; }
+  .hop-canvas-modal-spacer { flex: 1 1 auto; }
+  .hop-canvas-detail { font-size: 12px; margin-top: 8px; }
+  #hopCanvasModal .modal-dialog { width: min(1100px, calc(100% - 30px)); }
+  .hop-canvas-host { position: relative; background: #f7f9fb; border: 1px solid #e4e7ea; border-radius: 4px; overflow: auto; max-height: 60vh; }
+  .hop-canvas { display: block; width: 100%; min-height: 280px; }
+  .hop-canvas-empty { padding: 34px; text-align: center; color: #8a9199; }
+  .hop-canvas-toolbar { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 4px; }
+  .hop-canvas-toolbar .btn { width: 26px; padding: 1px 0; font-size: 13px; line-height: 18px; }
+  .hop-canvas .hop-node rect { fill: #fff; stroke: #b8c2cc; stroke-width: 1.5; }
+  .hop-canvas .hop-node { cursor: pointer; }
+  .hop-canvas .hop-node:hover rect { stroke: #3c8dbc; stroke-width: 2; }
+  .hop-canvas .hop-node-name { font: 600 12px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #2f3d4a; }
+  .hop-canvas .hop-node-type { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #8a9199; }
+  .hop-canvas .hop-node-start rect { fill: #eef7ee; stroke: #6fae6f; }
+  .hop-canvas .hop-node-success rect { fill: #eef7ee; stroke: #45a145; }
+  .hop-canvas .hop-node-failure rect { fill: #fdeeee; stroke: #d9534f; }
+  .hop-canvas .hop-node-passthrough rect { stroke-dasharray: 4 3; }
+  .hop-canvas .hop-node.is-running rect { stroke: #3c8dbc; stroke-width: 2.5; }
+  .hop-canvas .hop-node.is-failed rect { fill: #fdeeee; stroke: #d9534f; stroke-width: 2.5; }
+  .hop-canvas .hop-node-metrics { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
+  .hop-canvas .hop-edge { fill: none; stroke: #9aa5b1; stroke-width: 1.8; }
+  .hop-canvas .hop-edge-success { stroke: #45a145; }
+  .hop-canvas .hop-edge-failure { stroke: #d9534f; }
+  .hop-canvas .hop-edge.is-disabled { stroke: #c9d2d9; stroke-dasharray: 5 4; }
+  .hop-canvas .hop-edge-head { stroke: none; fill: #9aa5b1; }
+  .hop-canvas .hop-edge-head.hop-edge-success { fill: #45a145; }
+  .hop-canvas .hop-edge-head.hop-edge-failure { fill: #d9534f; }
+  .hop-canvas .hop-edge-head.hop-edge-disabled { fill: #c9d2d9; }
+  .hop-canvas .hop-note rect { fill: #fffbe6; stroke: #e6d999; }
+  .hop-canvas .hop-note text { font: 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #7a6f3d; }
+</style>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=2"></script>
+<?php } ?>
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
@@ -552,6 +620,9 @@
     var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
     var runningBuildsUrl = window.jobseekerRunningBuildsUrl || <?php echo json_encode(base_url() . 'jenkins/runningBuilds'); ?>;
     var containerMetricsUrl = <?php echo json_encode(base_url() . 'docker-monitoring/jobs'); ?>;
+    var hopGraphUrl = <?php echo json_encode(base_url() . 'hop/graph'); ?>;
+    var hopJobs = <?php echo json_encode(isset($hop_jobs) && is_array($hop_jobs) ? $hop_jobs : array(), JSON_UNESCAPED_SLASHES); ?> || [];
+    var hopJobsByName = {};
     var jobsByName = {};
     var visibleJobs = [];
     var selectedJobNames = {};
@@ -568,6 +639,9 @@
     var containerMetricsRequest = null;
     var consoleViewMode = 'tabs';
     var triggerSelectedBusy = false;
+    var hopCanvasJobName = '';
+    var hopCanvasTimer = null;
+    var hopCanvasInFlight = false;
     var initialResumeBuild = {
       jobName: <?php echo json_encode(isset($resume_job) ? $resume_job : ''); ?>,
       buildNumber: <?php echo json_encode(isset($resume_build) ? $resume_build : ''); ?>,
@@ -582,6 +656,12 @@
       label: function() { return '<span class="label label-default">Unknown</span>'; },
       text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
     };
+
+    $.each(hopJobs, function(index, job) {
+      if (job && job.job_name) {
+        hopJobsByName[String(job.job_name)] = job;
+      }
+    });
 
     if (jenkinsUrl && jenkinsUrl.charAt(jenkinsUrl.length - 1) !== '/') {
       jenkinsUrl += '/';
@@ -601,6 +681,96 @@
 
     function escapeAttribute(value) {
       return escapeHtml(value);
+    }
+
+    function hopJob(jobName) {
+      return hopJobsByName[String(jobName || '')] || null;
+    }
+
+    function hopJobNameHtml(jobName, className) {
+      var metadata = hopJob(jobName);
+      if (! metadata) {
+        return '<span class="' + escapeAttribute(className || '') + '">' + escapeHtml(jobName) + '</span>';
+      }
+      return '<button type="button" class="execution-hop-job-link ' + escapeAttribute(className || '') + '" data-hop-job="' +
+        escapeAttribute(jobName) + '" title="Explore this Apache Hop canvas">' + escapeHtml(jobName) + '</button>';
+    }
+
+    function clearHopCanvasTimer() {
+      if (hopCanvasTimer) {
+        clearInterval(hopCanvasTimer);
+        hopCanvasTimer = null;
+      }
+    }
+
+    function scheduleHopCanvas() {
+      clearHopCanvasTimer();
+      if (! $('#hopCanvasModal').hasClass('in') || ! $('#hopCanvasLive').is(':checked')) {
+        return;
+      }
+      hopCanvasTimer = setInterval(function() {
+        if (! document.hidden && $('#hopCanvasModal').hasClass('in')) {
+          drawHopCanvas();
+        }
+      }, 5000);
+    }
+
+    function drawHopCanvas() {
+      var metadata = hopJob(hopCanvasJobName);
+      if (! metadata || ! window.JobSeekerHopCanvas || hopCanvasInFlight) {
+        return;
+      }
+      hopCanvasInFlight = true;
+      $('#hopCanvasReload').prop('disabled', true).find('i').addClass('fa-spin');
+
+      $.getJSON(hopGraphUrl, {
+        job: hopCanvasJobName,
+        live: $('#hopCanvasLive').is(':checked') ? '1' : '0'
+      })
+        .done(function(graph) {
+          var live = graph.live || null;
+          var nodes = (live && live.nodes) || {};
+          $('#hopCanvasFileLabel').text(graph.file || metadata.entry_file || '');
+          $('#hopExecutionCanvasState').text(
+            live
+              ? (live.status || live.state) + ' · started ' + (live.started_at || 'unknown')
+              : 'Design view · no live Hop Server run is currently attached'
+          );
+          $('#hopExecutionCanvasDetail').text('Select a transform or action to inspect its run metrics.');
+
+          window.JobSeekerHopCanvas.render('#hopExecutionCanvas', graph, {
+            nodeState: nodes,
+            onSelect: function(node) {
+              var state = nodes[node.name];
+              $('#hopExecutionCanvasDetail').text(
+                node.name + (node.type ? ' · ' + node.type : '') +
+                (state ? ' · ' + state.status + ' · read ' + state.read + ', written ' + state.written + ', errors ' + state.errors : '')
+              );
+            }
+          });
+        })
+        .fail(function(response) {
+          var message = (response && response.responseJSON && response.responseJSON.error) || 'The Apache Hop canvas could not be read.';
+          $('#hopExecutionCanvas').html('<div class="hop-canvas-empty">' + escapeHtml(message) + '</div>');
+          $('#hopExecutionCanvasState').text('');
+        })
+        .always(function() {
+          hopCanvasInFlight = false;
+          $('#hopCanvasReload').prop('disabled', false).find('i').removeClass('fa-spin');
+        });
+    }
+
+    function openHopCanvas(jobName) {
+      var metadata = hopJob(jobName);
+      if (! metadata || ! $('#hopCanvasModal').length) {
+        return;
+      }
+      hopCanvasJobName = String(jobName);
+      $('#hopCanvasJobLabel').text(hopCanvasJobName);
+      $('#hopCanvasFileLabel').text(metadata.entry_file || '');
+      $('#hopExecutionCanvasState').text('Loading canvas…');
+      $('#hopExecutionCanvas').html('<div class="hop-canvas-empty"><i class="fa fa-refresh fa-spin"></i> Loading Apache Hop canvas…</div>');
+      $('#hopCanvasModal').modal('show');
     }
 
     function jenkinsJobPath(jobName) {
@@ -1282,7 +1452,7 @@
 
         html += '<label class="execution-job-option' + (job.buildable === false ? ' disabled' : '') + '" title="' + escapeAttribute(buildJobOptionText(job)) + '">' +
           '<input type="checkbox" class="execution-job-check" value="' + escapeAttribute(name) + '" ' + (selectedJobNames[name] ? 'checked ' : '') + (job.buildable === false ? 'disabled ' : '') + '>' +
-          '<span class="execution-job-name">' + escapeHtml(name) + '</span>' +
+          hopJobNameHtml(name, 'execution-job-name') +
           jobStateLabel(job) +
           renderJobEnvironment(job) +
           '<span class="execution-job-created"><i class="fa fa-calendar-o"></i> ' + formatJobCreationDateHtml(name) + '</span>' +
@@ -1568,10 +1738,11 @@
         '<div role="tabpanel" class="tab-pane ' + activeClass + '" id="pane-' + run.id + '">' +
           '<div class="execution-pane-header">' +
             '<div>' +
-              '<h4 style="margin-top: 0; margin-bottom: 4px;"><span class="run-job-name"></span></h4>' +
+              '<h4 style="margin-top: 0; margin-bottom: 4px;">' + hopJobNameHtml(run.jobName, 'run-job-name') + '</h4>' +
               '<span class="run-status"></span> <span class="text-muted run-queue"></span>' +
             '</div>' +
             '<div>' +
+              (hopJob(run.jobName) ? '<button type="button" class="btn btn-info btn-sm execution-hop-canvas" data-hop-job="' + escapeAttribute(run.jobName) + '"><i class="fa fa-random"></i> Explore canvas</button> ' : '') +
               '<button type="button" class="btn btn-danger btn-sm execution-abort" data-execution-id="' + run.id + '"><i class="fa fa-stop"></i> Stop</button>' +
               ' <button type="button" class="btn btn-default btn-sm execution-remove" data-execution-id="' + run.id + '"><i class="fa fa-times"></i> Close</button>' +
             '</div>' +
@@ -1691,8 +1862,18 @@
           return;
         }
 
+        var jobCell = hopJob(run.jobName)
+          ? hopJobNameHtml(run.jobName, '') + ' <a href="#pane-' + run.id + '" class="execution-row-link text-muted" data-tab-id="' + run.id + '" title="Open live console"><i class="fa fa-terminal"></i></a>'
+          : '<a href="#pane-' + run.id + '" class="execution-row-link" data-tab-id="' + run.id + '">' + escapeHtml(run.jobName) + '</a>';
+        var action = hopJob(run.jobName)
+          ? '<button type="button" class="btn btn-xs btn-info execution-hop-canvas" data-hop-job="' + escapeAttribute(run.jobName) + '"><i class="fa fa-random"></i> Canvas</button> '
+          : '';
+        action += isTerminal(run)
+          ? '<span class="text-muted">Done</span>'
+          : '<button type="button" class="btn btn-xs btn-danger execution-abort" data-execution-id="' + run.id + '">Stop</button>';
+
         rows += '<tr>' +
-          '<td><a href="#pane-' + run.id + '" class="execution-row-link" data-tab-id="' + run.id + '">' + escapeHtml(run.jobName) + '</a></td>' +
+          '<td>' + jobCell + '</td>' +
           '<td>' + environmentHelper.label(run.environmentInfo) + '</td>' +
           '<td>' + escapeHtml(workerNodeLabel(run)) + '</td>' +
           '<td>' + escapeHtml(buildLabel(run)) + '</td>' +
@@ -1701,7 +1882,7 @@
           '<td>' + formatTimeHtml(run.timestamp) + '</td>' +
           '<td>' + escapeHtml(run.finished ? formatDuration(run.duration) : formatDuration(run.timestamp ? Date.now() - parseInt(run.timestamp, 10) : 0)) + '</td>' +
           '<td>' + progressBar(run) + '<small>' + escapeHtml(run.consoleBytes + ' bytes') + '</small></td>' +
-          '<td>' + (isTerminal(run) ? '<span class="text-muted">Done</span>' : '<button type="button" class="btn btn-xs btn-danger execution-abort" data-execution-id="' + run.id + '">Stop</button>') + '</td>' +
+          '<td>' + action + '</td>' +
         '</tr>';
       });
 
@@ -2284,6 +2465,26 @@
 
     $(document).on('click', '.execution-remove', function() {
       removeExecution(executions[$(this).data('execution-id')]);
+    });
+
+    $(document).on('click', '.execution-hop-job-link, .execution-hop-canvas', function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openHopCanvas($(this).attr('data-hop-job'));
+    });
+
+    $('#hopCanvasModal').on('shown.bs.modal', function() {
+      drawHopCanvas();
+      scheduleHopCanvas();
+    }).on('hidden.bs.modal', function() {
+      clearHopCanvasTimer();
+      hopCanvasJobName = '';
+    });
+
+    $('#hopCanvasReload').on('click', drawHopCanvas);
+    $('#hopCanvasLive').on('change', function() {
+      scheduleHopCanvas();
+      drawHopCanvas();
     });
 
     $('[data-console-view]').on('click', function() {
