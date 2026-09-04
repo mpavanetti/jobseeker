@@ -24,8 +24,16 @@
     shell: { title: 'Shell execution', icon: 'fa-terminal' },
     email: { title: 'Email notification', icon: 'fa-envelope-o' },
     cleanup: { title: 'Cleanup', icon: 'fa-trash-o' },
-    result: { title: 'Build result', icon: 'fa-flag-checkered' }
+    result: { title: 'Build result', icon: 'fa-flag-checkered' },
+    // Apache Hop logs are grouped by the transform or action that wrote each
+    // line, which is how Hop's own UI presents a run.
+    'hop-run': { title: 'Apache Hop run', icon: 'fa-sitemap' },
+    'hop-step': { title: 'Transform or action', icon: 'fa-cog' },
+    'hop-log': { title: 'Run log', icon: 'fa-file-text-o' }
   };
+
+  // 2026/09/04 17:38:00 - Copy files - ERROR: File/folder [...] does not exist!
+  var HOP_LINE = /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+-\s+([^-]+?)\s+-\s?([\s\S]*)$/;
 
   function normalizedLine(line) {
     return String(line == null ? '' : line).replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, '');
@@ -219,6 +227,68 @@
     return { raw: raw, sections: sections };
   }
 
+  /**
+   * Group an Apache Hop log the way Hop itself does: by the transform or action
+   * that produced each line. A Hop run has no Jenkins markers, so the generic
+   * parser would collapse the whole thing into one block - which is exactly the
+   * wall of text a person opens the log to avoid.
+   */
+  function parseHop(text, options) {
+    options = options || {};
+    var raw = String(text == null ? '' : text);
+    var normalized = raw.replace(/\r\n?/g, '\n');
+    var lines = normalized.split('\n');
+    var runName = String(options.name || '').trim();
+    var order = [];
+    var byOrigin = {};
+    var lastOrigin = '';
+
+    if (lines.length > 1 && lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+
+    lines.forEach(function(line) {
+      var clean = normalizedLine(line);
+      var match = HOP_LINE.exec(clean);
+      var origin = match ? match[2].trim() : lastOrigin;
+      var body = match ? (match[1] + '  ' + match[3]) : clean;
+
+      lastOrigin = origin;
+      if (! byOrigin[origin]) {
+        var isRun = runName !== '' ? origin === runName : order.length === 0 && origin !== '';
+        var kind = origin === '' ? 'hop-log' : (isRun ? 'hop-run' : 'hop-step');
+        byOrigin[origin] = {
+          id: 'hop-' + order.length,
+          kind: kind,
+          title: origin === '' ? SECTION_META['hop-log'].title : origin,
+          icon: SECTION_META[kind].icon,
+          lines: [],
+          lineCount: 0,
+          hasError: false
+        };
+        order.push(byOrigin[origin]);
+      }
+
+      var section = byOrigin[origin];
+      section.lines.push(body);
+      section.lineCount += 1;
+      section.hasError = section.hasError || hasError(clean);
+    });
+
+    order.forEach(function(section) {
+      section.text = section.lines.join('\n');
+      delete section.lines;
+    });
+
+    return { raw: raw, sections: order };
+  }
+
+  function parserFor(options) {
+    return options && options.parser === 'hop'
+      ? function(text) { return parseHop(text, options); }
+      : parse;
+  }
+
   function stateFor(host) {
     if (! host.__jobSeekerConsoleState) {
       host.__jobSeekerConsoleState = {
@@ -258,6 +328,11 @@
   }
 
   function defaultOpen(section, index, total, options) {
+    if (section.kind === 'hop-run' || section.kind === 'hop-step' || section.kind === 'hop-log') {
+      // A pipeline can have dozens of transforms. Open what failed, the run
+      // itself, and a log with nothing to choose between.
+      return section.hasError || section.kind === 'hop-run' || total === 1;
+    }
     return section.hasError || section.kind === 'docker-execution' || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'shell' || section.kind === 'email' || section.kind === 'cleanup' ||
       section.kind === 'result' || total === 1 || (!! options.live && index === total - 1);
   }
@@ -382,7 +457,7 @@
 
       if (action === 'raw') {
         state.rawVisible = ! state.rawVisible;
-        render(host, parse(state.text), options);
+        render(host, parserFor(options)(state.text), options);
         return;
       }
 
@@ -409,9 +484,10 @@
       return null;
     }
 
+    options = options || {};
     var state = stateFor(host);
     state.text = String(text == null ? '' : text);
-    render(host, parse(state.text), options || {});
+    render(host, parserFor(options)(state.text), options);
     return host;
   }
 
@@ -421,9 +497,10 @@
       return host || null;
     }
 
+    options = options || {};
     var state = stateFor(host);
     state.text += String(text);
-    render(host, parse(state.text), options || {});
+    render(host, parserFor(options)(state.text), options);
     return host;
   }
 
@@ -437,6 +514,7 @@
     classifyLine: classifyLine,
     getText: getText,
     parse: parse,
+    parseHop: parseHop,
     setText: setText
   };
 }));

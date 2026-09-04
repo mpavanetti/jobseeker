@@ -299,6 +299,86 @@ CREATE TABLE IF NOT EXISTS `data_asset_migrations` (
   PRIMARY KEY (`migration_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
+-- Apache Hop project registry. The filesystem under repository/hop/projects
+-- stays authoritative; these rows add ownership, environment scope, run
+-- defaults and an index for the Apache Hop screen.
+CREATE TABLE IF NOT EXISTS `hop_projects` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `project_key` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `description` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `storage_path` varchar(1000) COLLATE utf8_unicode_ci NOT NULL,
+  `entry_file` varchar(500) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `run_config` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'local',
+  `engine` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'container',
+  `log_level` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'Basic',
+  `parameters_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `source` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'upload',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `owner` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `hop_projects_key` (`project_key`),
+  KEY `hop_projects_environment` (`environment`),
+  KEY `hop_projects_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Which Jenkins jobs run which Hop project, written when a job is saved so the
+-- Apache Hop screen can show usage without walking every Jenkins config.
+CREATE TABLE IF NOT EXISTS `hop_project_jobs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `project_key` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `entry_file` varchar(500) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `engine` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'container',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `hop_project_jobs_scope` (`job_name`,`environment`),
+  KEY `hop_project_jobs_project` (`project_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- What the Apache Hop Server has run, including pipelines and workflows
+-- published straight to it from the Apache Hop GUI. The server forgets a
+-- finished execution after its object timeout and loses every one of them on
+-- restart, so the Apache Hop screen and the Transaction Monitoring ingestion
+-- cannot be built on its memory alone. `execution_id` is the id Hop assigns,
+-- which makes the ingestion idempotent: one Hop run is one TMF row.
+CREATE TABLE IF NOT EXISTS `hop_server_executions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `execution_id` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  -- Hop registers a run under the <name> inside the file, which the Apache Hop
+  -- GUI leaves as "New workflow" unless somebody renames it. The file name is
+  -- what a person recognises, so it is what the screens and TMF show.
+  `display_name` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `kind` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'pipeline',
+  `status` varchar(100) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `state` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'running',
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `project_key` varchar(100) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `filename` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `source` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'hop-gui',
+  `job_name` varchar(200) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `tmf_instance_id` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `records_total` int(11) NOT NULL DEFAULT 0,
+  `records_processed` int(11) NOT NULL DEFAULT 0,
+  `errors` int(11) NOT NULL DEFAULT 0,
+  `error_logged` tinyint(1) NOT NULL DEFAULT 0,
+  `log_text` mediumtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `ended_at` datetime DEFAULT NULL,
+  `first_seen_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `hop_server_executions_id` (`execution_id`),
+  KEY `hop_server_executions_started` (`started_at`),
+  KEY `hop_server_executions_state` (`state`,`started_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Copiando estrutura para tabela jobseeker.projectdetails
 CREATE TABLE IF NOT EXISTS `projectdetails` (
   `Id` int(11) NOT NULL AUTO_INCREMENT,

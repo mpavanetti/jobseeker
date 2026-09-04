@@ -15,6 +15,8 @@ if (! function_exists('jobseeker_normalize_global_environment')) {
 }
 
 $jobseekerDeploymentMode = isset($deployment_mode) && $deployment_mode === 'standalone' ? 'standalone' : 'multi';
+$jobseekerHopSetting = strtolower(trim((string) getenv('JOBSEEKER_HOP_ENABLED')));
+$jobseekerHopEnabled = ! in_array($jobseekerHopSetting, array('0', 'false', 'off', 'no'), TRUE);
 $jobseekerStandaloneEnvironment = $jobseekerDeploymentMode === 'standalone'
   ? jobseeker_normalize_global_environment(isset($standalone_environment) ? $standalone_environment : '')
   : '';
@@ -93,7 +95,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   <!-- Alertify Js -->
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/alertify.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
-  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=2" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=3" rel="stylesheet" type="text/css" />
   <!-- jQuery UI -->
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
@@ -130,7 +132,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=4" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=5" type="text/javascript"></script>
 <script type="text/javascript">
   window.jobseekerTime = {
     serverTimezone: 'UTC',
@@ -1231,6 +1233,12 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                   <span>Pipelines</span>
                 </a>
               </li>
+              <?php if ($jobseekerHopEnabled) { ?><li>
+                <a href="<?php echo base_url(); ?>hop" >
+                  <i class="fa fa-random"></i>
+                  <span>Apache Hop</span>
+                </a>
+              </li><?php } ?>
             <!-- <li>
               <a href="#" >
                 <i class="fa fa-list"></i>
