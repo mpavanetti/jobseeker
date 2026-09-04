@@ -54,6 +54,10 @@
 .job-console-section-email { border-left-color: #2dd4bf; }
 .job-console-section-cleanup { border-left-color: #c084fc; }
 .job-console-section-result { border-left-color: #22c55e; }
+/* Apache Hop groups by transform or action rather than by build phase. */
+.job-console-section-hop-run { border-left-color: #f472b6; }
+.job-console-section-hop-step { border-left-color: #60a5fa; }
+.job-console-section-hop-log { border-left-color: #94a3b8; }
 .job-console-section.has-error { border-left-color: #f87171; }
 
 .job-console-summary {

@@ -1,0 +1,18 @@
+{
+  "configurationVariables": [],
+  "defaultSelection": true,
+  "description": "JobSeeker default local pipeline engine",
+  "engineRunConfiguration": {
+    "Local": {
+      "feedback_size": "50000",
+      "gather_metrics": false,
+      "rowset_size": "10000",
+      "safe_mode": false,
+      "sample_size": "100",
+      "sample_type_in_gui": "Last",
+      "show_feedback": false,
+      "topo_sort": false
+    }
+  },
+  "name": "local"
+}

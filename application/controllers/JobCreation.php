@@ -12,6 +12,9 @@ class JobCreation extends BaseController
   use JobCreationExecutionTrait;
   use JenkinsRunnerTrait;
 
+  /** Memoized HopProject library for this request. */
+  private $hopProjectLibrary;
+
     /**
      * Cron triggers change rarely, so the whole job list shares one reading of
      * them. Keep this short enough that a schedule edit shows up promptly.
@@ -49,10 +52,42 @@ class JobCreation extends BaseController
           ->result();
 		$gitCredentials = $this->jobSeekerFilterEnvironmentRows($gitCredentials, 'environment', TRUE);
       }
+      $hopEnabled = $this->hopEnabled();
+      $hopProjects = array();
+      $hopSamples = array();
+      $hopEngines = array('container', 'server');
+      $hopLogLevels = array('Nothing', 'Error', 'Minimal', 'Basic', 'Detailed', 'Debug', 'Rowlevel');
+      $selectedHopProject = FALSE;
+      $selectedHopEntry = '';
+      $selectedHopEngine = '';
+      if ($hopEnabled) {
+        $hop = $this->hopProject();
+        $selectedHopProject = $hop->cleanProjectKey($this->input->get('hop_project', TRUE));
+        // "Use in job" on the Apache Hop screen carries the exact file and engine
+        // a run used, so a Hop Server execution somebody is happy with becomes a
+        // scheduled Jenkins job without retyping any of it.
+        $selectedHopEntry = $hop->cleanEntryFile($this->input->get('hop_entry', TRUE));
+        $selectedHopEngine = trim((string) $this->input->get('hop_engine', TRUE));
+        $hopProjects = $hop->listProjects($this->repositoryRootPath());
+        $hopSamples = $this->hopSamples();
+        $hopEngines = $hop->engines();
+        $hopLogLevels = $hop->logLevels();
+      }
       $data = array(
         'job_creation_dates' => $this->readJobCreationDates(),
         'job_samples' => is_array($jobSamples) ? $jobSamples : array(),
-        'git_credentials' => $gitCredentials
+        'git_credentials' => $gitCredentials,
+        'hop_enabled' => $hopEnabled,
+        'hop_projects' => $hopProjects,
+        'hop_samples' => $hopSamples,
+        'hop_engines' => $hopEngines,
+        'hop_log_levels' => $hopLogLevels,
+        'hop_default_engine' => 'container',
+        'hop_default_run_config' => 'local',
+        'hop_default_log_level' => 'Basic',
+        'hop_selected_project' => $selectedHopProject === FALSE ? '' : $selectedHopProject,
+        'hop_selected_entry' => $selectedHopEntry,
+        'hop_selected_engine' => $selectedHopEngine === '' ? '' : $hop->cleanEngine($selectedHopEngine)
       );
         
       $this->loadViews("jobCreation", $this->global, $data, NULL);
@@ -61,6 +96,206 @@ class JobCreation extends BaseController
 
     private function canManageJobs() {
       return $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+    }
+
+    /**
+     * Apache Hop support. The library is stateless, so one instance is reused
+     * for the whole request.
+     */
+    private function hopProject() {
+      if (! isset($this->hopProjectLibrary)) {
+        $this->load->library('HopProject');
+        $this->hopProjectLibrary = $this->hopproject;
+      }
+      return $this->hopProjectLibrary;
+    }
+
+    private function hopEnabled() {
+      return $this->envFlag('JOBSEEKER_HOP_ENABLED', TRUE);
+    }
+
+    private function hopSamplesRoot() {
+      return APPPATH.'third_party'.DIRECTORY_SEPARATOR.'hop'.DIRECTORY_SEPARATOR.'samples';
+    }
+
+    /**
+     * Reviewed starter projects shipped with JobSeeker. They are copied into
+     * repository/hop/projects on demand, exactly like the Python sample
+     * workspaces, so a first Hop job runs on a fresh stack with nothing
+     * pre-provisioned.
+     */
+    private function hopSamples() {
+      $root = $this->hopSamplesRoot();
+      if (! is_dir($root)) {
+        return array();
+      }
+
+      $hop = $this->hopProject();
+      $samples = array();
+      foreach ((array) scandir($root) as $entry) {
+        if ($entry === '.' || $entry === '..' || strpos($entry, '.') === 0) {
+          continue;
+        }
+        $path = $root.DIRECTORY_SEPARATOR.$entry;
+        if (! is_dir($path)) {
+          continue;
+        }
+        $description = $hop->describe($path);
+        $samples[] = array(
+          'key' => $entry,
+          'name' => $description['manifest']['project'] !== '' ? $description['manifest']['project'] : $entry,
+          'description' => $description['manifest']['description'],
+          'entry_file' => $description['entry_file'],
+          'entry_files' => $description['entry_files']
+        );
+      }
+
+      usort($samples, function($left, $right) {
+        return strcasecmp($left['key'], $right['key']);
+      });
+
+      return $samples;
+    }
+
+    private function copyHopSample($sampleKey, $targetPath) {
+      $sampleKey = $this->safePathSegment($sampleKey);
+      if ($sampleKey === FALSE) {
+        return FALSE;
+      }
+      $source = $this->hopSamplesRoot().DIRECTORY_SEPARATOR.$sampleKey;
+      if (! is_dir($source)) {
+        return FALSE;
+      }
+      if (is_dir($targetPath)) {
+        $this->removeUploadDirectory($targetPath);
+      }
+      if (! $this->copyDirectory($source, $targetPath)) {
+        return FALSE;
+      }
+
+      // The copy belongs to this job now, so it carries this job's project
+      // name rather than the starter's.
+      $this->hopProject()->saveManifest($targetPath, array('project' => basename($targetPath)));
+      return TRUE;
+    }
+
+    /**
+     * Resolve the Hop project a job runs, from an upload, a repository path, or
+     * a bundled sample. Returns the execution contract buildHopExecutionCommand
+     * turns into the Jenkins shell step.
+     */
+    private function resolveHopExecution($repositoryRoot, $jobName, $request) {
+      $hop = $this->hopProject();
+      $sourceMode = isset($request['sourceMode']) ? (string) $request['sourceMode'] : 'upload';
+      $projectsRoot = $hop->projectsRoot($repositoryRoot);
+
+      if ($sourceMode === 'path') {
+        $relative = $this->safeRelativePath(isset($request['projectPath']) ? $request['projectPath'] : '');
+        if ($relative === FALSE) {
+          return array('ok' => FALSE, 'message' => 'The Apache Hop repository path is invalid. Use a folder such as hop/projects/my-project.');
+        }
+        $candidate = $this->resolveRepositoryPath($relative, $repositoryRoot);
+        if ($candidate === FALSE || ! is_dir($candidate)) {
+          return array('ok' => FALSE, 'message' => 'The Apache Hop repository path was not found under the JobSeeker repository.');
+        }
+        $projectRoot = $hop->locate($candidate);
+      } else if ($sourceMode === 'sample') {
+        $projectKey = $hop->cleanProjectKey($jobName);
+        if ($projectKey === FALSE) {
+          return array('ok' => FALSE, 'message' => 'The job name cannot be used as an Apache Hop project folder name.');
+        }
+        $target = $projectsRoot.DIRECTORY_SEPARATOR.$projectKey;
+        if (! $this->copyHopSample(isset($request['sample']) ? $request['sample'] : '', $target)) {
+          return array('ok' => FALSE, 'message' => 'The selected Apache Hop sample project could not be copied into the repository.');
+        }
+        $projectRoot = $hop->locate($target);
+      } else {
+        $projectKey = $hop->cleanProjectKey($jobName);
+        if ($projectKey === FALSE) {
+          return array('ok' => FALSE, 'message' => 'The job name cannot be used as an Apache Hop project folder name.');
+        }
+        $projectRoot = $hop->locate($projectsRoot.DIRECTORY_SEPARATOR.$projectKey);
+      }
+
+      if ($projectRoot === FALSE) {
+        return array('ok' => FALSE, 'message' => 'No Apache Hop project was found for this job. Upload a project archive, a .hwf workflow, or a .hpl pipeline, or choose a starter project.');
+      }
+      if (! $this->pathWithinBase($projectRoot, $this->repositoryRealPath($repositoryRoot))) {
+        return array('ok' => FALSE, 'message' => 'The Apache Hop project must live inside the JobSeeker repository.');
+      }
+
+      $hop->ensureProjectConfig($projectRoot);
+      $hop->ensureRunConfigurations($projectRoot);
+
+      $entryFile = $hop->cleanEntryFile(isset($request['entryFile']) ? $request['entryFile'] : '');
+      $entryFiles = $hop->entryFiles($projectRoot);
+      if ($entryFile === '' && count($entryFiles) === 1) {
+        $entryFile = $entryFiles[0];
+      }
+
+      $validation = $hop->validate($projectRoot, $entryFile);
+      if (! $validation['ok']) {
+        return array('ok' => FALSE, 'message' => 'Apache Hop project problem: '.implode(' ', $validation['problems']));
+      }
+
+      $parameters = $hop->parseParameters(isset($request['parameters']) ? $request['parameters'] : '');
+      if (! $parameters['ok']) {
+        return array('ok' => FALSE, 'message' => $parameters['message']);
+      }
+
+      $engine = $hop->cleanEngine(isset($request['engine']) ? $request['engine'] : '');
+      $execution = array(
+        'projectKey' => basename($projectRoot),
+        'projectPath' => $projectRoot,
+        'entryFile' => $entryFile,
+        'engine' => $engine,
+        'runConfig' => $hop->cleanRunConfig(isset($request['runConfig']) ? $request['runConfig'] : ''),
+        'logLevel' => $hop->cleanLogLevel(isset($request['logLevel']) ? $request['logLevel'] : ''),
+        'parameters' => $parameters['parameters'],
+        'image' => trim((string) getenv('JOBSEEKER_HOP_IMAGE')),
+        'cpuLimit' => isset($request['cpuLimit']) ? $request['cpuLimit'] : '1',
+        'memoryLimitMb' => isset($request['memoryLimitMb']) ? $request['memoryLimitMb'] : 1024
+      );
+
+      $hop->saveManifest($projectRoot, array(
+        'entry_file' => $execution['entryFile'],
+        'run_config' => $execution['runConfig'],
+        'engine' => $execution['engine'],
+        'log_level' => $execution['logLevel'],
+        'parameters' => $execution['parameters']
+      ));
+
+      return array('ok' => TRUE, 'execution' => $execution);
+    }
+
+    /** Register the project and its Jenkins job so the Apache Hop screen can list them. */
+    private function persistHopProject($execution, $environment, $description = '') {
+      $this->load->model('Hop_model');
+      $hop = $this->hopProject();
+      $manifest = $hop->manifest($execution['projectPath']);
+      $projectEnvironment = strtoupper((string) $environment);
+      $existingProject = $this->Hop_model->getProject($execution['projectKey']);
+      if ($existingProject) {
+        $existingEnvironment = strtoupper((string) $existingProject['environment']);
+        if ($existingEnvironment === 'ALL' || ($existingEnvironment !== '' && $existingEnvironment !== $projectEnvironment)) {
+          $projectEnvironment = 'ALL';
+        }
+      }
+      $this->Hop_model->saveProject(array(
+        'project_key' => $execution['projectKey'],
+        'name' => $manifest['project'] !== '' ? $manifest['project'] : $execution['projectKey'],
+        'description' => (string) $description,
+        'environment' => $projectEnvironment === '' ? 'ALL' : $projectEnvironment,
+        'storage_path' => $execution['projectPath'],
+        'entry_file' => $execution['entryFile'],
+        'run_config' => $execution['runConfig'],
+        'engine' => $execution['engine'],
+        'log_level' => $execution['logLevel'],
+        'parameters_json' => json_encode($execution['parameters']),
+        'source' => 'job-creation',
+        'is_active' => 1,
+        'owner' => isset($this->name) ? (string) $this->name : ''
+      ));
     }
 
     private function jenkinsJobPath($jobName) {
@@ -799,19 +1034,31 @@ class JobCreation extends BaseController
 
      $ds = DIRECTORY_SEPARATOR;
 
+      // Apache Hop uploads land in repository/hop/projects, because a Hop
+      // project is a folder Hop itself recognises rather than a single script.
+      $uploadFolder = $safeScriptType === 'hop' ? 'projects' : 'jobs';
+
       // Check if jenkins home variable exist
      if($jenkins_home === '' || $jenkins_home === null){
-      $storeFolder = '../../repository/'.$safeScriptType.'/jobs/';
+      $storeFolder = '../../repository/'.$safeScriptType.'/'.$uploadFolder.'/';
       $targetPath = dirname( __FILE__ ) . $ds. $storeFolder . $ds; 
 
      } else {
 
-      $storeFolder = rtrim($jenkins_home, '/\\').'/repository/'.$safeScriptType.'/jobs/';
+      $storeFolder = rtrim($jenkins_home, '/\\').'/repository/'.$safeScriptType.'/'.$uploadFolder.'/';
       $targetPath = $storeFolder;
       
      }
 
-      $allowedExtensions = $safeScriptType === 'python' ? array('zip', 'py') : ($safeScriptType === 'bash' ? array('zip', 'sh') : array('zip'));
+      if ($safeScriptType === 'python') {
+        $allowedExtensions = array('zip', 'py');
+      } else if ($safeScriptType === 'bash') {
+        $allowedExtensions = array('zip', 'sh');
+      } else if ($safeScriptType === 'hop') {
+        $allowedExtensions = array('zip', 'hpl', 'hwf');
+      } else {
+        $allowedExtensions = array('zip');
+      }
       $upload = $this->getUploadedFile('file', $allowedExtensions, 104857600);
       if (! $upload['ok']) {
         $this->output->set_status_header(400);
@@ -857,6 +1104,30 @@ class JobCreation extends BaseController
         return;
       }
 
+      // A single .hwf or .hpl is a complete unit of work for Hop, so wrap it in
+      // the minimum project structure Hop needs instead of rejecting it.
+      if ($safeScriptType === 'hop' && in_array($upload['extension'], array('hpl', 'hwf'), TRUE)) {
+        $hop = $this->hopProject();
+        if (! $hop->scaffold($targetJobPath, $safeJobName)) {
+          $this->output->set_status_header(500);
+          echo 'Unable to create the Apache Hop project folder.';
+          return;
+        }
+
+        $subFolder = $upload['extension'] === 'hwf' ? 'workflows' : 'pipelines';
+        $targetFile = $targetJobPath . $ds . $subFolder . $ds . $upload['safe_name'];
+        if (! move_uploaded_file($upload['tmp_name'], $targetFile)) {
+          $this->output->set_status_header(500);
+          echo 'Unable to store uploaded file.';
+          return;
+        }
+        @chmod($targetFile, 0664);
+
+        $hop->saveManifest($targetJobPath, array('entry_file' => $subFolder.'/'.$upload['safe_name']));
+        echo 'Apache Hop '.($upload['extension'] === 'hwf' ? 'workflow' : 'pipeline').' uploaded.';
+        return;
+      }
+
       if (! $this->ensureDirectory($targetPath)) {
         $this->output->set_status_header(500);
         echo 'Unable to create upload directory.';
@@ -870,16 +1141,56 @@ class JobCreation extends BaseController
         return;
       }
 
-      $destinationExisted = is_dir($targetJobPath);
-      $extractResult = $this->extractZipSafely($targetFile, $targetJobPath);
+      // A Hop archive is validated in a private staging directory and swapped
+      // into place only when it is a usable project. A failed upload therefore
+      // cannot partially overwrite the last working project.
+      $isHopArchive = $safeScriptType === 'hop';
+      $extractPath = $isHopArchive
+        ? $targetJobPath.'-upload-'.substr(sha1(uniqid('', TRUE)), 0, 12)
+        : $targetJobPath;
+      $destinationExisted = is_dir($extractPath);
+      $extractResult = $this->extractZipSafely($targetFile, $extractPath);
       @unlink($targetFile);
 
       if (! $extractResult['ok']) {
-        if (! $destinationExisted && is_dir($targetJobPath)) {
-          $this->removeUploadDirectory($targetJobPath);
+        if (! $destinationExisted && (file_exists($extractPath) || is_link($extractPath))) {
+          $this->removeUploadDirectory($extractPath);
         }
         $this->output->set_status_header(400);
         echo $extractResult['message'];
+        return;
+      }
+
+      if ($safeScriptType === 'hop') {
+        $normalized = $this->normalizeUploadedHopProject($extractPath);
+        if ($normalized === FALSE) {
+          $this->removeUploadDirectory($extractPath);
+          $this->output->set_status_header(400);
+          echo 'The uploaded archive does not contain an Apache Hop project. Expected a project-config.json, or at least one .hwf or .hpl file.';
+          return;
+        }
+
+        $backupPath = $targetJobPath.'-backup-'.substr(sha1(uniqid('', TRUE)), 0, 12);
+        $hadExistingProject = file_exists($targetJobPath) || is_link($targetJobPath);
+        if ($hadExistingProject && ! @rename($targetJobPath, $backupPath)) {
+          $this->removeUploadDirectory($extractPath);
+          $this->output->set_status_header(500);
+          echo 'The existing Apache Hop project could not be prepared for replacement.';
+          return;
+        }
+        if (! @rename($extractPath, $targetJobPath)) {
+          if ($hadExistingProject) {
+            @rename($backupPath, $targetJobPath);
+          }
+          $this->removeUploadDirectory($extractPath);
+          $this->output->set_status_header(500);
+          echo 'The uploaded Apache Hop project could not be installed.';
+          return;
+        }
+        if ($hadExistingProject) {
+          $this->removeUploadDirectory($backupPath);
+        }
+        echo 'Apache Hop project uploaded and extracted.';
         return;
       }
 
@@ -887,7 +1198,42 @@ class JobCreation extends BaseController
 
       }
 
+      /**
+       * Flatten an archive that wraps the project in one folder, then make sure
+       * the descriptors Hop needs are present. Exports from the Hop GUI and
+       * "zip the folder" uploads then behave the same way.
+       */
+      private function normalizeUploadedHopProject($targetJobPath) {
+        $hop = $this->hopProject();
+        $projectRoot = $hop->locate($targetJobPath);
+        if ($projectRoot === FALSE) {
+          return FALSE;
+        }
+
+        if (rtrim($projectRoot, '/\\') !== rtrim($targetJobPath, '/\\')) {
+          $staging = rtrim($targetJobPath, '/\\').'-hop-'.substr(sha1(uniqid('', TRUE)), 0, 8);
+          if ($this->copyDirectory($projectRoot, $staging)) {
+            $this->removeUploadDirectory($targetJobPath);
+            if (! @rename($staging, $targetJobPath)) {
+              $this->copyDirectory($staging, $targetJobPath);
+              $this->removeUploadDirectory($staging);
+            }
+          }
+          $projectRoot = $targetJobPath;
+        }
+
+        $hop->ensureProjectConfig($projectRoot);
+        $hop->ensureRunConfigurations($projectRoot);
+        return $projectRoot;
+      }
+
       private function removeUploadDirectory($path) {
+        if (is_link($path) || ! is_dir($path)) {
+          if (file_exists($path) || is_link($path)) {
+            @unlink($path);
+          }
+          return;
+        }
         foreach (scandir($path) as $item) {
           if ($item === '.' || $item === '..') {
             continue;
@@ -3120,7 +3466,7 @@ class JobCreation extends BaseController
             }
           }
           $repositoryRoot = $this->inlinePythonRepositoryRoot();
-          foreach (array('python/inline', 'python/jobs', 'bash/jobs', 'batch/jobs', 'talend/jobs') as $location) {
+          foreach (array('python/inline', 'python/jobs', 'bash/jobs', 'batch/jobs', 'talend/jobs', 'hop/projects') as $location) {
             $relative = $this->safeRelativePath($location.'/'.$jobName);
             if ($relative === FALSE) {
               continue;
@@ -3778,6 +4124,17 @@ class JobCreation extends BaseController
                 $pythonRunTests = $this->input->post('pythonRunTests') !== '0';
                 $pythonExecution = NULL;
                 $linuxScriptExecution = NULL;
+                $hopExecution = NULL;
+                $hopRequest = array(
+                  'sourceMode' => (string) $this->input->post('hopSourceMode'),
+                  'projectPath' => (string) $this->input->post('hopProjectPath'),
+                  'sample' => (string) $this->input->post('hopSample'),
+                  'entryFile' => (string) $this->input->post('hopEntryFile'),
+                  'engine' => (string) $this->input->post('hopEngine'),
+                  'runConfig' => (string) $this->input->post('hopRunConfig'),
+                  'logLevel' => (string) $this->input->post('hopLogLevel'),
+                  'parameters' => (string) $this->input->post('hopParameters')
+                );
                 $linuxUsesPythonRuntime = ($linuxExecutionStrategy == 'python_inline' || ($linuxExecutionStrategy == 'script' && ($linuxScriptType == 'python' || $linuxScriptType == 'python_inline')));
 
                 if ($linuxExecutionStrategy == 'python_inline' || $linuxScriptType == 'python_inline') {
@@ -3990,6 +4347,24 @@ class JobCreation extends BaseController
                          
                           // echo 'LINUX - BASH File Path: <b>'.$filePath.'</b>';
                           // echo '<hr><br>';
+                    } else if ($linuxScriptType == 'hop') {
+                          $repositoryRoot = rtrim($storeFolder, '/\\');
+
+                          if (! $this->hopEnabled()) {
+                            $this->session->set_flashdata('error', 'Apache Hop execution is disabled on this installation. Set JOBSEEKER_HOP_ENABLED=true to enable it.');
+                            redirect('JobCreation');
+                          }
+
+                          $hopRequest['cpuLimit'] = $containerCpuLimit === FALSE ? '1' : $containerCpuLimit;
+                          $hopRequest['memoryLimitMb'] = $containerMemoryLimitMb === FALSE ? 1024 : $containerMemoryLimitMb;
+                          $hopResolution = $this->resolveHopExecution($repositoryRoot, $job_name, $hopRequest);
+
+                          if (! $hopResolution['ok']) {
+                            $this->session->set_flashdata('error', $hopResolution['message']);
+                            redirect('JobCreation');
+                          }
+
+                          $hopExecution = $hopResolution['execution'];
                     } else if ($linuxScriptType == 'python' || $linuxScriptType == 'python_inline') {
                           $repositoryRoot = rtrim($storeFolder, '/\\');
 
@@ -4168,6 +4543,9 @@ class JobCreation extends BaseController
                         redirect('JobCreation');
                       }
                       $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment), $pythonRuntimeOptions));
+                    } else if($linuxScriptType == 'hop'){
+                      $repositoryRoot = rtrim($storeFolder, '/\\');
+                      $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildHopExecutionCommand($hopExecution, $repositoryRoot));
                     } else {
                       $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildShellScriptExecutionCommand($linuxScriptExecution, $linuxRuntimeOptions, $repositoryRoot));
                     }
@@ -4378,6 +4756,29 @@ class JobCreation extends BaseController
                 if (empty($savedJobNames)) {
                   $this->session->set_flashdata('error', 'No Jenkins jobs were saved. Failed jobs: '.implode(', ', $saveFailures).'.');
                   redirect('JobCreation');
+                }
+
+                // Register the Hop project and its jobs so the Apache Hop screen
+                // can show usage without reading every Jenkins configuration.
+                if ($hopExecution !== NULL) {
+                  $this->persistHopProject($hopExecution, $environment, $description);
+                  $this->load->model('Hop_model');
+                  foreach ($savedJobNames as $targetJobName) {
+                    $this->Hop_model->linkJob(
+                      $hopExecution['projectKey'],
+                      $targetJobName,
+                      $environment,
+                      $hopExecution['entryFile'],
+                      $hopExecution['engine']
+                    );
+                  }
+                } else if ($this->db->table_exists('hop_project_jobs')) {
+                  // Updating an existing Hop job to another runtime must not
+                  // leave a stale project-usage badge in the Hop catalog.
+                  $this->load->model('Hop_model');
+                  foreach ($savedJobNames as $targetJobName) {
+                    $this->Hop_model->unlinkJob($targetJobName);
+                  }
                 }
 
                 $dependencySummary = NULL;

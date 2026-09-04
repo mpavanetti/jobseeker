@@ -1,0 +1,73 @@
+# JobSeeker Apache Hop runtime.
+#
+# The stock Apache Hop image plus the JobSeeker SDK, so a Hop workflow can call
+# jobseeker-asset / jobseeker-connector / jobseeker-hop from a shell action, and
+# so the long-lived Hop Server can build its database catalog from the JobSeeker
+# connector registry at start-up.
+#
+# The upstream entry point contract (HOP_PROJECT_FOLDER, HOP_FILE_PATH,
+# HOP_ENVIRONMENT_CONFIG_FILE_NAME_PATHS, HOP_RUN_CONFIG, HOP_SERVER_*) is left
+# untouched: this image is a superset, not a fork.
+
+ARG HOP_VERSION=2.19.0
+FROM apache/hop:${HOP_VERSION}
+
+# JDBC drivers baked in at build time with Hop's own installer, so a run needs
+# no network access and no per-build download. The base image already ships the
+# permissively licensed drivers (PostgreSQL, MS SQL Server, SQLite, H2, ...);
+# these are the restricted ones JobSeeker's own connectors need. Add vendors
+# with JOBSEEKER_HOP_DRIVERS in .env - run `hop driver list` for the ids.
+ARG HOP_DRIVERS="mysql,mariadb"
+
+# The repository volume is shared with PHP, Jenkins and OpenVSCode, which all
+# run as uid 1000. The upstream image creates its "hop" user as 501, so files it
+# wrote back would be unreadable there; align the runtime user instead of
+# loosening permissions on the shared folder.
+ARG HOP_RUNTIME_UID=1000
+ARG HOP_RUNTIME_GID=1000
+
+USER root
+
+# Only the paths Hop actually writes to are re-owned. A recursive chown of
+# /opt/hop would rewrite every file in the Hop install and add a ~2.5 GB
+# duplicate layer to the image for no benefit.
+RUN if [ "$(id -u hop)" != "${HOP_RUNTIME_UID}" ]; then \
+      deluser hop; \
+      delgroup hop 2>/dev/null || true; \
+      addgroup -g "${HOP_RUNTIME_GID}" -S hop 2>/dev/null || true; \
+      adduser -u "${HOP_RUNTIME_UID}" -S -D -G hop hop; \
+      chown -R "${HOP_RUNTIME_UID}:${HOP_RUNTIME_GID}" \
+        /opt/hop/config /opt/hop/lib/jdbc /opt/hop/plugins/misc \
+        /files /home/hop; \
+      chown "${HOP_RUNTIME_UID}:${HOP_RUNTIME_GID}" /opt/hop; \
+    fi
+
+# Python and the complete JobSeeker SDK. The MariaDB transport is intentionally
+# included: it is what makes `jobseeker-hop tmf heartbeat` usable from a Hop
+# workflow action, not only from the Jenkins-side runner.
+RUN apk add --no-cache python3 py3-pip tar \
+    && ln -sf /usr/bin/python3 /usr/local/bin/python
+
+COPY application/third_party/python/jobseeker_sdk /opt/jobseeker/sdk
+RUN pip install --no-cache-dir --break-system-packages /opt/jobseeker/sdk \
+    && jobseeker-hop --help >/dev/null
+
+# Install the requested JDBC drivers as the hop user so they land in the same
+# lib/jdbc folder the runtime scans. This is the slowest layer in the image, so
+# it comes before the entry point extension: editing that script must not cost a
+# re-download of every driver.
+USER hop
+RUN set -eu; \
+    for driver in $(echo "${HOP_DRIVERS}" | tr ',' ' '); do \
+      [ -z "${driver}" ] && continue; \
+      echo "Installing JDBC driver ${driver}"; \
+      /opt/hop/hop driver install "${driver}" --accept-license; \
+    done
+
+COPY --chmod=0555 docker/hop/entrypoint-extension.sh /opt/jobseeker/entrypoint-extension.sh
+
+ENV HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH=/opt/jobseeker/entrypoint-extension.sh \
+    JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \
+    JOBSEEKER_DATA_ASSETS_MANIFEST=/jobseeker-repository/data-assets/manifest.json \
+    HOP_LOG_PATH=/tmp/hop.err.log \
+    PATH=/opt/hop:${PATH}

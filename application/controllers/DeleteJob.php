@@ -180,6 +180,10 @@ class DeleteJob extends BaseController
             $systems = $ok && $deleteRepositories ? $this->deleteRepositoryForJob($jobName) : array();
             if ($ok) {
                 $this->removeJobCreationDate($jobName);
+                if ($this->db->table_exists('hop_project_jobs')) {
+                    $this->load->model('Hop_model');
+                    $this->Hop_model->unlinkJob($jobName);
+                }
                 $deleted++;
             }
             $results[] = array(
@@ -237,6 +241,7 @@ class DeleteJob extends BaseController
             array('system' => 'batch', 'relative_root' => 'batch/jobs'),
             array('system' => 'bash', 'relative_root' => 'bash/jobs'),
             array('system' => 'talend', 'relative_root' => 'talend/jobs'),
+            array('system' => 'hop', 'relative_root' => 'hop/projects'),
             array('system' => 'python', 'relative_root' => 'python/jobs'),
             array('system' => 'python-inline', 'relative_root' => 'python/inline')
         );
