@@ -165,4 +165,48 @@ const explicitShellMarker = consoleGroups.parse([
 assert.deepStrictEqual(explicitShellMarker.sections.map((section) => section.kind), ['shell', 'result']);
 assert(explicitShellMarker.sections[0].text.includes('second shell line'));
 
+const successfulHopInventory = [
+  'Hop Server result: OK',
+  'Pipeline executed successfully',
+  "2026/09/04 22:01:13 - tmf-inventory - Execution started for pipeline [tmf-inventory]",
+  '2026/09/04 22:01:13 - write inventory to log.0 - status = ready',
+  '2026/09/04 22:01:13 - write inventory to log.0 - status = error',
+  '2026/09/04 22:01:13 - write inventory to log.0 - executions = 6',
+  '2026/09/04 22:01:13 - write inventory to log.0 - Finished processing (I=0, O=0, R=3, W=3, U=0, E=0)',
+  '[JobSeeker] Completed pipelines/tmf-inventory.hpl in 0.5s (read 3, written 3, errors 0)',
+  'Finished: SUCCESS'
+].join('\n');
+const successfulHopConsole = consoleGroups.parse(successfulHopInventory);
+assert.strictEqual(successfulHopConsole.sections.some((section) => section.hasError), false,
+  'a Hop data row whose value is error must not mark a successful Jenkins section as failed');
+const successfulHopLog = consoleGroups.parseHop(successfulHopInventory, {name: 'tmf-inventory'});
+assert.strictEqual(successfulHopLog.sections.some((section) => section.hasError), false,
+  'the grouped Hop log must apply the same structured error rule');
+
+const failedHopLog = consoleGroups.parseHop([
+  '2026/09/04 22:03:39 - tmf-inventory - Execution started for pipeline [tmf-inventory]',
+  '2026/09/04 22:03:40 - read TMF status counts.0 - ERROR: Unable to connect to database',
+  '2026/09/04 22:03:40 - read TMF status counts.0 - Finished processing (I=0, O=0, R=0, W=0, U=0, E=0)'
+].join('\n'), {name: 'tmf-inventory'});
+assert.strictEqual(failedHopLog.sections.find((section) => section.title === 'read TMF status counts.0').hasError, true,
+  'an actual Hop ERROR record must still be highlighted');
+
+// A licence name is not a failure. The JDBC driver installer prints "GPLv2 with
+// Universal FOSS Exception", which used to paint a successful build red.
+const licenceLog = [
+  'Started by user jobseeker',
+  '+ hop driver install mysql --accept-license',
+  "  license  : GPLv2 with Universal FOSS Exception (category X)",
+  '  into     : /opt/hop/lib/jdbc',
+  'Installed 1 jar(s):',
+  'Finished: SUCCESS'
+].join('\n');
+assert(
+  !consoleGroups.parse(licenceLog).sections.some((section) => section.hasError),
+  'an ordinary use of the word Exception must not flag a section as failed'
+);
+// A real exception still does, with or without a trailing colon.
+assert(consoleGroups.parse('java.lang.NullPointerException').sections[0].hasError);
+assert(consoleGroups.parse('org.apache.hop.core.exception.HopXmlException: bad').sections[0].hasError);
+
 console.log('Job console grouping tests passed.');

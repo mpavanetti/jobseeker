@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="jobseeker-hop-test-") as root:
         )
 
     project = hop.HopProject(root)
-    manifest = hop.HopManifest()
+    manifest = hop.HopManifest({"context": ["JOBSEEKER_ENVIRONMENT"]})
     referenced = project.referenced_variables()
     assert "CUSTOM_REGION" in referenced
     assert "JOBSEEKER_ASSET_CUSTOMER_REFERENCE" in referenced
@@ -43,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix="jobseeker-hop-test-") as root:
         ("JOBSEEKER_ENVIRONMENT",),
     )
     assert context_names == ["CUSTOM_REGION", "JOBSEEKER_ASSET_CUSTOMER_REFERENCE"]
+    assert hop._runtime_environment(" dev ") == "DEV"
 
     values = hop._resolve_context(
         FakeContext({
@@ -55,6 +56,28 @@ with tempfile.TemporaryDirectory(prefix="jobseeker-hop-test-") as root:
     resolved = {variable["name"]: variable["value"] for variable in variables}
     assert resolved["CUSTOM_REGION"] == "south"
     assert resolved["JOBSEEKER_ASSET_CUSTOMER_REFERENCE"] == "/data/customer.csv"
+
+    protected = hop.build_run_variables(
+        "DEV",
+        "platform-variables",
+        context={"JOBSEEKER_ENVIRONMENT": "PROD"},
+        parameters={"JOBSEEKER_JOB_NAME": "wrong-job"},
+    )
+    protected_values = {variable["name"]: variable["value"] for variable in protected}
+    assert protected_values["JOBSEEKER_ENVIRONMENT"] == "DEV"
+    assert protected_values["JOBSEEKER_JOB_NAME"] == "platform-variables"
+
+    try:
+        hop.run(
+            root,
+            "variables.hpl",
+            parameters={"JOBSEEKER_ENVIRONMENT": "PROD"},
+            dry_run=True,
+        )
+    except hop.HopError as error:
+        assert "cannot replace JobSeeker runtime variables" in str(error)
+    else:
+        raise AssertionError("reserved JobSeeker parameters must be rejected")
 
 
 clean_counters = hop.parse_hop_counters(

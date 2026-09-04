@@ -175,6 +175,58 @@ def delete_tmf_rows(job_name: str) -> None:
         connection.close()
 
 
+def adopt_stack_connector_settings() -> None:
+    """Use the connector endpoint and token the running stack actually uses.
+
+    The SDK's defaults are the ones a fresh checkout ships, and a deployment
+    that has set its own ``JOBSEEKER_CONNECTOR_API_TOKEN`` in .env will answer
+    the SDK's default with HTTP 401. That surfaces here as "connection not
+    found" from Hop, which points at the wrong thing entirely, so the values
+    are read back from the container that serves the API.
+    """
+
+    if not os.environ.get("JOBSEEKER_CONNECTOR_API_URL"):
+        os.environ["JOBSEEKER_CONNECTOR_API_URL"] = "http://127.0.0.1/connector-runtime"
+    if os.environ.get("JOBSEEKER_CONNECTOR_API_TOKEN"):
+        return
+
+    container = compose_container("php")
+    if not container:
+        return
+    try:
+        token = subprocess.check_output(
+            ["docker", "exec", container, "printenv", "JOBSEEKER_CONNECTOR_API_TOKEN"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return
+
+    if token:
+        os.environ["JOBSEEKER_CONNECTOR_API_TOKEN"] = token
+
+
+def compose_container(service: str) -> str:
+    """Find a running container for one Compose service.
+
+    ``docker compose ps`` only sees the project named after this directory, and
+    a stack is often brought up under a different project name. Falling back to
+    the Compose service label finds it whatever the project is called.
+    """
+
+    for command in (
+        ["docker", "compose", "ps", "-q", service],
+        ["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=" + service],
+    ):
+        try:
+            found = subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        if found:
+            return found.splitlines()[0].strip()
+    return ""
+
+
 def configure_local_stack_network() -> None:
     """Join run containers to the same Compose network as the live app.
 
@@ -187,9 +239,9 @@ def configure_local_stack_network() -> None:
     if os.environ.get("JOBSEEKER_HOP_NETWORK"):
         return
     try:
-        container = subprocess.check_output(
-            ["docker", "compose", "ps", "-q", "nginx"], text=True, stderr=subprocess.DEVNULL
-        ).strip()
+        container = compose_container("nginx")
+        if not container:
+            return
         networks = json.loads(subprocess.check_output(
             ["docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", container],
             text=True,
@@ -210,6 +262,7 @@ def main() -> int:
     os.environ.setdefault("JOBSEEKER_CONNECTOR_API_TOKEN", "jobseeker-local-connector-token")
     os.environ.setdefault("JOBSEEKER_HOP_SERVER_URL", "http://127.0.0.1:8181")
     os.environ["JOBSEEKER_REPOSITORY_ROOT"] = repository_root
+    adopt_stack_connector_settings()
     configure_local_stack_network()
     suffix = uuid.uuid4().hex[:6]
 

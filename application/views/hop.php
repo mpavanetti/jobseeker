@@ -520,6 +520,8 @@ foreach ($executions as $execution) {
   var executions = <?php echo json_encode($executions, JSON_UNESCAPED_SLASHES); ?>;
   var pending = null;
   var inFlight = false;
+  var executionsTable = null;
+  var projectsTable = null;
 
   function escapeHtml(value) {
     return $('<div>').text(value === null || value === undefined ? '' : String(value)).html();
@@ -565,33 +567,7 @@ foreach ($executions as $execution) {
       .some(function(value) { return String(value || '').toLowerCase().indexOf(term) >= 0; });
   }
 
-  function renderRows() {
-    var rows = executions.filter(matchesFilters);
-    var body = $('#hopExecutionsBody').empty();
-
-    $('#hopRunCount').text(executions.length);
-    $('#hopRunSummary').text(
-      executions.filter(function(row) { return row.source === 'hop-gui'; }).length + ' from the Hop GUI · ' +
-      executions.filter(function(row) { return row.state === 'error'; }).length + ' failed'
-    );
-    $('#hopRunFilterCount').text(
-      rows.length === executions.length ? '' : rows.length + ' of ' + executions.length + ' shown'
-    );
-
-    if (!executions.length) {
-      $('#hopExecutionsTable').hide();
-      $('#hopExecutionsEmpty').show();
-      return;
-    }
-    $('#hopExecutionsEmpty').hide();
-    $('#hopExecutionsTable').show();
-
-    if (!rows.length) {
-      body.append('<tr><td colspan="7" class="text-muted" style="text-align:center;padding:24px">No run matches these filters.</td></tr>');
-      return;
-    }
-
-    rows.forEach(function(execution) {
+  function executionRow(execution) {
       var icon = execution.kind === 'workflow' ? 'fa-sitemap' : 'fa-exchange';
       // The Hop GUI can publish either a file inside the shared repository or a
       // zip export of a project it holds locally. Only the first can become a
@@ -616,7 +592,7 @@ foreach ($executions as $execution) {
         : '';
       var reuse = useInJobUrl(execution);
 
-      body.append(
+      return (
         '<tr>' +
         '<td>' + escapeHtml(execution.started_at || execution.first_seen_at || '') + '</td>' +
         '<td><i class="fa ' + icon + '"></i> <strong>' + canvasLink + '</strong>' +
@@ -646,7 +622,54 @@ foreach ($executions as $execution) {
         '</td>' +
         '</tr>'
       );
+  }
+
+  function executionTableContainer() {
+    return executionsTable ? $(executionsTable.table().container()) : $('#hopExecutionsTable');
+  }
+
+  function replaceExecutionRows(rows) {
+    if (executionsTable) {
+      executionsTable.clear();
+      rows.forEach(function(execution) {
+        executionsTable.row.add($(executionRow(execution))[0]);
+      });
+      executionsTable.draw(false);
+      return;
+    }
+
+    var body = $('#hopExecutionsBody').empty();
+    if (!rows.length && executions.length) {
+      body.append('<tr><td colspan="7" class="text-muted" style="text-align:center;padding:24px">No run matches these filters.</td></tr>');
+      return;
+    }
+    rows.forEach(function(execution) {
+      body.append(executionRow(execution));
     });
+  }
+
+  function renderRows() {
+    var rows = executions.filter(matchesFilters);
+
+    $('#hopRunCount').text(executions.length);
+    $('#hopRunSummary').text(
+      executions.filter(function(row) { return row.source === 'hop-gui'; }).length + ' from the Hop GUI · ' +
+      executions.filter(function(row) { return row.state === 'error'; }).length + ' failed'
+    );
+    $('#hopRunFilterCount').text(
+      rows.length === executions.length ? '' : rows.length + ' of ' + executions.length + ' shown'
+    );
+
+    replaceExecutionRows(rows);
+    if (!executions.length) {
+      executionTableContainer().hide();
+      $('#hopExecutionsEmpty').show();
+      return;
+    }
+
+    $('#hopExecutionsEmpty').hide();
+    executionTableContainer().show();
+    if (executionsTable) { executionsTable.columns.adjust(); }
   }
 
   function applyServer(server) {
@@ -857,29 +880,64 @@ foreach ($executions as $execution) {
     if (!document.hidden) { refresh(false); }
   }, 20000);
 
-  if ($.fn.DataTable && $('#hopProjectsTable').length) {
-    var projectsTable = $('#hopProjectsTable').DataTable({
-      paging: true, pageLength: 25, searching: true, ordering: true, order: [], info: true, autoWidth: false
-    });
+  // DataTables is loaded by the shared footer after this view. Deferring setup
+  // until DOM ready ensures both growing lists actually receive pagination.
+  $(function() {
+    if (!$.fn.DataTable) { return; }
 
-    // Filters over the columns a person actually narrows by. DataTables' own
-    // search stays the free-text field.
-    $.fn.dataTable.ext.search.push(function(settings, data, index, row, counter) {
-      if (settings.nTable !== $('#hopProjectsTable')[0]) { return true; }
-      var node = $(projectsTable.row(index).node());
-      var environmentFilter = $('#hopProjectEnvironment').val() || '';
-      var healthFilter = $('#hopProjectHealth').val() || '';
+    if ($('#hopExecutionsTable').length) {
+      executionsTable = $('#hopExecutionsTable').DataTable({
+        paging: true,
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+        searching: false,
+        ordering: true,
+        order: [[0, 'desc']],
+        info: true,
+        autoWidth: false,
+        deferRender: true,
+        columnDefs: [{targets: 6, orderable: false}],
+        language: {
+          emptyTable: 'The Hop Server has not run anything yet.',
+          zeroRecords: 'No run matches these filters.'
+        }
+      });
+      if (!executions.length) { executionTableContainer().hide(); }
+    }
 
-      if (environmentFilter && node.data('environment') !== environmentFilter) { return false; }
-      if (healthFilter === 'attention' && String(node.data('attention')) !== '1') { return false; }
-      if (healthFilter === 'used' && String(node.data('used')) !== '1') { return false; }
-      if (healthFilter === 'unused' && String(node.data('used')) === '1') { return false; }
-      return true;
-    });
+    if ($('#hopProjectsTable').length) {
+      projectsTable = $('#hopProjectsTable').DataTable({
+        paging: true,
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+        searching: true,
+        ordering: true,
+        order: [],
+        info: true,
+        autoWidth: false,
+        deferRender: true,
+        columnDefs: [{targets: 5, orderable: false}]
+      });
 
-    $(document).on('change', '#hopProjectEnvironment, #hopProjectHealth', function() {
-      projectsTable.draw();
-    });
-  }
+      // Filters over the columns a person actually narrows by. DataTables' own
+      // search stays the free-text field.
+      $.fn.dataTable.ext.search.push(function(settings, data, index, row, counter) {
+        if (settings.nTable !== $('#hopProjectsTable')[0]) { return true; }
+        var node = $(projectsTable.row(index).node());
+        var environmentFilter = $('#hopProjectEnvironment').val() || '';
+        var healthFilter = $('#hopProjectHealth').val() || '';
+
+        if (environmentFilter && node.data('environment') !== environmentFilter) { return false; }
+        if (healthFilter === 'attention' && String(node.data('attention')) !== '1') { return false; }
+        if (healthFilter === 'used' && String(node.data('used')) !== '1') { return false; }
+        if (healthFilter === 'unused' && String(node.data('used')) === '1') { return false; }
+        return true;
+      });
+
+      $(document).on('change', '#hopProjectEnvironment, #hopProjectHealth', function() {
+        projectsTable.draw();
+      });
+    }
+  });
 })();
 </script>
