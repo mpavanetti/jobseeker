@@ -1851,7 +1851,7 @@ class BaseController extends CI_Controller {
 		return strpos($path, $base) === 0;
 	}
 
-	protected function extractZipSafely($zipFile, $destination) {
+	protected function extractZipSafely($zipFile, $destination, $maxEntries = 10000, $maxUncompressedBytes = 536870912) {
 		if (! $this->ensureDirectory($destination)) {
 			return array('ok' => FALSE, 'message' => 'Unable to create extraction directory.');
 		}
@@ -1867,13 +1867,53 @@ class BaseController extends CI_Controller {
 			return array('ok' => FALSE, 'message' => 'Extraction directory is invalid.');
 		}
 
+		if ($zip->numFiles > $maxEntries) {
+			$zip->close();
+			return array('ok' => FALSE, 'message' => 'ZIP archive contains too many files.');
+		}
+
+		// Do not extract over a link planted by an earlier upload. ZipArchive can
+		// otherwise follow it and write outside the intended job directory.
+		$existing = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator($realDestination, FilesystemIterator::SKIP_DOTS),
+			RecursiveIteratorIterator::SELF_FIRST
+		);
+		foreach ($existing as $item) {
+			if ($item->isLink()) {
+				$zip->close();
+				return array('ok' => FALSE, 'message' => 'Extraction directory contains an unsafe symbolic link.');
+			}
+		}
+
+		$totalUncompressedBytes = 0;
 		for ($i = 0; $i < $zip->numFiles; $i++) {
 			$entryName = $zip->getNameIndex($i);
 			$normalizedName = str_replace('\\', '/', $entryName);
 
-			if ($normalizedName === '' || strpos($normalizedName, "\0") !== FALSE || $normalizedName[0] === '/' || preg_match('#(^|/)\.\.($|/)#', $normalizedName)) {
+			if ($normalizedName === '' || strlen($normalizedName) > 2048 || substr_count($normalizedName, '/') > 100
+				|| strpos($normalizedName, "\0") !== FALSE || $normalizedName[0] === '/'
+				|| preg_match('#(^|/)\.\.($|/)#', $normalizedName)) {
 				$zip->close();
 				return array('ok' => FALSE, 'message' => 'ZIP archive contains an unsafe path.');
+			}
+
+			$stat = $zip->statIndex($i);
+			$totalUncompressedBytes += is_array($stat) && isset($stat['size']) ? max(0, (int) $stat['size']) : 0;
+			if ($totalUncompressedBytes > $maxUncompressedBytes) {
+				$zip->close();
+				return array('ok' => FALSE, 'message' => 'ZIP archive expands beyond the maximum allowed size.');
+			}
+
+			// Unix archives can encode symlinks, devices and FIFOs in the upper
+			// mode bits. Only regular files and directories belong in a job upload.
+			$operatingSystem = 0;
+			$externalAttributes = 0;
+			if ($zip->getExternalAttributesIndex($i, $operatingSystem, $externalAttributes)) {
+				$fileType = ($externalAttributes >> 16) & 0170000;
+				if ($fileType !== 0 && $fileType !== 0100000 && $fileType !== 0040000) {
+					$zip->close();
+					return array('ok' => FALSE, 'message' => 'ZIP archive contains an unsupported link or special file.');
+				}
 			}
 
 			$entryTarget = $realDestination . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $normalizedName);

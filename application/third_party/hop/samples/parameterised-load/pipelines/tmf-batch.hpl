@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline>
+  <info>
+    <name>tmf-batch</name>
+    <name_sync_with_filename>Y</name_sync_with_filename>
+    <description>Parameterised extract with a guard. BATCH_SIZE is a Hop parameter that the Job Creation form sets, and the guard aborts the pipeline when the source returns nothing, so the Jenkins build and the TMF row both end in error.</description>
+    <extended_description/>
+    <pipeline_version/>
+    <pipeline_type>Normal</pipeline_type>
+    <pipeline_status>0</pipeline_status>
+    <parameters>
+      <parameter>
+        <name>BATCH_SIZE</name>
+        <default_value>50</default_value>
+        <description>Maximum number of Transaction Monitoring rows to read in one run.</description>
+      </parameter>
+      <parameter>
+        <name>MINIMUM_ROWS</name>
+        <default_value>1</default_value>
+        <description>Abort the run when fewer rows than this are read.</description>
+      </parameter>
+    </parameters>
+    <capture_transform_performance>N</capture_transform_performance>
+    <transform_performance_capturing_delay>1000</transform_performance_capturing_delay>
+    <transform_performance_capturing_size_limit>100</transform_performance_capturing_size_limit>
+    <created_user>-</created_user>
+    <created_date>2026/01/01 00:00:00.000</created_date>
+    <modified_user>-</modified_user>
+    <modified_date>2026/01/01 00:00:00.000</modified_date>
+  </info>
+  <notepads>
+  </notepads>
+  <order>
+    <hop>
+      <from>read a batch</from>
+      <to>count rows</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>count rows</from>
+      <to>guard row count</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>guard row count</from>
+      <to>write batch summary to log</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>guard row count</from>
+      <to>Abort empty batch</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform>
+    <name>read a batch</name>
+    <type>TableInput</type>
+    <description/>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <connection>jobseeker-mariadb</connection>
+    <sql>SELECT id, job_name, status, environment FROM tmf ORDER BY id DESC LIMIT ${BATCH_SIZE}</sql>
+    <limit>0</limit>
+    <lookup/>
+    <execute_each_row>N</execute_each_row>
+    <variables_active>Y</variables_active>
+    <attributes/>
+    <GUI>
+      <xloc>144</xloc>
+      <yloc>96</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>count rows</name>
+    <type>GroupBy</type>
+    <description/>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <all_rows>Y</all_rows>
+    <ignore_aggregate>N</ignore_aggregate>
+    <field_ignore/>
+    <directory>${java.io.tmpdir}</directory>
+    <prefix>grp</prefix>
+    <add_linenr>N</add_linenr>
+    <linenr_fieldname/>
+    <give_back_row>N</give_back_row>
+    <group>
+    </group>
+    <fields>
+      <field>
+        <aggregate>rows_read</aggregate>
+        <subject>id</subject>
+        <type>COUNT_ALL</type>
+        <valuefield/>
+      </field>
+    </fields>
+    <attributes/>
+    <GUI>
+      <xloc>336</xloc>
+      <yloc>96</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>guard row count</name>
+    <type>FilterRows</type>
+    <description/>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <send_true_to>write batch summary to log</send_true_to>
+    <send_false_to>Abort empty batch</send_false_to>
+    <compare>
+      <condition>
+        <negated>N</negated>
+        <leftvalue>rows_read</leftvalue>
+        <function>&gt;=</function>
+        <rightvalue/>
+        <value>
+          <name>constant</name>
+          <type>Integer</type>
+          <text>1</text>
+          <length>-1</length>
+          <precision>0</precision>
+          <isnull>N</isnull>
+          <mask>####0;-####0</mask>
+        </value>
+      </condition>
+    </compare>
+    <attributes/>
+    <GUI>
+      <xloc>528</xloc>
+      <yloc>96</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>write batch summary to log</name>
+    <type>WriteToLog</type>
+    <description/>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <loglevel>log_level_basic</loglevel>
+    <displayHeader>Y</displayHeader>
+    <limitRows>N</limitRows>
+    <limitRowsNumber>0</limitRowsNumber>
+    <logmessage>Batch of up to ${BATCH_SIZE} row(s) read from ${JOBSEEKER_ENVIRONMENT} for job ${JOBSEEKER_JOB_NAME}.</logmessage>
+    <fields>
+      <field>
+        <name>rows_read</name>
+      </field>
+    </fields>
+    <attributes/>
+    <GUI>
+      <xloc>752</xloc>
+      <yloc>32</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Abort empty batch</name>
+    <type>Abort</type>
+    <description/>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <row_threshold>0</row_threshold>
+    <message>No Transaction Monitoring rows were read. Run any JobSeeker job first, or point BATCH_SIZE at a populated source.</message>
+    <always_log_rows>Y</always_log_rows>
+    <abort_option>ABORT_WITH_ERROR</abort_option>
+    <attributes/>
+    <GUI>
+      <xloc>752</xloc>
+      <yloc>176</yloc>
+    </GUI>
+  </transform>
+  <transform_error_handling>
+  </transform_error_handling>
+  <attributes/>
+</pipeline>

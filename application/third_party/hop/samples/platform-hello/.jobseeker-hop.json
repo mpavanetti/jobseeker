@@ -1,0 +1,13 @@
+{
+  "assets": [],
+  "connectors": [],
+  "context": [],
+  "description": "Smoke test: prints JobSeeker runtime values, a referenced Context Detail and an optional Data Asset path. No connector or asset needed.",
+  "engine": "container",
+  "entry_file": "workflows/main.hwf",
+  "log_level": "Basic",
+  "parameters": {},
+  "project": "platform-hello",
+  "run_config": "local",
+  "schema_version": 1
+}

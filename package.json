@@ -4,7 +4,7 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
-    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:dashboard && npm run test:security",
+    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:hop && npm run test:dashboard && npm run test:security",
     "test:samples": "node scripts/test-job-samples-dataset-generator.js && python3 scripts/test-job-sample-syntax.py",
     "test:samples:runtime:e2e": "python3 scripts/test-job-sample-runtime-e2e.py",
     "test:dataset-generator": "python3 scripts/test-performance-dataset-generator.py",
@@ -33,6 +33,10 @@
     "test:command-guard": "php scripts/test-command-guard.php",
     "test:cron-schedule": "php scripts/test-cron-schedule.php",
     "test:dashboard": "node scripts/test-dashboard.js",
+    "test:hop": "node scripts/test-hop-integration.js && python3 scripts/test-hop-runtime.py",
+    "test:hop:e2e": "python3 scripts/test-hop-e2e.py",
+    "test:hop:ui": "python3 scripts/test-hop-ui-e2e.py",
+    "test:hop:jobs:e2e": "python3 scripts/test-hop-job-creation-e2e.py",
     "postinstall": "npm run assets:sync"
   },
   "engines": {

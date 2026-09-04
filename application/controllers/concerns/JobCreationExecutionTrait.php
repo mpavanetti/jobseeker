@@ -420,4 +420,50 @@ trait JobCreationExecutionTrait
 
         return implode("\n", $lines);
       }
+
+      /**
+       * Apache Hop execution.
+       *
+       * Jenkins keeps the schedule, the environment parameter, the timeout and
+       * the notifications; the whole Hop runtime concern lives in the
+       * jobseeker-hop runner, which materializes connectors into Hop database
+       * connections, publishes Data Assets and Context values as Hop variables,
+       * opens and closes the TMF instance, and starts the engine the job chose.
+       * Keeping this builder short means a failed build can be reproduced by
+       * copying one command out of the Jenkins console.
+       */
+      private function buildHopExecutionCommand($execution, $repositoryRoot) {
+        $engine = isset($execution['engine']) ? (string) $execution['engine'] : 'container';
+        $lines = array_merge(array('set -e', 'export PYTHONUNBUFFERED=1'), $this->dataAssetsRuntimeLines($repositoryRoot));
+        $lines[] = 'command -v jobseeker-hop >/dev/null || { echo "The JobSeeker Apache Hop runner is not installed on this Jenkins worker. Rebuild the Jenkins image to pick up the bundled SDK." >&2; exit 127; }';
+        $lines[] = 'printf "%s\n" '.escapeshellarg('[JobSeeker] Apache Hop execution ('.$engine.')');
+
+        $command = array(
+          'jobseeker-hop run',
+          '  --project '.escapeshellarg((string) $execution['projectPath']),
+          '  --file '.escapeshellarg((string) $execution['entryFile']),
+          '  --engine '.escapeshellarg($engine),
+          '  --run-config '.escapeshellarg((string) $execution['runConfig']),
+          '  --log-level '.escapeshellarg((string) $execution['logLevel']),
+          '  --environment "$JOBSEEKER_ENVIRONMENT"',
+          '  --job "$JOBSEEKER_JOB_NAME"',
+          '  --repository-root "$JOBSEEKER_REPOSITORY_ROOT"'
+        );
+
+        if ($engine === 'container') {
+          if (! empty($execution['image'])) {
+            $command[] = '  --image '.escapeshellarg((string) $execution['image']);
+          }
+          $command[] = '  --cpu-limit '.escapeshellarg(isset($execution['cpuLimit']) ? (string) $execution['cpuLimit'] : '1');
+          $command[] = '  --memory-limit-mb '.escapeshellarg((string) (isset($execution['memoryLimitMb']) ? (int) $execution['memoryLimitMb'] : 1024));
+        }
+
+        foreach ((array) (isset($execution['parameters']) ? $execution['parameters'] : array()) as $name => $value) {
+          $command[] = '  --param '.escapeshellarg($name.'='.$value);
+        }
+
+        $lines[] = implode(" \\\n", $command);
+
+        return implode("\n", $lines);
+      }
 }
