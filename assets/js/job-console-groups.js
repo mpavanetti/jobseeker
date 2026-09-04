@@ -114,7 +114,20 @@
   }
 
   function hasError(line) {
-    return /(?:^|\b)(?:ERROR|FAILURE|FAILED|Traceback|Exception|fatal:|command not found|No such file or directory|exited with (?:status|code) [1-9]\d*)/i.test(line) ||
+    // Hop output can contain business data such as `status = error`. Once a
+    // line has Hop's timestamp/origin envelope, only Hop's structured
+    // ERROR/FATAL message prefix is a runtime error. The broad generic matcher
+    // otherwise paints a successful transform red merely because it printed a
+    // row describing failed records from another system.
+    var hop = HOP_LINE.exec(line);
+    if (hop) {
+      return /^(?:ERROR|FATAL)(?:\s*:|\b)/i.test(String(hop[3] || '').trim());
+    }
+
+    // "Exception" only counts as part of an exception's class name. On its own
+    // it is an ordinary English word, and a driver install printing "GPLv2 with
+    // Universal FOSS Exception" is not a failed build.
+    return /(?:^|\b)(?:ERROR(?:\s*:|\b)|FAILURE\b|FAILED\b|Traceback\b|[A-Za-z0-9_.$]+Exception\b|fatal:|command not found|No such file or directory|exited with (?:status|code) [1-9]\d*)/i.test(line) ||
       /\b[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception):/.test(line);
   }
 

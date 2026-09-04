@@ -123,6 +123,17 @@ def main() -> int:
             check("the removed Jenkins agent engine is gone", "Jenkins agent" not in engine_text)
             check("the Hop Server status is reported",
                   page.locator(".hop-engine-card .label").count() == 2)
+            page.wait_for_function(
+                "window.jQuery && $.fn.DataTable && $.fn.DataTable.isDataTable('#hopExecutionsTable')"
+            )
+            check("Hop Server executions use paginated DataTables",
+                  page.locator("#hopExecutionsTable_wrapper").count() == 1
+                  and page.evaluate("$('#hopExecutionsTable').DataTable().page.len()") == 25)
+            if page.locator("#hopProjectsTable").count() > 0:
+                page.wait_for_function("$.fn.DataTable.isDataTable('#hopProjectsTable')")
+                check("Hop projects use paginated DataTables",
+                      page.locator("#hopProjectsTable_wrapper").count() == 1
+                      and page.evaluate("$('#hopProjectsTable').DataTable().page.len()") == 25)
 
             # A run published straight to the Hop Server reaches a person only
             # through this panel, so it has to be on the screen and it has to
@@ -153,6 +164,8 @@ def main() -> int:
             check("refreshing reconciles the Hop Server",
                   page.locator("#hopSyncState").inner_text().strip() != "",
                   "the sync state stayed empty")
+            check("refreshing preserves the executions DataTable",
+                  page.evaluate("$.fn.DataTable.isDataTable('#hopExecutionsTable')"))
 
             # A run has to be openable in the desktop Apache Hop GUI, which
             # means the file itself has to be downloadable.

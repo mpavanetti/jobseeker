@@ -104,6 +104,15 @@ def _env(name: str, default: str = "") -> str:
     return default if value is None or value == "" else str(value)
 
 
+def _runtime_environment(value: str = "") -> str:
+    """One normalized environment scope for every run-time integration."""
+
+    requested = str(value or "").strip()
+    if not requested:
+        requested = _env("JOBSEEKER_ENVIRONMENT", "LOCAL").strip()
+    return (requested or "LOCAL").upper()
+
+
 def _variable_name(prefix: str, key: str) -> str:
     normalized = "".join(character if character.isalnum() else "_" for character in str(key)).upper()
     normalized = re.sub(r"_+", "_", normalized).strip("_")
@@ -631,14 +640,20 @@ def build_run_variables(
     """
 
     translate = path_translator or (lambda value: value)
-    variables: List[Dict[str, str]] = [
+    platform_variables: List[Dict[str, str]] = [
         _described("JOBSEEKER_ENVIRONMENT", environment, "JobSeeker runtime environment"),
         _described("JOBSEEKER_JOB_NAME", job, "Jenkins job that triggered this run"),
     ]
     if instance_id:
-        variables.append(_described("JOBSEEKER_TMF_INSTANCE_ID", instance_id, "Transaction Monitoring instance id"))
+        platform_variables.append(_described("JOBSEEKER_TMF_INSTANCE_ID", instance_id, "Transaction Monitoring instance id"))
     if build_number:
-        variables.append(_described("JOBSEEKER_BUILD_NUMBER", build_number, "Jenkins build number"))
+        platform_variables.append(_described("JOBSEEKER_BUILD_NUMBER", build_number, "Jenkins build number"))
+
+    variables: List[Dict[str, str]] = []
+    for name, value in dict(context or {}).items():
+        variables.append(_described(name, value, "JobSeeker Context value"))
+    for name, value in dict(parameters or {}).items():
+        variables.append(_described(name, value, "Job parameter"))
 
     for asset in assets or []:
         try:
@@ -671,10 +686,10 @@ def build_run_variables(
             )
         )
 
-    for name, value in dict(context or {}).items():
-        variables.append(_described(name, value, "JobSeeker Context value"))
-    for name, value in dict(parameters or {}).items():
-        variables.append(_described(name, value, "Job parameter"))
+    # Platform identity and resolved resources are authoritative. In
+    # particular, a Context row or generic caller cannot turn a DEV build into
+    # PROD by replacing JOBSEEKER_ENVIRONMENT after scope resolution.
+    variables.extend(platform_variables)
 
     # Later definitions win, matching how Hop merges environment config files.
     unique: Dict[str, Dict[str, str]] = {}
@@ -1667,8 +1682,10 @@ def _context_variable_names(project: HopProject, manifest: HopManifest, known: S
     """
 
     excluded = set(str(name) for name in known)
-    requested = set(str(name) for name in manifest.context if str(name))
-    for name in project.referenced_variables():
+    requested = set()
+    candidates = list(manifest.context) + project.referenced_variables()
+    for name in candidates:
+        name = str(name)
         if (
             name in excluded
             or name.startswith("HOP_")
@@ -1715,7 +1732,7 @@ def run(
     if engine_name not in ENGINES:
         raise HopError("Unknown Hop engine %r. Use one of: %s." % (engine_name, ", ".join(ENGINES)))
 
-    resolved_environment = (environment or _env("JOBSEEKER_ENVIRONMENT", "LOCAL")).upper()
+    resolved_environment = _runtime_environment(environment)
     resolved_job = job or _env("JOBSEEKER_JOB_NAME") or _env("JOB_NAME") or project.name
     resolved_run_config = run_config or manifest.run_config or DEFAULT_RUN_CONFIG
     resolved_log_level = log_level or manifest.log_level or DEFAULT_LOG_LEVEL
@@ -1724,6 +1741,12 @@ def run(
 
     merged_parameters = dict(manifest.parameters)
     merged_parameters.update(dict(parameters or {}))
+    reserved_parameters = sorted(name for name in merged_parameters if str(name).upper().startswith("JOBSEEKER_"))
+    if reserved_parameters:
+        raise HopError(
+            "Hop parameters cannot replace JobSeeker runtime variables: %s"
+            % ", ".join(reserved_parameters)
+        )
 
     resolved_repository = os.path.abspath(repository_root or _env("JOBSEEKER_REPOSITORY_ROOT", "/php/repository"))
     build_number = _env("BUILD_NUMBER", "0")
