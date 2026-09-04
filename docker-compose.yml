@@ -32,15 +32,21 @@ services:
     network_mode: none
     command: >-
       sh -lc "set -eu;
-      mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash/jobs /repository/batch/jobs /repository/talend/jobs;
+      mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash/jobs /repository/batch/jobs /repository/talend/jobs /repository/hop/projects/jobseeker /repository/hop/runs /repository/hop/server/metadata /repository/hop/server/config /repository/hop/server/published /repository/hop/server/exports /repository/hop/server/jdbc;
+      if [ ! -f /repository/hop/projects/jobseeker/project-config.json ]; then cp -R /bundled-hop-project/. /repository/hop/projects/jobseeker/; sed -i 's/\"project\": \"platform-hello\"/\"project\": \"jobseeker\"/' /repository/hop/projects/jobseeker/.jobseeker-hop.json; fi;
       tar -C /bundled-sdk --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' -cf - . | tar -C /repository/python/lib/jobseeker-sdk -xf -;
-      chown 1000:1000 /repository /repository/python /repository/python/lib;
-      chown -R 1000:1000 /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend;
+      chown "$${JOBSEEKER_HOST_UID}:$${JOBSEEKER_HOST_GID}" /repository /repository/python /repository/python/lib;
+      chown -R "$${JOBSEEKER_HOST_UID}:$${JOBSEEKER_HOST_GID}" /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend /repository/hop;
       chmod 0775 /repository /repository/python /repository/python/lib;
-      chmod -R u+rwX,g+rwX /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend"
+      chmod -R u+rwX,g+rwX,o-w /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend /repository/hop;
+      find /repository/hop -type d -exec chmod 2775 {} +"
     volumes:
       - ./repository:/repository
       - ./application/third_party/python/jobseeker_sdk:/bundled-sdk:ro
+      - ./application/third_party/hop/samples/platform-hello:/bundled-hop-project:ro
+    environment:
+      - JOBSEEKER_HOST_UID=${JOBSEEKER_HOST_UID:-1000}
+      - JOBSEEKER_HOST_GID=${JOBSEEKER_HOST_GID:-1000}
 
   assets:
     image: node:20-alpine
@@ -130,6 +136,19 @@ services:
       - JOBSEEKER_DOCKER_MONITOR_URL=http://docker-monitor-proxy:8080
       - JOBSEEKER_DOCKER_RUNTIME_URL=http://docker-runtime:2375
       - JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION=${JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION:-3.13}
+      - JOBSEEKER_HOP_ENABLED=${JOBSEEKER_HOP_ENABLED:-true}
+      - JOBSEEKER_HOP_VERSION=${JOBSEEKER_HOP_VERSION:-2.19.0}
+      - JOBSEEKER_HOP_IMAGE=${JOBSEEKER_HOP_IMAGE:-}
+      - JOBSEEKER_HOP_SERVER_URL=${JOBSEEKER_HOP_SERVER_INTERNAL_URL:-http://hop-server:8080}
+      - JOBSEEKER_HOP_SERVER_USER=${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      - JOBSEEKER_HOP_SERVER_PASSWORD=${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      - JOBSEEKER_HOP_SERVER_PORT=${JOBSEEKER_HOP_SERVER_PORT:-8181}
+      - JOBSEEKER_HOP_SERVER_ENVIRONMENT=${JOBSEEKER_HOP_SERVER_ENVIRONMENT:-DEV}
+      - JOBSEEKER_HOP_SERVER_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_HOP_SERVER_CONFIG_FOLDER=${JOBSEEKER_HOP_SERVER_CONFIG_FOLDER:-/php/repository/hop/server/config}
+      - JOBSEEKER_HOP_SERVER_EXPORT_FOLDER=${JOBSEEKER_HOP_SERVER_EXPORT_FOLDER:-/php/repository/hop/server/exports}
+      - JOBSEEKER_HOP_SERVER_JDBC_FOLDER=${JOBSEEKER_HOP_SERVER_JDBC_FOLDER:-/php/repository/hop/server/jdbc}
+      - JOBSEEKER_HOP_EXECUTION_HISTORY=${JOBSEEKER_HOP_EXECUTION_HISTORY:-100}
       - JOBSEEKER_TMF_RESULT_LIMIT=${JOBSEEKER_TMF_RESULT_LIMIT:-1000}
       - JOBSEEKER_JENKINS_USER=${JENKINS_ADMIN_ID:-jobseeker}
       - JOBSEEKER_JENKINS_TOKEN=${JENKINS_ADMIN_PASSWORD:-jobseeker}
@@ -257,6 +276,76 @@ services:
       retries: 5
       start_period: 20s
 
+  # Long-lived Apache Hop Server. Jenkins still schedules and triggers every
+  # run; this is only the "warm JVM" execution engine a job can select instead
+  # of an ephemeral container. It starts hop-server because HOP_FILE_PATH is
+  # empty, which is the upstream image's own contract.
+  hop-server:
+    build:
+      context: .
+      dockerfile: docker/hop_image
+      args:
+        HOP_VERSION: ${JOBSEEKER_HOP_VERSION:-2.19.0}
+        HOP_DRIVERS: ${JOBSEEKER_HOP_DRIVERS:-mysql,mariadb}
+        HOP_RUNTIME_UID: ${JOBSEEKER_HOST_UID:-1000}
+        HOP_RUNTIME_GID: ${JOBSEEKER_HOST_GID:-1000}
+    image: jobseeker-hop:local
+    profiles:
+      - hop
+    depends_on:
+      repository-data-init:
+        condition: service_completed_successfully
+    ports:
+      - "${JOBSEEKER_HOP_SERVER_HOST:-127.0.0.1}:${JOBSEEKER_HOP_SERVER_PORT:-8181}:8080"
+    volumes:
+      - ./repository:/php/repository
+    networks:
+      - internal
+    environment:
+      - HOP_SERVER_PORT=8080
+      - HOP_SERVER_HOSTNAME=0.0.0.0
+      - HOP_SERVER_AUTH=true
+      - HOP_SERVER_USER=${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      - HOP_SERVER_PASS=${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      - HOP_SERVER_PASSWORD=${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      - HOP_SERVER_METADATA_FOLDER=/php/repository/hop/server/metadata
+      # A writable Hop configuration folder on the shared repository volume, so
+      # JobSeeker can publish its platform variables as Hop system variables and
+      # a pipeline started from the Apache Hop GUI resolves ${JOBSEEKER_*} the
+      # same way a Jenkins job does. Hop reads them at start-up, so republishing
+      # needs a restart of this service; the database connections beside them are
+      # read per run and do not. The folder is seeded from the image on first start.
+      - HOP_CONFIG_FOLDER=${JOBSEEKER_HOP_SERVER_CONFIG_FOLDER:-/php/repository/hop/server/config}
+      # JDBC drivers the published connections need are installed on start into
+      # the first folder listed, so a driver is downloaded once rather than baked
+      # into every rebuild. The image's own folder stays on the list: dropping it
+      # would hide the drivers Apache Hop already bundles.
+      - HOP_SHARED_JDBC_FOLDERS=${JOBSEEKER_HOP_SERVER_JDBC_FOLDER:-/php/repository/hop/server/jdbc},/opt/hop/lib/jdbc
+      - JOBSEEKER_HOP_DRIVERS_FILE=/php/repository/hop/server/published/drivers.json
+      - HOP_SERVER_MAX_LOG_LINES=${JOBSEEKER_HOP_SERVER_MAX_LOG_LINES:-20000}
+      - HOP_SERVER_MAX_LOG_TIMEOUT=${JOBSEEKER_HOP_SERVER_MAX_LOG_TIMEOUT:-720}
+      - HOP_SERVER_MAX_OBJECT_TIMEOUT=${JOBSEEKER_HOP_SERVER_MAX_OBJECT_TIMEOUT:-1440}
+      - HOP_LOG_LEVEL=${JOBSEEKER_HOP_LOG_LEVEL:-Basic}
+      # The Apache Hop GUI publishes by uploading a zip export, which Hop writes
+      # to the JVM temp folder. Pointing that at the shared repository volume is
+      # what lets JobSeeker import such a run into a real project, so a pipeline
+      # designed in the GUI can become a scheduled Jenkins job.
+      - HOP_OPTIONS=${JOBSEEKER_HOP_SERVER_JAVA_OPTIONS:--Xms256m -Xmx1024m} -Djava.io.tmpdir=${JOBSEEKER_HOP_SERVER_EXPORT_FOLDER:-/php/repository/hop/server/exports}
+      - JOBSEEKER_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_DATA_ASSETS_MANIFEST=/php/repository/data-assets/manifest.json
+      - JOBSEEKER_ENVIRONMENT=${JOBSEEKER_HOP_SERVER_ENVIRONMENT:-DEV}
+      - JOBSEEKER_HOP_SERVER_JOB=${JOBSEEKER_HOP_SERVER_JOB:-hop-server}
+      - JOBSEEKER_HOP_CONNECTOR_REFRESH=${JOBSEEKER_HOP_CONNECTOR_REFRESH:-false}
+      - JOBSEEKER_HOP_SERVER_METADATA=/php/repository/hop/server/metadata
+      - JOBSEEKER_CONNECTOR_API_URL=http://nginx:8080/connector-runtime
+      - JOBSEEKER_CONNECTOR_API_TOKEN=${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u \"$$HOP_SERVER_USER:$$HOP_SERVER_PASS\" http://127.0.0.1:8080/hop/status >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   docker-monitor-proxy:
     image: nginx:alpine
     volumes:
@@ -346,6 +435,16 @@ services:
       - JOBSEEKER_SMTP_REPLY_TO=${JOBSEEKER_SMTP_REPLY_TO:-jobseeker@local.test}
       - JOBSEEKER_JENKINS_ROOT_URL=${JOBSEEKER_JENKINS_PUBLIC_URL:-http://localhost:8080/}
       - DOCKER_HOST=${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      - JOBSEEKER_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_HOP_IMAGE=${JOBSEEKER_HOP_IMAGE:-apache/hop:2.19.0}
+      - JOBSEEKER_HOP_SERVER_URL=${JOBSEEKER_HOP_SERVER_INTERNAL_URL:-http://hop-server:8080}
+      - JOBSEEKER_HOP_SERVER_USER=${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      - JOBSEEKER_HOP_SERVER_PASSWORD=${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      - JOBSEEKER_HOP_SERVER_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_HOP_NETWORK=${JOBSEEKER_HOP_NETWORK:-host}
+      - JOBSEEKER_HOP_CPU_LIMIT=${JOBSEEKER_HOP_CPU_LIMIT:-1}
+      - JOBSEEKER_HOP_MEMORY_LIMIT_MB=${JOBSEEKER_HOP_MEMORY_LIMIT_MB:-1024}
+      - JOBSEEKER_HOP_DRIVERS_MAVEN_REPO=${JOBSEEKER_HOP_DRIVERS_MAVEN_REPO:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1"]
       interval: 30s
@@ -366,6 +465,16 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_IMAGE: ${JOBSEEKER_HOP_IMAGE:-apache/hop:2.19.0}
+      JOBSEEKER_HOP_SERVER_URL: ${JOBSEEKER_HOP_SERVER_INTERNAL_URL:-http://hop-server:8080}
+      JOBSEEKER_HOP_SERVER_USER: ${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      JOBSEEKER_HOP_SERVER_PASSWORD: ${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      JOBSEEKER_HOP_SERVER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_NETWORK: ${JOBSEEKER_HOP_NETWORK:-host}
+      JOBSEEKER_HOP_CPU_LIMIT: ${JOBSEEKER_HOP_CPU_LIMIT:-1}
+      JOBSEEKER_HOP_MEMORY_LIMIT_MB: ${JOBSEEKER_HOP_MEMORY_LIMIT_MB:-1024}
+      JOBSEEKER_HOP_DRIVERS_MAVEN_REPO: ${JOBSEEKER_HOP_DRIVERS_MAVEN_REPO:-}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
@@ -396,6 +505,16 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_IMAGE: ${JOBSEEKER_HOP_IMAGE:-apache/hop:2.19.0}
+      JOBSEEKER_HOP_SERVER_URL: ${JOBSEEKER_HOP_SERVER_INTERNAL_URL:-http://hop-server:8080}
+      JOBSEEKER_HOP_SERVER_USER: ${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      JOBSEEKER_HOP_SERVER_PASSWORD: ${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      JOBSEEKER_HOP_SERVER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_NETWORK: ${JOBSEEKER_HOP_NETWORK:-host}
+      JOBSEEKER_HOP_CPU_LIMIT: ${JOBSEEKER_HOP_CPU_LIMIT:-1}
+      JOBSEEKER_HOP_MEMORY_LIMIT_MB: ${JOBSEEKER_HOP_MEMORY_LIMIT_MB:-1024}
+      JOBSEEKER_HOP_DRIVERS_MAVEN_REPO: ${JOBSEEKER_HOP_DRIVERS_MAVEN_REPO:-}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
@@ -426,6 +545,16 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_IMAGE: ${JOBSEEKER_HOP_IMAGE:-apache/hop:2.19.0}
+      JOBSEEKER_HOP_SERVER_URL: ${JOBSEEKER_HOP_SERVER_INTERNAL_URL:-http://hop-server:8080}
+      JOBSEEKER_HOP_SERVER_USER: ${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      JOBSEEKER_HOP_SERVER_PASSWORD: ${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      JOBSEEKER_HOP_SERVER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_NETWORK: ${JOBSEEKER_HOP_NETWORK:-host}
+      JOBSEEKER_HOP_CPU_LIMIT: ${JOBSEEKER_HOP_CPU_LIMIT:-1}
+      JOBSEEKER_HOP_MEMORY_LIMIT_MB: ${JOBSEEKER_HOP_MEMORY_LIMIT_MB:-1024}
+      JOBSEEKER_HOP_DRIVERS_MAVEN_REPO: ${JOBSEEKER_HOP_DRIVERS_MAVEN_REPO:-}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
@@ -456,6 +585,16 @@ services:
       JENKINS_AGENT_WEB_SOCKET: ${JOBSEEKER_JENKINS_AGENT_WEB_SOCKET:-false}
       JENKINS_AGENT_TUNNEL: ${JOBSEEKER_JENKINS_AGENT_TUNNEL:-jenkins:50000}
       DOCKER_HOST: ${JOBSEEKER_DOCKER_HOST:-tcp://docker-runtime:2375}
+      JOBSEEKER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_IMAGE: ${JOBSEEKER_HOP_IMAGE:-apache/hop:2.19.0}
+      JOBSEEKER_HOP_SERVER_URL: ${JOBSEEKER_HOP_SERVER_INTERNAL_URL:-http://hop-server:8080}
+      JOBSEEKER_HOP_SERVER_USER: ${JOBSEEKER_HOP_SERVER_USER:-cluster}
+      JOBSEEKER_HOP_SERVER_PASSWORD: ${JOBSEEKER_HOP_SERVER_PASSWORD:-cluster}
+      JOBSEEKER_HOP_SERVER_REPOSITORY_ROOT: /php/repository
+      JOBSEEKER_HOP_NETWORK: ${JOBSEEKER_HOP_NETWORK:-host}
+      JOBSEEKER_HOP_CPU_LIMIT: ${JOBSEEKER_HOP_CPU_LIMIT:-1}
+      JOBSEEKER_HOP_MEMORY_LIMIT_MB: ${JOBSEEKER_HOP_MEMORY_LIMIT_MB:-1024}
+      JOBSEEKER_HOP_DRIVERS_MAVEN_REPO: ${JOBSEEKER_HOP_DRIVERS_MAVEN_REPO:-}
       JOBSEEKER_CONNECTOR_API_URL: http://nginx:8080/connector-runtime
       JOBSEEKER_CONNECTOR_API_TOKEN: ${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
       AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}

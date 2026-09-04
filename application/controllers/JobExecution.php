@@ -29,7 +29,18 @@ class JobExecution extends BaseController
                     $resumeBuild = '';
                 }
 
+                // Apache Hop jobs can show the canvas of what they run, so the
+                // screen needs to know which of the jobs are Hop jobs.
+                $hopJobs = array();
+                $hopSetting = strtolower(trim((string) getenv('JOBSEEKER_HOP_ENABLED')));
+                $hopEnabled = ! in_array($hopSetting, array('0', 'false', 'off', 'no'), TRUE);
+                if ($hopEnabled && $this->db->table_exists('hop_project_jobs')) {
+                    $this->load->model('Hop_model');
+                    $hopJobs = $this->Hop_model->hopJobs();
+                }
+
                 $data = array(
+                    'hop_jobs' => $hopJobs,
                     'job_creation_dates' => $this->readJobCreationDates(),
                     'resume_job' => trim((string) $this->security->xss_clean($this->input->get('job'))),
                     'resume_build' => $resumeBuild,

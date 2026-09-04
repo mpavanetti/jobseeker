@@ -4,7 +4,7 @@ Self-hosted operations and orchestration for Jenkins-backed data jobs.
 
 JobSeeker gives data teams one place to create, schedule, run, promote, and monitor ETL and batch workloads. It adds environment-aware controls, visual pipelines, runtime configuration, observability, and governed analytics around Jenkins without replacing Jenkins as the execution engine.
 
-JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible workloads.
+JobSeeker supports Python, Apache Hop, Talend, shell, Docker, and other Jenkins-compatible workloads.
 
 > **Project status:** beta. Use the default configuration for local evaluation only, and review the security guidance before deploying to a shared environment.
 
@@ -12,13 +12,21 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 
 ### Job operations
 
-- Create and manage Jenkins jobs through guided forms for Python, Talend, Linux shell, and Windows command workloads.
+- Create and manage Jenkins jobs through guided forms for Python, Apache Hop, Talend, Linux shell, and Windows command workloads.
 - Load curated simple, intermediate, and advanced shell or Python starters into the active execution editor, including multi-file JobSeeker SDK workspaces and database-connector ETL jobs that run out of the box.
 - Save multiple browser-cached job drafts, compare their configuration, duplicate them, and chain drafts before creating jobs.
 - Run jobs immediately or schedule one-time, recurring, tag-based, and custom Jenkins cron triggers.
 - Send templated email notifications for successful, failed, and aborted builds.
 - Map the connectors and data assets a job's code uses, check their catalog status, and run a real connection test at creation.
 - Inspect queue state, build history, worker assignment, grouped console output, Python test stages, and Docker resource usage.
+
+### Apache Hop
+
+- Run `.hwf` workflows and `.hpl` pipelines as scheduled Jenkins jobs using an isolated container or the optional long-lived Hop Server.
+- Load a starter, upload a project, or reuse one in the repository. Connectors, Data Assets, job parameters, and referenced Context Details are resolved as Hop connections and variables at run time.
+- Track every run in Transaction Monitoring with Hop row counts and real log errors; an `ERROR` or `FATAL` log entry fails the build even if Hop reports a clean exit code.
+- Click a Hop job name or **Canvas** on Job Execution to inspect its graph and live transform metrics in a modal.
+- Use the Apache Hop catalog to import, download, or schedule projects and reconcile runs published from the desktop Hop GUI.
 
 ### Visual pipelines
 
@@ -37,6 +45,7 @@ JobSeeker supports Python, Talend, shell, Docker, and other Jenkins-compatible w
 ### Data runtime
 
 - Use the bundled Python `jobseeker` SDK for TMF logging, context lookup, progress reporting, Data Asset discovery, and connector access.
+- Execute Apache Hop with the same SDK's `jobseeker-hop` runner, which turns connectors into Hop database connections and Data Assets into Hop variables before the engine starts.
 - Publish environment-aware Data Assets behind stable `jobseeker://` URIs for Python, shell, Talend, and Docker jobs.
 - Resolve named ETL connectors by environment and job scope from encrypted local values, worker variables, Azure Key Vault, or AWS Secrets Manager.
 - Open inline Docker Python jobs as full projects in the bundled OpenVSCode Server with Poetry, uv, Ruff, mypy, BasedPyright, pytest, coverage, and debugpy.
@@ -123,6 +132,19 @@ OpenVSCode Server | http://localhost:3000/ (normally opened from a job's **Code*
 
 Use `JOBSEEKER_HTTP_PORT`, `JENKINS_HTTP_PORT`, `JOBSEEKER_MAILPIT_HTTP_PORT`, or `JOBSEEKER_OPENVSCODE_PORT` in `.env` when a default port is already in use.
 
+### Optional Apache Hop
+
+Hop job support is enabled by default. The container engine needs no extra
+service; its first run pulls the configured Apache Hop image. For the faster
+server engine, start the optional Compose profile:
+
+```bash
+docker compose --profile hop up -d --build hop-server
+```
+
+Set `JOBSEEKER_HOP_ENABLED=false` in `.env` and recreate `php` to hide Hop and
+disable its server calls. Existing Jenkins jobs are not deleted.
+
 ### Default access
 
 JobSeeker role | Login | Password
@@ -198,6 +220,12 @@ Variable | Purpose
 `JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES` | Stops an unused editor automatically; use `0` to keep it running.
 `JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED` | Adds the optional Continue local-AI extension to the OpenVSCode image.
 `JOBSEEKER_TMF_RESULT_LIMIT` | Bounds the newest TMF rows rendered in one response (default 1,000, maximum 10,000).
+`JOBSEEKER_HOP_ENABLED` | Enables the optional Apache Hop UI and integration (default `true`).
+`JOBSEEKER_HOP_IMAGE` | Container image for Hop jobs. Empty uses the public `apache/hop` image, which installs missing JDBC drivers per run; point it at `jobseeker-hop:local` to bake them in.
+`JOBSEEKER_HOP_SERVER_PORT` | Publishes the optional long-lived Hop Server (`docker compose --profile hop up -d hop-server`).
+`JOBSEEKER_HOP_SERVER_ENVIRONMENT` | Which JobSeeker environment a run started outside Jenkins belongs to, for its Transaction Monitoring row and its published connections.
+`JOBSEEKER_HOP_EXECUTION_HISTORY` | How many Hop Server executions the Apache Hop screen keeps on show (default 100).
+`JOBSEEKER_HOP_SERVER_JDBC_FOLDER` | Where the Hop Server installs the JDBC drivers its published connections need, so a download survives a container rebuild.
 `JOBSEEKER_TIMEZONE` | The app always stores and computes time in UTC; this only sets which side of the per-browser UI timezone toggle a first-time viewer starts on (`UTC` by default, or any PHP timezone identifier to start on local time).
 `JOBSEEKER_COMMAND_GUARD_ENFORCE` | When `true`, a critical/high `CommandGuard` finding blocks job creation instead of only warning.
 
