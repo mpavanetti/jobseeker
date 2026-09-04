@@ -1,0 +1,15 @@
+{
+  "assets": [],
+  "connectors": [
+    "jobseeker-mariadb"
+  ],
+  "context": [],
+  "description": "Parameterised extract with a row-count guard that aborts the build when the source is empty, so the TMF error path is exercised.",
+  "engine": "container",
+  "entry_file": "pipelines/tmf-batch.hpl",
+  "log_level": "Basic",
+  "parameters": {},
+  "project": "parameterised-load",
+  "run_config": "local",
+  "schema_version": 1
+}

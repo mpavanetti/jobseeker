@@ -2298,7 +2298,7 @@
               <button type="button" class="job-option-card job-execution-option" data-execution-family="etl" data-option-panel="#runlinuxCommand">
                 <i class="fa fa-cubes job-option-icon"></i>
                 <span class="job-option-title">ETL Tools</span>
-                <span class="job-option-detail">Run Talend packages; additional ETL engines can be added here.</span>
+                <span class="job-option-detail">Run Talend packages or Apache Hop workflows and pipelines.</span>
                 <span class="job-option-state"><span class="label label-primary">Enabled</span></span>
               </button>
             <?php }?>
@@ -2475,8 +2475,10 @@
                         <span>Select the engine used to execute this integration package.</span>
                       </div>
                       <div class="linux-execution-choice-grid">
+                        <?php if (! empty($hop_enabled)) { ?>
+                        <button type="button" class="linux-execution-choice" data-linux-etl-choice="hop"><i class="fa fa-random"></i><strong>Apache Hop</strong><span>Run a Hop workflow or pipeline.</span></button>
+                        <?php } ?>
                         <button type="button" class="linux-execution-choice" data-linux-etl-choice="talend"><i class="fa fa-cubes"></i><strong>Talend</strong><span>Upload and execute a Talend Linux package.</span></button>
-                        <button type="button" class="linux-execution-choice" disabled><i class="fa fa-random"></i><strong>Apache Hop</strong><span>Coming soon.</span></button>
                       </div>
                     </div>
                     <div class="row linuxLegacyExecutionFields">
@@ -2496,12 +2498,110 @@
                           <label for="linuxScriptType">Script Type</label>
                           <select class="form-control" id="linuxScriptType" name="linuxScriptType"><option value="0" selected>-- Select a script type -- </option>
                             <option value="bash">Bash Script</option>
+                            <?php if (! empty($hop_enabled)) { ?>
+                            <option value="hop">Apache Hop Workflow or Pipeline</option>
+                            <?php } ?>
                             <option value="talend">Talend Data Integration Script</option>
                             <option value="python">Python File or Repository</option>
                           </select>
                         </div>
                       </div>
                     </div>
+                    <?php if (! empty($hop_enabled)) { ?>
+                    <div class="row hopSourceForm" style="display: none;">
+                      <div class="col-md-12">
+                        <div class="callout callout-info" style="margin-bottom:12px">
+                          <h4><i class="fa fa-random"></i> Apache Hop</h4>
+                          <p style="margin-bottom:0">
+                            Jenkins keeps the schedule, the environment parameter, the timeout and the notifications. At run time JobSeeker turns every connector in scope into a Hop
+                            database connection named after its connector key, publishes each Data Asset as a <code>${JOBSEEKER_ASSET_KEY}</code> variable, and records the run in Transaction Monitoring.
+                          </p>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="hopSourceMode">Project Source</label>
+                          <select class="form-control" id="hopSourceMode" name="hopSourceMode">
+                            <option value="upload" selected>Upload project, workflow or pipeline</option>
+                            <option value="sample">Start from a sample project</option>
+                            <option value="path">Repository path</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="col-md-8 hopSampleColumn" style="display: none;">
+                        <div class="form-group">
+                          <label for="hopSample">Sample Project</label>
+                          <select class="form-control" id="hopSample" name="hopSample">
+                            <?php foreach ((array) (isset($hop_samples) ? $hop_samples : array()) as $hopSample) { ?>
+                              <option value="<?php echo html_escape($hopSample['key']); ?>" data-entry-files="<?php echo html_escape(json_encode($hopSample['entry_files'])); ?>" data-entry-file="<?php echo html_escape($hopSample['entry_file']); ?>"><?php echo html_escape($hopSample['name']); ?><?php echo $hopSample['description'] !== '' ? ' - '.html_escape($hopSample['description']) : ''; ?></option>
+                            <?php } ?>
+                          </select>
+                          <span class="help-block">The sample is copied into <code>repository/hop/projects/&lt;job&gt;</code> and can be edited afterwards.</span>
+                        </div>
+                      </div>
+                      <div class="col-md-8 hopPathColumn" style="display: none;">
+                        <div class="form-group">
+                          <label for="hopProjectPath">Repository Folder</label>
+                          <input type="text" class="form-control" id="hopProjectPath" name="hopProjectPath" maxlength="1000" autocomplete="off" list="hopProjectOptions" placeholder="hop/projects/my-project">
+                          <datalist id="hopProjectOptions">
+                            <?php foreach ((array) (isset($hop_projects) ? $hop_projects : array()) as $hopProject) { ?>
+                              <option value="hop/projects/<?php echo html_escape($hopProject['key']); ?>">
+                            <?php } ?>
+                          </datalist>
+                          <span class="help-block">Any Apache Hop project already inside the JobSeeker repository.</span>
+                        </div>
+                      </div>
+                      <div class="col-md-8 hopEntryColumn">
+                        <div class="form-group">
+                          <label for="hopEntryFile">Workflow or Pipeline</label>
+                          <div class="input-group">
+                            <input type="text" class="form-control" id="hopEntryFile" name="hopEntryFile" maxlength="500" autocomplete="off" list="hopEntryFileOptions" placeholder="workflows/main.hwf">
+                            <span class="input-group-btn"><button type="button" class="btn btn-default" id="hopRefreshEntryFiles"><i class="fa fa-refresh"></i> Detect</button></span>
+                          </div>
+                          <datalist id="hopEntryFileOptions"></datalist>
+                          <span class="help-block" id="hopEntryHelp">Upload the project first, then press Detect to list its .hwf and .hpl files. A project with exactly one runnable file needs no selection.</span>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="hopEngine">Execution Engine</label>
+                          <select class="form-control" id="hopEngine" name="hopEngine">
+                            <option value="container" selected>Docker container (isolated, per build)</option>
+                            <option value="server">Hop Server (warm JVM)</option>
+                          </select>
+                          <span class="help-block" id="hopEngineHelp">One ephemeral Apache Hop container per build, with the CPU and memory limits below.</span>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="hopRunConfig">Run Configuration</label>
+                          <input type="text" class="form-control" id="hopRunConfig" name="hopRunConfig" maxlength="100" autocomplete="off" value="local" placeholder="local">
+                          <span class="help-block">A Hop run configuration in the project's metadata. JobSeeker writes a <code>local</code> one when the project has none.</span>
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="form-group">
+                          <label for="hopLogLevel">Log Level</label>
+                          <select class="form-control" id="hopLogLevel" name="hopLogLevel">
+                            <option value="Nothing">Nothing</option>
+                            <option value="Error">Error</option>
+                            <option value="Minimal">Minimal</option>
+                            <option value="Basic" selected>Basic</option>
+                            <option value="Detailed">Detailed</option>
+                            <option value="Debug">Debug</option>
+                            <option value="Rowlevel">Row level</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="col-md-12">
+                        <div class="form-group">
+                          <label for="hopParameters">Parameters</label>
+                          <textarea class="form-control" id="hopParameters" name="hopParameters" rows="3" spellcheck="false" placeholder="BATCH_SIZE=1000&#10;SOURCE_SYSTEM=crm"></textarea>
+                          <span class="help-block">One <code>NAME=VALUE</code> per line. They reach Hop as parameters and variables, alongside the generated JobSeeker variables.</span>
+                        </div>
+                      </div>
+                    </div>
+                    <?php } ?>
                     <div class="row pythonSourceForm" style="display: none;">
                       <div class="col-md-4 pythonSourceModeColumn">
                         <div class="form-group">
@@ -3651,7 +3751,7 @@
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -5918,6 +6018,10 @@
         return $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'talend';
       }
 
+      function linuxExecutionUsesHop() {
+        return $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'hop';
+      }
+
       function linuxExecutionHasRuntime() {
         if (! $('#linuxCommand').is(':checked')) {
           return false;
@@ -5952,13 +6056,18 @@
 
       function updatePythonRuntimeControls() {
         var hasRuntime = linuxExecutionHasRuntime();
+        var isHopExecution = linuxExecutionUsesHop();
         var isDockerRuntime = $('#pythonRuntimeMode').val() == 'docker';
-        $('.pythonRuntimeForm').toggle(hasRuntime);
-        $('.pythonContainerLimits').toggle(hasRuntime && isDockerRuntime);
-        $('#containerCpuLimit, #containerMemoryLimitMb').prop('required', hasRuntime && isDockerRuntime);
+        // Apache Hop picks its engine in its own panel, so the Jenkins agent /
+        // Docker selector would be a second, contradictory control. The shared
+        // container resource panel is still the right place to size a run.
+        var wantsContainerLimits = isHopExecution ? $('#hopEngine').val() == 'container' : isDockerRuntime;
+        $('.pythonRuntimeForm').toggle(hasRuntime && ! isHopExecution);
+        $('.pythonContainerLimits').toggle(hasRuntime && wantsContainerLimits);
+        $('#containerCpuLimit, #containerMemoryLimitMb').prop('required', hasRuntime && wantsContainerLimits);
         syncContainerLimitPreset();
 
-        if (! hasRuntime) {
+        if (! hasRuntime || isHopExecution) {
           return;
         }
 
@@ -6163,6 +6272,9 @@
             if ($('#linuxScriptType').val() == 'talend') {
               return 'ETL Tools / Talend / ' + pythonRuntimeSummary();
             }
+            if ($('#linuxScriptType').val() == 'hop') {
+              return 'ETL Tools / Apache Hop / ' + selectedText('#hopEngine', 'container') + ($.trim($('#hopEntryFile').val()) !== '' ? ' / ' + $.trim($('#hopEntryFile').val()) : '');
+            }
             if ($('#linuxScriptType').val() == 'bash') {
               return 'Linux Shell / Bash script / ' + pythonRuntimeSummary();
             }
@@ -6219,6 +6331,14 @@
           pythonDockerImage: '',
           containerCpuLimit: '1',
           containerMemoryLimitMb: '512',
+          hopSourceMode: 'upload',
+          hopSample: '',
+          hopProjectPath: '',
+          hopEntryFile: '',
+          hopEngine: 'container',
+          hopRunConfig: 'local',
+          hopLogLevel: 'Basic',
+          hopParameters: '',
           linuxCommandLine: '',
           action: '0',
           tag: '@hourly',
@@ -6378,6 +6498,9 @@
             if (draft.linuxScriptType === 'talend') {
               return 'ETL Tools / Talend / ' + draftPythonRuntimeSummary(draft);
             }
+            if (draft.linuxScriptType === 'hop') {
+              return 'ETL Tools / Apache Hop / ' + (draft.hopEngine || 'container') + (draft.hopEntryFile ? ' / ' + draft.hopEntryFile : '');
+            }
             if (draft.linuxScriptType === 'bash') {
               return 'Linux Shell / Bash script / ' + draftPythonRuntimeSummary(draft);
             }
@@ -6390,9 +6513,12 @@
       }
 
       function draftUsesUploadedSource(draft) {
+        // Apache Hop can also start from a bundled sample or a repository path,
+        // so it only counts as an upload when that is the selected source.
         return (draftChecked(draft, 'winCommand') && draft.executionStrategy === 'script' && draft.scriptType !== '0') ||
-          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType !== 'python' && draft.linuxScriptType !== '0') ||
-          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType === 'python' && draft.pythonSourceMode === 'upload');
+          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType !== 'python' && draft.linuxScriptType !== 'hop' && draft.linuxScriptType !== '0') ||
+          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType === 'python' && draft.pythonSourceMode === 'upload') ||
+          (draftChecked(draft, 'linuxCommand') && draft.linuxExecutionStrategy === 'script' && draft.linuxScriptType === 'hop' && (draft.hopSourceMode || 'upload') === 'upload');
       }
 
       function draftControlSummary(draft) {
@@ -7250,6 +7376,7 @@
 
         var isPythonScript = isScriptExecution && scriptType == 'python';
 
+        updateHopSourceControls();
         $('.pythonSourceForm').toggle(isPythonScript || isInlinePythonExecution);
         $('.pythonSourceModeColumn').toggle(isPythonScript);
         $('.pythonEntryPointColumn')
@@ -7300,6 +7427,12 @@
           return;
         }
 
+        if (scriptType == 'hop' && $('#hopSourceMode').val() != 'upload') {
+          $('.linuxUploadScript').hide();
+          $('.destroyDropzone').remove();
+          return;
+        }
+
         var jobName = ensureJobName();
 
         if (jobName == '' || jobName == null) {
@@ -7310,8 +7443,18 @@
           return;
         }
 
-        var acceptedFiles = scriptType == 'python' ? '.py,.zip' : (scriptType == 'bash' ? '.sh,.zip' : '.zip');
-        var uploadMessage = scriptType == 'python' ? 'Drop Python .py or .zip files here or click to upload.' : (scriptType == 'bash' ? 'Drop Bash .sh or .zip files here or click to upload.' : 'Drop Talend zip packages here or click to upload.');
+        var acceptedFiles = '.zip';
+        var uploadMessage = 'Drop Talend zip packages here or click to upload.';
+        if (scriptType == 'python') {
+          acceptedFiles = '.py,.zip';
+          uploadMessage = 'Drop Python .py or .zip files here or click to upload.';
+        } else if (scriptType == 'bash') {
+          acceptedFiles = '.sh,.zip';
+          uploadMessage = 'Drop Bash .sh or .zip files here or click to upload.';
+        } else if (scriptType == 'hop') {
+          acceptedFiles = '.zip,.hpl,.hwf';
+          uploadMessage = 'Drop an Apache Hop project zip, a .hwf workflow, or a .hpl pipeline here or click to upload.';
+        }
         $('.linuxUploadScript').show();
         $('.destroyDropzone').remove();
         $('#linuxColumn').append($('<DIV id="dropzone" class="destroyDropzone"><form class="dropzone needsclick" id="mydropzone" action="<?php echo base_url(); ?>upload/do_upload" enctype="multipart/form-data" method="post" style="height: 220px;"><DIV class="dz-message needsclick"><img src="<?php echo base_url(); ?>assets/images/bi.png" alt="cloud" style="height: 100px; width: 100px;"><h3><b>' + uploadMessage + '</b></h3><BR></DIV></form></DIV>'));
@@ -7328,6 +7471,9 @@
           success: function() {
             toastr.success('Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.', 'File Upload Success');
             $('.buildXmlBtn').prop('disabled', false);
+            if (scriptType == 'hop') {
+              detectHopEntryFiles();
+            }
           },
           error: function() {
             toastr.error('Erro during uploading file.', 'File Upload Error');
@@ -7380,7 +7526,7 @@
           return 'python';
         }
 
-        return linuxExecutionUsesTalend() ? 'etl' : 'shell';
+        return (linuxExecutionUsesTalend() || linuxExecutionUsesHop()) ? 'etl' : 'shell';
       }
 
       function syncLinuxExecutionChoiceControls() {
@@ -7406,8 +7552,13 @@
           $('.linux-execution-choice[data-linux-python-choice="' + pythonChoice + '"]').addClass('active');
         } else if (mode == 'etl') {
           $('#linuxExecutionPanelTitle').text('ETL Tools');
-          $('#dataAssetsRuntimeTitle').text('Data Assets for ETL Packages');
-          $('#dataAssetsRuntimeMessage').html('Published files are mounted at stable repository paths. Use <code>$JOBSEEKER_DATA_ASSETS_MANIFEST</code> to resolve the selected environment and job scope from Talend or another ETL runtime.');
+          if (scriptType == 'hop') {
+            $('#dataAssetsRuntimeTitle').text('Data Assets for Apache Hop');
+            $('#dataAssetsRuntimeMessage').html('Every published asset in scope becomes a Hop variable named <code>${JOBSEEKER_ASSET_&lt;KEY&gt;}</code>, already pointing at the path the selected engine will see. Use it directly in a file name field.');
+          } else {
+            $('#dataAssetsRuntimeTitle').text('Data Assets for ETL Packages');
+            $('#dataAssetsRuntimeMessage').html('Published files are mounted at stable repository paths. Use <code>$JOBSEEKER_DATA_ASSETS_MANIFEST</code> to resolve the selected environment and job scope from Talend or another ETL runtime.');
+          }
           $('.linux-etl-options').show();
           $('.linux-execution-choice[data-linux-etl-choice="' + scriptType + '"]').addClass('active');
         } else {
@@ -7493,6 +7644,107 @@
         refreshJobOptionPanels();
         updateJobCreationReview();
       }
+
+
+      var hopEngineHelp = {
+        container: 'One ephemeral Apache Hop container per build, with the CPU and memory limits below.',
+        server: 'Sends the run to the shared Hop Server for a warm JVM start. Runs are serialized; resolved connector metadata exists only for the synchronous run and is removed immediately afterward.'
+      };
+
+      function updateHopSourceControls() {
+        var isHop = linuxExecutionUsesHop();
+        var sourceMode = $('#hopSourceMode').val() || 'upload';
+
+        $('.hopSourceForm').toggle(isHop);
+        $('.hopSampleColumn').toggle(isHop && sourceMode == 'sample');
+        $('.hopPathColumn').toggle(isHop && sourceMode == 'path');
+        $('.hopEntryColumn')
+          .toggleClass('col-md-8', sourceMode == 'upload')
+          .toggleClass('col-md-12', sourceMode != 'upload');
+        $('#hopEngineHelp').text(hopEngineHelp[$('#hopEngine').val()] || hopEngineHelp.container);
+
+        if (isHop && sourceMode == 'sample') {
+          applyHopSampleEntryFiles();
+        }
+      }
+
+      function setHopEntryFileOptions(entryFiles, selected) {
+        var options = $('#hopEntryFileOptions').empty();
+        $.each(entryFiles || [], function(index, entryFile) {
+          options.append($('<option>').attr('value', entryFile));
+        });
+
+        if (selected) {
+          $('#hopEntryFile').val(selected);
+        } else if ((entryFiles || []).length === 1) {
+          $('#hopEntryFile').val(entryFiles[0]);
+        }
+
+        if (!entryFiles || entryFiles.length === 0) {
+          $('#hopEntryHelp').text('No .hwf or .hpl file has been detected yet. Upload the project, then press Detect.');
+        } else {
+          $('#hopEntryHelp').text('Detected ' + entryFiles.length + ' runnable file(s) in this project.');
+        }
+      }
+
+      function applyHopSampleEntryFiles() {
+        var option = $('#hopSample').find('option:selected');
+        if (!option.length) { return; }
+        var entryFiles = [];
+        try { entryFiles = JSON.parse(option.attr('data-entry-files') || '[]'); } catch (error) { entryFiles = []; }
+        setHopEntryFileOptions(entryFiles, option.attr('data-entry-file') || '');
+      }
+
+      function detectHopEntryFiles() {
+        var sourceMode = $('#hopSourceMode').val() || 'upload';
+
+        if (sourceMode == 'sample') {
+          applyHopSampleEntryFiles();
+          return;
+        }
+
+        var projectKey;
+        if (sourceMode == 'path') {
+          var parts = String($('#hopProjectPath').val() || '').replace(/\\/g, '/').replace(/\/+$/, '').split('/');
+          projectKey = parts[parts.length - 1];
+        } else {
+          projectKey = ensureJobName();
+        }
+
+        if (!projectKey) {
+          toastr.error('Name the job first, then upload the Apache Hop project.', 'Apache Hop');
+          return;
+        }
+
+        $.getJSON('<?php echo base_url(); ?>hop/inspect?project=' + encodeURIComponent(projectKey))
+          .done(function(description) {
+            setHopEntryFileOptions(description.entry_files, $.trim($('#hopEntryFile').val()) === '' ? description.entry_file : '');
+          })
+          .fail(function(response) {
+            var message = (response && response.responseJSON && response.responseJSON.error) || 'The Apache Hop project could not be read yet.';
+            $('#hopEntryHelp').text(message);
+          });
+      }
+
+      $('#hopSourceMode').change(function() {
+        updateHopSourceControls();
+        syncLinuxScriptUpload();
+        updateJobCreationReview();
+      });
+
+      $('#hopSample').change(function() {
+        applyHopSampleEntryFiles();
+        updateJobCreationReview();
+      });
+
+      $('#hopEngine').change(function() {
+        updateHopSourceControls();
+        updatePythonRuntimeControls();
+        updateJobCreationReview();
+      });
+
+      $('#hopRefreshEntryFiles').click(detectHopEntryFiles);
+      $('#hopEntryFile, #hopRunConfig, #hopLogLevel, #hopParameters, #hopProjectPath').on('input change', updateJobCreationReview);
 
       $('#pythonSourceMode').change(function() {
         updatePythonSourceControls();
@@ -8127,6 +8379,44 @@
       updatePythonRuntimeControls();
     }
 
+    function hopCommandOptionValues(command, optionName) {
+      var values = [];
+      var prefix = '--' + optionName + ' ';
+      $.each(String(command || '').split(/\r?\n/), function(index, line) {
+        line = $.trim(line).replace(/\s*\\$/, '');
+        if (line.indexOf(prefix) === 0) {
+          values.push(unquoteShellValue($.trim(line.substring(prefix.length))));
+        }
+      });
+      return values;
+    }
+
+    function hydrateHopCommand(command) {
+      var project = (hopCommandOptionValues(command, 'project')[0] || '').replace(/\\/g, '/');
+      var projectMarker = '/hop/projects/';
+      var markerIndex = project.indexOf(projectMarker);
+      if (markerIndex !== -1) {
+        project = 'hop/projects/' + project.substring(markerIndex + projectMarker.length).replace(/^\/+|\/+$/g, '');
+      }
+
+      $('#linuxCommand').prop('checked', true);
+      $('#runlinuxCommand').show();
+      setSelectValue('#linuxExecutionStrategy', 'script');
+      setSelectValue('#linuxScriptType', 'hop');
+      setSelectValue('#hopSourceMode', 'path');
+      $('#hopProjectPath').val(project);
+      $('#hopEntryFile').val(hopCommandOptionValues(command, 'file')[0] || '');
+      setSelectValue('#hopEngine', hopCommandOptionValues(command, 'engine')[0] || 'container');
+      $('#hopRunConfig').val(hopCommandOptionValues(command, 'run-config')[0] || 'local');
+      setSelectValue('#hopLogLevel', hopCommandOptionValues(command, 'log-level')[0] || 'Basic');
+      $('#containerCpuLimit').val(hopCommandOptionValues(command, 'cpu-limit')[0] || '1');
+      $('#containerMemoryLimitMb').val(hopCommandOptionValues(command, 'memory-limit-mb')[0] || '1024');
+      $('#hopParameters').val(hopCommandOptionValues(command, 'param').join('\n'));
+      syncLinuxExecutionControls(false);
+      updateHopSourceControls();
+      detectHopEntryFiles();
+    }
+
     function hydrateLinuxDockerCommand(command) {
       $('#linuxCommand').prop('checked', true);
       $('#runlinuxCommand').show();
@@ -8242,7 +8532,9 @@
 
       if (shell) {
         var shellCommand = firstXmlText(xmlDoc, 'command', shell);
-        if (shellCommand.indexOf('JOBSEEKER_PYTHON_RUNTIME') !== -1 || shellCommand.indexOf('JOBSEEKER_PYTHON_LIB') !== -1) {
+        if (shellCommand.indexOf('jobseeker-hop run') !== -1) {
+          hydrateHopCommand(shellCommand);
+        } else if (shellCommand.indexOf('JOBSEEKER_PYTHON_RUNTIME') !== -1 || shellCommand.indexOf('JOBSEEKER_PYTHON_LIB') !== -1) {
           workspaceRequest = hydratePythonCommand(jobName, shellCommand);
         } else if (shellCommand.indexOf('JOBSEEKER_LINUX_RUNTIME') !== -1) {
           hydrateLinuxDockerCommand(shellCommand);
@@ -9065,6 +9357,22 @@ if (window.JobSeekerDraftCache && savedJobNames.length) {
 }
 if (! restoreJobDraftCache()) {
   ensureJobDraftsInitialized();
+}
+var requestedHopProject = <?php echo json_encode(isset($hop_selected_project) ? $hop_selected_project : ''); ?>;
+var requestedHopEntry = <?php echo json_encode(isset($hop_selected_entry) ? $hop_selected_entry : ''); ?>;
+var requestedHopEngine = <?php echo json_encode(isset($hop_selected_engine) ? $hop_selected_engine : ''); ?>;
+if (requestedHopProject && $('#hopSourceMode').length) {
+  applyLinuxEtlChoice('hop');
+  setSelectValue('#hopSourceMode', 'path');
+  $('#hopProjectPath').val('hop/projects/' + requestedHopProject);
+  if (requestedHopEntry) {
+    $('#hopEntryFile').val(requestedHopEntry);
+  }
+  if (requestedHopEngine) {
+    setSelectValue('#hopEngine', requestedHopEngine);
+  }
+  updateHopSourceControls();
+  detectHopEntryFiles();
 }
 syncEnvironmentFromGlobal(true);
 draftCacheReady = true;
