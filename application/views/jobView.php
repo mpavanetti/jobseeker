@@ -529,7 +529,7 @@
 </div>
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
 
 <script type="text/javascript">
   $(document).ready(function() {

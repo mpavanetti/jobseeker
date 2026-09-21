@@ -131,7 +131,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   @media (max-width: 767px) { .jobseeker-global-timezone .jobseeker-tz-label { display: none; } }
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=1" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=2" type="text/javascript"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=6" type="text/javascript"></script>
 <script type="text/javascript">
   window.jobseekerTime = {

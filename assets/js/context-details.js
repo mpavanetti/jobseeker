@@ -2,7 +2,7 @@
   'use strict';
 
   function escapeHtml(value) {
-    return $('<div>').text(value == null ? '' : value).html();
+    return $('<div>').text(value == null ? '' : value).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function normalizeEnvironment(value) {

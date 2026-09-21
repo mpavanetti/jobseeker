@@ -510,7 +510,7 @@ pre {
 </div>
 <!-- /.content-wrapper -->
 
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-inspect-modal.js?v=1"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-inspect-modal.js?v=2"></script>
 <script type="text/javascript">
 
   var jobListRefreshTimer = null;

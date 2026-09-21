@@ -339,7 +339,7 @@
     }
 
     function escapeHtml(value) {
-      return $('<div>').text(value == null ? '' : String(value)).html();
+      return $('<div>').text(value == null ? '' : String(value)).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function number(value) {

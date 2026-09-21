@@ -12,7 +12,7 @@
 
   function escapeHtml(value) {
     if ($) {
-      return $('<div>').text(value == null ? '' : value).html();
+      return $('<div>').text(value == null ? '' : value).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
