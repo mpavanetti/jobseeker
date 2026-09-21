@@ -25,3 +25,4 @@ config/*
 jenkins/*
 application/cache/promotion_history/
 __pycache__/
+graphify-out/
