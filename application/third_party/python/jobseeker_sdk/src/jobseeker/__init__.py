@@ -841,6 +841,13 @@ def materialize_connectors(
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code == 401:
+            raise JobSeekerError(
+                "Connector catalog request was unauthorized. Verify that "
+                "JOBSEEKER_CONNECTOR_API_TOKEN matches the JobSeeker application."
+            ) from error
+        raise JobSeekerError("Connector catalog request failed: HTTP %s" % error.code) from error
     except (urllib.error.URLError, ValueError) as error:
         raise JobSeekerError("Connector catalog request failed: %s" % error) from error
 

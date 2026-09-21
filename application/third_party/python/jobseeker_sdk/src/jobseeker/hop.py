@@ -671,6 +671,7 @@ def build_run_variables(
     for connector in connectors or []:
         prefix = _variable_name("JOBSEEKER_CONN", connector.key)
         config = dict(getattr(connector, "config", {}) or {})
+        secrets = dict(getattr(connector, "secrets", {}) or {})
         database = str(getattr(connector, "database", "") or config.get("database") or "")
         if str(getattr(connector, "type", "")).lower() == "oracle_service" and config.get("oracle_service_name"):
             database = str(config.get("oracle_service_name"))
@@ -682,9 +683,30 @@ def build_run_variables(
                 _described(prefix + "_PORT", getattr(connector, "port", ""), "Connector %s port" % connector.key),
                 _described(prefix + "_DATABASE", database, "Connector %s database" % connector.key),
                 _described(prefix + "_USER", getattr(connector, "username", ""), "Connector %s user" % connector.key),
-                _described(prefix + "_PASSWORD", getattr(connector, "password", ""), "Connector %s password" % connector.key),
+                _described(
+                    prefix + "_PASSWORD",
+                    getattr(connector, "password", ""),
+                    "Connector %s secret password" % connector.key,
+                ),
             )
         )
+        # Hop database metadata has conventional USER/PASSWORD fields, while
+        # APIs, object stores, queues, Git, and custom credentials commonly use
+        # token, API-key, SAS, connection-string, or SSH fields. Publish every
+        # resolved field under the same connector prefix without placing it in
+        # project metadata. Username/password keep their shorter compatibility
+        # aliases above.
+        for secret_name, secret_value in secrets.items():
+            normalized_name = str(secret_name).strip().lower()
+            if normalized_name in ("username", "password"):
+                continue
+            variables.append(
+                _described(
+                    _variable_name(prefix, normalized_name),
+                    secret_value,
+                    "Connector %s secret %s" % (connector.key, normalized_name),
+                )
+            )
 
     # Platform identity and resolved resources are authoritative. In
     # particular, a Context row or generic caller cannot turn a DEV build into
@@ -705,7 +727,12 @@ def write_environment_file(path: str, variables: Sequence[Mapping[str, str]]) ->
 
 
 def secret_variable_names(variables: Sequence[Mapping[str, str]]) -> List[str]:
-    return [str(variable.get("name")) for variable in variables if str(variable.get("name", "")).endswith("_PASSWORD")]
+    return [
+        str(variable.get("name"))
+        for variable in variables
+        if " secret " in str(variable.get("description", "")).lower()
+        or str(variable.get("name", "")).endswith("_PASSWORD")
+    ]
 
 
 def redact(text: str, variables: Sequence[Mapping[str, str]]) -> str:
@@ -713,7 +740,11 @@ def redact(text: str, variables: Sequence[Mapping[str, str]]) -> str:
 
     for variable in variables:
         value = str(variable.get("value") or "")
-        if len(value) >= 4 and str(variable.get("name", "")).endswith("_PASSWORD"):
+        is_secret = (
+            " secret " in str(variable.get("description", "")).lower()
+            or str(variable.get("name", "")).endswith("_PASSWORD")
+        )
+        if len(value) >= 4 and is_secret:
             text = text.replace(value, "********")
     return text
 
