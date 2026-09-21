@@ -15,16 +15,36 @@ Environment:
     JOBSEEKER_UI_URL       base URL (default http://127.0.0.1)
     JOBSEEKER_UI_EMAIL     default admin@example.com
     JOBSEEKER_UI_PASSWORD  default 123456
+    JOBSEEKER_JENKINS_URL  Jenkins URL (default http://127.0.0.1:8080)
+    JENKINS_ADMIN_ID / JENKINS_ADMIN_PASSWORD
+                           Jenkins credentials (default jobseeker/jobseeker)
+    JOBSEEKER_DB_*         MariaDB settings (defaults match docker-compose)
 """
 
 from __future__ import annotations
 
+import base64
+import http.cookiejar
+import json
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 
 BASE_URL = os.environ.get("JOBSEEKER_UI_URL", "http://127.0.0.1").rstrip("/")
 EMAIL = os.environ.get("JOBSEEKER_UI_EMAIL", "admin@example.com")
 PASSWORD = os.environ.get("JOBSEEKER_UI_PASSWORD", "123456")
+JENKINS_URL = os.environ.get("JOBSEEKER_JENKINS_URL", "http://127.0.0.1:8080").rstrip("/")
+JENKINS_AUTH = "Basic " + base64.b64encode(
+    ("%s:%s" % (os.environ.get("JENKINS_ADMIN_ID", "jobseeker"),
+                 os.environ.get("JENKINS_ADMIN_PASSWORD", "jobseeker"))).encode()
+).decode()
+FIXTURE_JOB = "hop-ui-canvas-%s" % uuid.uuid4().hex[:6]
+JENKINS_OPENER = urllib.request.build_opener(
+    urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+)
 
 PASSED: list = []
 FAILED: list = []
@@ -54,6 +74,137 @@ def stage(title: str) -> None:
     print("\n== %s ==" % title)
 
 
+def jenkins(path: str, method: str = "GET", data: bytes = None, headers: dict = None):
+    request = urllib.request.Request(JENKINS_URL + path, data=data, method=method)
+    request.add_header("Authorization", JENKINS_AUTH)
+    for name, value in (headers or {}).items():
+        request.add_header(name, value)
+    try:
+        with JENKINS_OPENER.open(request, timeout=60) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", "replace")
+    except urllib.error.URLError as error:
+        return 0, str(error)
+
+
+def jenkins_post_headers() -> dict:
+    status, body = jenkins("/crumbIssuer/api/json")
+    if status != 200:
+        return {}
+    crumb = json.loads(body)
+    return {crumb["crumbRequestField"]: crumb["crumb"]}
+
+
+def create_hop_job_fixture():
+    """Create the smallest Jenkins/registry fixture needed by Job Execution.
+
+    Job creation itself has a dedicated end-to-end suite. This fixture keeps the
+    browser suite independent of that suite's cleanup while still making the
+    canvas link and graph endpoint use the real Jenkins and MariaDB services.
+    """
+
+    config = """<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Temporary Apache Hop browser-test fixture</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>ENVIRONMENT</name>
+          <defaultValue>DEV</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders/>
+  <publishers/>
+  <buildWrappers/>
+</project>
+""".encode("utf-8")
+    headers = dict(jenkins_post_headers(), **{"Content-Type": "application/xml"})
+    status, body = jenkins(
+        "/createItem?name=" + urllib.parse.quote(FIXTURE_JOB),
+        method="POST",
+        data=config,
+        headers=headers,
+    )
+    if status not in (200, 201):
+        return False, "Jenkins returned HTTP %s: %s" % (status, body[:160])
+
+    try:
+        import mysql.connector  # type: ignore
+
+        connection = mysql.connector.connect(
+            host=os.environ.get("JOBSEEKER_DB_HOST", "127.0.0.1"),
+            port=int(os.environ.get("JOBSEEKER_DB_PORT", "3306")),
+            user=os.environ.get("JOBSEEKER_DB_USER", "mysql"),
+            password=os.environ.get("JOBSEEKER_DB_PASSWORD", "mysql"),
+            database=os.environ.get("JOBSEEKER_DB_NAME", "jobseeker"),
+        )
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                "INSERT INTO hop_project_jobs "
+                "(project_key, job_name, environment, entry_file, engine, created_at, updated_at) "
+                "VALUES (%s, %s, 'DEV', 'workflows/main.hwf', 'container', UTC_TIMESTAMP(), UTC_TIMESTAMP())",
+                ("jobseeker", FIXTURE_JOB),
+            )
+            connection.commit()
+            cursor.close()
+        finally:
+            connection.close()
+    except Exception as error:  # noqa: BLE001 - report fixture setup cleanly
+        remove_hop_job_fixture()
+        return False, "could not register the Hop fixture: %s" % error
+
+    return True, ""
+
+
+def remove_hop_job_fixture() -> None:
+    """Remove only the Jenkins and registry rows created by this test run."""
+
+    try:
+        import mysql.connector  # type: ignore
+
+        connection = mysql.connector.connect(
+            host=os.environ.get("JOBSEEKER_DB_HOST", "127.0.0.1"),
+            port=int(os.environ.get("JOBSEEKER_DB_PORT", "3306")),
+            user=os.environ.get("JOBSEEKER_DB_USER", "mysql"),
+            password=os.environ.get("JOBSEEKER_DB_PASSWORD", "mysql"),
+            database=os.environ.get("JOBSEEKER_DB_NAME", "jobseeker"),
+        )
+        try:
+            cursor = connection.cursor()
+            cursor.execute("DELETE FROM hop_project_jobs WHERE job_name = %s", (FIXTURE_JOB,))
+            connection.commit()
+            cursor.close()
+        finally:
+            connection.close()
+    except Exception:  # noqa: BLE001 - cleanup remains best effort
+        pass
+
+    try:
+        jenkins(
+            "/job/%s/doDelete" % urllib.parse.quote(FIXTURE_JOB),
+            method="POST",
+            data=b"",
+            headers=jenkins_post_headers(),
+        )
+    except Exception:  # noqa: BLE001 - cleanup remains best effort
+        pass
+
+
 def main() -> int:
     try:
         from playwright.sync_api import sync_playwright
@@ -63,28 +214,30 @@ def main() -> int:
 
     print("JobSeeker Apache Hop UI checks against %s" % BASE_URL)
     errors: list = []
+    fixture_ready, fixture_detail = create_hop_job_fixture()
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        context = browser.new_context(viewport={"width": 1440, "height": 900})
-        page = context.new_page()
-        page.on("pageerror", lambda error: errors.append("pageerror: %s" % error))
-        page.on(
-            "console",
-            lambda message: errors.append("console: %s" % message.text)
-            if message.type == "error"
-            and UNATTRIBUTED_CONSOLE not in message.text
-            and not any(token in message.text for token in IGNORED_CONSOLE)
-            else None,
-        )
-        page.on(
-            "response",
-            lambda response: errors.append("http %d: %s" % (response.status, response.url))
-            if response.status >= 400 and not any(token in response.url for token in IGNORED_REQUESTS)
-            else None,
-        )
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            page = context.new_page()
+            page.on("pageerror", lambda error: errors.append("pageerror: %s" % error))
+            page.on(
+                "console",
+                lambda message: errors.append("console: %s" % message.text)
+                if message.type == "error"
+                and UNATTRIBUTED_CONSOLE not in message.text
+                and not any(token in message.text for token in IGNORED_CONSOLE)
+                else None,
+            )
+            page.on(
+                "response",
+                lambda response: errors.append("http %d: %s" % (response.status, response.url))
+                if response.status >= 400 and not any(token in response.url for token in IGNORED_REQUESTS)
+                else None,
+            )
 
-        try:
+            check("temporary Hop UI fixture is available", fixture_ready, fixture_detail)
             stage("Sign in")
             page.goto(BASE_URL + "/", wait_until="domcontentloaded")
             page.fill("input[name='email']", EMAIL)
@@ -207,8 +360,12 @@ def main() -> int:
             page.wait_for_timeout(3000)
             check("the canvas is not a separate execution-page section",
                   page.locator("#hopCanvasBox").count() == 0)
-            if page.locator(".execution-hop-job-link").count() > 0:
-                page.locator(".execution-hop-job-link").first.click()
+            fixture_link = page.locator(
+                '.execution-hop-job-link[data-hop-job="%s"]' % FIXTURE_JOB
+            )
+            if fixture_ready:
+                fixture_link.wait_for(state="visible")
+                fixture_link.click()
                 page.locator("#hopCanvasModal").wait_for(state="visible")
                 page.wait_for_timeout(1500)
                 check("a Hop job name opens the canvas modal",
@@ -219,7 +376,7 @@ def main() -> int:
                       page.locator("#hopExecutionCanvasState").inner_text().strip() != "")
                 page.locator("#hopCanvasModal button[data-dismiss='modal']").first.click()
             else:
-                print("  SKIP  no Jenkins job runs an Apache Hop project yet")
+                check("a Hop job is available on Job Execution", False, fixture_detail)
 
             page.goto(BASE_URL + "/hop", wait_until="networkidle")
             page.wait_for_timeout(1200)
@@ -340,9 +497,10 @@ def main() -> int:
             check("no browser errors and no failed requests", not real_errors, "; ".join(real_errors[:4]))
 
             page.screenshot(path="/tmp/jobseeker-hop-jobcreation.png", full_page=False)
-        finally:
             context.close()
             browser.close()
+    finally:
+        remove_hop_job_fixture()
 
     print("\n%d passed, %d failed" % (len(PASSED), len(FAILED)))
     for name, detail in FAILED:
