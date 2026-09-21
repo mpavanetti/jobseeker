@@ -580,7 +580,7 @@
       }
 
       if ($('#executorMonitorAutoRefresh').is(':checked')) {
-        refreshTimer = window.setInterval(loadExecutorMonitor, 15000);
+        refreshTimer = window.setInterval(function() { if (! document.hidden) { loadExecutorMonitor(); } }, 15000);
       }
     }
 
