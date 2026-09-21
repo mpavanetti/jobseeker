@@ -524,7 +524,7 @@ foreach ($executions as $execution) {
   var projectsTable = null;
 
   function escapeHtml(value) {
-    return $('<div>').text(value === null || value === undefined ? '' : String(value)).html();
+    return $('<div>').text(value === null || value === undefined ? '' : String(value)).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function stateLabel(execution) {

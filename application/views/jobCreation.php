@@ -3340,7 +3340,7 @@
 </div>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/select2/dist/js/select2.min.js"></script>
   <script type="text/javascript" src="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.js"></script>
-  <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-inspect-modal.js?v=1"></script>
+  <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-inspect-modal.js?v=2"></script>
   <script type="text/javascript">
     $(document).ready(function(){
 
@@ -7815,7 +7815,7 @@
       }
 
      function escapeHtml(value) {
-      return $('<div>').text(value == null ? '' : value).html();
+      return $('<div>').text(value == null ? '' : value).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function escapeAttribute(value) {
@@ -9030,7 +9030,7 @@
       var svSeq = 0;
 
       function svEscape(value) {
-        return $('<div>').text(value == null ? '' : String(value)).html();
+        return $('<div>').text(value == null ? '' : String(value)).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
       function svPayload() {
@@ -9426,7 +9426,7 @@ $(document).on('click', '.inspectJenkinsJob', function() {
 
 </script>
 
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=1"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
 <script type="text/javascript">
 (function($) {
   var deps = window.JobSeekerJobDependencies;

@@ -99,4 +99,4 @@ window.JobSeekerVisualizationSources = <?php echo json_encode(array('endpoints' 
   'deleteDataset' => base_url().'Visualization/deleteDataset'
 ))); ?>;
 </script>
-<script src="<?php echo base_url(); ?>assets/js/visualization-datasources.js?v=2"></script>
+<script src="<?php echo base_url(); ?>assets/js/visualization-datasources.js?v=3"></script>

@@ -51,4 +51,30 @@ ok('csrf_protection is enabled', /\$config\['csrf_protection'\]\s*=\s*TRUE/.test
 ok('csrf_exclude_uris is limited to jenkins/proxy and connector-runtime',
   /csrf_exclude_uris'\]\s*=\s*array\('jenkins\/proxy',\s*'connector-runtime'\)/.test(config));
 
+// 6. Every escapeHtml()-style helper must escape quotes, not just angle brackets.
+//    jQuery's .text()/.html() round-trip leaves " and ' untouched, so a helper
+//    built on it lets an attacker-controlled value (for example the <name>
+//    inside an uploaded Apache Hop .hwf/.hpl, surfaced as execution.name) break
+//    out of an HTML attribute such as data-hop-name="..." and inject a handler.
+const escapeHelperFiles = [
+  'application/views/hop.php',
+  'application/views/jenkinsExecutors.php',
+  'application/views/contextPromotion.php',
+  'application/views/jobCreation.php',
+  'application/views/tmf.php',
+  'application/views/emailSettings.php',
+  'assets/js/visualization-datasources.js',
+  'assets/js/job-dependencies.js',
+  'assets/js/visualization-studio.js',
+  'assets/js/context-details.js',
+  'assets/js/job-inspect-modal.js',
+  'assets/js/job-environment.js',
+  'assets/js/dashboard.js'
+];
+// A `return $('<div>').text(...).html()` that is not followed by quote escaping.
+const unsafeRoundTrip = /return \$\('<div>'\)\.text\([^;]*?\)\.html\(\)\s*;/;
+for (const file of escapeHelperFiles) {
+  ok(file + ' has no quote-unsafe escape helper', !unsafeRoundTrip.test(read(file)));
+}
+
 console.log('Security hardening regression checks passed (' + checks + ' assertions).');

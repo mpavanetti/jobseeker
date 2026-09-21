@@ -91,4 +91,4 @@ window.JobSeekerInsightStudio = <?php echo json_encode(array(
   )
 )); ?>;
 </script>
-<script src="<?php echo base_url(); ?>assets/js/visualization-studio.js?v=6"></script>
+<script src="<?php echo base_url(); ?>assets/js/visualization-studio.js?v=7"></script>

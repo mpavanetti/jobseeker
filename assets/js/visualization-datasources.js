@@ -6,7 +6,7 @@
   var numericTypes = ['tinyint','smallint','mediumint','int','integer','bigint','decimal','numeric','float','double','real','smallserial','serial','bigserial','money'];
   var dateTypes = ['date','datetime','timestamp','timestamp without time zone','timestamp with time zone'];
 
-  function escapeHtml(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
+  function escapeHtml(value) { return $('<div>').text(value == null ? '' : String(value)).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   function notify(status, message) {
     var $notice = $('#vizSourceNotice').removeClass('alert-success alert-danger').addClass(status ? 'alert-success' : 'alert-danger').html('<i class="fa ' + (status ? 'fa-check-circle' : 'fa-exclamation-circle') + '"></i> ' + escapeHtml(message)).show();
     window.scrollTo({ top: Math.max(0, $notice.offset().top - 90), behavior: 'smooth' });

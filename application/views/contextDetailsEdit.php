@@ -135,4 +135,4 @@
   </section>
 </div>
 
-<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=2"></script>
+<script src="<?php echo base_url(); ?>assets/js/context-details.js?v=3"></script>
