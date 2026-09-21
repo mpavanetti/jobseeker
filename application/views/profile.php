@@ -63,8 +63,8 @@ $group = $userInfo->group;
                                         <div class="col-md-12">                                
                                             <div class="form-group">
                                                 <label for="fname">Full Name</label>
-                                                <input type="text" class="form-control" id="fname" name="fname" placeholder="<?php echo $name; ?>" value="<?php echo set_value('fname', $name); ?>" maxlength="128" />
-                                                <input type="hidden" value="<?php echo $userId; ?>" name="userId" id="userId" />    
+                                                <input type="text" class="form-control" id="fname" name="fname" placeholder="<?php echo html_escape($name); ?>" value="<?php echo set_value('fname', $name); ?>" maxlength="128" />
+                                                <input type="hidden" value="<?php echo html_escape($userId); ?>" name="userId" id="userId" />    
                                             </div>
                                         </div>
                                     </div>
@@ -72,7 +72,7 @@ $group = $userInfo->group;
                                         <div class="col-md-12">
                                             <div class="form-group">
                                                 <label for="mobile">Mobile Number</label>
-                                                <input type="text" class="form-control" id="mobile" name="mobile" placeholder="<?php echo $mobile; ?>" value="<?php echo set_value('mobile', $mobile); ?>" maxlength="10">
+                                                <input type="text" class="form-control" id="mobile" name="mobile" placeholder="<?php echo html_escape($mobile); ?>" value="<?php echo set_value('mobile', $mobile); ?>" maxlength="10">
                                             </div>
                                         </div>
                                     </div>
@@ -80,7 +80,7 @@ $group = $userInfo->group;
                                         <div class="col-md-12">
                                             <div class="form-group">
                                                 <label for="email">Email</label>
-                                                <input type="text" class="form-control" id="email" name="email" placeholder="<?php echo $email; ?>" value="<?php echo set_value('email', $email); ?>">
+                                                <input type="text" class="form-control" id="email" name="email" placeholder="<?php echo html_escape($email); ?>" value="<?php echo set_value('email', $email); ?>">
                                             </div>
                                         </div>
                                     </div>

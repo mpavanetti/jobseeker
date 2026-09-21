@@ -77,4 +77,14 @@ for (const file of escapeHelperFiles) {
   ok(file + ' has no quote-unsafe escape helper', !unsafeRoundTrip.test(read(file)));
 }
 
+// 7. profile.php renders stored user fields into HTML attributes. value="" goes
+//    through set_value() (which escapes), but placeholder="" and the hidden
+//    userId did not, so a stored name/mobile/email could break out of the
+//    attribute and inject a handler on the victim's own profile page.
+const profile = read('application/views/profile.php');
+for (const field of ['$name', '$userId', '$mobile', '$email']) {
+  ok('profile.php escapes ' + field + ' in attribute output',
+    !new RegExp('="<\\?php echo \\' + field + '; \\?>"').test(profile));
+}
+
 console.log('Security hardening regression checks passed (' + checks + ' assertions).');
