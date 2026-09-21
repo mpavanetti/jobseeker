@@ -16,8 +16,21 @@ class BaseController extends CI_Controller {
 	protected $lastLogin = '';
 	private $jenkinsOnlineEnvironmentAgentCapacityCache = array();
 	private $standaloneEnvironmentRecordEnsured = FALSE;
+	private $runtimeConfigCache = NULL;
+	private $jenkinsCrumbHeaderCache = array();
 
+	/**
+	 * The runtime config is read on every Jenkins call, and an endpoint that
+	 * talks to Jenkins once per job reads it once per job. The file only changes
+	 * when Setup writes it - which ends the request in a redirect - so one read
+	 * per request is enough. Callers that rewrite the file call
+	 * forgetRuntimeConfig() so a later read in the same request sees it.
+	 */
 	protected function getRuntimeConfig() {
+		if ($this->runtimeConfigCache !== NULL) {
+			return $this->runtimeConfigCache;
+		}
+
 		if (! is_readable(JOBSEEKER_CONFIG_PATH)) {
 			log_message('error', 'Runtime config file is not readable: ' . JOBSEEKER_CONFIG_PATH);
 			show_error('Application configuration is unavailable.', 500);
@@ -31,7 +44,66 @@ class BaseController extends CI_Controller {
 			show_error('Application configuration is invalid.', 500);
 		}
 
+		$this->runtimeConfigCache = $config;
+
 		return $config;
+	}
+
+	/** Drop the memoized runtime config after JOBSEEKER_CONFIG_PATH is rewritten. */
+	protected function forgetRuntimeConfig() {
+		$this->runtimeConfigCache = NULL;
+	}
+
+	/**
+	 * Jenkins wants a CSRF crumb on every write, and the crumb plus its session
+	 * cookie stay valid for the whole of one PHP request. Fetching them once
+	 * spares an extra Jenkins round trip per write - the difference between one
+	 * and two HTTP calls for a single save, and between N and 2N for a promotion
+	 * or a bulk delete that writes one job config at a time.
+	 *
+	 * @return string[] Header lines to append; empty when Jenkins issues no crumb.
+	 */
+	private function jenkinsCrumbHeaders($jenkinsUrl, $authorizationHeader) {
+		$cacheKey = $jenkinsUrl."\0".$authorizationHeader;
+
+		if (isset($this->jenkinsCrumbHeaderCache[$cacheKey])) {
+			return $this->jenkinsCrumbHeaderCache[$cacheKey];
+		}
+
+		$crumbContext = stream_context_create(array(
+			'http' => array(
+				'method' => 'GET',
+				'header' => $authorizationHeader,
+				'ignore_errors' => TRUE,
+				'timeout' => 10
+			)
+		));
+		$crumbResponse = file_get_contents(rtrim($jenkinsUrl, '/') . '/crumbIssuer/api/json', FALSE, $crumbContext);
+		$crumbHeaders = isset($http_response_header) ? $http_response_header : array();
+		$crumb = json_decode($crumbResponse);
+		$headers = array();
+
+		if (is_object($crumb) && ! empty($crumb->crumbRequestField) && ! empty($crumb->crumb)) {
+			$headers[] = $crumb->crumbRequestField . ': ' . $crumb->crumb;
+			$cookies = array();
+
+			foreach ($crumbHeaders as $header) {
+				if (stripos($header, 'Set-Cookie:') === 0) {
+					$cookie = explode(';', trim(substr($header, strlen('Set-Cookie:'))), 2);
+					$cookies[] = $cookie[0];
+				}
+			}
+
+			if (! empty($cookies)) {
+				$headers[] = 'Cookie: ' . implode('; ', $cookies);
+			}
+
+			// Only a crumb that Jenkins actually issued is worth reusing; a failed
+			// lookup is retried on the next write rather than cached as "none".
+			$this->jenkinsCrumbHeaderCache[$cacheKey] = $headers;
+		}
+
+		return $headers;
 	}
 
 	/**
@@ -152,32 +224,8 @@ class BaseController extends CI_Controller {
 		$method = strtoupper($method);
 
 		if ($method !== 'GET' && $method !== 'HEAD') {
-			$crumbContext = stream_context_create(array(
-				'http' => array(
-					'method' => 'GET',
-					'header' => $authorizationHeader,
-					'ignore_errors' => TRUE,
-					'timeout' => 10
-				)
-			));
-			$crumbResponse = file_get_contents(rtrim($jenkinsUrl, '/') . '/crumbIssuer/api/json', FALSE, $crumbContext);
-			$crumbHeaders = isset($http_response_header) ? $http_response_header : array();
-			$crumb = json_decode($crumbResponse);
-
-			if (is_object($crumb) && ! empty($crumb->crumbRequestField) && ! empty($crumb->crumb)) {
-				$headers[] = $crumb->crumbRequestField . ': ' . $crumb->crumb;
-				$cookies = array();
-
-				foreach ($crumbHeaders as $header) {
-					if (stripos($header, 'Set-Cookie:') === 0) {
-						$cookie = explode(';', trim(substr($header, strlen('Set-Cookie:'))), 2);
-						$cookies[] = $cookie[0];
-					}
-				}
-
-				if (! empty($cookies)) {
-					$headers[] = 'Cookie: ' . implode('; ', $cookies);
-				}
+			foreach ($this->jenkinsCrumbHeaders($jenkinsUrl, $authorizationHeader) as $crumbHeader) {
+				$headers[] = $crumbHeader;
 			}
 		}
 

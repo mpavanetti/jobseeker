@@ -150,6 +150,7 @@ class Setup extends BaseController
                  redirect('setup/jenkins');
             } else {
 
+                $this->forgetRuntimeConfig();
                 if (file_put_contents(JOBSEEKER_CONFIG_PATH, json_encode($file, JSON_PRETTY_PRINT), LOCK_EX) === FALSE) {
                     $this->session->set_flashdata('error', '<b>Config File Error</b>, Unable to write the Jenkins configuration file.');
                     redirect('setup/jenkins');
@@ -158,7 +159,8 @@ class Setup extends BaseController
                  redirect('Setup/jenkins');  
             }
         } else {
-            if (file_put_contents(JOBSEEKER_CONFIG_PATH, json_encode($file, JSON_PRETTY_PRINT), LOCK_EX) === FALSE) {
+            $this->forgetRuntimeConfig();
+                if (file_put_contents(JOBSEEKER_CONFIG_PATH, json_encode($file, JSON_PRETTY_PRINT), LOCK_EX) === FALSE) {
                 $this->session->set_flashdata('error', '<b>Config File Error</b>, Unable to write the Jenkins configuration file.');
                 redirect('setup/jenkins');
             }
