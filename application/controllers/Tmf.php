@@ -181,7 +181,7 @@ class Tmf extends BaseController
         $errorList["data"] = $this->model->getError($instanceId, $this->selectedEnvironmentFilter());
 
 
-          echo json_encode($errorList, JSON_PRETTY_PRINT);
+          echo json_encode($errorList);
     }
 
      function listId($id)
@@ -190,7 +190,7 @@ class Tmf extends BaseController
         $list["data"] = $this->model->listId($id, $this->selectedEnvironmentFilter());
 
 
-          echo json_encode($list, JSON_PRETTY_PRINT);
+          echo json_encode($list);
     }
 
 

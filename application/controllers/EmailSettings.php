@@ -266,7 +266,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->model->fetchAll($colunm);
-         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+         echo json_encode($listJobsJson);
 
      }
 
@@ -282,7 +282,7 @@ class EmailSettings extends BaseController
              $listJobsJson["data"][0]->preview_subject = $this->renderTemplatePreview($template['subject'], $template);
              $listJobsJson["data"][0]->preview_msg = $this->renderTemplatePreview($template['msg'], $template);
          }
-         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+         echo json_encode($listJobsJson);
 
      }
 
@@ -293,7 +293,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson = $this->model->fetchSMTP();
-         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+         echo json_encode($listJobsJson);
 
      }
 
@@ -304,7 +304,7 @@ class EmailSettings extends BaseController
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson = $this->model->fetchXsmtp($id);
-         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+         echo json_encode($listJobsJson);
 
      }
 
