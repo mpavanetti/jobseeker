@@ -1686,11 +1686,20 @@ pre {
     clearJobListRefresh();
 
     jobListRefreshTimer = setInterval(function(){
-      if($('#refresh').is(":checked")){
-        reloadJobTables();
-      } else {
+      if(! $('#refresh').is(":checked")){
         clearJobListRefresh();
+        return;
       }
+
+      // A hidden tab cannot show the refresh, so skip the round trip rather
+      // than keep polling Jenkins from a window nobody is looking at. The tick
+      // stays scheduled, so the table refreshes as soon as the tab is visible
+      // again. Same rule the Docker monitor already follows.
+      if(document.hidden){
+        return;
+      }
+
+      reloadJobTables();
     }, jobListRefreshIntervalMs);
   }
 
