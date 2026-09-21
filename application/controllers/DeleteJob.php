@@ -290,7 +290,7 @@ class DeleteJob extends BaseController
         $this->output
             ->set_status_header($status)
             ->set_content_type('application/json')
-            ->set_output(json_encode($payload, JSON_PRETTY_PRINT));
+            ->set_output(json_encode($payload));
     }
 
     private function deleteRepositoryPath($relativeRoot, $jobName)

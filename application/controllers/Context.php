@@ -94,7 +94,7 @@ public function fetchEnvironments() {
          $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
          $listJobsJson["data"] = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironments());
-         echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+         echo json_encode($listJobsJson);
 
      }
 
@@ -235,7 +235,7 @@ public function previewJobPromotion() {
     return;
   }
 
-  echo json_encode($this->buildJobPromotionResult($input, TRUE), JSON_PRETTY_PRINT);
+  echo json_encode($this->buildJobPromotionResult($input, TRUE));
 }
 
 public function promoteJob() {

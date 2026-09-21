@@ -37,7 +37,7 @@ class JobsTable extends BaseController
         $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
 
         $listJobsJson["data"] = $this->model->listJobs();
-        echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+        echo json_encode($listJobsJson);
 
      
     }
@@ -49,7 +49,7 @@ class JobsTable extends BaseController
         $this->global['pageTitle'] = 'Talend Job Seeker : Json Parse';
 
         $listJobsJson["data"] = $this->model->listJobsName();
-        echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+        echo json_encode($listJobsJson);
 
      
     }

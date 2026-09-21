@@ -33,7 +33,7 @@ class Upload extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Json Parse';
 
         $listJobsJson = $this->model->listJobs();
-        echo json_encode($listJobsJson, JSON_PRETTY_PRINT);
+        echo json_encode($listJobsJson);
 
      
     }
@@ -45,7 +45,7 @@ class Upload extends BaseController
 
       $listComponent = $this->model->listComponents($jobname);
 
-      echo json_encode($listComponent, JSON_PRETTY_PRINT);
+      echo json_encode($listComponent);
 
     }
 
@@ -56,7 +56,7 @@ class Upload extends BaseController
 
       $listComponentType = $this->model->listComponentType($jobname, $component);
 
-      echo json_encode($listComponentType, JSON_PRETTY_PRINT);
+      echo json_encode($listComponentType);
 
     }
 
@@ -67,7 +67,7 @@ class Upload extends BaseController
 
       $listComponentPath = $this->model->listComponentPath($jobname, $component, $type);
 
-      echo json_encode($listComponentPath, JSON_PRETTY_PRINT);
+      echo json_encode($listComponentPath);
 
     }
 
@@ -79,7 +79,7 @@ class Upload extends BaseController
 
       $listAll = $this->model->listAll($jobname, $component, $type);
 
-      echo json_encode($listAll, JSON_PRETTY_PRINT);
+      echo json_encode($listAll);
 
       
     }
@@ -92,7 +92,7 @@ class Upload extends BaseController
 
       $Path = $this->model->Path($jobname, $component, $type);
 
-      echo json_encode($Path, JSON_PRETTY_PRINT);
+      echo json_encode($Path);
 
       
     }
@@ -104,7 +104,7 @@ class Upload extends BaseController
 
       $countJobs = $this->model->countJobs();
 
-      echo json_encode($countJobs, JSON_PRETTY_PRINT);
+      echo json_encode($countJobs);
 
     }
 
@@ -115,7 +115,7 @@ class Upload extends BaseController
 
       $countComponents = $this->model->countComponents();
 
-      echo json_encode($countComponents, JSON_PRETTY_PRINT);
+      echo json_encode($countComponents);
 
     }
 
@@ -126,7 +126,7 @@ class Upload extends BaseController
 
       $countComponentsTypes = $this->model->countComponentsTypes();
 
-      echo json_encode($countComponentsTypes, JSON_PRETTY_PRINT);
+      echo json_encode($countComponentsTypes);
 
     }
 
