@@ -258,11 +258,10 @@ def main() -> int:
     repository_root = os.path.abspath(os.environ.get("JOBSEEKER_HOP_E2E_ROOT", REPOSITORY_DEFAULT))
     os.makedirs(os.path.join(repository_root, "data-assets"), exist_ok=True)
     os.environ.setdefault("JOBSEEKER_DB_HOST", "127.0.0.1")
-    os.environ.setdefault("JOBSEEKER_CONNECTOR_API_URL", "http://127.0.0.1/connector-runtime")
-    os.environ.setdefault("JOBSEEKER_CONNECTOR_API_TOKEN", "jobseeker-local-connector-token")
     os.environ.setdefault("JOBSEEKER_HOP_SERVER_URL", "http://127.0.0.1:8181")
     os.environ["JOBSEEKER_REPOSITORY_ROOT"] = repository_root
     adopt_stack_connector_settings()
+    os.environ.setdefault("JOBSEEKER_CONNECTOR_API_TOKEN", "jobseeker-local-connector-token")
     configure_local_stack_network()
     suffix = uuid.uuid4().hex[:6]
 

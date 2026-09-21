@@ -39,6 +39,8 @@ const jobExecutionView = read('application/views/jobExecution.php');
 const jobExecutionController = read('application/controllers/JobExecution.php');
 const schema = read('db_setup.sql');
 const baseController = read('application/libraries/BaseController.php');
+const hopE2e = read('scripts/test-hop-e2e.py');
+const hopUiE2e = read('scripts/test-hop-ui-e2e.py');
 
 // --- Upstream Apache Hop container contract -------------------------------
 // Names taken from docker/resources/load-and-execute.sh in apache/hop 2.19.
@@ -224,6 +226,16 @@ assert((hopView.match(/pageLength:\s*25/g) || []).length >= 2,
   'Hop Server executions and projects must both paginate with DataTables');
 assert(hopView.includes("$(function()") && hopView.includes("$('#hopExecutionsTable').DataTable"),
   'Hop DataTables must initialize after the shared footer plugin is loaded');
+const discoverConnectorToken = hopE2e.lastIndexOf('adopt_stack_connector_settings()');
+const installDefaultConnectorToken = hopE2e.indexOf(
+  'os.environ.setdefault("JOBSEEKER_CONNECTOR_API_TOKEN", "jobseeker-local-connector-token")');
+assert(discoverConnectorToken !== -1 && installDefaultConnectorToken !== -1 &&
+  discoverConnectorToken < installDefaultConnectorToken,
+  'the live test must discover a customized stack token before installing its fallback');
+assert(hopUiE2e.includes('create_hop_job_fixture()') && hopUiE2e.includes('remove_hop_job_fixture()'),
+  'the UI test must own and clean up the Hop job needed to exercise Job Execution');
+assert(!hopUiE2e.includes('SKIP  no Jenkins job runs an Apache Hop project yet'),
+  'the Job Execution canvas scenario must not depend on leftover Jenkins jobs');
 
 // The Apache Hop GUI leaves a new file's internal name as "New workflow", so
 // every run of it would otherwise pile up under one meaningless label.
