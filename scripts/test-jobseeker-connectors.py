@@ -505,6 +505,21 @@ def main():
             stable_marker = os.path.join(stable_directory, "last-good-catalog")
             with open(stable_marker, "w", encoding="utf-8") as stream:
                 stream.write("preserved")
+            try:
+                materialize_connectors(
+                    directory=stable_directory,
+                    environment="DEV",
+                    job="load-orders",
+                    api_url=endpoint,
+                    api_token="wrong-token",
+                )
+                raise AssertionError("an invalid catalog token should fail materialization")
+            except JobSeekerError as error:
+                assert "unauthorized" in str(error).lower()
+                assert "JOBSEEKER_CONNECTOR_API_TOKEN" in str(error)
+                assert "wrong-token" not in str(error)
+            assert os.path.isfile(stable_marker)
+
             os.environ.pop("JOBSEEKER_TEST_MISSING_SECRET", None)
             try:
                 materialize_connectors(

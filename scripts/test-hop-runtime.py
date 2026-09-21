@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from types import SimpleNamespace
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -78,6 +79,63 @@ with tempfile.TemporaryDirectory(prefix="jobseeker-hop-test-") as root:
         assert "cannot replace JobSeeker runtime variables" in str(error)
     else:
         raise AssertionError("reserved JobSeeker parameters must be rejected")
+
+    connector_types = (
+        "mysql", "pgsql", "sqlserver", "oracle_service", "oracle_sid",
+        "mongodb", "redis", "snowflake", "databricks", "kafka", "rabbitmq",
+        "elasticsearch", "sftp", "http_api", "aws_s3", "azure_blob",
+        "azure_data_lake", "gcs", "git_repository", "generic_secret",
+    )
+    connectors = [
+        SimpleNamespace(
+            key="matrix-%s" % connector_type.replace("_", "-"),
+            type=connector_type,
+            host="connector.example.test",
+            port=443,
+            database="resource",
+            username="matrix-user",
+            password="matrix-password-%s" % connector_type,
+            secrets={
+                "username": "matrix-user",
+                "password": "matrix-password-%s" % connector_type,
+                "token": "matrix-token-%s" % connector_type,
+                "api_key": "matrix-api-key-%s" % connector_type,
+            },
+            config={
+                "oracle_service_name": "FREEPDB1",
+                "oracle_sid": "XE",
+            },
+        )
+        for connector_type in connector_types
+    ]
+    connector_variables = hop.build_run_variables("DEV", "connector-matrix", connectors=connectors)
+    connector_values = {variable["name"]: variable["value"] for variable in connector_variables}
+    for connector in connectors:
+        prefix = hop._variable_name("JOBSEEKER_CONN", connector.key)
+        assert connector_values[prefix + "_USER"] == "matrix-user"
+        assert connector_values[prefix + "_PASSWORD"] == connector.password
+        assert connector_values[prefix + "_TOKEN"] == connector.secrets["token"]
+        assert connector_values[prefix + "_API_KEY"] == connector.secrets["api_key"]
+
+    relational_types = set(hop.RELATIONAL_TYPES).intersection(connector_types)
+    metadata = [hop.rdbms_metadata(connector) for connector in connectors]
+    assert sum(document is not None for document in metadata) == len(relational_types)
+    assert {
+        connector.type for connector, document in zip(connectors, metadata) if document is not None
+    } == relational_types
+    serialized_metadata = str(metadata)
+    assert "matrix-password" not in serialized_metadata and "matrix-token" not in serialized_metadata
+
+    secret_names = set(hop.secret_variable_names(connector_variables))
+    for connector in connectors:
+        prefix = hop._variable_name("JOBSEEKER_CONN", connector.key)
+        assert prefix + "_PASSWORD" in secret_names
+        assert prefix + "_TOKEN" in secret_names
+        assert prefix + "_API_KEY" in secret_names
+    secret_text = " ".join(
+        [connectors[0].password, connectors[0].secrets["token"], connectors[0].secrets["api_key"]]
+    )
+    assert hop.redact(secret_text, connector_variables) == "******** ******** ********"
 
 
 clean_counters = hop.parse_hop_counters(

@@ -19,8 +19,77 @@ sys.dont_write_bytecode = True
 BASE_URL = os.environ.get("JOBSEEKER_E2E_URL", "http://localhost").rstrip("/")
 ADMIN_EMAIL = os.environ.get("JOBSEEKER_E2E_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.environ.get("JOBSEEKER_E2E_PASSWORD", "123456")
-API_TOKEN = os.environ.get("JOBSEEKER_CONNECTOR_API_TOKEN", "jobseeker-local-connector-token")
+API_TOKEN = os.environ.get("JOBSEEKER_CONNECTOR_API_TOKEN", "")
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+CONNECTOR_TYPES = (
+    "mysql",
+    "pgsql",
+    "sqlserver",
+    "oracle_service",
+    "oracle_sid",
+    "mongodb",
+    "redis",
+    "snowflake",
+    "databricks",
+    "kafka",
+    "rabbitmq",
+    "elasticsearch",
+    "sftp",
+    "http_api",
+    "aws_s3",
+    "azure_blob",
+    "azure_data_lake",
+    "gcs",
+    "git_repository",
+    "generic_secret",
+)
+NO_ENDPOINT_TYPES = {"aws_s3", "azure_blob", "azure_data_lake", "gcs", "generic_secret"}
+
+
+def compose_container(service):
+    """Return a running Compose container even when the project was renamed."""
+
+    for command in (
+        ["docker", "compose", "ps", "-q", service],
+        ["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=" + service],
+    ):
+        try:
+            found = subprocess.check_output(
+                command,
+                cwd=REPOSITORY_ROOT,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        if found:
+            return found.splitlines()[0].strip()
+    return ""
+
+
+def adopt_stack_connector_token():
+    """Use the token configured on the PHP container serving the catalog.
+
+    A customized deployment must not make this E2E suite fail with the shipped
+    development token. An explicit environment value still takes precedence so
+    the same script remains usable against a remote deployment.
+    """
+
+    global API_TOKEN
+    if API_TOKEN:
+        return
+    container = compose_container("php")
+    if container:
+        try:
+            API_TOKEN = subprocess.check_output(
+                ["docker", "exec", container, "printenv", "JOBSEEKER_CONNECTOR_API_TOKEN"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    if not API_TOKEN:
+        API_TOKEN = "jobseeker-local-connector-token"
 
 
 class Browser:
@@ -119,7 +188,8 @@ def connector_id(browser, key):
     return matches[0]
 
 
-def runtime_catalog(browser, environment, job_name, expected=(200,), token=API_TOKEN):
+def runtime_catalog(browser, environment, job_name, expected=(200,), token=None):
+    token = API_TOKEN if token is None else token
     headers = {"Authorization": "Bearer " + token, "Content-Type": "application/x-www-form-urlencoded"}
     status, body, response_headers = browser.request(
         "/connector-runtime",
@@ -208,6 +278,94 @@ def test_jenkins_worker_materialization(run_id, key, job_name):
         subprocess.run(compose + ["rm", "-rf", runtime_directory], cwd=REPOSITORY_ROOT, check=True)
 
 
+def test_all_connector_types_with_python_and_shell(browser, prefix, job_name):
+    """Round-trip every UI connector type through the API, SDK, and shell helper."""
+
+    keys = {}
+    for connector_type in CONNECTOR_TYPES:
+        key = "%s-type-%s" % (prefix, connector_type.replace("_", "-"))
+        keys[connector_type] = key
+        endpoint_required = connector_type not in NO_ENDPOINT_TYPES
+        overrides = {
+            "db_type": connector_type,
+            "address": "mariadb" if endpoint_required else "",
+            "port": "3306" if endpoint_required else "0",
+            "schema": "jobseeker",
+            "description": "E2E connector type %s" % connector_type,
+            "local_secret_fields": "marker=marker-%s" % connector_type,
+        }
+        if connector_type == "oracle_service":
+            overrides["oracle_ServiceName"] = "FREEPDB1"
+        elif connector_type == "oracle_sid":
+            overrides["oracle_sid"] = "XE"
+        elif connector_type == "git_repository":
+            overrides["schema"] = "https://example.invalid/jobseeker/connectors.git"
+        save_connector(browser, "DEV", connector_fields(key, job_name, **overrides))
+
+        connector_id_value = connector_id(browser, key)
+        status, payload = test_connector(browser, connector_id_value, "DEV")
+        assert status == 200 and payload["ok"] is True, (connector_type, payload)
+        expected_network = "skipped" if connector_type in NO_ENDPOINT_TYPES else "reachable"
+        assert payload["network"] == expected_network, (connector_type, payload)
+
+    _, payload, _ = runtime_catalog(browser, "DEV", job_name)
+    runtime_connectors = connector_map(payload)
+    for connector_type, key in keys.items():
+        assert runtime_connectors[key]["type"] == connector_type
+        assert runtime_connectors[key]["secret"]["values"]["marker"] == "marker-%s" % connector_type
+
+    sdk = load_sdk()
+    with tempfile.TemporaryDirectory(prefix="jobseeker-connector-types-") as runtime_directory:
+        manifest_path = sdk.materialize_connectors(
+            directory=runtime_directory,
+            environment="DEV",
+            job=job_name,
+            api_url=BASE_URL + "/connector-runtime",
+            api_token=API_TOKEN,
+        )
+        catalog = sdk.ConnectorCatalog(runtime_directory)
+        helper = os.path.join(runtime_directory, "jobseeker-connector")
+        helper_environment = dict(os.environ, JOBSEEKER_CONNECTORS_DIR=runtime_directory)
+        listed = set(subprocess.check_output([helper, "list"], text=True, env=helper_environment).splitlines())
+        assert set(keys.values()).issubset(listed)
+
+        for connector_type, key in keys.items():
+            connector = catalog.resolve(key)
+            assert connector.type == connector_type
+            assert connector.value("marker", required=True) == "marker-%s" % connector_type
+            assert subprocess.check_output(
+                [helper, "get", key, "marker"], text=True, env=helper_environment
+            ) == "marker-%s" % connector_type
+            subprocess.run(
+                [
+                    helper,
+                    "exec",
+                    key,
+                    "--",
+                    "sh",
+                    "-c",
+                    'test "$JOBSEEKER_CONNECTOR_KEY" = "$EXPECTED_KEY" && '
+                    'test "$JOBSEEKER_CONNECTOR_MARKER" = "$EXPECTED_MARKER"',
+                ],
+                check=True,
+                env=dict(
+                    helper_environment,
+                    EXPECTED_KEY=key,
+                    EXPECTED_MARKER="marker-%s" % connector_type,
+                ),
+            )
+
+        materialized_bytes = b"\n".join(
+            path.read_bytes() for path in Path(runtime_directory).rglob("*") if path.is_file()
+        )
+        assert API_TOKEN.encode("utf-8") not in materialized_bytes
+        manifest_text = Path(manifest_path).read_text(encoding="utf-8")
+        assert "e2e-password" not in manifest_text
+        assert "marker-" not in manifest_text
+
+    return keys
+
+
 def remove_connector_access_logs(key_prefix):
     query = "DELETE FROM connector_access_log WHERE connector_key LIKE '%s%%'" % key_prefix
     subprocess.run(
@@ -230,12 +388,14 @@ def remove_connector_access_logs(key_prefix):
 
 
 def main():
+    adopt_stack_connector_token()
     browser = Browser()
     run_id = uuid.uuid4().hex[:10]
     prefix = "e2e-" + run_id
     job_name = prefix + "-job"
     cloud_job = prefix + "-cloud"
     worker_job = prefix + "-worker"
+    type_matrix_job = prefix + "-type-matrix"
     local_key = prefix + "-local"
     environment_key = prefix + "-environment"
     none_key = prefix + "-none"
@@ -341,6 +501,13 @@ def main():
             "DEV",
             connector_fields(worker_key, worker_job, login="worker-user", password="worker-password"),
         )
+
+        matrix_keys = test_all_connector_types_with_python_and_shell(
+            browser,
+            prefix,
+            type_matrix_job,
+        )
+        assert set(matrix_keys) == set(CONNECTOR_TYPES)
 
         save_connector(
             browser,
