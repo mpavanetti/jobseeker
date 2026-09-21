@@ -374,7 +374,6 @@ class Visualization extends BaseController
             {
             
             $this->global['pageTitle'] = 'Job Seeker : Visualization Config';
-            $user = $this->global['name'];
 
             $data["list"] = $this->model->list();
             $data["reports"] = $this->model->listReports();
