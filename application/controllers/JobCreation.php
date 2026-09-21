@@ -3301,26 +3301,6 @@ class JobCreation extends BaseController
           return;
         }
 
-        // Opening the editor also synchronizes the browser draft into the
-        // workspace. Existing jobs require a matching signature; new drafts
-        // may initialize a workspace prepared earlier in the same draft flow.
-        $workspaceConflict = $this->inlinePythonWorkspaceConflict(
-          $cleanJobName['name'],
-          $entryPoint,
-          $this->input->post('pythonWorkspaceSignature'),
-          $this->jenkinsJobExists($cleanJobName['name'])
-        );
-        if ($workspaceConflict !== FALSE) {
-          $workspaceConflict['ok'] = TRUE;
-          $this->jsonJobCreationResponse(array(
-            'ok' => FALSE,
-            'conflict' => TRUE,
-            'message' => 'The inline Python workspace changed after this form was loaded. JobSeeker refreshed the form from disk; review it and click Open in VS Code again.',
-            'currentSnapshot' => $workspaceConflict
-          ), 409);
-          return;
-        }
-
         if (trim($pyprojectText) === '') {
           $pyprojectText = $this->defaultInlinePythonPyproject($cleanJobName['name'], $requirementsText, $this->pythonVersionFromDockerImage($pythonDockerImage));
         }
@@ -3333,6 +3313,44 @@ class JobCreation extends BaseController
         // pyproject.toml. Write supplied content, but treat an empty hidden
         // field as "leave the live workspace alone" instead of deletion.
         $requirementsTextForOpen = trim($requirementsText) === '' ? NULL : $requirementsText;
+
+        // Opening the editor also synchronizes the browser draft into the
+        // workspace. Existing jobs require a matching signature; new drafts
+        // may initialize a workspace prepared earlier in the same draft flow.
+        $workspaceConflict = $this->inlinePythonWorkspaceConflict(
+          $cleanJobName['name'],
+          $entryPoint,
+          $this->input->post('pythonWorkspaceSignature'),
+          $this->jenkinsJobExists($cleanJobName['name'])
+        );
+        // A form that carries no signature - a new tab, a cleared draft cache, a
+        // sample loaded under an existing job's name - is not evidence that the
+        // workspace moved. Compare what this request would actually write with
+        // what is on disk, exactly as the save path does, and only report a
+        // conflict when the two genuinely differ. Without this, "Open in VS Code"
+        // failed with a spurious 409 on every freshly loaded form for a job that
+        // already exists in Jenkins.
+        if ($workspaceConflict !== FALSE && $this->submittedInlineWorkspaceMatchesSnapshot(
+          $workspaceConflict,
+          $sourceCode,
+          $requirementsTextForOpen,
+          $pyprojectText,
+          $dockerfileText,
+          $inlineFiles
+        )) {
+          $workspaceConflict = FALSE;
+        }
+        if ($workspaceConflict !== FALSE) {
+          $workspaceConflict['ok'] = TRUE;
+          $this->jsonJobCreationResponse(array(
+            'ok' => FALSE,
+            'conflict' => TRUE,
+            'message' => 'The inline Python workspace changed after this form was loaded. JobSeeker refreshed the form from disk; review it and click Open in VS Code again.',
+            'currentSnapshot' => $workspaceConflict
+          ), 409);
+          return;
+        }
+
         $pythonExecution = $this->resolveInlinePythonExecution($this->inlinePythonRepositoryRoot(), $cleanJobName['name'], $entryPoint, $sourceCode, $requirementsTextForOpen, $dockerfileText, $inlineFiles, $pyprojectText);
         if ($pythonExecution === FALSE) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'JobSeeker could not prepare the inline Python workspace.'), 400);
