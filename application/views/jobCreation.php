@@ -7102,7 +7102,15 @@
         return String(value == null ? '' : value).replace(/\r\n?/g, '\n');
       }
 
-      function canonicalInlineWorkspaceFiles(payload) {
+      // The scaffolded smoke test JobSeeker writes into a new workspace is not a
+      // user edit, so a draft that never carried it must not read as "the
+      // workspace changed". The server's matcher forgives exactly this pair, and
+      // the two have to agree or a batch save is refused for a workspace the
+      // server would have accepted.
+      var DEFAULT_INLINE_SMOKE_TEST_PATH = 'tests/test_smoke.py';
+      var DEFAULT_INLINE_SMOKE_TEST = 'def test_python_environment():\n    assert True\n';
+
+      function parseInlineWorkspaceFiles(payload) {
         var files = [];
         var directories = [];
 
@@ -7123,7 +7131,43 @@
         files.sort(function(left, right) { return left.path.localeCompare(right.path); });
         directories.sort();
 
-        return JSON.stringify({files: files, directories: directories});
+        return {files: files, directories: directories};
+      }
+
+      function canonicalInlineWorkspaceFiles(payload) {
+        var parsed = parseInlineWorkspaceFiles(payload);
+        return parsed === null ? null : JSON.stringify(parsed);
+      }
+
+      function inlineWorkspaceFilesMatch(draftPayload, snapshotPayload) {
+        var draftFiles = parseInlineWorkspaceFiles(draftPayload);
+        var snapshotFiles = parseInlineWorkspaceFiles(snapshotPayload);
+
+        if (draftFiles === null || snapshotFiles === null) {
+          return canonicalInlineWorkspaceFiles(draftPayload) === canonicalInlineWorkspaceFiles(snapshotPayload);
+        }
+
+        var draftHasSmokeTest = false;
+        $.each(draftFiles.files, function(index, file) {
+          if (file.path === DEFAULT_INLINE_SMOKE_TEST_PATH) {
+            draftHasSmokeTest = true;
+            return false;
+          }
+        });
+
+        if (! draftHasSmokeTest) {
+          snapshotFiles.files = $.grep(snapshotFiles.files, function(file) {
+            return ! (file.path === DEFAULT_INLINE_SMOKE_TEST_PATH && file.content === DEFAULT_INLINE_SMOKE_TEST);
+          });
+
+          if ($.inArray('tests', draftFiles.directories) === -1) {
+            snapshotFiles.directories = $.grep(snapshotFiles.directories, function(directory) {
+              return directory !== 'tests';
+            });
+          }
+        }
+
+        return JSON.stringify(draftFiles) === JSON.stringify(snapshotFiles);
       }
 
       function draftMatchesWorkspaceSnapshot(draft, snapshot) {
@@ -7131,7 +7175,7 @@
           return false;
         }
 
-        if (canonicalInlineWorkspaceFiles(draft.pythonInlineFilesJson) !== canonicalInlineWorkspaceFiles(snapshot.files)) {
+        if (! inlineWorkspaceFilesMatch(draft.pythonInlineFilesJson, snapshot.files)) {
           return false;
         }
 
