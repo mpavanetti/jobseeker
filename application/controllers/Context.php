@@ -54,7 +54,6 @@ class Context extends BaseController
     {
 
       $this->global['pageTitle'] = 'Job Seeker : Project Config';
-      $user = $this->global['name'];
 
       $data["list"] = $this->model->listProjects();
       $data["projects"] = $this->model->listAvailableProjects();
@@ -75,7 +74,6 @@ class Context extends BaseController
   {
 
     $this->global['pageTitle'] = 'Job Seeker : Environment Config';
-    $user = $this->global['name'];
 
 	$environmentRows = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironments());
     $data["list"] = $environmentRows;

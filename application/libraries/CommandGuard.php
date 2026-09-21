@@ -250,8 +250,11 @@ class CommandGuard
 
         $operands = array();
         $recursive = FALSE;
-        $force = FALSE;
 
+        // Only recursion decides whether a delete is reportable here: a
+        // non-recursive "rm" removes named files, which jobs legitimately do,
+        // and flagging every "-f" would bury the real findings. So "-f" is
+        // consumed as a flag but deliberately not tracked.
         for ($i = $offset + 1; $i < count($tokens); $i++) {
             $token = $tokens[$i];
 
@@ -263,9 +266,6 @@ class CommandGuard
                 if (stripos($token, '--recursive') === 0) {
                     $recursive = TRUE;
                 }
-                if (stripos($token, '--force') === 0) {
-                    $force = TRUE;
-                }
                 if (stripos($token, '--no-preserve-root') === 0) {
                     $recursive = TRUE;
                 }
@@ -275,9 +275,6 @@ class CommandGuard
             if (strlen($token) > 1 && $token[0] === '-') {
                 if (strpbrk($token, 'rR') !== FALSE) {
                     $recursive = TRUE;
-                }
-                if (strpbrk($token, 'f') !== FALSE) {
-                    $force = TRUE;
                 }
                 continue;
             }

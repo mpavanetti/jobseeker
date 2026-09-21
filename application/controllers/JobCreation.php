@@ -4869,12 +4869,4 @@ class JobCreation extends BaseController
         }
     }
 
-    public function readXML() {
-
-        header("Content-Type: text/xml");
-        $content = file_get_contents("xml/config.xml");
-        // // echo $content;
-
-    }
-
 }
