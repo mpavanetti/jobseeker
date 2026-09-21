@@ -522,7 +522,8 @@ CREATE TABLE IF NOT EXISTS `tbl_last_login` (
   `agentString` varchar(1024) NOT NULL,
   `platform` varchar(128) NOT NULL,
   `createdDtm` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `last_login_user` (`userId`,`createdDtm`)
 ) ENGINE=InnoDB AUTO_INCREMENT=361 DEFAULT CHARSET=utf8;
 
 -- Copiando dados para a tabela jobseeker.tbl_last_login: ~0 rows (aproximadamente)
@@ -555,7 +556,9 @@ CREATE TABLE IF NOT EXISTS `tbl_reset_password` (
   `createdDtm` datetime NOT NULL,
   `updatedBy` bigint(20) DEFAULT NULL,
   `updatedDtm` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `reset_password_activation` (`activation_id`,`isDeleted`,`createdDtm`),
+  KEY `reset_password_email` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=latin1;
 
 -- Copiando dados para a tabela jobseeker.tbl_reset_password: ~0 rows (aproximadamente)
@@ -591,7 +594,8 @@ CREATE TABLE IF NOT EXISTS `tbl_users` (
   `createdDtm` datetime NOT NULL,
   `updatedBy` int(11) DEFAULT NULL,
   `updatedDtm` datetime DEFAULT NULL,
-  PRIMARY KEY (`userId`)
+  PRIMARY KEY (`userId`),
+  KEY `users_email_active` (`email`,`isDeleted`)
 ) ENGINE=MyISAM AUTO_INCREMENT=19 DEFAULT CHARSET=utf8;
 
 -- Copiando dados para a tabela jobseeker.tbl_users: 3 rows

@@ -14,6 +14,58 @@ class Login_model extends CI_Model
     {
         parent::__construct();
         $this->ensureLoginAttemptSchema();
+        $this->ensureAuthIndexes();
+    }
+
+    /**
+     * The sign-in tables shipped with nothing but their primary keys, so every
+     * sign-in scanned tbl_users, every reset link scanned tbl_reset_password,
+     * and the login-history screen scanned tbl_last_login. Add the indexes the
+     * queries in this model and User_model actually use.
+     *
+     * Idempotent and additive: the same shape ensureLoginAttemptSchema() and
+     * Dashboard_model use, so an existing deployment picks them up without a
+     * manual migration and a fresh one gets them from db_setup.sql.
+     */
+    private function ensureAuthIndexes()
+    {
+        $wanted = array(
+            // loginMe() / checkEmailExist() / getCustomerInfoByEmail()
+            'tbl_users' => array(
+                'users_email_active' => '(`email`,`isDeleted`)',
+            ),
+            // getResetPasswordRequest() / createPasswordUser() look the token up
+            // by activation_id, then clean up by email.
+            'tbl_reset_password' => array(
+                'reset_password_activation' => '(`activation_id`,`isDeleted`,`createdDtm`)',
+                'reset_password_email' => '(`email`)',
+            ),
+            // lastLoginInfo() and User_model::loginHistory()/loginHistoryCount()
+            // all filter by user; userId is what makes them selective. The date
+            // column rides along so a range filter on it stays in the index.
+            'tbl_last_login' => array(
+                'last_login_user' => '(`userId`,`createdDtm`)',
+            ),
+        );
+
+        foreach ($wanted as $table => $indexes) {
+            if (! $this->db->table_exists($table)) {
+                continue;
+            }
+
+            $existing = array();
+            foreach ($this->db->query('SHOW INDEX FROM `'.$table.'`')->result_array() as $row) {
+                if (isset($row['Key_name'])) {
+                    $existing[$row['Key_name']] = TRUE;
+                }
+            }
+
+            foreach ($indexes as $name => $columns) {
+                if (! isset($existing[$name])) {
+                    $this->db->query('ALTER TABLE `'.$table.'` ADD INDEX `'.$name.'` '.$columns);
+                }
+            }
+        }
     }
 
     private function ensureLoginAttemptSchema()
