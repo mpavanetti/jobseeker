@@ -32,6 +32,7 @@ removes the download.
 
 from __future__ import annotations
 
+import atexit
 import io
 import json
 import os
@@ -80,6 +81,319 @@ def install_sample(repository_root: str, sample: str, project_key: str) -> str:
         shutil.rmtree(target)
     shutil.copytree(os.path.join(SAMPLES, sample), target)
     return target
+
+
+def register_data_asset_fixture(
+    asset_key: str,
+    name: str,
+    direction: str,
+    relative_path: str,
+    file_name: str,
+) -> None:
+    """Register a fixture in the platform source of truth, not only its cache.
+
+    The Data Assets screen can regenerate manifest.json from MariaDB at any
+    time. A manifest-only fixture disappears when that happens and makes a Hop
+    run intermittently receive an empty path, so E2E assets follow the same
+    database-to-manifest lifecycle as real platform assets.
+    """
+
+    connection = _connect()
+    cursor = connection.cursor()
+    cursor.execute(
+        "INSERT INTO data_assets "
+        "(asset_key, name, direction, format, environment, job_name, storage_path, file_name, "
+        "options_json, description, is_required, is_active, version, created_at, updated_at, owner) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s)",
+        (
+            asset_key,
+            name,
+            direction,
+            "csv",
+            "DEV",
+            "*",
+            relative_path,
+            file_name,
+            json.dumps({"delimiter": ",", "encoding": "UTF-8", "header": True}),
+            "Apache Hop E2E fixture",
+            1,
+            1,
+            1,
+            "Hop E2E",
+        ),
+    )
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+
+def delete_data_asset_fixture(asset_key: str) -> None:
+    try:
+        connection = _connect()
+        cursor = connection.cursor()
+        cursor.execute(
+            "DELETE FROM data_assets WHERE asset_key = %s AND owner = 'Hop E2E'",
+            (asset_key,),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+    except Exception:  # noqa: BLE001 - best-effort cleanup also runs via atexit
+        pass
+
+
+def install_data_asset_fixture(repository_root: str, suffix: str):
+    """Publish one unique manifest asset and return its key/path/cleanup hook."""
+
+    asset_key = "hop-e2e-customer-%s" % suffix
+    relative_path = "data-assets/dev/%s/customers.csv" % asset_key
+    absolute_path = os.path.join(repository_root, *relative_path.split("/"))
+    os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
+    with open(absolute_path, "w", encoding="utf-8") as stream:
+        stream.write("customer_id,name\n1,Hop E2E\n")
+    register_data_asset_fixture(
+        asset_key,
+        "Apache Hop E2E customer reference",
+        "input",
+        relative_path,
+        "customers.csv",
+    )
+
+    manifest_path = os.path.join(repository_root, "data-assets", "manifest.json")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as stream:
+            payload = json.load(stream)
+    except (FileNotFoundError, ValueError):
+        payload = {"schema_version": 1, "assets": []}
+    assets = payload.get("assets", []) if isinstance(payload, dict) else []
+    payload = payload if isinstance(payload, dict) else {"schema_version": 1}
+    payload["assets"] = [item for item in assets if isinstance(item, dict) and item.get("key") != asset_key]
+    payload["assets"].append({
+        "key": asset_key,
+        "name": "Apache Hop E2E customer reference",
+        "uri": "jobseeker://dev/shared/%s" % asset_key,
+        "direction": "input",
+        "format": "csv",
+        "environment": "DEV",
+        "job": "*",
+        "relative_path": relative_path,
+        "file_name": "customers.csv",
+        "required": True,
+        "active": True,
+        "version": 1,
+        "options": {"delimiter": ",", "encoding": "UTF-8", "header": True},
+    })
+    temporary_path = manifest_path + ".hop-e2e.tmp"
+    with open(temporary_path, "w", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2)
+        stream.write("\n")
+    os.replace(temporary_path, manifest_path)
+
+    cleaned = False
+
+    def cleanup():
+        nonlocal cleaned
+        if cleaned:
+            return
+        cleaned = True
+        delete_data_asset_fixture(asset_key)
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as stream:
+                current = json.load(stream)
+            current_assets = current.get("assets", []) if isinstance(current, dict) else []
+            current["assets"] = [
+                item for item in current_assets
+                if not (isinstance(item, dict) and item.get("key") == asset_key)
+            ]
+            with open(temporary_path, "w", encoding="utf-8") as stream:
+                json.dump(current, stream, indent=2)
+                stream.write("\n")
+            os.replace(temporary_path, manifest_path)
+        except (FileNotFoundError, OSError, ValueError):
+            pass
+        shutil.rmtree(os.path.dirname(absolute_path), ignore_errors=True)
+
+    atexit.register(cleanup)
+    return asset_key, relative_path, cleanup
+
+
+def install_output_data_asset_fixture(repository_root: str, suffix: str):
+    """Publish a unique writable CSV asset and return its key/path/cleanup hook."""
+
+    asset_key = "hop-e2e-output-%s" % suffix
+    relative_path = "data-assets/dev/%s/customers-export.csv" % asset_key
+    absolute_path = os.path.join(repository_root, *relative_path.split("/"))
+    os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
+    register_data_asset_fixture(
+        asset_key,
+        "Apache Hop E2E customer export",
+        "output",
+        relative_path,
+        "customers-export.csv",
+    )
+
+    manifest_path = os.path.join(repository_root, "data-assets", "manifest.json")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as stream:
+            payload = json.load(stream)
+    except (FileNotFoundError, ValueError):
+        payload = {"schema_version": 1, "assets": []}
+    assets = payload.get("assets", []) if isinstance(payload, dict) else []
+    payload = payload if isinstance(payload, dict) else {"schema_version": 1}
+    payload["assets"] = [item for item in assets if isinstance(item, dict) and item.get("key") != asset_key]
+    payload["assets"].append({
+        "key": asset_key,
+        "name": "Apache Hop E2E customer export",
+        "uri": "jobseeker://dev/shared/%s" % asset_key,
+        "direction": "output",
+        "format": "csv",
+        "environment": "DEV",
+        "job": "*",
+        "relative_path": relative_path,
+        "file_name": "customers-export.csv",
+        "required": True,
+        "active": True,
+        "version": 1,
+        "options": {"delimiter": ",", "encoding": "UTF-8", "header": True},
+    })
+    temporary_path = manifest_path + ".hop-e2e.tmp"
+    with open(temporary_path, "w", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2)
+        stream.write("\n")
+    os.replace(temporary_path, manifest_path)
+
+    cleaned = False
+
+    def cleanup():
+        nonlocal cleaned
+        if cleaned:
+            return
+        cleaned = True
+        delete_data_asset_fixture(asset_key)
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as stream:
+                current = json.load(stream)
+            current_assets = current.get("assets", []) if isinstance(current, dict) else []
+            current["assets"] = [
+                item for item in current_assets
+                if not (isinstance(item, dict) and item.get("key") == asset_key)
+            ]
+            with open(temporary_path, "w", encoding="utf-8") as stream:
+                json.dump(current, stream, indent=2)
+                stream.write("\n")
+            os.replace(temporary_path, manifest_path)
+        except (FileNotFoundError, OSError, ValueError):
+            pass
+        shutil.rmtree(os.path.dirname(absolute_path), ignore_errors=True)
+
+    atexit.register(cleanup)
+    return asset_key, relative_path, absolute_path, cleanup
+
+
+def install_context_fixtures(suffix: str):
+    """Install two uniquely named DEV Context Details and return a cleanup hook."""
+
+    region_key = "E2E_REGION_%s" % suffix.upper()
+    owner_key = "E2E_OWNER_%s" % suffix.upper()
+    connection = _connect()
+    cursor = connection.cursor()
+    cursor.execute("SELECT Id FROM projectdetails WHERE ProjectName = %s LIMIT 1", ("PoC",))
+    project_row = cursor.fetchone()
+    cursor.execute("SELECT Id FROM environment WHERE UPPER(Environment) = 'DEV' LIMIT 1")
+    environment_row = cursor.fetchone()
+    if not project_row or not environment_row:
+        cursor.close()
+        connection.close()
+        raise RuntimeError("The Hop E2E Context fixture needs the seeded PoC project and DEV environment")
+    rows = (
+        (int(project_row[0]), region_key, "eu-west-e2e", int(environment_row[0])),
+        (int(project_row[0]), owner_key, "data-platform-e2e", int(environment_row[0])),
+    )
+    cursor.executemany(
+        "INSERT INTO contextdetails "
+        "(ProjectDetailsFK, ContextKey, ContextValue, isEncrypted, EnvironmentFK, Description, IsActive, CreatedOn, CreatedBy) "
+        "VALUES (%s, %s, %s, 0, %s, 'Apache Hop E2E fixture', 1, NOW(), 'Hop E2E')",
+        rows,
+    )
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+    cleaned = False
+
+    def cleanup():
+        nonlocal cleaned
+        if cleaned:
+            return
+        cleaned = True
+        try:
+            cleanup_connection = _connect()
+            cleanup_cursor = cleanup_connection.cursor()
+            cleanup_cursor.execute(
+                "DELETE FROM contextdetails WHERE ContextKey IN (%s, %s) AND CreatedBy = 'Hop E2E'",
+                (region_key, owner_key),
+            )
+            cleanup_connection.commit()
+            cleanup_cursor.close()
+            cleanup_connection.close()
+        except Exception:  # noqa: BLE001 - best-effort cleanup also runs via atexit
+            pass
+
+    atexit.register(cleanup)
+    return region_key, owner_key, cleanup
+
+
+def point_sample_at_asset(project_root: str, asset_key: str) -> str:
+    manifest_path = os.path.join(project_root, ".jobseeker-hop.json")
+    with open(manifest_path, "r", encoding="utf-8") as stream:
+        manifest = json.load(stream)
+    manifest["assets"] = [asset_key]
+    with open(manifest_path, "w", encoding="utf-8") as stream:
+        json.dump(manifest, stream, indent=2)
+        stream.write("\n")
+
+    variable_name = hop._variable_name("JOBSEEKER_ASSET", asset_key)
+    pipeline_path = os.path.join(project_root, "pipelines", "platform-variables.hpl")
+    with open(pipeline_path, "r", encoding="utf-8") as stream:
+        pipeline = stream.read()
+    pipeline = pipeline.replace("JOBSEEKER_ASSET_CUSTOMER_REFERENCE", variable_name)
+    with open(pipeline_path, "w", encoding="utf-8") as stream:
+        stream.write(pipeline)
+    return variable_name
+
+
+def configure_dataset_context_sample(
+    project_root: str,
+    input_key: str,
+    output_key: str,
+    region_key: str,
+    owner_key: str,
+) -> None:
+    """Point the generic starter names at this run's isolated fixtures."""
+
+    manifest_path = os.path.join(project_root, ".jobseeker-hop.json")
+    with open(manifest_path, "r", encoding="utf-8") as stream:
+        manifest = json.load(stream)
+    manifest["assets"] = [input_key, output_key]
+    manifest["context"] = ["Custom", region_key, owner_key]
+    with open(manifest_path, "w", encoding="utf-8") as stream:
+        json.dump(manifest, stream, indent=2)
+        stream.write("\n")
+
+    replacements = {
+        "JOBSEEKER_ASSET_HOP_CUSTOMER_INPUT": hop._variable_name("JOBSEEKER_ASSET", input_key),
+        "JOBSEEKER_ASSET_HOP_CUSTOMER_OUTPUT": hop._variable_name("JOBSEEKER_ASSET", output_key),
+        "SAMPLE_REGION": region_key,
+        "SAMPLE_OWNER": owner_key,
+    }
+    for relative in ("pipelines/show-contexts.hpl", "pipelines/copy-data-assets.hpl"):
+        path = os.path.join(project_root, relative)
+        with open(path, "r", encoding="utf-8") as stream:
+            body = stream.read()
+        for source, target in replacements.items():
+            body = body.replace(source, target)
+        with open(path, "w", encoding="utf-8") as stream:
+            stream.write(body)
 
 
 def run_hop(**kwargs):
@@ -264,6 +578,10 @@ def main() -> int:
     os.environ.setdefault("JOBSEEKER_CONNECTOR_API_TOKEN", "jobseeker-local-connector-token")
     configure_local_stack_network()
     suffix = uuid.uuid4().hex[:6]
+    asset_key, asset_relative_path, cleanup_asset = install_data_asset_fixture(repository_root, suffix)
+    output_asset_key, output_asset_relative_path, output_asset_path, cleanup_output_asset = \
+        install_output_data_asset_fixture(repository_root, suffix)
+    region_context_key, owner_context_key, cleanup_contexts = install_context_fixtures(suffix)
 
     print("JobSeeker Apache Hop end-to-end")
     print("repository root : %s" % repository_root)
@@ -271,6 +589,9 @@ def main() -> int:
     print("docker network  : %s" % os.environ.get("JOBSEEKER_HOP_NETWORK", "host"))
 
     created_jobs = []
+    dataset_project = ""
+    roundtrip_project = ""
+    roundtrip_table_preexisting = False
     # Only judge this run's own scratch directories, not anything a previous
     # debugging session deliberately kept.
     runs_before = set(os.listdir(os.path.join(repository_root, "hop", "runs"))) \
@@ -280,6 +601,7 @@ def main() -> int:
     stage("Project discovery and scaffolding")
     project_key = "e2e-platform-hello-%s" % suffix
     project = install_sample(repository_root, "platform-hello", project_key)
+    asset_variable = point_sample_at_asset(project, asset_key)
     described = hop.HopProject.locate(project).describe()
     check("project is discovered", described["has_project_config"])
     check("workflow is listed", "workflows/main.hwf" in described["workflows"])
@@ -340,9 +662,11 @@ def main() -> int:
     check("JOBSEEKER_BUILD_NUMBER reaches the pipeline", "build_number = 1" in output)
     check("a referenced Context Detail reaches the pipeline automatically",
           "custom_context = This is a custom context from jobseeker DEV" in output)
-    check("the Data Asset variable is resolved without a literal placeholder",
-          "customer_reference_path =" in output
-          and "${JOBSEEKER_ASSET_CUSTOMER_REFERENCE}" not in output)
+    expected_container_asset = "/jobseeker-repository/" + asset_relative_path
+    check("the container receives the real Data Asset path",
+          "customer_reference_path = %s" % expected_container_asset in output
+          and "${%s}" % asset_variable not in output,
+          "expected %s" % expected_container_asset)
     check("row counters are parsed from Hop", "read 1, written 1, errors 0" in output)
 
     rows = tmf_rows(job_name)
@@ -363,7 +687,60 @@ def main() -> int:
                   "the pipeline printed a different instance id")
     print("  (container run took %.1fs)" % elapsed)
 
-    # -- 3. Connectors become Hop database connections ------------------------
+    # -- 3. Multiple Context Details and Data Asset input/output -------------
+    stage("Data Asset input/output and multiple Context Details")
+    dataset_project_key = "e2e-dataset-context-%s" % suffix
+    dataset_project = install_sample(repository_root, "dataset-context-flow", dataset_project_key)
+    configure_dataset_context_sample(
+        dataset_project,
+        asset_key,
+        output_asset_key,
+        region_context_key,
+        owner_context_key,
+    )
+    dataset_job = "hop-e2e-dataset-context-%s" % suffix
+    created_jobs.append(dataset_job)
+    os.environ["BUILD_NUMBER"] = "8"
+    code, output = run_hop(
+        project_path=dataset_project,
+        entry_file="workflows/main.hwf",
+        engine="container",
+        environment="DEV",
+        job=dataset_job,
+        repository_root=repository_root,
+        with_connectors=False,
+        with_assets=True,
+        with_tmf=True,
+        memory_limit_mb=1024,
+    )
+    check("the Data Asset/Context workflow succeeds", code == 0, "exit code %s: %s" % (code, output[-500:]))
+    check("multiple Context Details reach Hop",
+          "region_context = eu-west-e2e" in output
+          and "owner_context = data-platform-e2e" in output
+          and "custom_context = This is a custom context from jobseeker DEV" in output)
+    check("the Data Asset workflow receives its selected environment",
+          "environment = DEV" in output and "job_name = %s" % dataset_job in output)
+    expected_input_path = "/jobseeker-repository/" + asset_relative_path
+    expected_output_path = "/jobseeker-repository/" + output_asset_relative_path
+    check("both Data Asset paths are translated for the container",
+          "input_asset = %s" % expected_input_path in output
+          and "output_asset = %s" % expected_output_path in output,
+          "expected %s and %s" % (expected_input_path, expected_output_path))
+    try:
+        with open(output_asset_path, "r", encoding="utf-8") as stream:
+            exported = stream.read()
+    except OSError:
+        exported = ""
+    check("Hop writes the output Data Asset",
+          "customer_id" in exported and "name" in exported and "Hop E2E" in exported,
+          "output was %r" % exported[:200])
+    dataset_rows = tmf_rows(dataset_job)
+    if dataset_rows:
+        check("the Data Asset/Context run is recorded in TMF",
+              dataset_rows[0][1] == "ready" and dataset_rows[0][4] == "DEV",
+              "status=%s environment=%s" % (dataset_rows[0][1], dataset_rows[0][4]))
+
+    # -- 4. Connectors become Hop database connections ------------------------
     stage("Connectors as Hop database connections")
     connector_key = "e2e-connector-inventory-%s" % suffix
     connector_project = install_sample(repository_root, "connector-inventory", connector_key)
@@ -418,7 +795,66 @@ def main() -> int:
         check("a leaked credential is redacted from the console",
               sentinel not in hop.redact("password=" + sentinel, variables))
 
-    # -- 4. Hop Server engine --------------------------------------------------
+    # -- 5. Connector-backed MariaDB write/read/delete round-trip -------------
+    stage("JobSeeker MariaDB connector round-trip")
+    roundtrip_project_key = "e2e-mariadb-roundtrip-%s" % suffix
+    roundtrip_project = install_sample(repository_root, "mariadb-roundtrip", roundtrip_project_key)
+    roundtrip_job = "hop-e2e-mariadb-roundtrip-%s" % suffix
+    created_jobs.append(roundtrip_job)
+    try:
+        table_connection = _connect()
+        table_cursor = table_connection.cursor()
+        table_cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = %s",
+            ("jobseeker_hop_sample_rows",),
+        )
+        roundtrip_table_preexisting = bool(table_cursor.fetchone()[0])
+        table_cursor.close()
+        table_connection.close()
+    except Exception:  # noqa: BLE001 - the execution below reports the useful error
+        roundtrip_table_preexisting = True
+
+    if not connectors_available:
+        print("  SKIP  connector catalog is not reachable; MariaDB round-trip assertions skipped")
+    else:
+        os.environ["BUILD_NUMBER"] = "9"
+        code, output = run_hop(
+            project_path=roundtrip_project,
+            entry_file="workflows/main.hwf",
+            engine="container",
+            environment="DEV",
+            job=roundtrip_job,
+            repository_root=repository_root,
+            with_connectors=True,
+            with_assets=False,
+            with_tmf=True,
+            memory_limit_mb=1024,
+        )
+        check("the MariaDB connector round-trip succeeds", code == 0, "exit code %s: %s" % (code, output[-800:]))
+        check("Hop writes and reads the run-scoped row through the connector",
+              "MariaDB round-trip succeeded through the JobSeeker connector." in output
+              and "environment = DEV" in output
+              and "job_name = %s" % roundtrip_job in output)
+        try:
+            verify_connection = _connect()
+            verify_cursor = verify_connection.cursor()
+            verify_cursor.execute(
+                "SELECT COUNT(*) FROM jobseeker_hop_sample_rows WHERE job_name = %s",
+                (roundtrip_job,),
+            )
+            retained_rows = int(verify_cursor.fetchone()[0])
+            verify_cursor.close()
+            verify_connection.close()
+        except Exception:
+            retained_rows = -1
+        check("the round-trip removes its sample row", retained_rows == 0, "retained rows=%s" % retained_rows)
+        roundtrip_rows = tmf_rows(roundtrip_job)
+        if roundtrip_rows:
+            check("the MariaDB round-trip is recorded in TMF",
+                  roundtrip_rows[0][1] == "ready" and roundtrip_rows[0][6] == "container",
+                  "status=%s dimension=%s" % (roundtrip_rows[0][1], roundtrip_rows[0][6]))
+
+    # -- 6. Hop Server engine --------------------------------------------------
     stage("Hop Server engine")
     server_engine = hop.ServerEngine(
         hop.HopProject(project), os.path.join(repository_root, "hop", "runs"), repository_root, {}
@@ -448,6 +884,13 @@ def main() -> int:
         check("the Hop Server runs the pipeline", code == 0, "exit code %s" % code)
         check("the server run returns the Hop log", "Finished processing" in output)
         check("the server run reports row counts", "read 1, written 1, errors 0" in output)
+        expected_server_asset = server_engine.server_repository_root + "/" + asset_relative_path
+        check("the Hop Server receives the real Data Asset path",
+              "customer_reference_path = %s" % expected_server_asset in output,
+              "expected %s; observed: %s" % (
+                  expected_server_asset,
+                  " | ".join(line.strip() for line in output.splitlines() if "customer_reference_path" in line) or "no path line",
+              ))
 
         # A repeat run must report its own counters: the server answers a
         # name-only status query with the first run still registered under that
@@ -553,7 +996,7 @@ def main() -> int:
             if name.endswith(".json"):
                 os.unlink(os.path.join(claims_root, name))
 
-    # -- 5. Failure path ------------------------------------------------------
+    # -- 7. Failure path ------------------------------------------------------
     stage("Failure path")
     failing_job = "hop-e2e-failure-%s" % suffix
     created_jobs.append(failing_job)
@@ -589,7 +1032,7 @@ def main() -> int:
     elif rows is not None:
         check("the failure is recorded in TMF as an error", False, "no TMF row was written")
 
-    # -- 6. Generated artefacts are cleaned up --------------------------------
+    # -- 8. Generated artefacts are cleaned up --------------------------------
     stage("Run hygiene")
     runs_root = os.path.join(repository_root, "hop", "runs")
     after = set(os.listdir(runs_root)) if os.path.isdir(runs_root) else set()
@@ -603,9 +1046,28 @@ def main() -> int:
     stage("Cleanup")
     for job in created_jobs:
         delete_tmf_rows(job)
-    for folder in (project, connector_project, scratch):
-        shutil.rmtree(folder, ignore_errors=True)
-    print("  removed %d TMF job(s) and 3 scratch project(s)" % len(created_jobs))
+    try:
+        cleanup_connection = _connect()
+        cleanup_cursor = cleanup_connection.cursor()
+        if roundtrip_table_preexisting:
+            cleanup_cursor.execute(
+                "DELETE FROM jobseeker_hop_sample_rows WHERE job_name = %s",
+                ("hop-e2e-mariadb-roundtrip-%s" % suffix,),
+            )
+        else:
+            cleanup_cursor.execute("DROP TABLE IF EXISTS jobseeker_hop_sample_rows")
+        cleanup_connection.commit()
+        cleanup_cursor.close()
+        cleanup_connection.close()
+    except Exception:  # noqa: BLE001 - remaining fixture checks above already failed visibly
+        pass
+    for folder in (project, connector_project, dataset_project, roundtrip_project, scratch):
+        if folder:
+            shutil.rmtree(folder, ignore_errors=True)
+    cleanup_asset()
+    cleanup_output_asset()
+    cleanup_contexts()
+    print("  removed %d TMF job(s), 5 scratch project(s), Data Assets, Context Details, and sample rows" % len(created_jobs))
 
     print("\n%d passed, %d failed" % (len(PASSED), len(FAILED)))
     for name, detail in FAILED:

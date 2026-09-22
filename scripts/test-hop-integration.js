@@ -435,7 +435,7 @@ assert(!/echo.*PASSWORD/i.test(entrypoint), 'the entry point must never echo a c
 // --- Sample projects --------------------------------------------------------
 const samplesRoot = 'application/third_party/hop/samples';
 const samples = fs.readdirSync(samplesRoot).filter(entry => fs.statSync(path.join(samplesRoot, entry)).isDirectory());
-assert(samples.length >= 3, 'ship at least three reviewed Hop starter projects');
+assert(samples.length >= 5, 'ship at least five reviewed Hop starter projects');
 samples.forEach(sample => {
   const root = path.join(samplesRoot, sample);
   assert(fs.existsSync(path.join(root, 'project-config.json')), sample + ' must be a real Hop project');
@@ -460,5 +460,33 @@ samples.forEach(sample => {
   });
 });
 assert(samples.includes('platform-hello'), 'keep the dependency-free smoke test sample');
+assert(samples.includes('dataset-context-flow'), 'ship a Data Asset and Context starter project');
+assert(samples.includes('mariadb-roundtrip'), 'ship a connector-backed MariaDB write/read starter project');
+
+const datasetContextRoot = path.join(samplesRoot, 'dataset-context-flow');
+const datasetContextManifest = JSON.parse(read(path.join(datasetContextRoot, '.jobseeker-hop.json')));
+assert.deepStrictEqual(datasetContextManifest.assets, ['hop-customer-input', 'hop-customer-output']);
+assert.deepStrictEqual(datasetContextManifest.context, ['Custom', 'SAMPLE_REGION', 'SAMPLE_OWNER']);
+assert(datasetContextManifest.context.every(name => !name.startsWith('HOP_')),
+  'sample Context keys must not use the reserved Apache Hop HOP_ prefix');
+const datasetPipeline = read(path.join(datasetContextRoot, 'pipelines/copy-data-assets.hpl'));
+assert(datasetPipeline.includes('${JOBSEEKER_ASSET_HOP_CUSTOMER_INPUT}'));
+assert(datasetPipeline.includes('${JOBSEEKER_ASSET_HOP_CUSTOMER_OUTPUT}'));
+assert(datasetPipeline.includes('<type>CSVInput</type>'));
+assert(datasetPipeline.includes('<type>TextFileOutput</type>'));
+
+const roundtripRoot = path.join(samplesRoot, 'mariadb-roundtrip');
+const roundtripManifest = JSON.parse(read(path.join(roundtripRoot, '.jobseeker-hop.json')));
+assert.deepStrictEqual(roundtripManifest.connectors, ['jobseeker-mariadb']);
+const roundtripWorkflow = read(path.join(roundtripRoot, 'workflows/main.hwf'));
+const roundtripWrite = read(path.join(roundtripRoot, 'pipelines/write-sample-row.hpl'));
+const roundtripRead = read(path.join(roundtripRoot, 'pipelines/read-sample-row.hpl'));
+assert(roundtripWorkflow.includes('<type>SQL</type>'));
+assert(roundtripWorkflow.includes('CREATE TABLE IF NOT EXISTS jobseeker_hop_sample_rows'));
+assert(roundtripWorkflow.includes('DELETE FROM jobseeker_hop_sample_rows'));
+assert(roundtripWrite.includes('<type>TableOutput</type>'));
+assert(roundtripRead.includes('<type>TableInput</type>'));
+assert(roundtripWrite.includes('<connection>jobseeker-mariadb</connection>'));
+assert(roundtripRead.includes('<connection>jobseeker-mariadb</connection>'));
 
 console.log('Apache Hop integration checks passed (' + samples.length + ' sample project(s)).');

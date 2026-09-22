@@ -1,0 +1,20 @@
+{
+  "assets": [
+    "hop-customer-input",
+    "hop-customer-output"
+  ],
+  "connectors": [],
+  "context": [
+    "Custom",
+    "SAMPLE_REGION",
+    "SAMPLE_OWNER"
+  ],
+  "description": "Copies a CSV between two JobSeeker Data Assets and logs environment plus three Context Details. Configure the named assets/contexts in the selected environment before running.",
+  "engine": "container",
+  "entry_file": "workflows/main.hwf",
+  "log_level": "Basic",
+  "parameters": {},
+  "project": "dataset-context-flow",
+  "run_config": "local",
+  "schema_version": 1
+}

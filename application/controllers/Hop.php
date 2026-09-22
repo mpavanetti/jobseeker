@@ -696,14 +696,32 @@ class Hop extends BaseController
         // rather than a picture of the design.
         if ($this->input->get('live') === '1') {
             $graph['live'] = NULL;
-            $current = $this->hopserver->currentExecution($graph['kind'], $graph['name']);
+            // A catalog link names one execution. A name-only lookup can pick
+            // another run of the same workflow (or a later run), so bind its
+            // overlay to the id when the caller has one.
+            $current = NULL;
+            if ($executionId !== '' && preg_match('#^[A-Za-z0-9._-]{1,100}$#', $executionId)) {
+                $stored = $this->Hop_model->findExecution($executionId);
+                if ($stored && $stored['project_key'] === $projectKey
+                    && $stored['kind'] === $graph['kind'] && $stored['name'] === $graph['name']) {
+                    $current = $this->hopserver->execution($graph['kind'], $graph['name'], $executionId);
+                }
+            } else if ($executionId === '') {
+                $startedAfter = '';
+                $startedMillis = $this->input->get('started_after', TRUE);
+                if ($jobName !== '' && is_scalar($startedMillis) && preg_match('/^\d{13}$/', (string) $startedMillis)) {
+                    $startedAfter = gmdate('Y-m-d H:i:s', (int) floor(((float) $startedMillis) / 1000));
+                }
+                $current = $this->hopserver->currentExecution($graph['kind'], $graph['name'], 5, $startedAfter, $jobName !== '');
+            }
             if ($current !== NULL) {
                 $graph['live'] = array(
                     'execution_id' => $current['execution_id'],
                     'status' => $current['status'],
                     'state' => $current['state'],
                     'started_at' => $current['started_at'],
-                    'nodes' => $this->hopserver->executionNodes($graph['kind'], $graph['name'], $current['execution_id'])
+                    'nodes' => isset($current['nodes']) ? $current['nodes']
+                        : $this->hopserver->executionNodes($graph['kind'], $graph['name'], $current['execution_id'])
                 );
             }
         }

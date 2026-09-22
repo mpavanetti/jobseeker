@@ -76,6 +76,12 @@ foreach ($executions as $execution) {
   .hop-canvas .hop-node-start rect { fill: #eef7ee; stroke: #6fae6f; }
   .hop-canvas .hop-node-success rect { fill: #eef7ee; stroke: #45a145; }
   .hop-canvas .hop-node-failure rect { fill: #fdeeee; stroke: #d9534f; }
+  .hop-canvas .hop-node.is-running rect { fill: #dcefff; stroke: #3c8dbc; stroke-width: 2.5; animation: hop-running-pulse 1.8s ease-in-out infinite; }
+  .hop-canvas .hop-node.is-complete rect { fill: #e9f7e9; stroke: #45a145; stroke-width: 2; }
+  .hop-canvas .hop-node.is-failed rect { fill: #fdeeee; stroke: #d9534f; stroke-width: 2.5; }
+  .hop-canvas .hop-node-metrics { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
+  @keyframes hop-running-pulse { 50% { stroke-width: 4; fill: #c8e8ff; } }
+  @media (prefers-reduced-motion: reduce) { .hop-canvas .hop-node.is-running rect { animation: none; } }
   .hop-canvas .hop-node-passthrough rect { stroke-dasharray: 4 3; }
   .hop-canvas .hop-edge { fill: none; stroke: #9aa5b1; stroke-width: 1.8; }
   .hop-canvas .hop-edge-success { stroke: #45a145; }
@@ -94,7 +100,7 @@ foreach ($executions as $execution) {
   .hop-canvas-toolbar { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 4px; }
   .hop-canvas-toolbar .btn { width: 26px; padding: 1px 0; font-size: 13px; line-height: 18px; }
 </style>
-<script src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=2" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=3" type="text/javascript"></script>
 
 <div class="content-wrapper hop-page">
   <section class="content-header">
@@ -522,6 +528,8 @@ foreach ($executions as $execution) {
   var inFlight = false;
   var executionsTable = null;
   var projectsTable = null;
+  var canvasTimer = null;
+  var canvasRequest = 0;
 
   function escapeHtml(value) {
     return $('<div>').text(value === null || value === undefined ? '' : String(value)).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -737,6 +745,10 @@ foreach ($executions as $execution) {
 
   // -- canvas ----------------------------------------------------------------
   function openCanvas(query, title) {
+    clearTimeout(canvasTimer);
+    var requestId = ++canvasRequest;
+    var followRun = !! query.execution;
+    if (followRun) { query.live = '1'; }
     $('#hopCanvasTitle').html('<i class="fa fa-sitemap"></i> ' + escapeHtml(title));
     $('#hopCanvasMeta').text('');
     $('#hopCanvasDetail').text('');
@@ -744,42 +756,60 @@ foreach ($executions as $execution) {
     $('#hopCanvasUseInJob, #hopCanvasDownload, #hopCanvasDownloadProject').hide();
     $('#hopCanvasModal').modal('show');
 
-    $.getJSON(graphUrl, query)
-      .done(function(graph) {
-        $('#hopCanvasMeta').text(
-          graph.kind + ' · ' + graph.file + ' · ' + (graph.nodes || []).length +
-          (graph.kind === 'workflow' ? ' action' : ' transform') + ((graph.nodes || []).length === 1 ? '' : 's') +
-          ' · ' + (graph.edges || []).length + ' hop' + ((graph.edges || []).length === 1 ? '' : 's') +
-          (graph.description ? ' — ' + graph.description : '')
-        );
-        $('#hopCanvasUseInJob')
-          .attr('href', jobCreationUrl + '?hop_project=' + encodeURIComponent(graph.project) +
-            '&hop_entry=' + encodeURIComponent(graph.file) + '&hop_engine=server')
-          .show();
-        // The file is the same XML Hop wrote, so downloading it is how a run
-        // seen here gets opened in the desktop Apache Hop GUI.
-        $('#hopCanvasDownload')
-          .attr('href', downloadUrl + '?project=' + encodeURIComponent(graph.project) +
-            '&file=' + encodeURIComponent(graph.file))
-          .show();
-        $('#hopCanvasDownloadProject')
-          .attr('href', downloadUrl + '?project=' + encodeURIComponent(graph.project) + '&archive=1')
-          .show();
-        window.JobSeekerHopCanvas.render('#hopCanvasBody', graph, {
-          onSelect: function(node) {
-            var details = [node.type ? 'type: ' + node.type : ''];
-            Object.keys(node.detail || {}).forEach(function(key) { details.push(key + ': ' + node.detail[key]); });
-            if (node.description) { details.push(node.description); }
-            $('#hopCanvasDetail').html('<strong>' + escapeHtml(node.name) + '</strong> — ' +
-              escapeHtml(details.filter(Boolean).join(' · ')));
+    function refreshCanvas() {
+      if (requestId !== canvasRequest) { return; }
+      $.getJSON(graphUrl, query)
+        .done(function(graph) {
+          if (requestId !== canvasRequest) { return; }
+          $('#hopCanvasMeta').text(
+            graph.kind + ' · ' + graph.file + ' · ' + (graph.nodes || []).length +
+            (graph.kind === 'workflow' ? ' action' : ' transform') + ((graph.nodes || []).length === 1 ? '' : 's') +
+            ' · ' + (graph.edges || []).length + ' hop' + ((graph.edges || []).length === 1 ? '' : 's') +
+            (graph.description ? ' — ' + graph.description : '') +
+            (followRun ? ' · ' + (graph.live ? (graph.live.status || graph.live.state || 'Running') : 'Live metrics unavailable') : '')
+          );
+          $('#hopCanvasUseInJob')
+            .attr('href', jobCreationUrl + '?hop_project=' + encodeURIComponent(graph.project) +
+              '&hop_entry=' + encodeURIComponent(graph.file) + '&hop_engine=server')
+            .show();
+          // The file is the same XML Hop wrote, so downloading it is how a run
+          // seen here gets opened in the desktop Apache Hop GUI.
+          $('#hopCanvasDownload')
+            .attr('href', downloadUrl + '?project=' + encodeURIComponent(graph.project) +
+              '&file=' + encodeURIComponent(graph.file))
+            .show();
+          $('#hopCanvasDownloadProject')
+            .attr('href', downloadUrl + '?project=' + encodeURIComponent(graph.project) + '&archive=1')
+            .show();
+          window.JobSeekerHopCanvas.render('#hopCanvasBody', graph, {
+            nodeState: graph.live && graph.live.nodes ? graph.live.nodes : {},
+            onSelect: function(node) {
+              var state = graph.live && graph.live.nodes ? graph.live.nodes[node.name] : null;
+              var details = [node.type ? 'type: ' + node.type : ''];
+              Object.keys(node.detail || {}).forEach(function(key) { details.push(key + ': ' + node.detail[key]); });
+              if (node.description) { details.push(node.description); }
+              if (state) { details.push(state.status + ' · read ' + state.read + ' · written ' + state.written + ' · errors ' + state.errors); }
+              $('#hopCanvasDetail').html('<strong>' + escapeHtml(node.name) + '</strong> — ' +
+                escapeHtml(details.filter(Boolean).join(' · ')));
+            }
+          });
+          if (followRun && graph.live && graph.live.state === 'running') {
+            canvasTimer = setTimeout(refreshCanvas, 5000);
           }
+        })
+        .fail(function(response) {
+          if (requestId !== canvasRequest) { return; }
+          var message = (response && response.responseJSON && response.responseJSON.error) || 'The Apache Hop canvas could not be read.';
+          $('#hopCanvasBody').html('<div class="hop-canvas-empty">' + escapeHtml(message) + '</div>');
         });
-      })
-      .fail(function(response) {
-        var message = (response && response.responseJSON && response.responseJSON.error) || 'The Apache Hop canvas could not be read.';
-        $('#hopCanvasBody').html('<div class="hop-canvas-empty">' + escapeHtml(message) + '</div>');
-      });
+    }
+    refreshCanvas();
   }
+
+  $('#hopCanvasModal').on('hidden.bs.modal', function() {
+    ++canvasRequest;
+    clearTimeout(canvasTimer);
+  });
 
   $(document).on('click', '.hop-view-canvas', function(event) {
     event.preventDefault();

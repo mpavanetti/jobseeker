@@ -1346,6 +1346,30 @@ class ServerEngine(HopEngine):
             self._collect_identity(block, "workflowname", registered)
         return registered
 
+    def _new_execution_id(
+        self,
+        known_before: Sequence[str],
+        object_name: str,
+        wait_seconds: float = 2.0,
+    ) -> str:
+        """Wait briefly for Hop Server to publish the id of this execution.
+
+        The execute endpoint is synchronous, but the global status registry can
+        lag its response by a few milliseconds. Falling straight back to a
+        name-only status request in that window can return an older, same-named
+        pipeline left open from Hop GUI and attach its log to the current job.
+        """
+
+        known = set(str(identifier) for identifier in known_before)
+        deadline = time.monotonic() + max(0.0, float(wait_seconds))
+        while True:
+            for identifier, name in self._registered_ids().items():
+                if identifier not in known and (name == object_name or not name):
+                    return identifier
+            if time.monotonic() >= deadline:
+                return ""
+            time.sleep(0.05)
+
     @staticmethod
     def _collect_identity(block: str, name_tag: str, registered: Dict[str, str]) -> None:
         identifier = re.search(r"<id>(.*?)</id>", block, re.DOTALL)
@@ -1537,22 +1561,24 @@ class ServerEngine(HopEngine):
         object_name = self._hop_object_name(
             os.path.join(self.project.root, entry_file.replace("/", os.sep)), entry_file
         )
-        known_before = set(self._registered_ids())
+        registered_before = self._registered_ids()
+        known_before = set(registered_before)
+        same_name_already_registered = object_name in registered_before.values()
 
         print("[JobSeeker] Hop Server execution: %s%s (%s)" % (self.base_url, endpoint, server_path))
         code, body = self._request(endpoint, fields)
         output = redact(_describe_web_result(body), variables)
         failed = code >= 400 or '"result":"ERROR"' in body.replace(" ", "") or "<result>ERROR</result>" in body
 
-        execution_id = ""
-        for identifier, name in self._registered_ids().items():
-            if identifier not in known_before and (name == object_name or not name):
-                execution_id = identifier
-                break
+        execution_id = self._new_execution_id(known_before, object_name)
 
         # The log is read back whether or not the request itself succeeded: a
         # pipeline that started and then failed reports why only here.
-        status = self._collect_status(object_name, execution_id, is_workflow)
+        # Without an id, a name-only query is safe only when no same-named run
+        # existed before this request. Otherwise Hop returns the first older run
+        # and JobSeeker would show stale variables, logs, and row counters.
+        status = self._collect_status(object_name, execution_id, is_workflow) \
+            if execution_id or not same_name_already_registered else {}
         counters = status.get("counters") or None
         if status.get("log"):
             output = output + "\n" + redact(str(status["log"]), variables)
