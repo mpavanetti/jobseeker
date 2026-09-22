@@ -90,6 +90,21 @@ def connector_fields(key, **overrides):
     return fields
 
 
+def remove_fixture_access_logs(prefix):
+    query = "DELETE FROM connector_access_log WHERE connector_key LIKE '%s%%'" % prefix.replace("'", "''")
+    subprocess.run(
+        [
+            "docker", "compose", "exec", "-T", "mariadb", "sh", "-c",
+            'mariadb -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "$1"',
+            "sh", query,
+        ],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def main():
     run_id = uuid.uuid4().hex[:8]
     bad_key = "e2e-ct-%s-unreachable" % run_id
@@ -162,6 +177,7 @@ def main():
                         "/dbSettings/deleteSetting?environment=ALL", method="POST",
                         fields={"userId": str(cid)}, csrf=True, expected=(200, 404, 409),
                     )
+        remove_fixture_access_logs("e2e-ct-%s-" % run_id)
 
 
 if __name__ == "__main__":

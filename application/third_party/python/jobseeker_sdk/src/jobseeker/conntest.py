@@ -17,6 +17,7 @@ Usage on a Jenkins worker (after ``jobseeker-connector materialize``)::
 from __future__ import annotations
 
 import argparse
+import base64
 import http.client
 import json
 import os
@@ -402,9 +403,14 @@ def _test_http(connector: "Connector", result: ConnectionTestResult, timeout: fl
         raw = raw.rstrip("/") + "/"
     started = time.monotonic()
     headers = {"User-Agent": "jobseeker-conntest/1"}
-    token = str(connector.value("token", "") or connector.value("api_key", "") or "")
+    token = str(connector.value("token", "") or "")
     if token:
-        headers["Authorization"] = "Bearer " + token
+        headers["Authorization"] = (_params(connector).get("authorization_scheme") or "Bearer") + " " + token
+    elif connector.value("api_key", ""):
+        headers[_params(connector).get("api_key_header") or "X-API-Key"] = str(connector.value("api_key", ""))
+    elif connector.username or connector.password:
+        credentials = (connector.username + ":" + connector.password).encode("utf-8")
+        headers["Authorization"] = "Basic " + base64.b64encode(credentials).decode("ascii")
     context = ssl.create_default_context()
     if _params(connector).get("insecure") in ("1", "true", "yes"):
         context.check_hostname = False
@@ -571,6 +577,36 @@ def _test_azure_blob(connector: "Connector", result: ConnectionTestResult, timeo
         return result.finish(UNREACHABLE, "Could not reach Azure Storage: %s" % error)
 
 
+def _test_azure_data_lake(connector: "Connector", result: ConnectionTestResult, timeout: float) -> ConnectionTestResult:
+    try:
+        from azure.storage.filedatalake import DataLakeServiceClient  # type: ignore
+        from azure.core.exceptions import AzureError, ClientAuthenticationError  # type: ignore
+    except ImportError:
+        return _driver_missing(connector, result, timeout, "azure-storage-file-datalake")
+    account_url = str(connector.host or "")
+    if "://" not in account_url:
+        account_url = "https://%s.dfs.core.windows.net" % account_url
+    else:
+        account_url = account_url.replace(".blob.core.windows.net", ".dfs.core.windows.net")
+    sas = str(connector.value("sas_token", "") or "")
+    connection_string = str(connector.value("connection_string", "") or "")
+    started = time.monotonic()
+    try:
+        if connection_string:
+            client = DataLakeServiceClient.from_connection_string(connection_string, connection_timeout=timeout)
+        else:
+            credential = sas or connector.value("account_key", "") or None
+            client = DataLakeServiceClient(account_url=account_url, credential=credential, connection_timeout=timeout)
+        info = client.get_service_properties()
+        result.latency_ms = _elapsed_ms(started)
+        result.add("service", True, "hour_metrics=%s" % ("enabled" if info.get("hour_metrics") else "available"))
+        return result.finish(PASSED, "Authenticated with Azure Data Lake Storage.")
+    except ClientAuthenticationError as error:
+        return result.finish(AUTH_FAILED, "Azure Data Lake rejected the credentials: %s" % error)
+    except (AzureError, OSError) as error:
+        return result.finish(UNREACHABLE, "Could not reach Azure Data Lake: %s" % error)
+
+
 def _test_gcs(connector: "Connector", result: ConnectionTestResult, timeout: float) -> ConnectionTestResult:
     try:
         from google.cloud import storage  # type: ignore
@@ -580,7 +616,21 @@ def _test_gcs(connector: "Connector", result: ConnectionTestResult, timeout: flo
     bucket = connector.database or _first_host(connector.host)
     started = time.monotonic()
     try:
-        client = storage.Client()
+        client_kwargs: Dict[str, Any] = {}
+        service_account_json = str(
+            connector.value("service_account_json", "")
+            or connector.value("credentials_json", "")
+            or ""
+        )
+        if service_account_json:
+            from google.oauth2 import service_account  # type: ignore
+
+            service_account_info = json.loads(service_account_json)
+            client_kwargs["credentials"] = service_account.Credentials.from_service_account_info(service_account_info)
+            client_kwargs["project"] = service_account_info.get("project_id")
+        elif _params(connector).get("project"):
+            client_kwargs["project"] = _params(connector)["project"]
+        client = storage.Client(**client_kwargs)
         if bucket:
             client.get_bucket(bucket, timeout=timeout)
             result.add("get_bucket", True, "bucket %s is reachable" % bucket)
@@ -682,7 +732,21 @@ def _test_kafka(connector: "Connector", result: ConnectionTestResult, timeout: f
     admin = None
     try:
         servers = connector.host if "," in str(connector.host) else "%s:%s" % (_first_host(connector.host), connector.port or 9092)
-        admin = KafkaAdminClient(bootstrap_servers=servers, request_timeout_ms=int(timeout * 1000) or 5000)
+        params = _params(connector)
+        options: Dict[str, Any] = {
+            "bootstrap_servers": servers,
+            "request_timeout_ms": int(timeout * 1000) or 5000,
+        }
+        if connector.username or connector.password:
+            options.update({
+                "security_protocol": params.get("security_protocol") or "SASL_SSL",
+                "sasl_mechanism": params.get("sasl_mechanism") or "PLAIN",
+                "sasl_plain_username": connector.username,
+                "sasl_plain_password": connector.password,
+            })
+        elif params.get("security_protocol"):
+            options["security_protocol"] = params["security_protocol"]
+        admin = KafkaAdminClient(**options)
         admin.list_topics()
         result.latency_ms = _elapsed_ms(started)
         result.add("metadata", True, "fetched broker metadata")
@@ -835,7 +899,7 @@ _HANDLERS = {
     "aws_s3": _test_s3,
     "s3": _test_s3,
     "azure_blob": _test_azure_blob,
-    "azure_data_lake": _test_azure_blob,
+    "azure_data_lake": _test_azure_data_lake,
     "gcs": _test_gcs,
     "snowflake": _test_snowflake,
     "databricks": _test_databricks,
@@ -847,6 +911,28 @@ _HANDLERS = {
 
 
 _NO_ENDPOINT_TYPES = {"generic_secret"}
+
+
+def _redact_connector_secrets(result: ConnectionTestResult, connector: "Connector") -> ConnectionTestResult:
+    """Remove every resolved secret from third-party driver output."""
+
+    values = sorted(
+        {str(value) for value in getattr(connector, "secrets", {}).values() if str(value)},
+        key=len,
+        reverse=True,
+    )
+
+    def redact_value(value: str) -> str:
+        protected = str(value or "")
+        for secret in values:
+            protected = protected.replace(secret, "***")
+        return _sanitize(protected)
+
+    result.message = redact_value(result.message)
+    result.server_version = redact_value(result.server_version)[:200]
+    for check in result.checks:
+        check.detail = redact_value(check.detail)
+    return result
 
 
 def test_connector(connector: "Connector", timeout: float = 5.0) -> ConnectionTestResult:
@@ -867,10 +953,10 @@ def test_connector(connector: "Connector", timeout: float = 5.0) -> ConnectionTe
     if connector_type in _NO_ENDPOINT_TYPES:
         readable = bool(getattr(connector, "secrets", {}) or connector.value("auth_type", "") == "none")
         result.add("secret", readable, "resolved secret values" if readable else "no secret values resolved")
-        return result.finish(
+        return _redact_connector_secrets(result.finish(
             PASSED if readable else UNREACHABLE,
             "This connector has no endpoint; the secret bundle was checked instead.",
-        )
+        ), connector)
 
     if connector_type == "elasticsearch":
         handler = lambda c, r, t: _test_http(c, r, t, "elasticsearch")  # noqa: E731
@@ -881,16 +967,19 @@ def test_connector(connector: "Connector", timeout: float = 5.0) -> ConnectionTe
 
     if handler is None:
         reachable = _tcp_probe(result, connector.host, connector.port, timeout)
-        return result.finish(
+        return _redact_connector_secrets(result.finish(
             UNSUPPORTED if not reachable else PASSED,
             "No protocol test is implemented for %r; checked TCP reachability only." % connector_type,
-        )
+        ), connector)
 
     try:
-        return handler(connector, result, timeout)
+        return _redact_connector_secrets(handler(connector, result, timeout), connector)
     except Exception as error:  # noqa: BLE001 - never let a driver crash the test
         result.add("handler", False, _sanitize(error))
-        return result.finish(UNREACHABLE, "The connection test raised an unexpected error: %s" % _sanitize(error))
+        return _redact_connector_secrets(
+            result.finish(UNREACHABLE, "The connection test raised an unexpected error: %s" % _sanitize(error)),
+            connector,
+        )
 
 
 # CLI -------------------------------------------------------------------------
