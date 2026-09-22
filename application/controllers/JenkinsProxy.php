@@ -104,6 +104,74 @@ class JenkinsProxy extends BaseController
             ->set_output(json_encode($status));
     }
 
+    /**
+     * Queue items for the sidebar, scoped to the selected environment.
+     * Reading the queue directly avoids loading the job tree and executors on
+     * every sidebar refresh.
+     */
+    public function queueDepth()
+    {
+        $response = $this->requestJenkins(
+            'GET',
+            'queue/api/json?tree=items[id,why,inQueueSince,cancelled,params,task[name,fullName],actions[parameters[name,value]]]'
+        );
+        if ((int) $response['status'] !== 200) {
+            $this->output
+                ->set_status_header(200)
+                ->set_content_type('application/json')
+                ->set_output(json_encode(array('ok' => FALSE, 'depth' => 0, 'items' => array())));
+            return;
+        }
+
+        $payload = json_decode($response['body']);
+        if (! is_object($payload) || ! isset($payload->items) || ! is_array($payload->items)) {
+            $this->output
+                ->set_status_header(200)
+                ->set_content_type('application/json')
+                ->set_output(json_encode(array('ok' => FALSE, 'depth' => 0, 'items' => array())));
+            return;
+        }
+        $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->requestedEnvironment());
+        $queued = array();
+
+        foreach ($payload->items as $item) {
+            // A cancelled item lingers in the queue for a moment; counting it
+            // would show work that is never going to start.
+            if (! empty($item->cancelled)) {
+                continue;
+            }
+
+            $taskName = '';
+            if (isset($item->task) && isset($item->task->fullName)) {
+                $taskName = (string) $item->task->fullName;
+            } else if (isset($item->task) && isset($item->task->name)) {
+                $taskName = (string) $item->task->name;
+            }
+
+            $environment = $this->normalizeJobSeekerEnvironment($this->jenkinsEnvironmentFromQueueItem($item, array()));
+            if ($requestedEnvironment !== '' && $requestedEnvironment !== 'ALL' && $environment !== $requestedEnvironment) {
+                continue;
+            }
+
+            $queued[] = array(
+                'id' => isset($item->id) ? (int) $item->id : 0,
+                'job' => $taskName,
+                'environment' => $environment,
+                'why' => isset($item->why) ? (string) $item->why : '',
+                // Jenkins reports this in milliseconds since the epoch.
+                'waitingSeconds' => isset($item->inQueueSince)
+                    ? max(0, time() - (int) round(((float) $item->inQueueSince) / 1000))
+                    : 0
+            );
+        }
+
+        $this->output
+            ->set_status_header(200)
+            ->set_content_type('application/json')
+            ->set_header('Cache-Control: no-store')
+            ->set_output(json_encode(array('ok' => TRUE, 'depth' => count($queued), 'items' => $queued)));
+    }
+
     public function executorMonitor()
     {
         if (! $this->canViewExecutorMonitoring()) {
@@ -245,6 +313,9 @@ class JenkinsProxy extends BaseController
 
     private function runningBuildLimit($value)
     {
+        if ($value === 'all') {
+            return 0;
+        }
         $limit = preg_match('/^[1-9][0-9]*$/', (string) $value) ? (int) $value : 5;
         return max(1, min(20, $limit));
     }
@@ -411,7 +482,7 @@ class JenkinsProxy extends BaseController
     {
         $environments = array();
         $limitedBuilds = array();
-        $limitPerEnvironment = max(1, (int) $limitPerEnvironment);
+        $limitPerEnvironment = max(0, (int) $limitPerEnvironment);
 
         foreach ($builds as $build) {
             $environment = isset($build['environment']) ? $build['environment'] : 'UNKNOWN';
@@ -422,7 +493,7 @@ class JenkinsProxy extends BaseController
 
             $environments[$environment]['running'] += 1;
 
-            if (count($environments[$environment]['builds']) < $limitPerEnvironment) {
+            if ($limitPerEnvironment === 0 || count($environments[$environment]['builds']) < $limitPerEnvironment) {
                 $build['rank'] = count($environments[$environment]['builds']) + 1;
                 $environments[$environment]['builds'][] = $build;
                 $limitedBuilds[] = $build;

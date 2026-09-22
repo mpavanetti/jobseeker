@@ -71,6 +71,7 @@ $route['dataset-generator/delete'] = 'DatasetGenerator/delete';
 $route['delete-job/jobs'] = 'DeleteJob/deleteJobs';
 $route['jenkins/proxy'] = 'JenkinsProxy/proxy';
 $route['jenkins/environmentSlots'] = 'JenkinsProxy/environmentSlots';
+$route['jenkins/queueDepth'] = 'JenkinsProxy/queueDepth';
 $route['jenkins/executorMonitor'] = 'JenkinsProxy/executorMonitor';
 $route['jenkins/dashboardMetrics'] = 'JenkinsProxy/dashboardMetrics';
 $route['jenkins/runningBuilds'] = 'JenkinsProxy/runningBuilds';
