@@ -8,7 +8,7 @@ boto3>=1.35.0,<2
 # Connection-test framework drivers (jobseeker.conntest). Keep every connector
 # type testable on the controller and its agents; protocol clients are imported
 # lazily by the SDK, so ordinary jobs do not pay their startup cost.
-psycopg[binary]>=3.1,<4
+psycopg[binary]>=3.3.6,<4
 redis>=5.0,<6
 pymongo>=4.6,<5
 oracledb>=2.2,<3
