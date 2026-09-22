@@ -2,7 +2,7 @@ pandas==2.3.2
 azure-identity==1.25.0
 azure-keyvault-secrets==4.10.0
 azure-storage-blob>=12.19,<13
-azure-storage-file-datalake>=12.14,<13
+azure-storage-file-datalake>=12.25.0,<13
 boto3>=1.35.0,<2
 
 # Connection-test framework drivers (jobseeker.conntest). Keep every connector
