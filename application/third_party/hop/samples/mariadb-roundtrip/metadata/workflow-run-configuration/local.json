@@ -1,0 +1,11 @@
+{
+  "configurationVariables": [],
+  "defaultSelection": true,
+  "description": "JobSeeker default local workflow engine",
+  "engineRunConfiguration": {
+    "Local": {
+      "safe_mode": false
+    }
+  },
+  "name": "local"
+}

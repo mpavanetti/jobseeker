@@ -232,6 +232,11 @@
       return null;
     }
 
+    // Polling replaces the SVG while a run is open. Carry its current zoom
+    // into the new drawing so watching metrics does not jump back to Fit.
+    var previousSvg = target.querySelector('.hop-canvas');
+    var previousView = previousSvg ? String(previousSvg.getAttribute('viewBox') || '').split(/\s+/).map(Number) : [];
+
     while (target.firstChild) {
       target.removeChild(target.firstChild);
     }
@@ -251,9 +256,13 @@
     var width = (box.maxX - box.minX) + PADDING * 2;
     var height = (box.maxY - box.minY) + PADDING * 2;
 
+    var view = { x: box.minX - PADDING, y: box.minY - PADDING, width: width, height: height };
+    if (previousView.length === 4 && previousView.every(isFinite) && previousView[2] > 0 && previousView[3] > 0) {
+      view = { x: previousView[0], y: previousView[1], width: previousView[2], height: previousView[3] };
+    }
     var svg = element('svg', {
       class: 'hop-canvas',
-      viewBox: (box.minX - PADDING) + ' ' + (box.minY - PADDING) + ' ' + width + ' ' + height,
+      viewBox: view.x + ' ' + view.y + ' ' + view.width + ' ' + view.height,
       preserveAspectRatio: 'xMidYMid meet',
       role: 'img',
       'aria-label': 'Apache Hop ' + (graph.kind || 'graph') + ' ' + (graph.name || '')
@@ -305,12 +314,15 @@
     placement.boxes.forEach(function(item) {
       var role = NODE_ROLE[String(item.node.type || '').toUpperCase()] || 'step';
       var state = nodeState[item.node.name];
-      var running = state && /running|waiting|paused|started/i.test(String(state.status || ''));
-      var failed = state && (parseInt(state.errors, 10) > 0 || /stopped|error/i.test(String(state.status || '')));
+      var status = state ? String(state.status || '') : '';
+      var running = state && /running|waiting|paused|started|initializing|idle/i.test(status);
+      var failed = state && (parseInt(state.errors, 10) > 0 || /stopped|error|fail|halting/i.test(status));
+      var complete = state && ! running && ! failed && /finished|success|disposed/i.test(status);
       var group = element('g', {
-        class: 'hop-node hop-node-' + role + (running ? ' is-running' : '') + (failed ? ' is-failed' : ''),
+        class: 'hop-node hop-node-' + role + (running ? ' is-running' : '') + (failed ? ' is-failed' : '') + (complete ? ' is-complete' : ''),
         transform: 'translate(' + item.x + ',' + item.y + ')',
-        tabindex: '0'
+        tabindex: '0',
+        'aria-label': item.node.name + (state ? ', ' + status + ', ' + state.written + ' rows written' : '')
       });
       group.appendChild(element('rect', { width: item.width, height: item.height, rx: 6 }));
       group.appendChild(element('text', { class: 'hop-node-name', x: 12, y: 20 }, truncate(item.node.name, Math.floor(item.width / CHARACTER_WIDTH) - 2)));
@@ -339,7 +351,6 @@
     // A large pipeline does not fit legibly in a modal, so the view can be
     // zoomed. The viewBox is the only thing that changes, which keeps text
     // crisp at every step.
-    var view = { x: box.minX - PADDING, y: box.minY - PADDING, width: width, height: height };
     var toolbar = document.createElement('div');
     toolbar.className = 'hop-canvas-toolbar';
     [

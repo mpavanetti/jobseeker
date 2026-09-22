@@ -594,8 +594,11 @@
   .hop-canvas .hop-node-success rect { fill: #eef7ee; stroke: #45a145; }
   .hop-canvas .hop-node-failure rect { fill: #fdeeee; stroke: #d9534f; }
   .hop-canvas .hop-node-passthrough rect { stroke-dasharray: 4 3; }
-  .hop-canvas .hop-node.is-running rect { stroke: #3c8dbc; stroke-width: 2.5; }
+  .hop-canvas .hop-node.is-running rect { fill: #dcefff; stroke: #3c8dbc; stroke-width: 2.5; animation: hop-running-pulse 1.8s ease-in-out infinite; }
+  .hop-canvas .hop-node.is-complete rect { fill: #e9f7e9; stroke: #45a145; stroke-width: 2; }
   .hop-canvas .hop-node.is-failed rect { fill: #fdeeee; stroke: #d9534f; stroke-width: 2.5; }
+  @keyframes hop-running-pulse { 50% { stroke-width: 4; fill: #c8e8ff; } }
+  @media (prefers-reduced-motion: reduce) { .hop-canvas .hop-node.is-running rect { animation: none; } }
   .hop-canvas .hop-node-metrics { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
   .hop-canvas .hop-edge { fill: none; stroke: #9aa5b1; stroke-width: 1.8; }
   .hop-canvas .hop-edge-success { stroke: #45a145; }
@@ -608,7 +611,7 @@
   .hop-canvas .hop-note rect { fill: #fffbe6; stroke: #e6d999; }
   .hop-canvas .hop-note text { font: 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #7a6f3d; }
 </style>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=2"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=3"></script>
 <?php } ?>
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
@@ -642,6 +645,9 @@
     var hopCanvasJobName = '';
     var hopCanvasTimer = null;
     var hopCanvasInFlight = false;
+    // The parsed canvas per Hop job. A Hop file only changes when somebody
+    // publishes a new one, so re-fetching it on every live tick is waste.
+    var hopCanvasGraphCache = {};
     var initialResumeBuild = {
       jobName: <?php echo json_encode(isset($resume_job) ? $resume_job : ''); ?>,
       buildNumber: <?php echo json_encode(isset($resume_build) ? $resume_build : ''); ?>,
@@ -715,39 +721,128 @@
       }, 5000);
     }
 
-    function drawHopCanvas() {
+    /**
+     * Only a job running on the Hop Server has live state the server can
+     * report. A "container" engine job starts an ephemeral Hop container that
+     * never registers with the server, so asking it is always a wasted request
+     * and always answers "nothing is running" - even mid-run.
+     */
+    function hopCanvasUsesServerEngine() {
+      var metadata = hopJob(hopCanvasJobName);
+      return !! metadata && String(metadata.engine || 'container') === 'server';
+    }
+
+    /**
+     * The run this screen is showing for the Hop job the canvas is open on,
+     * preferring one that is still going over a finished one.
+     */
+    function hopCanvasRun() {
+      var best = null;
+      Object.keys(executions).forEach(function(id) {
+        var run = executions[id];
+        if (! run || run.jobName !== hopCanvasJobName || ! run.buildNumber) {
+          return;
+        }
+        if (! best ||
+            (best.finished && ! run.finished) ||
+            (best.finished === run.finished && Number(run.buildNumber) > Number(best.buildNumber))) {
+          best = run;
+        }
+      });
+      return best;
+    }
+
+    /**
+     * Per-node state for a container run, read out of the build console this
+     * screen is already streaming. It is the same shape the Hop Server path
+     * returns, so the canvas overlay does not care which engine produced it.
+     */
+    function hopCanvasConsoleState(kind) {
+      var run = hopCanvasRun();
+      if (! run || ! window.JobSeekerConsole || ! window.JobSeekerConsole.hopNodeState) {
+        return null;
+      }
+      var host = $('#console-' + run.id);
+      if (! host.length) {
+        return null;
+      }
+      var text = window.JobSeekerConsole.getText(host);
+      if (! text) {
+        return null;
+      }
+      var state = window.JobSeekerConsole.hopNodeState(text, { kind: kind });
+      return state.nodeCount ? { run: run, nodes: state.nodes } : null;
+    }
+
+    function renderHopCanvas(graph) {
+      var metadata = hopJob(hopCanvasJobName) || {};
+      var live = graph.live || null;
+      var nodes = (live && live.nodes) || {};
+      var fromConsole = $('#hopCanvasLive').is(':checked') ? hopCanvasConsoleState(graph.kind) : null;
+      if (fromConsole && fromConsole.run.finished) { live = null; }
+      else if (live) { fromConsole = null; }
+      if (fromConsole) {
+        nodes = fromConsole.nodes;
+      }
+
+      $('#hopCanvasFileLabel').text(graph.file || metadata.entry_file || '');
+      $('#hopExecutionCanvasState').text(hopCanvasStateText(live, fromConsole));
+      $('#hopExecutionCanvasDetail').text('Select a transform or action to inspect its run metrics.');
+
+      window.JobSeekerHopCanvas.render('#hopExecutionCanvas', graph, {
+        nodeState: nodes,
+        onSelect: function(node) {
+          var state = nodes[node.name];
+          $('#hopExecutionCanvasDetail').text(
+            node.name + (node.type ? ' · ' + node.type : '') +
+            (state ? ' · ' + state.status + ' · read ' + state.read + ', written ' + state.written + ', errors ' + state.errors : '')
+          );
+        }
+      });
+    }
+
+    function hopCanvasStateText(live, fromConsole) {
+      if (live) {
+        return (live.status || live.state) + ' · started ' + (live.started_at || 'unknown');
+      }
+      if (fromConsole) {
+        return (fromConsole.run.finished ? 'Build #' : 'Running · build #') + fromConsole.run.buildNumber +
+          ' · metrics read from the build console';
+      }
+      if (hopCanvasUsesServerEngine()) {
+        return 'Design view · no live Hop Server run is currently attached';
+      }
+      return 'Design view · run this job to see its transforms light up';
+    }
+
+    function drawHopCanvas(options) {
       var metadata = hopJob(hopCanvasJobName);
       if (! metadata || ! window.JobSeekerHopCanvas || hopCanvasInFlight) {
         return;
       }
+
+      // The canvas itself only changes when the Hop file does. For a container
+      // job there is no server-side live state to collect either, so once the
+      // canvas is in hand every later tick is a local re-render against the
+      // console - no request at all.
+      var cached = hopCanvasGraphCache[hopCanvasJobName];
+      if (cached && ! (options && options.force) && ! hopCanvasUsesServerEngine()) {
+        renderHopCanvas(cached);
+        return;
+      }
+
       hopCanvasInFlight = true;
       $('#hopCanvasReload').prop('disabled', true).find('i').addClass('fa-spin');
 
+      var displayedRun = hopCanvasRun();
       $.getJSON(hopGraphUrl, {
         job: hopCanvasJobName,
-        live: $('#hopCanvasLive').is(':checked') ? '1' : '0'
+        live: $('#hopCanvasLive').is(':checked') && hopCanvasUsesServerEngine() ? '1' : '0',
+        started_after: displayedRun && ! displayedRun.finished && displayedRun.timestamp ? String(displayedRun.timestamp) : ''
       })
         .done(function(graph) {
-          var live = graph.live || null;
-          var nodes = (live && live.nodes) || {};
-          $('#hopCanvasFileLabel').text(graph.file || metadata.entry_file || '');
-          $('#hopExecutionCanvasState').text(
-            live
-              ? (live.status || live.state) + ' · started ' + (live.started_at || 'unknown')
-              : 'Design view · no live Hop Server run is currently attached'
-          );
-          $('#hopExecutionCanvasDetail').text('Select a transform or action to inspect its run metrics.');
-
-          window.JobSeekerHopCanvas.render('#hopExecutionCanvas', graph, {
-            nodeState: nodes,
-            onSelect: function(node) {
-              var state = nodes[node.name];
-              $('#hopExecutionCanvasDetail').text(
-                node.name + (node.type ? ' · ' + node.type : '') +
-                (state ? ' · ' + state.status + ' · read ' + state.read + ', written ' + state.written + ', errors ' + state.errors : '')
-              );
-            }
-          });
+          hopCanvasGraphCache[hopCanvasJobName] = graph;
+          renderHopCanvas(graph);
         })
         .fail(function(response) {
           var message = (response && response.responseJSON && response.responseJSON.error) || 'The Apache Hop canvas could not be read.';
@@ -765,12 +860,21 @@
       if (! metadata || ! $('#hopCanvasModal').length) {
         return;
       }
+      var alreadyOpen = $('#hopCanvasModal').hasClass('in');
       hopCanvasJobName = String(jobName);
       $('#hopCanvasJobLabel').text(hopCanvasJobName);
       $('#hopCanvasFileLabel').text(metadata.entry_file || '');
       $('#hopExecutionCanvasState').text('Loading canvas…');
       $('#hopExecutionCanvas').html('<div class="hop-canvas-empty"><i class="fa fa-refresh fa-spin"></i> Loading Apache Hop canvas…</div>');
       $('#hopCanvasModal').modal('show');
+
+      // Bootstrap only fires shown.bs.modal on a modal that was hidden, so
+      // picking a second Hop job while the canvas is already open has to draw
+      // itself - otherwise it keeps showing the job that opened it.
+      if (alreadyOpen) {
+        drawHopCanvas({ force: true });
+        scheduleHopCanvas();
+      }
     }
 
     function jenkinsJobPath(jobName) {
@@ -2474,14 +2578,14 @@
     });
 
     $('#hopCanvasModal').on('shown.bs.modal', function() {
-      drawHopCanvas();
+      drawHopCanvas({ force: true });
       scheduleHopCanvas();
     }).on('hidden.bs.modal', function() {
       clearHopCanvasTimer();
       hopCanvasJobName = '';
     });
 
-    $('#hopCanvasReload').on('click', drawHopCanvas);
+    $('#hopCanvasReload').on('click', function() { drawHopCanvas({ force: true }); });
     $('#hopCanvasLive').on('change', function() {
       scheduleHopCanvas();
       drawHopCanvas();

@@ -195,6 +195,7 @@ class HopServer
             return NULL;
         }
         $execution['log'] = $this->log($response['body']);
+        $execution['nodes'] = $this->parseExecutionNodes($kind, $response['body']);
         return $execution;
     }
 
@@ -219,9 +220,14 @@ class HopServer
             return array();
         }
 
+        return $this->parseExecutionNodes($kind, $response['body']);
+    }
+
+    private function parseExecutionNodes($kind, $body)
+    {
         $nodes = array();
         if ($kind === 'workflow') {
-            foreach ($this->blocks($response['body'], 'action_status') as $block) {
+            foreach ($this->blocks($body, 'action_status') as $block) {
                 $nodeName = $this->value($block, 'name');
                 if ($nodeName === '') {
                     continue;
@@ -236,27 +242,37 @@ class HopServer
             return $nodes;
         }
 
-        foreach ($this->blocks($response['body'], 'transform_status') as $block) {
+        foreach ($this->blocks($body, 'transform_status') as $block) {
             $nodeName = $this->value($block, 'transformName');
             if ($nodeName === '') {
                 continue;
             }
-            $nodes[$nodeName] = array(
-                'status' => $this->value($block, 'statusDescription'),
-                'read' => max((int) $this->value($block, 'linesRead'), (int) $this->value($block, 'linesInput')),
-                'written' => (int) $this->value($block, 'linesWritten'),
-                'errors' => (int) $this->value($block, 'errors')
-            );
+            $status = $this->value($block, 'statusDescription');
+            if (! isset($nodes[$nodeName])) {
+                $nodes[$nodeName] = array('status' => $status, 'read' => 0, 'written' => 0, 'errors' => 0);
+            }
+            // Hop reports one transform_status per copy. Keep the totals for
+            // every copy and show Running until the last copy has finished.
+            $nodes[$nodeName]['read'] += max((int) $this->value($block, 'linesRead'), (int) $this->value($block, 'linesInput'));
+            $nodes[$nodeName]['written'] += (int) $this->value($block, 'linesWritten');
+            $nodes[$nodeName]['errors'] += (int) $this->value($block, 'errors');
+            if (preg_match('/error|fail|stopped|halting/i', $status)
+                || (! preg_match('/error|fail|stopped|halting/i', $nodes[$nodeName]['status'])
+                    && preg_match('/running|waiting|paused|started|initializing|idle/i', $status))) {
+                $nodes[$nodeName]['status'] = $status;
+            }
         }
         return $nodes;
     }
 
     /** The execution the server currently holds for one object, newest first. */
-    public function currentExecution($kind, $name, $timeoutSeconds = 5)
+    public function currentExecution($kind, $name, $timeoutSeconds = 5, $startedAfter = '', $runningOnly = FALSE)
     {
         $latest = NULL;
         foreach ($this->executions($timeoutSeconds) as $execution) {
-            if ($execution['kind'] !== $kind || $execution['name'] !== $name) {
+            if ($execution['kind'] !== $kind || $execution['name'] !== $name
+                || ($runningOnly && $execution['state'] !== 'running')
+                || ($startedAfter !== '' && strcmp((string) $execution['started_at'], (string) $startedAfter) < 0)) {
                 continue;
             }
             if ($latest === NULL || strcmp((string) $execution['started_at'], (string) $latest['started_at']) > 0) {

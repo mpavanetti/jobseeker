@@ -137,6 +137,14 @@ with tempfile.TemporaryDirectory(prefix="jobseeker-hop-test-") as root:
     )
     assert hop.redact(secret_text, connector_variables) == "******** ******** ********"
 
+    server = hop.ServerEngine(project, root, root, {})
+    registry_snapshots = iter((
+        {"old-id": "platform-variables"},
+        {"old-id": "platform-variables", "new-id": "platform-variables"},
+    ))
+    server._registered_ids = lambda: next(registry_snapshots)  # type: ignore[method-assign]
+    assert server._new_execution_id({"old-id"}, "platform-variables") == "new-id"
+
 
 clean_counters = hop.parse_hop_counters(
     "read.0 - Finished processing (I=1, O=0, R=1, W=1, U=0, E=0)"

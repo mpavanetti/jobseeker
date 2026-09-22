@@ -29,6 +29,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -49,6 +50,7 @@ REPOSITORY = os.path.abspath(os.environ.get(
     "JOBSEEKER_HOP_E2E_ROOT",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "repository"),
 ))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JOB = "hop-e2e-form-%s" % uuid.uuid4().hex[:6]
 UPLOAD_JOB = "hop-e2e-upload-%s" % uuid.uuid4().hex[:6]
 ARCHIVE_JOB = "hop-e2e-archive-%s" % uuid.uuid4().hex[:6]
@@ -60,6 +62,39 @@ FAILED: list = []
 
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+
+def console_sections(console: str) -> list[dict]:
+    analyzer = r"""
+const fs = require('fs');
+const groups = require('./assets/js/job-console-groups');
+const parsed = groups.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(parsed.sections.map(section => ({
+  kind: section.kind,
+  title: section.title,
+  hasError: section.hasError
+}))));
+"""
+    completed = subprocess.run(
+        ["node", "-e", analyzer], cwd=ROOT, input=console,
+        text=True, capture_output=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("Console classifier failed: " + completed.stderr.strip())
+    return json.loads(completed.stdout)
+
+
+def check_hop_console(name: str, console: str) -> None:
+    sections = console_sections(console)
+    kinds = [section["kind"] for section in sections]
+    red = [section["title"] for section in sections if section["hasError"]]
+    check(name + " is grouped as Apache Hop", "hop-execution" in kinds, "sections=%s" % kinds)
+    check(name + " has no false error sections", not red, "red=%s" % red)
+    check(
+        name + " is not grouped as a generic Docker job",
+        not {"docker-runtime", "docker-build", "docker-execution"}.intersection(kinds),
+        "sections=%s" % kinds,
+    )
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
@@ -477,6 +512,7 @@ def main() -> int:
     check("platform variables are fully resolved in the created job",
           "${JOBSEEKER_" not in console,
           console[-1000:] if console else "empty console")
+    check_hop_console("the generated Hop console", console)
 
     print("\nuploading and publishing a standalone Hop pipeline")
     pipeline_source = os.path.join(
@@ -537,6 +573,7 @@ def main() -> int:
     check("Jenkins executes the uploaded pipeline", upload_build_status == 200, "HTTP %s" % upload_build_status)
     check("the uploaded pipeline build succeeds", upload_build.get("result") == "SUCCESS",
           "%s: %s" % (upload_build.get("result"), upload_console[-500:]))
+    check_hop_console("the uploaded Hop console", upload_console)
 
     # A pipeline published straight to the Hop Server from the Apache Hop GUI
     # never touches Jenkins. It used to be visible only inside Hop; the Apache

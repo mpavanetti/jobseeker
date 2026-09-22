@@ -1,0 +1,17 @@
+{
+  "assets": [],
+  "connectors": [
+    "jobseeker-mariadb"
+  ],
+  "context": [
+    "Custom"
+  ],
+  "description": "Safe MariaDB write/read example: uses the JobSeeker connector to create an isolated sample table, writes one run-scoped row, verifies it, then removes the row.",
+  "engine": "container",
+  "entry_file": "workflows/main.hwf",
+  "log_level": "Basic",
+  "parameters": {},
+  "project": "mariadb-roundtrip",
+  "run_config": "local",
+  "schema_version": 1
+}
