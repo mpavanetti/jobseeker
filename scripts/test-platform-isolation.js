@@ -61,7 +61,7 @@ assert(jenkinsProxy.includes('$status = $this->jenkinsExecutorMonitorStatus($req
 assert(jenkinsProxy.includes('$this->includeConfiguredContextEnvironments($status, $requestedEnvironment)'), 'Configured executor placeholders must preserve the requested backend scope.');
 assert(baseController.includes('scopeJenkinsExecutorMonitorStatus($slotStatus, $environment)'), 'Executor rows must be scoped before the backend response is returned.');
 assert(baseController.includes('$this->checkJenkinsEnvironmentSlotsForBuildRequest($path, $body)'), 'JobSeeker build requests must enforce environment slot limits.');
-assert(baseController.includes('jenkinsOnlineEnvironmentAgentCapacity($environment)'), 'Agent routing must inspect matching online environment capacity.');
+assert(baseController.includes('jenkinsEnvironmentExecutionLabel($environment)'), 'Build routing must use the shared-and-agent environment label expression.');
 assert(!executorView.includes('scopedRows') && !executorView.includes('scopedEnvironments'), 'Executor monitoring must not filter environment rows in JavaScript.');
 assert(tmfController.includes("$environment = array($globalEnvironment)"), 'TMF form filters must not broaden the global backend scope.');
 assert(tmfController.includes('$this->jobSeekerEnvironmentPreference()'), 'TMF must use the current user environment preference when the URL has no filter.');
@@ -89,7 +89,7 @@ assert(contextScript.includes('dom: \'rt<"context-datatable-footer"ip>\''), 'Con
 assert(contextScript.includes(".find('.dataTables_paginate').toggle(info.pages > 1)"), 'Context pagination must be hidden when the filtered result has one page.');
 assert(!contextScript.includes('append($pagination)') && !contextView.includes('contextTablePagination'), 'Context pagination must not be detached from DataTables event handling.');
 assert(assetScript.includes("window.location.href = baseUrl + '?environment='"), 'Data Asset environment changes must reload backend-filtered rows.');
-assert(jobCreationController.includes('$this->jenkinsOnlineEnvironmentAgentCapacity($environment)'), 'New jobs must target only online matching environment agents.');
+assert(jobCreationController.includes('$this->jenkinsEnvironmentExecutionLabel($environment)'), 'New jobs must target their environment agent and the shared node.');
 assert(JSON.parse(runtimeConfig).jenkins.environment_agents_enabled === true, 'Environment-agent routing must default to enabled in runtime config.');
 assert(compose.includes('JOBSEEKER_JENKINS_ENVIRONMENT_AGENTS_ENABLED:-true'), 'Compose must enable environment-agent routing by default.');
 

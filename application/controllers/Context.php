@@ -1538,9 +1538,8 @@ private function rewritePromotionAgentAssignment($dom, $sourceEnvironment, $targ
     return 0;
   }
 
-  $targetCapacity = $this->jenkinsOnlineEnvironmentAgentCapacity($targetEnvironment);
-  $targetAgentLabel = $targetCapacity['label'];
-  $agentLabel = (int) $targetCapacity['executors'] > 0 ? $targetAgentLabel : '';
+  $targetAgentLabel = $this->jenkinsEnvironmentAgentLabel($targetEnvironment);
+  $agentLabel = $this->jenkinsEnvironmentExecutionLabel($targetEnvironment);
   $sourceAgentLabel = $this->jenkinsEnvironmentAgentLabel($sourceEnvironment);
   $updates = 0;
   $root = $dom->documentElement;
@@ -1555,7 +1554,7 @@ private function rewritePromotionAgentAssignment($dom, $sourceEnvironment, $targ
     $currentLabel = $assignedNode ? trim((string) $assignedNode->nodeValue) : '';
     $isJobSeekerPin = $currentLabel !== '' && (
       in_array($currentLabel, array($sourceAgentLabel, $targetAgentLabel), TRUE)
-      || preg_match('/^jobseeker-env-[a-z0-9_-]+$/i', $currentLabel)
+      || preg_match('/^jobseeker-env-[a-z0-9_-]+(?:\s*\|\|\s*built-in)?$/i', $currentLabel)
     );
     if ($assignedNode && ($currentLabel === '' || $isJobSeekerPin)) {
       while ($assignedNode->firstChild) {

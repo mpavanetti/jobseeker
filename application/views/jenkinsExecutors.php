@@ -407,9 +407,13 @@
       return $.map(nodes || [], function(node) {
         var status = node.offline ? '<span class="label label-danger">Offline</span>' : (node.temporarilyOffline ? '<span class="label label-warning">Temporarily offline</span>' : '<span class="label label-success">Online</span>');
 
+        var environmentCell = node.environment
+          ? environmentLabel(node.environment)
+          : '<span class="label label-default">Shared</span>';
+
         return '<tr>' +
           '<td>' + escapeHtml(node.node || 'Jenkins node') + '</td>' +
-          '<td>' + (node.environment ? environmentLabel(node.environment) : '<span class="label label-default">Shared</span>') + '</td>' +
+          '<td>' + environmentCell + '</td>' +
           '<td>' + status + '</td>' +
           '<td>' + number(node.busyExecutors) + ' / ' + number(node.executors) + '</td>' +
           '<td>' + number(node.availableExecutors) + '</td>' +
@@ -442,7 +446,7 @@
         var label = labels[selected] || ('jobseeker-env-' + String(selected).toLowerCase());
         var agents = slots ? number(slots.onlineAgentNodes) + ' / ' + number(slots.agentNodes) : '0 / 0';
         var executors = slots ? number(slots.availableAgentExecutors) + ' / ' + number(slots.agentExecutors) : '0 / 0';
-        return badge + ' ' + escapeHtml(selected) + ' routes to <code>' + escapeHtml(label) + '</code>. Online workers: ' + agents + '. Available worker executors: ' + executors + '.';
+        return badge + ' ' + escapeHtml(selected) + ' can run on <code>' + escapeHtml(label) + '</code> or the shared built-in node. Online workers: ' + agents + '. Available agent executors: ' + executors + '.';
       }
 
       return badge + ' All environments are shown. The executor total includes controller executors plus any online agent executors.';

@@ -397,10 +397,11 @@ class Pipelines extends BaseController
             return;
         }
         $sourceLabel = $this->jenkinsEnvironmentAgentLabel($sourceEnvironment);
-        if ($sourceLabel === '' || trim($assignedNode->nodeValue) !== $sourceLabel) {
+        $sourceExecutionLabel = $this->jenkinsEnvironmentExecutionLabel($sourceEnvironment);
+        if ($sourceLabel === '' || ! in_array(trim($assignedNode->nodeValue), array($sourceLabel, $sourceExecutionLabel), TRUE)) {
             return;
         }
-        $targetLabel = $this->jenkinsEnvironmentAgentLabel($targetEnvironment);
+        $targetLabel = $this->jenkinsEnvironmentExecutionLabel($targetEnvironment);
         while ($assignedNode->firstChild) {
             $assignedNode->removeChild($assignedNode->firstChild);
         }
