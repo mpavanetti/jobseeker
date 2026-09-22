@@ -9,8 +9,10 @@ rows behind.
 from __future__ import annotations
 
 import http.cookiejar
+import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -27,6 +29,17 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = os.environ.get("JOBSEEKER_E2E_URL", "http://localhost").rstrip("/")
 ADMIN_EMAIL = os.environ.get("JOBSEEKER_E2E_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.environ.get("JOBSEEKER_E2E_PASSWORD", "123456")
+
+CONSOLE_ANALYZER = r"""
+const fs = require('fs');
+const groups = require('./assets/js/job-console-groups');
+const parsed = groups.parse(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(parsed.sections.map(section => ({
+  kind: section.kind,
+  title: section.title,
+  hasError: section.hasError
+}))));
+"""
 
 PHP_RENDERER = r'''
 define('BASEPATH', '/workspace/system/');
@@ -125,6 +138,7 @@ foreach ($samples as $sample) {
             'entry_point' => isset($sample['entry_point']) ? $sample['entry_point'] : '',
             'code' => isset($sample['code']) ? $sample['code'] : '',
             'requirements' => isset($sample['requirements']) ? $sample['requirements'] : '',
+            'use_dockerfile' => ! empty($sample['use_dockerfile']),
             'files' => isset($sample['files']) ? $sample['files'] : array(),
             'command' => $command
         );
@@ -180,6 +194,154 @@ class Browser:
         if status not in expected:
             raise RuntimeError(f"{method} {path} returned {status}: {text[:500]}")
         return status, text
+
+    def multipart(
+        self,
+        path: str,
+        fields: dict[str, str],
+        file_field: str,
+        file_name: str,
+        file_content: bytes,
+        content_type: str = "text/csv",
+    ) -> tuple[int, str]:
+        boundary = "----jobseeker-samples-" + uuid.uuid4().hex
+        parts: list[str] = []
+        values = list(fields.items()) + [("csrf_test_name", self.csrf())]
+        for name, value in values:
+            parts.extend([
+                "--" + boundary,
+                f'Content-Disposition: form-data; name="{name}"',
+                "",
+                str(value),
+            ])
+        prefix = ("\r\n".join(parts) + "\r\n").encode()
+        file_header = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{file_field}"; filename="{file_name}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode()
+        suffix = f"\r\n--{boundary}--\r\n".encode()
+        return self.request(
+            path,
+            method="POST",
+            body=prefix + file_header + file_content + suffix,
+            content_type="multipart/form-data; boundary=" + boundary,
+        )
+
+
+def assets_from_page(page: str) -> list[dict[str, Any]]:
+    match = re.search(r'<script id="dataAssetsPayload" type="application/json">(.*?)</script>', page, re.S)
+    if not match:
+        raise RuntimeError("The Data Assets page did not publish its JSON payload.")
+    return json.loads(html.unescape(match.group(1)))
+
+
+def console_sections(console: str) -> list[dict[str, Any]]:
+    completed = subprocess.run(
+        ["node", "-e", CONSOLE_ANALYZER],
+        cwd=ROOT,
+        input=console,
+        text=True,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("Console classifier failed: " + completed.stderr.strip())
+    return json.loads(completed.stdout)
+
+
+def console_contract_error(case: dict[str, Any], console: str) -> str:
+    sections = console_sections(console)
+    kinds = [section["kind"] for section in sections]
+    red = [section["title"] for section in sections if section["hasError"]]
+    if red:
+        return "successful console contains red section(s): " + ", ".join(red)
+
+    docker_kinds = {"docker-runtime", "docker-build", "docker-execution"}
+    if case["runtime"] == "local":
+        unexpected = sorted(docker_kinds.intersection(kinds))
+        if unexpected:
+            return "local runtime was grouped as Docker: " + ", ".join(unexpected)
+        required = "shell" if case["family"] == "shell" else "python"
+        if required not in kinds:
+            return "local console is missing the %s execution section" % required
+        if case["family"] == "python" and "python-environment" not in kinds:
+            return "local Python console is missing its environment section"
+        return ""
+
+    for required in ("docker-runtime", "docker-execution"):
+        if required not in kinds:
+            return "Docker console is missing the %s section" % required
+    expects_build = case["family"] == "python" and bool(case["use_dockerfile"])
+    if expects_build != ("docker-build" in kinds):
+        return (
+            "custom Dockerfile build was not grouped as an image build"
+            if expects_build
+            else "prebuilt Docker image was incorrectly grouped as an image build"
+        )
+    return ""
+
+
+SAMPLE_ASSETS: dict[str, list[tuple[str, str, bytes | None]]] = {
+    "shell-data-asset": [("etl", "input", b"id,value\n1,ready\n")],
+    "shell-connector-asset-bridge": [("etl", "input", b"id,value\n1,ready\n")],
+    "python-asset-transform": [
+        ("customer-reference", "input", b"Customer_ID,Name,customer_id,email\n1,Alice,1,alice@example.com\n"),
+        ("customer-normalized", "output", None),
+    ],
+    "python-db-warehouse-etl": [("tmf-run-summary", "output", None)],
+    "python-quality-workspace": [
+        ("customer-reference", "input", b"Customer_ID,Name,customer_id,email\n1,Alice,1,alice@example.com\n"),
+    ],
+    "python-multi-stage-etl": [
+        ("orders-inbound", "input", b"order_id,amount,source\norder-1,42.50,e2e\n"),
+        ("orders-curated", "output", None),
+    ],
+    "python-platform-pipeline": [
+        ("orders-inbound", "input", b"order_id,amount,source\norder-1,42.50,e2e\n"),
+        ("orders-curated", "output", None),
+    ],
+}
+
+
+def register_sample_asset(
+    browser: Browser,
+    job_name: str,
+    key: str,
+    direction: str,
+    content: bytes | None,
+) -> dict[str, Any]:
+    fields = {
+        "asset_id": "0",
+        "name": f"Sample E2E {key}",
+        "asset_key": key,
+        "direction": direction,
+        "environment": "DEV",
+        "job_name": job_name,
+        "format": "csv",
+        "file_name": key + ".csv",
+        "delimiter": ",",
+        "encoding": "UTF-8",
+        "has_header": "1",
+        "sheet": "",
+        "description": "Disposable sample runtime E2E fixture.",
+        "is_required": "1" if direction == "input" else "0",
+        "is_active": "1",
+    }
+    if content is None:
+        _, page = browser.request(
+            "/data-assets/save?environment=DEV", method="POST", fields=fields, csrf=True
+        )
+    else:
+        _, page = browser.multipart(
+            "/data-assets/save?environment=DEV", fields, "asset_file", key + ".csv", content
+        )
+    asset = next(
+        (item for item in assets_from_page(page) if item["key"] == key and item["job"] == job_name),
+        None,
+    )
+    if not asset:
+        raise RuntimeError(f"Data Asset fixture {key!r} was not registered for {job_name!r}.")
+    return asset
 
 
 def render_cases(run_id: str) -> list[dict[str, Any]]:
@@ -288,6 +450,8 @@ def main() -> None:
     cases = render_cases(run_id)
     browser = Browser()
     created_jobs: list[str] = []
+    created_assets: list[dict[str, Any]] = []
+    output_assets: list[dict[str, Any]] = []
     workspaces: list[Path] = []
     failures: list[tuple[dict[str, Any], str, str]] = []
 
@@ -302,6 +466,13 @@ def main() -> None:
         raise RuntimeError("Admin login failed.")
 
     try:
+        for case in cases:
+            for key, direction, content in SAMPLE_ASSETS.get(case["id"], []):
+                asset = register_sample_asset(browser, case["job_name"], key, direction, content)
+                created_assets.append(asset)
+                if direction == "output":
+                    output_assets.append(asset)
+
         total = len(cases)
         for index, case in enumerate(cases, start=1):
             label = f"{case['family']}/{case['id']} [{case['runtime']}]"
@@ -331,6 +502,18 @@ def main() -> None:
             print(f"[{index:02d}/{total}] {label}: {result} (build {build_number})", flush=True)
             if result != "SUCCESS":
                 failures.append((case, result, console))
+            elif (console_error := console_contract_error(case, console)):
+                failures.append((case, "CONSOLE_GROUPING: " + console_error, console))
+            elif case["id"] == "shell-data-asset" and "Resolved etl ->" not in console:
+                failures.append((case, "DATA_ASSET_NOT_RESOLVED", console))
+            elif case["id"] == "shell-connector-asset-bridge" and "Resolved Data Asset etl ->" not in console:
+                failures.append((case, "DATA_ASSET_NOT_RESOLVED", console))
+            elif case["id"] == "python-asset-transform" and "Published 1 rows to jobseeker://dev/" not in console:
+                failures.append((case, "DATA_ASSET_NOT_PUBLISHED", console))
+            elif case["id"] == "python-db-warehouse-etl" and "Published " not in console:
+                failures.append((case, "DATA_ASSET_NOT_PUBLISHED", console))
+            elif case["id"] == "python-platform-pipeline" and "Published 1 rows to jobseeker://dev/" not in console:
+                failures.append((case, "DATA_ASSET_NOT_PUBLISHED", console))
 
         if failures:
             print("\nSample matrix failures:", flush=True)
@@ -340,7 +523,22 @@ def main() -> None:
                 print(f"\n--- {label}: {result} ---\n{tail}", flush=True)
             raise SystemExit(1)
 
-        print(f"All {len(cases)} sample/runtime Jenkins builds passed.", flush=True)
+        # Opening the catalog refreshes metadata for files written by jobs.
+        _, catalog_body = browser.request("/data-assets/catalog?environment=DEV")
+        catalog = json.loads(catalog_body)["assets"]
+        catalog_by_scope = {(item["key"], item["job"]): item for item in catalog}
+        missing_outputs = []
+        for asset in output_assets:
+            published = catalog_by_scope.get((asset["key"], asset["job"]))
+            if not published or not published["exists"] or int(published["version"]) < 1 or not published["checksum"]:
+                missing_outputs.append(f"{asset['job']}:{asset['key']}")
+        if missing_outputs:
+            raise RuntimeError("Sample jobs did not publish output Data Assets: " + ", ".join(missing_outputs))
+
+        print(
+            f"All {len(cases)} sample/runtime Jenkins builds and {len(created_assets)} scoped Data Assets passed.",
+            flush=True,
+        )
     finally:
         for job_name in reversed(created_jobs):
             try:
@@ -355,6 +553,35 @@ def main() -> None:
                 print(f"Cleanup warning for Jenkins job {job_name}: {error}", flush=True)
         for workspace in reversed(workspaces):
             shutil.rmtree(workspace, ignore_errors=True)
+        for asset in reversed(created_assets):
+            try:
+                browser.request(
+                    "/data-assets/delete?environment=DEV",
+                    method="POST",
+                    fields={"asset_id": str(asset["id"]), "delete_file": "1"},
+                    csrf=True,
+                    expected=(200,),
+                )
+            except Exception as error:  # noqa: BLE001 - cleanup must continue
+                print(f"Cleanup warning for Data Asset {asset['key']}: {error}", flush=True)
+        # The API leaves empty key/scope directories by design. Remove only
+        # empty directories owned by this run; never unlink unexpected files.
+        for job_name in {case["job_name"] for case in cases}:
+            asset_root = ROOT / "repository" / "data-assets" / "dev" / job_name
+            if asset_root.is_dir():
+                for directory in sorted(
+                    (path for path in asset_root.rglob("*") if path.is_dir()),
+                    key=lambda path: len(path.parts),
+                    reverse=True,
+                ):
+                    try:
+                        directory.rmdir()
+                    except OSError:
+                        pass
+                try:
+                    asset_root.rmdir()
+                except OSError:
+                    pass
         if created_jobs:
             placeholders = ",".join("'%s'" % name.replace("'", "''") for name in created_jobs)
             subprocess.run(
@@ -366,7 +593,10 @@ def main() -> None:
                     "mariadb",
                     "sh",
                     "-lc",
-                    f'exec mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "DELETE FROM job_dependencies WHERE job_name IN ({placeholders})"',
+                    f'exec mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "'
+                    f'DELETE FROM tmf_error WHERE job_name IN ({placeholders}); '
+                    f'DELETE FROM tmf WHERE job_name IN ({placeholders}); '
+                    f'DELETE FROM job_dependencies WHERE job_name IN ({placeholders});"',
                 ],
                 cwd=ROOT,
                 capture_output=True,

@@ -3729,7 +3729,14 @@
       var pythonDockerfileUserEdited = false;
       var defaultDockerPythonVersion = '3.13';
       var pythonInlineOpenVscodeEnabled = <?php $openvscodeFlag = getenv('JOBSEEKER_OPENVSCODE_ENABLED'); echo json_encode($openvscodeFlag === FALSE || trim((string) $openvscodeFlag) === '' || ! in_array(strtolower(trim((string) $openvscodeFlag)), array('0', 'false', 'no', 'off'), TRUE)); ?>;
-      var jobSampleCatalog = <?php echo json_encode(array_values(isset($job_samples) ? $job_samples : array()), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES); ?> || [];
+      // Fetched the first time the sample library is opened rather than inlined
+      // here: the catalog is the same static document for everyone, so serving
+      // it separately lets the browser cache it and keeps roughly 40KB of JSON
+      // out of every single load of this page.
+      var jobSampleCatalogUrl = <?php echo json_encode(base_url().'jobCreation/samples'); ?>;
+      var jobSampleCatalog = [];
+      var jobSampleCatalogLoaded = false;
+      var jobSampleCatalogRequest = null;
       var jobSampleIntegrationLabels = {
         tmf: 'TMF',
         contexts: 'Contexts',
@@ -3957,6 +3964,21 @@
         toastr.success(sample.name + ' loaded. Review names, context keys, assets, and connectors before saving.', 'Job Sample Loaded');
       }
 
+      function loadJobSampleCatalog() {
+        if (jobSampleCatalogLoaded) {
+          return $.Deferred().resolve().promise();
+        }
+        if (! jobSampleCatalogRequest) {
+          jobSampleCatalogRequest = $.getJSON(jobSampleCatalogUrl)
+            .done(function(samples) {
+              jobSampleCatalog = $.isArray(samples) ? samples : [];
+              jobSampleCatalogLoaded = true;
+            })
+            .always(function() { jobSampleCatalogRequest = null; });
+        }
+        return jobSampleCatalogRequest;
+      }
+
       $(document).on('click', '.open-job-sample-library', function() {
         selectedJobSampleId = '';
         var currentFamily = $('#linuxCommand').is(':checked') ? currentExecutionFamily() : 'all';
@@ -3964,8 +3986,20 @@
         $('#jobSampleComplexity').val('all');
         $('#jobSampleIntegration').val('all');
         $('#jobSampleSearch').val('');
-        renderJobSampleLibrary();
         $('#jobSampleModal').modal('show');
+
+        if (jobSampleCatalogLoaded) {
+          renderJobSampleLibrary();
+          return;
+        }
+
+        $('#jobSampleGrid').html('<div class="job-sample-empty"><i class="fa fa-refresh fa-spin"></i> Loading the sample library…</div>');
+        $('#loadSelectedJobSample').prop('disabled', true);
+        loadJobSampleCatalog()
+          .done(renderJobSampleLibrary)
+          .fail(function() {
+            $('#jobSampleGrid').html('<div class="job-sample-empty"><i class="fa fa-exclamation-triangle"></i> The sample library could not be loaded.</div>');
+          });
       });
 
       $('#jobSampleFamily, #jobSampleComplexity, #jobSampleIntegration').on('change', renderJobSampleLibrary);
@@ -5671,10 +5705,24 @@
         }
 
         sortPythonInlineWorkspace();
-        $('#pythonInlineFilesJson').val(JSON.stringify({
+
+        var field = $('#pythonInlineFilesJson');
+        var next = JSON.stringify({
           files: pythonInlineExtraFiles,
           directories: pythonInlineDirectories
-        }));
+        });
+
+        // Only announce a real change. Read-only callers such as draftFromForm()
+        // and currentPythonExternalPayload() re-sync on every autosave tick, and
+        // a notification per tick would re-run the dependency scan for a
+        // workspace nobody touched. A dedicated event rather than "change" also
+        // keeps this off the form-wide change handlers those callers run under,
+        // which is what would turn an autosave into a loop.
+        if (field.val() === next) {
+          return;
+        }
+
+        field.val(next).trigger('jobseeker:inline-files-changed');
       }
 
       function loadPythonInlineFilesFromHidden() {
@@ -9521,7 +9569,12 @@ $(document).on('click', '.inspectJenkinsJob', function() {
 
   $(document).on('input change', '#pythonInlineCode, #linuxCommandLine, #windowsCommandLine, #pythonRequirementsText, #job_name', schedule);
   $(document).on('change', '#environment', schedule);
-  $(document).on('DOMSubtreeModified', '#pythonInlineFilesJson', schedule);
+  // The inline workspace is written into a hidden field by script, which fires
+  // no input or change event of its own. This used to listen for
+  // DOMSubtreeModified; Chrome has since removed that event entirely, so adding
+  // a file that references js.connector(...) or js.asset(...) silently stopped
+  // refreshing the dependency panel.
+  $(document).on('jobseeker:inline-files-changed', '#pythonInlineFilesJson', schedule);
 
   $(document).on('click', '#jobDependencyTest', function() {
     var button = $(this).prop('disabled', true);

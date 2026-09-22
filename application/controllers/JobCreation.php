@@ -38,7 +38,6 @@ class JobCreation extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : Job Creation';
-      $jobSamples = require APPPATH . 'config/job_samples.php';
       $gitCredentials = array();
       if ($this->db->table_exists('database_settings')) {
         $gitCredentials = $this->db
@@ -75,7 +74,6 @@ class JobCreation extends BaseController
       }
       $data = array(
         'job_creation_dates' => $this->readJobCreationDates(),
-        'job_samples' => is_array($jobSamples) ? $jobSamples : array(),
         'git_credentials' => $gitCredentials,
         'hop_enabled' => $hopEnabled,
         'hop_projects' => $hopProjects,
@@ -472,6 +470,35 @@ class JobCreation extends BaseController
         ->set_status_header((int) $status)
         ->set_content_type('application/json', 'utf-8')
         ->set_output(json_encode($payload));
+    }
+
+    /**
+     * The job sample library, as its own cacheable document.
+     *
+     * The catalog is a static config file - the same bytes for every user and
+     * every request - but it was inlined into the job creation page, so a page
+     * that is already the heaviest in the platform carried it again on every
+     * load and no browser could cache it. It is only read when somebody opens
+     * the sample library, so it is fetched then instead.
+     */
+    public function samples()
+    {
+      $samples = require APPPATH . 'config/job_samples.php';
+      $payload = json_encode(array_values(is_array($samples) ? $samples : array()), JSON_UNESCAPED_SLASHES);
+
+      // Revalidation keeps a deploy that ships new samples from being pinned
+      // behind a cached copy, while costing a 304 rather than the whole body.
+      $etag = '"' . md5($payload) . '"';
+      if (trim((string) $this->input->get_request_header('If-None-Match', TRUE)) === $etag) {
+        $this->output->set_status_header(304)->set_header('ETag: '.$etag);
+        return;
+      }
+
+      $this->output
+        ->set_content_type('application/json', 'utf-8')
+        ->set_header('ETag: '.$etag)
+        ->set_header('Cache-Control: private, must-revalidate, max-age=0')
+        ->set_output($payload);
     }
 
     private function jenkinsQueueIdFromHeaders($headers) {

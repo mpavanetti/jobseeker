@@ -118,6 +118,7 @@ $route['data-assets/preview/(:num)'] = "DataAssets/preview/$1";
 $route['data-assets/catalog'] = "DataAssets/catalog";
 $route['connector-runtime'] = "ConnectorRuntime/index";
 $route['dbSettings/testConnector'] = "DbSettings/testConnector";
+$route['jobCreation/samples'] = "JobCreation/samples";
 $route['jobCreation/scanDependencies'] = "JobCreation/scanDependencies";
 $route['jobCreation/testDependencies'] = "JobCreation/testDependencies";
 $route['jobCreation/validateSchedule'] = "JobCreation/validateSchedule";
