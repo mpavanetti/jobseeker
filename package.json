@@ -31,6 +31,7 @@
     "test:viz-migration:e2e": "python3 scripts/test-visualization-connection-migration.py",
     "test:job-deps": "node scripts/test-job-dependencies.js",
     "test:job-deps:e2e": "python3 scripts/test-job-dependencies-e2e.py",
+    "test:job-runs:e2e": "python3 scripts/test-job-run-comparison-e2e.py",
     "test:pipelines": "node scripts/test-pipeline-builder.js",
     "test:pipelines:e2e": "python3 scripts/test-pipeline-deployment-e2e.py",
     "test:command-guard": "php scripts/test-command-guard.php",

@@ -198,8 +198,29 @@
     min-width: 0;
   }
 
-  .job-detail-card .box-title {
-    max-width: calc(100% - 210px);
+  .run-compare-recent { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .run-compare-results { overflow-x: auto; margin-top: 16px; }
+  .run-compare-results .job-compare-table { min-width: 760px; }
+  .run-compare-different td { background: #fff8e8; }
+  .run-compare-logs { display: flex; gap: 12px; overflow-x: auto; margin-top: 18px; }
+  .run-compare-log { flex: 1 0 360px; min-width: 0; }
+  .run-compare-log .job-console-host { max-height: 520px; min-height: 180px; }
+
+  .job-detail-header {
+    align-items: center;
+    background: #f8fbfd;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    justify-content: space-between;
+    padding: 10px 12px;
+  }
+
+  .job-detail-header .box-title {
+    flex: 1 1 220px;
+    float: none;
+    margin: 0;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -208,9 +229,14 @@
   .job-detail-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     justify-content: flex-end;
   }
+
+  .job-detail-actions .btn { font-weight: 600; min-height: 31px; }
+  .job-detail-actions .btn-default { background: #fff; border-color: #b8c7d3; color: #34495e; }
+  .job-detail-actions .btn-default:hover,
+  .job-detail-actions .btn-default:focus { background: #eaf3f9; border-color: #3c8dbc; color: #17577d; }
 
   .job-overview-grid {
     display: grid;
@@ -354,13 +380,8 @@
       grid-template-columns: 1fr;
     }
 
-    .job-detail-card .box-title {
-      max-width: 100%;
-    }
-
     .job-detail-actions {
       justify-content: flex-start;
-      margin-top: 8px;
     }
   }
 </style>
@@ -522,6 +543,23 @@
               <div id="jobDetailsGrid" class="job-detail-grid"></div>
             </div>
           </div>
+
+          <div class="box box-info" id="runCompareBox" style="display:none;">
+            <div class="box-header with-border">
+              <h3 class="box-title"><b>Compare runs</b> <small id="runCompareJob"></small></h3>
+              <div class="box-tools pull-right"><button type="button" class="btn btn-box-tool" id="runCompareClose" aria-label="Close run comparison"><i class="fa fa-times"></i></button></div>
+            </div>
+            <div class="box-body">
+              <label for="runCompareBuilds">Build numbers (2 to 4, separated by commas)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="runCompareBuilds" placeholder="For example: 42, 39, 31">
+                <span class="input-group-btn"><button type="button" class="btn btn-info" id="runCompareGo"><i class="fa fa-columns"></i> Compare runs</button></span>
+              </div>
+              <div id="runCompareRecent" class="run-compare-recent"></div>
+              <p class="job-view-status-line" id="runCompareStatus">Choose two or more builds. You can enter older build numbers directly.</p>
+              <div id="runCompareResults" class="run-compare-results"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -546,6 +584,9 @@
     var comparisonAcrossEnvironments = false;
     var pendingComparisonKey = '';
     var comparisonSourceJob = '';
+    var runComparisonJob = '';
+    var runComparisonRequest = 0;
+    var loadedJobDetails = {};
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
     var environmentHelper = window.JobSeekerEnvironment || {
       detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
@@ -1412,7 +1453,7 @@
 
     function isSensitiveParameter(parameter) {
       var identity = String((parameter && parameter.name) || '') + ' ' + String((parameter && parameter.type) || '');
-      return /(password|passwd|secret|credential|private.?key|access.?key|api.?key|auth.?token)/i.test(identity);
+      return /(password|passwd|passphrase|secret|credential|private.?key|access.?key|api.?key|token|authorization)/i.test(identity);
     }
 
     function parameterDisplayText(value, hasValue) {
@@ -1685,6 +1726,8 @@
       }
 
       setDetailBusy(true, 'Loading details for ' + jobs.length + ' job(s)...');
+      $('#runCompareBox').hide();
+      ++runComparisonRequest;
       $('#jobViewEmpty').hide();
       $('#jobCompareWrapper').show().html('<div class="text-muted text-center" style="padding: 24px;">Loading job comparison...</div>');
       $('#jobDetailsGrid').html('');
@@ -1695,6 +1738,8 @@
 
       $.when.apply($, requests).done(function() {
         var details = requests.length === 1 ? [arguments[0]] : Array.prototype.slice.call(arguments);
+        loadedJobDetails = {};
+        $.each(details, function(index, detail) { loadedJobDetails[detail.name] = detail; });
         renderSummary(details);
         renderComparison(details);
         renderDetails(details);
@@ -1887,11 +1932,12 @@
         }
 
         html += '<div class="box ' + boxClass + ' job-detail-card">' +
-          '<div class="box-header with-border">' +
+          '<div class="box-header with-border job-detail-header">' +
             '<h3 class="box-title"><b>' + escapeHtml(detail.name) + '</b> ' + environmentHelper.label(config.environmentInfo) + '</h3>' +
-            '<div class="box-tools pull-right job-detail-actions">' +
-              (detail.jenkinsUrl ? '<a class="btn btn-box-tool" href="' + escapeAttribute(detail.jenkinsUrl) + '" target="_blank" rel="noopener"><i class="fa fa-external-link"></i> Jenkins</a>' : '') +
-              (detail.jenkinsUrl ? '<a class="btn btn-box-tool" href="' + escapeAttribute(detail.jenkinsUrl + 'configure') + '" target="_blank" rel="noopener"><i class="fa fa-cog"></i> Configure</a>' : '') +
+            '<div class="job-detail-actions">' +
+              '<button type="button" class="btn btn-primary btn-sm job-compare-runs" data-job="' + escapeAttribute(detail.name) + '"><i class="fa fa-columns"></i> Compare runs</button>' +
+              (detail.jenkinsUrl ? '<a class="btn btn-default btn-sm" href="' + escapeAttribute(detail.jenkinsUrl) + '" target="_blank" rel="noopener"><i class="fa fa-external-link"></i> Jenkins</a>' : '') +
+              (detail.jenkinsUrl ? '<a class="btn btn-default btn-sm" href="' + escapeAttribute(detail.jenkinsUrl + 'configure') + '" target="_blank" rel="noopener"><i class="fa fa-cog"></i> Configure</a>' : '') +
             '</div>' +
           '</div>' +
           '<div class="box-body">' +
@@ -1953,6 +1999,175 @@
         }
       });
     }
+
+    function runNumbersFromInput() {
+      var raw = $.trim($('#runCompareBuilds').val());
+      var values = raw ? raw.split(',') : [];
+      var numbers = [];
+      var seen = {};
+      $.each(values, function(index, value) {
+        value = $.trim(value);
+        if (! /^\d+$/.test(value) || Number(value) < 1 || Number(value) > 999999999) {
+          numbers = [];
+          return false;
+        }
+        var number = Number(value);
+        if (! seen[number]) { numbers.push(number); seen[number] = true; }
+      });
+      return numbers;
+    }
+
+    function fetchRunForComparison(jobName, number) {
+      var deferred = $.Deferred();
+      var path = jenkinsJobPath(jobName) + '/' + number;
+      var tree = 'number,result,building,timestamp,duration,builtOn,url,description,actions[parameters[name,value]]';
+      jenkinsRequest(path + '/api/json?tree=' + tree).done(function(build) {
+        jenkinsRequest(path + '/consoleText', 'GET', {dataType: 'text'})
+          .done(function(log) { deferred.resolve({build: build, log: String(log || '')}); })
+          .fail(function(xhr) { deferred.resolve({build: build, log: '', logError: 'Console log unavailable (HTTP ' + xhr.status + ').'}); });
+      }).fail(function(xhr) {
+        deferred.resolve({number: number, error: 'Build #' + number + ' could not be loaded (HTTP ' + xhr.status + ').'});
+      });
+      return deferred.promise();
+    }
+
+    function renderRunComparison(jobName, runs) {
+      var config = loadedJobDetails[jobName] && loadedJobDetails[jobName].config;
+      var parameterDefinitions = {};
+      $.each(config && config.parameters ? config.parameters : [], function(index, parameter) {
+        parameterDefinitions[parameter.name] = parameter;
+      });
+      var parameterNames = {};
+      $.each(runs, function(index, run) {
+        run.values = run.build ? buildParameterValues(run.build) : {};
+        Object.keys(run.values).forEach(function(name) { parameterNames[name] = true; });
+      });
+      var names = Object.keys(parameterNames).sort();
+      var html = '<table class="table table-bordered table-condensed job-compare-table"><thead><tr><th>Detail</th>';
+      $.each(runs, function(index, run) {
+        var build = run.build;
+        html += '<th>Build #' + escapeHtml(build ? build.number : run.number) +
+          (build && jenkinsJobUrl(jobName) ? ' <a href="' + escapeAttribute(jenkinsJobUrl(jobName) + build.number + '/') + '" target="_blank" rel="noopener" title="Open this build in Jenkins"><i class="fa fa-external-link"></i></a>' : '') + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+      $.each([
+        {label: 'Result', value: function(run) { return run.build ? statusLabel(run.build.building ? 'Running' : (run.build.result || 'No result')) : renderMuted('Unavailable'); }},
+        {label: 'Started', value: function(run) { return run.build ? formatTimeHtml(run.build.timestamp) : renderMuted('Unknown'); }},
+        {label: 'Duration', value: function(run) { return run.build ? escapeHtml(formatDuration(run.build.duration)) : renderMuted('Unknown'); }},
+        {label: 'Worker', value: function(run) { return run.build ? escapeHtml(workerNodeLabel(run.build)) : renderMuted('Unknown'); }},
+        {label: 'Description', value: function(run) { return run.build ? renderValue(run.build.description) : renderMuted('Unknown'); }}
+      ], function(index, row) {
+        html += '<tr><td><strong>' + row.label + '</strong></td>';
+        $.each(runs, function(runIndex, run) { html += '<td>' + (run.error ? '<span class="text-danger">' + escapeHtml(run.error) + '</span>' : row.value(run)) + '</td>'; });
+        html += '</tr>';
+      });
+      $.each(names, function(index, name) {
+        var parameter = parameterDefinitions[name] || {name: name, type: ''};
+        var values = $.map(runs, function(run) { return Object.prototype.hasOwnProperty.call(run.values, name) ? parameterValueText(run.values[name]) : '\u0000not supplied'; });
+        var different = ! isSensitiveParameter(parameter) && values.some(function(value) { return value !== values[0]; });
+        html += '<tr' + (different ? ' class="run-compare-different"' : '') + '><td><strong>' + escapeHtml(name) + '</strong><br><small>Parameter' + (different ? ' · differs' : '') + '</small></td>';
+        $.each(runs, function(runIndex, run) {
+          var supplied = Object.prototype.hasOwnProperty.call(run.values, name);
+          html += '<td>' + renderParameterValue(parameter, run.values[name], supplied) + '</td>';
+        });
+        html += '</tr>';
+      });
+      if (! names.length) { html += '<tr><td><strong>Parameters</strong></td><td colspan="' + runs.length + '">' + renderMuted('No run parameters recorded') + '</td></tr>'; }
+      html += '</tbody></table><h4>Full console logs</h4><div class="run-compare-logs">';
+      $.each(runs, function(index, run) {
+        html += '<div class="run-compare-log"><h4>Build #' + escapeHtml(run.build ? run.build.number : run.number) + '</h4>' +
+          (run.logError ? '<p class="text-warning">' + escapeHtml(run.logError) + '</p>' : '') +
+          (run.error ? '<p class="text-danger">' + escapeHtml(run.error) + '</p>' : '') +
+          '<div id="jobRunCompareConsole-' + index + '"></div></div>';
+      });
+      html += '</div>';
+      $('#runCompareResults').html(html);
+      $.each(runs, function(index, run) {
+        var target = '#jobRunCompareConsole-' + index;
+        var log = run.log || 'No console output available.';
+        if (window.JobSeekerConsole) {
+          window.JobSeekerConsole.setText(target, log, {live: !! (run.build && run.build.building)});
+        } else {
+          $(target).html('<pre class="job-console-pre">' + escapeHtml(log) + '</pre>');
+        }
+      });
+    }
+
+    function compareRuns() {
+      var numbers = runNumbersFromInput();
+      if (numbers.length < 2 || numbers.length > 4) {
+        $('#runCompareStatus').text('Enter 2 to 4 valid build numbers separated by commas.');
+        return;
+      }
+      var jobName = runComparisonJob;
+      var requestId = ++runComparisonRequest;
+      $('#runCompareStatus').text('Loading ' + numbers.length + ' runs…');
+      $('#runCompareResults').empty();
+      $('#runCompareGo').prop('disabled', true);
+      var requests = $.map(numbers, function(number) { return fetchRunForComparison(jobName, number); });
+      $.when.apply($, requests).done(function() {
+        if (requestId !== runComparisonRequest) { return; }
+        var runs = Array.prototype.slice.call(arguments);
+        renderRunComparison(jobName, runs);
+        $('#runCompareStatus').text('Comparing ' + numbers.length + ' runs of ' + jobName + '. Differing parameter values are highlighted.');
+      }).always(function() {
+        if (requestId === runComparisonRequest) { $('#runCompareGo').prop('disabled', false); }
+      });
+    }
+
+    function markSelectedRunPicks() {
+      var numbers = runNumbersFromInput();
+      $('#runCompareRecent .run-compare-pick').each(function() {
+        var selected = $.inArray(Number($(this).attr('data-build')), numbers) !== -1;
+        $(this).toggleClass('btn-info', selected).toggleClass('btn-default', ! selected);
+      });
+    }
+
+    function openRunComparison(jobName) {
+      if (! loadedJobDetails[jobName]) { return; }
+      runComparisonJob = jobName;
+      ++runComparisonRequest;
+      $('#runCompareBox').show();
+      $('#runCompareJob').text(jobName);
+      $('#runCompareBuilds').val('');
+      $('#runCompareResults, #runCompareRecent').empty();
+      $('#runCompareStatus').text('Loading recent builds…');
+      $('#runCompareBox')[0].scrollIntoView({behavior: 'smooth', block: 'start'});
+      var requestId = runComparisonRequest;
+      jenkinsRequest(jenkinsJobPath(jobName) + '/api/json?tree=builds[number,result,building,timestamp,duration]{0,30}')
+        .done(function(data) {
+          if (requestId !== runComparisonRequest) { return; }
+          var builds = Array.isArray(data.builds) ? data.builds : [];
+          $('#runCompareRecent').html($.map(builds, function(build) {
+            return '<button type="button" class="btn btn-default btn-xs run-compare-pick" data-build="' + escapeAttribute(build.number) + '">#' +
+              escapeHtml(build.number) + ' ' + escapeHtml(build.building ? 'Running' : (build.result || 'No result')) + '</button>';
+          }).join(''));
+          if (builds.length >= 2) {
+            $('#runCompareBuilds').val(builds[0].number + ', ' + builds[1].number);
+            markSelectedRunPicks();
+            compareRuns();
+          } else {
+            $('#runCompareStatus').text(builds.length ? 'Only one build is available. Choose an older build number when available.' : 'No builds are available for this job yet.');
+          }
+        }).fail(function(xhr) {
+          if (requestId === runComparisonRequest) { $('#runCompareStatus').text(responseMessage(xhr, 'Unable to load build history.')); }
+        });
+    }
+
+    $(document).on('click', '.job-compare-runs', function() { openRunComparison($(this).attr('data-job')); });
+    $(document).on('click', '.run-compare-pick', function() {
+      var number = Number($(this).attr('data-build'));
+      var numbers = runNumbersFromInput();
+      var index = $.inArray(number, numbers);
+      if (index >= 0) { numbers.splice(index, 1); }
+      else if (numbers.length < 4) { numbers.push(number); }
+      $('#runCompareBuilds').val(numbers.join(', '));
+      markSelectedRunPicks();
+    });
+    $('#runCompareGo').on('click', compareRuns);
+    $('#runCompareBuilds').on('input', markSelectedRunPicks);
+    $('#runCompareBuilds').on('keydown', function(event) { if (event.key === 'Enter') { event.preventDefault(); compareRuns(); } });
+    $('#runCompareClose').on('click', function() { ++runComparisonRequest; $('#runCompareBox').hide(); });
 
     $('#jobFilter').on('keyup', function() {
       renderJobOptions($(this).val());
