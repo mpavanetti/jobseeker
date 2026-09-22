@@ -201,7 +201,6 @@
 
    $('#jenkins').change(function(){
       var jenkins = $('#jenkins').val();
-      console.log(jenkins);
       if(jenkins == 'false') {
         $('.jenkinsForm').hide();
         $('.next').show();

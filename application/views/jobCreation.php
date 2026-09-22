@@ -8983,14 +8983,10 @@
                       $(".buildXmlBtn").prop('disabled', true);
                     },
                     success: function(file, response) {
-                      console.log(file)
-                      console.log(response)
                       toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
                       $(".buildXmlBtn").prop('disabled', false);
                     },
                     error: function(file, response) {
-                      console.log(file)
-                      console.log(response)
                       toastr.error("Erro during uploading file.", "File Upload Error")
                       $(".buildXmlBtn").prop('disabled', false);
                     }
@@ -9209,7 +9205,6 @@ $('#abort').click(function(){
 
     $('#timeoutStrategy').change(function(){
       var val = $('#timeoutStrategy').val();
-      console.log(val)
       if (val == 'absolute') {
         $('.timeoutSeconds').fadeOut();
         $('.timeoutMinutes').fadeIn();

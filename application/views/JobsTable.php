@@ -131,7 +131,6 @@
       url : hitURL,
       data : { userId : userId } 
       }).done(function(data){
-        console.log(data);
         if(data.status === true) {
           currentRow.parents('tr').remove();
           alertify.success('Your input has been successfully deleted !');

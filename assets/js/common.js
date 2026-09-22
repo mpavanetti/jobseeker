@@ -20,7 +20,6 @@ jQuery(document).ready(function(){
 			url : hitURL,
 			data : { userId : userId } 
 			}).done(function(data){
-				console.log(data);
 				if(data.status === true) {
 					currentRow.parents('tr').remove();
 					alert("User successfully deleted");
