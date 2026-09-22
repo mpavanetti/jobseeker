@@ -430,5 +430,148 @@
             });
         })();
     </script>
+    <script type="text/javascript">
+        (function() {
+            var refreshTimer = null;
+            var requestInFlight = null;
+            var requestSerial = 0;
+            var queueListUrl = <?php echo json_encode(base_url() . 'jobList?filter=queued'); ?>;
+            var preferredEnvironmentOrder = ['DEV', 'QA', 'UAT', 'PREPROD', 'HML', 'PROD', 'UNKNOWN'];
+
+            function escapeHtml(value) {
+                return String(value == null ? '' : value).replace(/[&<>'"]/g, function(character) {
+                    return {'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;'}[character];
+                });
+            }
+
+            function selectedEnvironment(value) {
+                if (typeof value === 'undefined' || value === null) {
+                    value = window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected
+                        ? window.JobSeekerGlobalEnvironment.selected()
+                        : $('body').attr('data-jobseeker-environment') || 'all';
+                }
+                return window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.normalize
+                    ? window.JobSeekerGlobalEnvironment.normalize(value)
+                    : String(value || 'all').toUpperCase();
+            }
+
+            function isAllEnvironment(value) {
+                return ! value || String(value).toLowerCase() === 'all' || value === '*';
+            }
+
+            function updateScope(environment) {
+                $('#sidebarQueuedJobsScope').text('(' + (isAllEnvironment(environment) ? 'All' : environment) + ')');
+            }
+
+            function formatWait(seconds) {
+                seconds = Math.max(0, parseInt(seconds, 10) || 0);
+                if (seconds >= 3600) {
+                    return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+                }
+                if (seconds >= 60) {
+                    return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+                }
+                return seconds + 's';
+            }
+
+            function render(payload, environment) {
+                var container = $('#sidebarQueuedJobsList');
+                if (! payload || payload.ok !== true) {
+                    container.html('<div class="jobseeker-sidebar-running-error">Unable to load queued jobs.</div>');
+                    return;
+                }
+
+                var items = Array.isArray(payload.items) ? payload.items : [];
+                if (! items.length) {
+                    var emptyText = isAllEnvironment(environment) ? 'No queued Jenkins jobs.' : 'No queued ' + environment + ' Jenkins jobs.';
+                    container.html('<div class="jobseeker-sidebar-running-empty">' + escapeHtml(emptyText) + '</div>');
+                    return;
+                }
+
+                var groups = {};
+                $.each(items, function(index, item) {
+                    var name = item.environment || 'UNKNOWN';
+                    (groups[name] = groups[name] || []).push(item);
+                });
+
+                var html = '';
+                $.each(Object.keys(groups).sort(function(left, right) {
+                    var leftIndex = preferredEnvironmentOrder.indexOf(left);
+                    var rightIndex = preferredEnvironmentOrder.indexOf(right);
+                    return (leftIndex === -1 ? 999 : leftIndex) - (rightIndex === -1 ? 999 : rightIndex) || left.localeCompare(right);
+                }), function(index, name) {
+                    var group = groups[name];
+                    var badgeClass = window.JobSeekerEnvironment && window.JobSeekerEnvironment.badgeClass
+                        ? window.JobSeekerEnvironment.badgeClass(name) : 'default';
+                    html += '<div class="jobseeker-sidebar-running-env">' +
+                        '<div class="jobseeker-sidebar-running-env-header">' +
+                          '<span class="label label-' + escapeHtml(badgeClass) + '">' + escapeHtml(name) + '</span>' +
+                          '<small>' + group.length + ' queued</small>' +
+                        '</div>';
+                    $.each(group, function(itemIndex, item) {
+                        var reason = item.why || 'Waiting for an executor';
+                        html += '<a class="jobseeker-sidebar-running-build" href="' + escapeHtml(queueListUrl) + '" title="' + escapeHtml(reason) + '">' +
+                            '<strong>' + escapeHtml(item.job || 'Unknown job') + '</strong>' +
+                            '<small>' + escapeHtml(formatWait(item.waitingSeconds)) + ' waiting - ' + escapeHtml(reason) + '</small>' +
+                          '</a>';
+                    });
+                    html += '</div>';
+                });
+                container.html(html);
+            }
+
+            function refresh(environment, force) {
+                if (! $('#sidebarQueuedJobsList').length) {
+                    return;
+                }
+                environment = selectedEnvironment(environment);
+                updateScope(environment);
+
+                if (requestInFlight && requestInFlight.readyState !== 4) {
+                    if (! force) {
+                        return;
+                    }
+                    requestInFlight.abort();
+                }
+
+                var serial = ++requestSerial;
+                $('#sidebarQueuedJobsRefresh i').addClass('fa-spin');
+                requestInFlight = $.getJSON(window.jobseekerQueueDepthUrl, {environment: isAllEnvironment(environment) ? 'all' : environment})
+                    .done(function(payload) {
+                        if (serial === requestSerial) {
+                            render(payload, environment);
+                        }
+                    })
+                    .fail(function(xhr, textStatus) {
+                        if (textStatus !== 'abort' && serial === requestSerial) {
+                            $('#sidebarQueuedJobsList').html('<div class="jobseeker-sidebar-running-error">Unable to load queued jobs.</div>');
+                        }
+                    })
+                    .always(function() {
+                        if (serial === requestSerial) {
+                            $('#sidebarQueuedJobsRefresh i').removeClass('fa-spin');
+                        }
+                    });
+            }
+
+            window.JobSeekerQueuedJobs = {refresh: function(environment) { refresh(environment, true); }};
+
+            $(function() {
+                if (! $('#sidebarQueuedJobsList').length) {
+                    return;
+                }
+                refresh();
+                refreshTimer = window.setInterval(function() {
+                    if (! document.hidden) { refresh(); }
+                }, 15000);
+                $('#sidebarQueuedJobsRefresh').on('click', function() { refresh(null, true); });
+                $(document).on('jobseeker:environment-change', function(event, environment) { refresh(environment, true); });
+                $(document).on('visibilitychange.jobseekerQueue', function() {
+                    if (! document.hidden) { refresh(null, true); }
+                });
+                $(window).on('beforeunload', function() { window.clearInterval(refreshTimer); });
+            });
+        })();
+    </script>
   </body>
 </html>

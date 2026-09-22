@@ -1736,7 +1736,7 @@ class BaseController extends CI_Controller {
 		return '';
 	}
 
-	private function jenkinsEnvironmentFromQueueItem($item, $jobDefaults) {
+	protected function jenkinsEnvironmentFromQueueItem($item, $jobDefaults) {
 		$environment = $this->jenkinsParameterValueFromActions($item, 'ENVIRONMENT');
 
 		if ($environment === '' && isset($item->params) && preg_match('/(?:^|\s)ENVIRONMENT=([^\s]+)/', (string) $item->params, $matches)) {

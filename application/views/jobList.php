@@ -1726,6 +1726,42 @@ pre {
     }
   });
 
+  /*
+   * Allow a quick filter to be selected from the URL, so somewhere else in the
+   * platform can link straight to "the jobs that are queued" rather than
+   * landing here and asking the reader to find the button themselves. Only the
+   * filters that actually exist are honoured; anything else falls through to
+   * the default, so a stale link cannot leave the page showing nothing.
+   */
+  $(function applyMonitorFilterFromUrl() {
+    var requested = (window.location.search.match(/[?&]filter=([^&]+)/) || [])[1];
+    if (! requested) {
+      return;
+    }
+
+    requested = decodeURIComponent(requested).toLowerCase().replace(/[^a-z-]/g, '');
+    var $button = $('.monitor-filter[data-filter="' + requested + '"]');
+    if (! $button.length) {
+      return;
+    }
+
+    // The filter button's handler redraws the table, and DataTables is loaded
+    // by the shared footer after this view. Clicking before it is there throws
+    // on $.fn.DataTable, so wait for it - and give up rather than spin forever
+    // if it never arrives.
+    var attempts = 0;
+    (function clickWhenTableReady() {
+      if ($.fn.DataTable) {
+        $button.trigger('click');
+        return;
+      }
+      if (++attempts > 40) {
+        return;
+      }
+      window.setTimeout(clickWhenTableReady, 50);
+    }());
+  });
+
   $('#monitorEnvironmentFilter').on('change', function() {
     jobEnvironmentFilter = $(this).val() || 'all';
     ensureMonitorFilterRegistered();

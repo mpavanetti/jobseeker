@@ -1672,9 +1672,9 @@
       return run;
     }
 
-    function loadRunningBuildsForCurrentEnvironment() {
+    function loadRunningBuildsForCurrentEnvironment(allEnvironments) {
       $('#viewRunningBuilds').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Loading');
-      $.getJSON(runningBuildsUrl, {environment: jobEnvironmentRequestValue(), limit: 10})
+      $.getJSON(runningBuildsUrl, {environment: allEnvironments ? 'all' : jobEnvironmentRequestValue(), limit: allEnvironments ? 'all' : 10})
         .done(function(payload) {
           if (! payload || payload.ok !== true) {
             toastr.error(payload && payload.message ? payload.message : 'Unable to load running jobs.', 'Live Console');
@@ -2509,6 +2509,9 @@
 
     loadJobs();
     resumeInitialExecution();
+    if (new URLSearchParams(window.location.search).get('running') === 'all') {
+      loadRunningBuildsForCurrentEnvironment(true);
+    }
     updateTriggerSelectedButton();
     updateConsoleViewLayout();
   });

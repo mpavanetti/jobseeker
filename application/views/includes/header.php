@@ -154,6 +154,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   window.jobseekerDashboardEnvironment = <?php echo json_encode($jobseekerSelectedEnvironment); ?>;
   window.jobseekerDeploymentMode = <?php echo json_encode($jobseekerDeploymentMode); ?>;
   window.jobseekerStandaloneEnvironment = <?php echo json_encode($jobseekerStandaloneEnvironment); ?>;
+  window.jobseekerQueueDepthUrl = <?php echo json_encode(base_url() . 'jenkins/queueDepth'); ?>;
 
   function addJobseekerCsrfToForm(form) {
     if (! window.jobseekerCsrf || ! window.jobseekerCsrf.name || ! window.jobseekerCsrf.hash) {
@@ -893,6 +894,20 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     min-width: 0;
   }
 
+  .jobseeker-sidebar-running-title-link {
+    align-items: center;
+    color: #fff;
+    display: inline-flex;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .jobseeker-sidebar-running-title-link:hover,
+  .jobseeker-sidebar-running-title-link:focus {
+    color: #fff;
+    text-decoration: underline;
+  }
+
   .jobseeker-sidebar-running-title small {
     color: #8aa4af;
     font-size: 11px;
@@ -955,6 +970,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   }
 
   #sidebarRunningJobsList,
+  #sidebarQueuedJobsList,
   #sidebarCachedJobsList {
     max-height: 240px;
     overflow-x: hidden;
@@ -1404,10 +1420,17 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
         <?php if ($jenkins_enabled == true) { ?>
           <div class="jobseeker-sidebar-running" id="sidebarRunningJobs">
             <div class="jobseeker-sidebar-running-title">
-              <span><i class="fa fa-play-circle"></i> Running Jobs <small id="sidebarRunningJobsScope"></small></span>
+              <a class="jobseeker-sidebar-running-title-link" href="<?php echo base_url(); ?>jobExecution?environment=all&amp;running=all" title="Open all running jobs in Job Execution"><i class="fa fa-play-circle"></i> Running Jobs <small id="sidebarRunningJobsScope"></small></a>
               <button type="button" class="jobseeker-sidebar-running-refresh" id="sidebarRunningJobsRefresh" title="Refresh running jobs"><i class="fa fa-refresh"></i></button>
             </div>
             <div id="sidebarRunningJobsList" class="jobseeker-sidebar-running-empty">Loading running jobs...</div>
+          </div>
+          <div class="jobseeker-sidebar-running" id="sidebarQueuedJobs">
+            <div class="jobseeker-sidebar-running-title">
+              <a class="jobseeker-sidebar-running-title-link" href="<?php echo base_url(); ?>jobList?filter=queued" title="Open queued jobs in Job List"><i class="fa fa-hourglass-half"></i> Queued Jobs <small id="sidebarQueuedJobsScope"></small></a>
+              <button type="button" class="jobseeker-sidebar-running-refresh" id="sidebarQueuedJobsRefresh" title="Refresh queued jobs"><i class="fa fa-refresh"></i></button>
+            </div>
+            <div id="sidebarQueuedJobsList" class="jobseeker-sidebar-running-empty">Loading queued jobs...</div>
           </div>
         <?php } ?>
       </section>
