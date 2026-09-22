@@ -51,6 +51,8 @@ assert(generator.includes('--cpus "$JOBSEEKER_CONTAINER_CPUS"'), 'Docker jobs mu
 assert(generator.includes('--memory "${JOBSEEKER_CONTAINER_MEMORY_MB}m"'), 'Docker jobs must enforce their configured memory limit.');
 assert(generator.includes('--memory-swap "${JOBSEEKER_CONTAINER_MEMORY_MB}m"'), 'Docker jobs must prevent swap from bypassing the memory limit.');
 assert((generator.match(/array_merge\(\$lines, \$this->dockerJobResourceLines\(\$runtimeOptions\)\)/g) || []).length === 3, 'Every primary Docker execution path must export resource limits.');
+assert((generator.match(/\[JobSeeker\] Docker runtime setup/g) || []).length === 3, 'Shell, script, and Python Docker jobs must identify their setup phase.');
+assert(generator.includes('if [ -n "$JOBSEEKER_DOCKERFILE" ]; then printf "%s\\n" "[JobSeeker] Docker image build"'), 'Only an actual custom Dockerfile build may emit the image-build phase.');
 assert(generator.includes("dockerJobIdentityLines('python')"), 'Python Docker jobs must identify their runtime.');
 assert(generator.includes("dockerJobIdentityLines('linux-shell')"), 'Inline shell Docker jobs must identify their runtime.');
 assert(creationView.includes('id="containerResourceSummary"'), 'Docker resource controls must show the effective per-run allocation.');

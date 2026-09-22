@@ -18,6 +18,7 @@
     'docker-build': { title: 'Docker image build', icon: 'fa-cube' },
     'docker-runtime': { title: 'Docker container setup', icon: 'fa-archive' },
     'docker-execution': { title: 'Docker execution', icon: 'fa-play-circle' },
+    'hop-execution': { title: 'Apache Hop execution', icon: 'fa-sitemap' },
     'python-environment': { title: 'Python environment', icon: 'fa-wrench' },
     'python-tests': { title: 'Python tests', icon: 'fa-check-square-o' },
     python: { title: 'Python execution', icon: 'fa-code' },
@@ -72,8 +73,16 @@
       return 'docker-build';
     }
 
+    if (/^\[JobSeeker\]\s+Docker (?:container|runtime) setup\s*$/i.test(line)) {
+      return 'docker-runtime';
+    }
+
     if (/^\[JobSeeker\]\s+Docker container (?:execution|run)\s*$/i.test(line)) {
       return 'docker-execution';
+    }
+
+    if (/^\[JobSeeker\]\s+(?:Apache Hop (?:execution\b|(?:container|server) run\b)|Hop Server execution\b)/i.test(line)) {
+      return 'hop-execution';
     }
 
     if (/^\[JobSeeker\]\s+Python environment\s*$/i.test(line)) {
@@ -124,11 +133,22 @@
       return /^(?:ERROR|FATAL)(?:\s*:|\b)/i.test(String(hop[3] || '').trim());
     }
 
-    // "Exception" only counts as part of an exception's class name. On its own
-    // it is an ordinary English word, and a driver install printing "GPLv2 with
-    // Universal FOSS Exception" is not a failed build.
-    return /(?:^|\b)(?:ERROR(?:\s*:|\b)|FAILURE\b|FAILED\b|Traceback\b|[A-Za-z0-9_.$]+Exception\b|fatal:|command not found|No such file or directory|exited with (?:status|code) [1-9]\d*)/i.test(line) ||
-      /\b[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception):/.test(line);
+    // Treat failure words as log syntax, not as arbitrary data. Successful
+    // jobs routinely print values such as `status=error`, `0 failed`, and
+    // `failure notifications disabled`; none of those is an error record.
+    // Exception only counts as part of a class name, so licence names such as
+    // "Universal FOSS Exception" also remain neutral.
+    return /^\s*(?:\[[^\]]+\]\s*)?(?:ERROR|FATAL|FAILURE|FAILED)(?:\s*:|\b)/.test(line) ||
+      /\b(?:ERROR|FATAL|FAILURE|FAILED)\s*:/i.test(line) ||
+      /\[(?:ERROR|FATAL)\]/i.test(line) ||
+      /^Email sending failed\b/i.test(line) ||
+      /^\s*\d{4}[-/]\d{2}[-/]\d{2}[^\n]*\b(?:ERROR|FATAL)\b/.test(line) ||
+      /(?:^|\s)(?:npm\s+ERR!|Traceback\b|fatal:|command not found|No such file or directory)/i.test(line) ||
+      /\b(?:command failed|marked build as failure|returned non-zero exit status|exited with (?:status|code) [1-9]\d*|script returned exit code [1-9]\d*)/i.test(line) ||
+      /\b[1-9]\d*\s+failed\b/i.test(line) ||
+      /\b[A-Za-z_][A-Za-z0-9_.$]+Exception\b/.test(line) ||
+      /\b[A-Za-z_][A-Za-z0-9_.$]*(?:Error|Exception):/.test(line) ||
+      /^Finished:\s+(?:FAILURE|UNSTABLE)\s*$/i.test(line);
   }
 
   function classifyLine(value, currentKind) {
@@ -140,6 +160,9 @@
     }
 
     if (/^\[JobSeeker\]/.test(line)) {
+      if (currentKind === 'hop-execution') {
+        return 'hop-execution';
+      }
       return 'jobseeker';
     }
 
@@ -167,7 +190,7 @@
       return 'email';
     }
 
-    if (currentKind === 'source' || currentKind === 'docker-execution' || currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'shell' || currentKind === 'cleanup' || currentKind === 'result') {
+    if (currentKind === 'source' || currentKind === 'docker-execution' || currentKind === 'hop-execution' || currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'shell' || currentKind === 'cleanup' || currentKind === 'result') {
       return currentKind;
     }
 
@@ -296,6 +319,119 @@
     return { raw: raw, sections: order };
   }
 
+  // Hop closes each transform with a metrics line and brackets each workflow
+  // action with a start and a finish line:
+  //   read customers.0 - Finished processing (I=0, O=0, R=10, W=10, U=0, E=0)
+  //   main - Starting action [load]
+  //   main - Finished action [load] (result=[true])
+  var HOP_METRICS = /\(\s*I\s*=\s*(\d+)\s*,\s*O\s*=\s*(\d+)\s*,\s*R\s*=\s*(\d+)\s*,\s*W\s*=\s*(\d+)\s*,\s*U\s*=\s*(\d+)\s*,\s*E\s*=\s*(\d+)\s*\)/;
+  var HOP_ACTION_START = /^Starting action \[([\s\S]+)\]\s*$/;
+  var HOP_ACTION_END = /^Finished action \[([\s\S]+?)\]\s*\(result=\[([^\]]*)\]\)/;
+  var HOP_TIMESTAMP = /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+-\s+([\s\S]*)$/;
+  // A transform logs once per copy, as "<name>.<copy>".
+  var HOP_COPY_SUFFIX = /\.\d+$/;
+
+  /**
+   * Split a Hop log line into its origin and message.
+   *
+   * The separator is " - " rather than a bare dash so that a transform whose
+   * own name contains one - "read-customers" - still resolves to the right
+   * origin.
+   */
+  function hopLineParts(line) {
+    var match = HOP_TIMESTAMP.exec(normalizedLine(line));
+    if (! match) {
+      return null;
+    }
+    var rest = match[2];
+    var split = rest.indexOf(' - ');
+    if (split < 0) {
+      return null;
+    }
+    return { origin: rest.slice(0, split).trim(), message: rest.slice(split + 3).trim() };
+  }
+
+  /**
+   * Derive per-node run state from an Apache Hop build console.
+   *
+   * A job running on the "container" engine starts an ephemeral Hop container
+   * and never registers with the Hop Server, so the server has no status to
+   * report for it. The build console is the only place that run's per-transform
+   * and per-action state exists, and the execution screen is already streaming
+   * it. Parsing it here produces the same shape the Hop Server path returns -
+   * { status, read, written, errors } keyed by node name - so the canvas
+   * overlay renders identically whichever engine produced the run.
+   */
+  function hopNodeState(text, options) {
+    options = options || {};
+    var workflow = options.kind === 'workflow';
+    var normalized = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+    var nodes = {};
+    var count = 0;
+    var loggedErrors = {};
+    var metricErrors = {};
+
+    function node(name) {
+      if (! nodes[name]) {
+        nodes[name] = { status: '', read: 0, written: 0, errors: 0 };
+        count += 1;
+      }
+      return nodes[name];
+    }
+
+    normalized.split('\n').forEach(function(line) {
+      var parts = hopLineParts(line);
+      if (! parts || parts.origin === '') {
+        return;
+      }
+
+      if (workflow) {
+        var started = HOP_ACTION_START.exec(parts.message);
+        if (started) {
+          node(started[1].trim()).status = 'Running';
+          return;
+        }
+        var ended = HOP_ACTION_END.exec(parts.message);
+        if (ended) {
+          var ok = String(ended[2]).trim().toLowerCase() === 'true';
+          var action = node(ended[1].trim());
+          action.status = ok ? 'Finished' : 'Failed';
+          action.errors = ok ? action.errors : action.errors + 1;
+        }
+        return;
+      }
+
+      // Hop prefixes transform messages with a copy number. The first such
+      // line can arrive long before the closing metrics line, so mark that
+      // transform active while its rows are still moving. Pipeline headers
+      // have no copy suffix and do not represent a node on the canvas.
+      if (! HOP_COPY_SUFFIX.test(parts.origin)) {
+        return;
+      }
+      var transformName = parts.origin.replace(HOP_COPY_SUFFIX, '');
+      var transform = node(transformName);
+      if (/^(?:ERROR|FATAL)(?:\s*:|\b)/i.test(parts.message)) {
+        transform.status = 'Failed';
+        loggedErrors[transformName] = (loggedErrors[transformName] || 0) + 1;
+        transform.errors = Math.max(loggedErrors[transformName], metricErrors[transformName] || 0);
+      } else if (transform.status !== 'Failed') {
+        transform.status = 'Running';
+      }
+      var metrics = HOP_METRICS.exec(parts.message);
+      if (! metrics) {
+        return;
+      }
+      // Copies of one transform each report their own slice of the work.
+      transform.read += parseInt(metrics[3], 10) || 0;
+      transform.written += parseInt(metrics[4], 10) || 0;
+      metricErrors[transformName] = (metricErrors[transformName] || 0) + (parseInt(metrics[6], 10) || 0);
+      transform.errors = Math.max(loggedErrors[transformName] || 0, metricErrors[transformName]);
+      transform.status = transform.errors > 0 ? 'Failed' : (/^Finished processing/.test(parts.message) ? 'Finished' : 'Running');
+    });
+
+    return { nodes: nodes, nodeCount: count };
+  }
+
   function parserFor(options) {
     return options && options.parser === 'hop'
       ? function(text) { return parseHop(text, options); }
@@ -346,7 +482,7 @@
       // itself, and a log with nothing to choose between.
       return section.hasError || section.kind === 'hop-run' || total === 1;
     }
-    return section.hasError || section.kind === 'docker-execution' || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'shell' || section.kind === 'email' || section.kind === 'cleanup' ||
+    return section.hasError || section.kind === 'docker-execution' || section.kind === 'hop-execution' || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'shell' || section.kind === 'email' || section.kind === 'cleanup' ||
       section.kind === 'result' || total === 1 || (!! options.live && index === total - 1);
   }
 
@@ -526,6 +662,7 @@
     appendText: appendText,
     classifyLine: classifyLine,
     getText: getText,
+    hopNodeState: hopNodeState,
     parse: parse,
     parseHop: parseHop,
     setText: setText
