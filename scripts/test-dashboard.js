@@ -66,8 +66,9 @@ assert(jenkinsProxy.includes('function dashboardMetrics()'), 'The sanitized Jenk
 assert(jenkinsProxy.includes("$slots[$field] += isset($row[$field])"), 'Dashboard slots must aggregate backend environment limits.');
 assert(jenkinsProxy.includes("'onlineAgentExecutors' => 0"), 'Dashboard capacity rows must expose online agent executors.');
 assert(baseController.includes("$effectiveLimit = $configuredLimit + (int) $slotStatus['environments'][$environmentName]['onlineAgentExecutors']"), 'Online environment-agent executors must be additive to dashboard slot limits.');
-assert(baseController.includes("$includeControllerCapacity = $requestedEnvironment === 'LOCAL'") && baseController.includes("empty($status['environmentAgentsEnabled'])") && baseController.includes("$environmentRow['onlineAgentExecutors']") && baseController.includes('$controllerHasScopedBuild'), 'Scoped metrics must include controller capacity when routing is disabled, it is the environment fallback, or it is running a scoped build.');
-assert(baseController.includes('function($row) use ($requestedEnvironment, $includeControllerCapacity)'), 'Scoped nodes and executors must apply the controller-capacity decision consistently.');
+assert(baseController.includes("return $agentLabel === '' ? '' : $agentLabel.' || built-in';"), 'Environment jobs must be eligible for their agent and the shared built-in node.');
+assert(baseController.includes('function($row) use ($requestedEnvironment)') && baseController.includes('if (! empty($row[\'controller\'])) {') && baseController.includes('return TRUE;'), 'Scoped executor metrics must retain shared controller rows.');
+assert(!baseController.includes('$includeControllerCapacity'), 'Online agents must not remove shared executors from scoped totals.');
 assert(routes.includes("dashboard/overview") && routes.includes("jenkins/dashboardMetrics"), 'Dashboard routes must remain registered.');
 
 // The overview endpoint caches its aggregate query for a short window and
