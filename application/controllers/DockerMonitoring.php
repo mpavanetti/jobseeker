@@ -53,6 +53,64 @@ class DockerMonitoring extends BaseController
         );
     }
 
+    /**
+     * Fetch the inspect document for every listed container, and the one-shot
+     * stats for the running ones, in two parallel batches.
+     *
+     * Returns array('inspect' => array(id => array), 'stats' => array(id => array)),
+     * with an entry only where the engine answered with usable JSON - the
+     * caller's existing "no data" defaults then apply exactly as before.
+     */
+    private function dockerEngineBatch($baseUrl, $containerRecords)
+    {
+        $inspectPaths = array();
+        $statsPaths = array();
+
+        foreach ($containerRecords as $container) {
+            $id = isset($container['Id']) ? strtolower((string) $container['Id']) : '';
+            if (! preg_match('/^[a-f0-9]{12,64}$/', $id)) {
+                continue;
+            }
+
+            $inspectPaths['/containers/'.$id.'/json'] = $id;
+            if ((isset($container['State']) ? strtolower((string) $container['State']) : '') === 'running') {
+                $statsPaths['/containers/'.$id.'/stats?stream=false&one-shot=true'] = $id;
+            }
+        }
+
+        return array(
+            'inspect' => $this->decodeEngineBatch($baseUrl, $inspectPaths),
+            'stats' => $this->decodeEngineBatch($baseUrl, $statsPaths)
+        );
+    }
+
+    private function decodeEngineBatch($baseUrl, $pathsById)
+    {
+        $decoded = array();
+        if (empty($pathsById)) {
+            return $decoded;
+        }
+
+        $responses = $this->requestInternalHttpMany($baseUrl, array_keys($pathsById), 12, 3);
+        foreach ($pathsById as $path => $id) {
+            if (! isset($responses[$path])) {
+                continue;
+            }
+
+            $response = $responses[$path];
+            if ((int) $response['status'] < 200 || (int) $response['status'] >= 300) {
+                continue;
+            }
+
+            $payload = json_decode((string) $response['body'], TRUE);
+            if (is_array($payload)) {
+                $decoded[$id] = $payload;
+            }
+        }
+
+        return $decoded;
+    }
+
     private function pruneEngineBuildCache($label, $baseUrl)
     {
         // `all=1` removes every unused build-cache record. Docker never removes
@@ -249,6 +307,13 @@ class DockerMonitoring extends BaseController
         $containerRecords = $containersResponse['data'];
         $containerLimit = 50;
         $containers = array();
+
+        // Inspect and stats are one engine round trip per container each, so
+        // reading them one container at a time cost up to a hundred sequential
+        // requests per refresh of a screen that polls. They only depend on the
+        // container list, so they go out as two parallel batches instead.
+        $engineBatch = $this->dockerEngineBatch($baseUrl, array_slice($containerRecords, 0, $containerLimit));
+
         foreach (array_slice($containerRecords, 0, $containerLimit) as $container) {
             $id = isset($container['Id']) ? strtolower((string) $container['Id']) : '';
             if (! preg_match('/^[a-f0-9]{12,64}$/', $id)) {
@@ -256,8 +321,7 @@ class DockerMonitoring extends BaseController
             }
 
             $state = isset($container['State']) ? strtolower((string) $container['State']) : 'unknown';
-            $inspectResponse = $this->engineRequest($baseUrl, '/containers/'.$id.'/json', 3);
-            $inspect = $inspectResponse['ok'] ? $inspectResponse['data'] : array();
+            $inspect = isset($engineBatch['inspect'][$id]) ? $engineBatch['inspect'][$id] : array();
             $usage = array(
                 'metricsAvailable' => FALSE,
                 'cpuPercent' => 0,
@@ -275,12 +339,9 @@ class DockerMonitoring extends BaseController
                 'blockWriteBytes' => 0,
                 'pids' => 0
             );
-            if ($state === 'running') {
-                $statsResponse = $this->engineRequest($baseUrl, '/containers/'.$id.'/stats?stream=false&one-shot=true', 3);
-                if ($statsResponse['ok']) {
-                    $usage = $this->calculateContainerStats($statsResponse['data']);
-                    $usage['metricsAvailable'] = TRUE;
-                }
+            if ($state === 'running' && isset($engineBatch['stats'][$id])) {
+                $usage = $this->calculateContainerStats($engineBatch['stats'][$id]);
+                $usage['metricsAvailable'] = TRUE;
             }
 
             $names = isset($container['Names']) && is_array($container['Names']) ? $container['Names'] : array();

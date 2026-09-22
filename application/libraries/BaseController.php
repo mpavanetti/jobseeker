@@ -115,10 +115,21 @@ class BaseController extends CI_Controller {
 	 * busy for the length of the slowest batch rather than the whole queue.
 	 * Returns a path => body map; a path that failed maps to ''. Falls back to the
 	 * serial path when ext-curl is unavailable.
+	 *
+	 * With $withStatus a caller gets array('status' => int, 'body' => string) per
+	 * path instead of just the body. The status is read from curl either way;
+	 * returning it is what lets a caller that has to explain which call failed -
+	 * and with what HTTP code - still make its requests in parallel.
 	 */
-	protected function requestJenkinsMany($paths, $concurrency = 8) {
+	protected function requestJenkinsMany($paths, $concurrency = 8, $withStatus = FALSE) {
 		$results = array();
 		$paths = array_values(array_unique(array_filter((array) $paths, 'strlen')));
+
+		$record = function ($status, $body) use ($withStatus) {
+			$status = (int) $status;
+			$body = $status === 200 && is_string($body) ? $body : '';
+			return $withStatus ? array('status' => $status, 'body' => $body) : $body;
+		};
 
 		if (empty($paths)) {
 			return $results;
@@ -127,7 +138,7 @@ class BaseController extends CI_Controller {
 		if (! function_exists('curl_multi_init')) {
 			foreach ($paths as $path) {
 				$response = $this->requestJenkins('GET', $path);
-				$results[$path] = (int) $response['status'] === 200 ? (string) $response['body'] : '';
+				$results[$path] = $record($response['status'], (string) $response['body']);
 			}
 
 			return $results;
@@ -137,7 +148,7 @@ class BaseController extends CI_Controller {
 
 		if (empty($config->jenkins->enabled)) {
 			foreach ($paths as $path) {
-				$results[$path] = '';
+				$results[$path] = $record(0, '');
 			}
 
 			return $results;
@@ -156,7 +167,7 @@ class BaseController extends CI_Controller {
 			foreach ($chunk as $path) {
 				// Same guard as requestJenkins: never let a caller escape the Jenkins root.
 				if (preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//#i', $path) || strpos($path, '..') !== FALSE || preg_match('/[\r\n]/', (string) $path)) {
-					$results[$path] = '';
+					$results[$path] = $record(400, '');
 					continue;
 				}
 
@@ -187,8 +198,7 @@ class BaseController extends CI_Controller {
 
 			foreach ($handles as $path => $handle) {
 				$status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-				$body = curl_multi_getcontent($handle);
-				$results[$path] = $status === 200 && is_string($body) ? $body : '';
+				$results[$path] = $record($status, curl_multi_getcontent($handle));
 				curl_multi_remove_handle($multi, $handle);
 				curl_close($handle);
 			}
@@ -330,6 +340,90 @@ class BaseController extends CI_Controller {
 			'body' => $response === FALSE ? '' : $response,
 			'headers' => $responseHeaders
 		);
+	}
+
+	/**
+	 * GET several paths from one internal service at once.
+	 *
+	 * The Docker monitor asks the engine about every container it lists, which
+	 * one request at a time is a round trip per container per screen refresh.
+	 * The paths are validated exactly as requestInternalHttp() validates them,
+	 * and the result is keyed by path: array('status' => int, 'body' => string).
+	 */
+	protected function requestInternalHttpMany($baseUrl, $paths, $concurrency = 8, $timeout = 3) {
+		$results = array();
+		$baseUrl = rtrim(trim((string) $baseUrl), '/');
+		$paths = array_values(array_unique(array_filter((array) $paths, 'strlen')));
+		$timeout = max(1, min(15, (int) $timeout));
+
+		if (empty($paths) || ! preg_match('#^https?://[a-z0-9._-]+(?::[0-9]{1,5})?$#i', $baseUrl)) {
+			foreach ($paths as $path) {
+				$results[$path] = array('status' => 400, 'body' => '');
+			}
+
+			return $results;
+		}
+
+		if (! function_exists('curl_multi_init')) {
+			foreach ($paths as $path) {
+				$response = $this->requestInternalHttp($baseUrl, 'GET', $path, '', $timeout);
+				$results[$path] = array('status' => (int) $response['status'], 'body' => (string) $response['body']);
+			}
+
+			return $results;
+		}
+
+		foreach (array_chunk($paths, max(1, min(32, (int) $concurrency))) as $chunk) {
+			$multi = curl_multi_init();
+			$handles = array();
+
+			foreach ($chunk as $path) {
+				$normalized = '/'.ltrim((string) $path, '/');
+				if (strpos($normalized, '..') !== FALSE || preg_match('/[\r\n]/', $normalized)) {
+					$results[$path] = array('status' => 400, 'body' => '');
+					continue;
+				}
+
+				$handle = curl_init($baseUrl.$normalized);
+				curl_setopt_array($handle, array(
+					CURLOPT_RETURNTRANSFER => TRUE,
+					CURLOPT_HTTPHEADER => array('Accept: application/json'),
+					CURLOPT_CONNECTTIMEOUT => $timeout,
+					CURLOPT_TIMEOUT => $timeout,
+					CURLOPT_FOLLOWLOCATION => FALSE
+				));
+				curl_multi_add_handle($multi, $handle);
+				$handles[$path] = $handle;
+			}
+
+			if (empty($handles)) {
+				curl_multi_close($multi);
+				continue;
+			}
+
+			$running = NULL;
+			do {
+				curl_multi_exec($multi, $running);
+				if ($running > 0) {
+					curl_multi_select($multi, 1.0);
+				}
+			} while ($running > 0);
+
+			foreach ($handles as $path => $handle) {
+				$status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+				$body = curl_multi_getcontent($handle);
+				$results[$path] = array(
+					'status' => $status > 0 ? $status : 502,
+					'body' => is_string($body) ? $body : ''
+				);
+				curl_multi_remove_handle($multi, $handle);
+				curl_close($handle);
+			}
+
+			curl_multi_close($multi);
+		}
+
+		return $results;
 	}
 
 	protected function normalizeJobSeekerEnvironment($environment) {
@@ -812,8 +906,8 @@ class BaseController extends CI_Controller {
 		return $inserted ? implode("\n", $updated) : $command;
 	}
 
-	protected function jenkinsEnvironmentSlotStatus($environment = '') {
-		$usage = $this->jenkinsEnvironmentSlotUsage();
+	protected function jenkinsEnvironmentSlotStatus($environment = '', $prefetched = array()) {
+		$usage = $this->jenkinsEnvironmentSlotUsage($prefetched);
 		$limits = array();
 		$configuredLimits = $this->jenkinsEnvironmentSlotLimits();
 		$defaultLimit = isset($configuredLimits['DEFAULT']) ? (int) $configuredLimits['DEFAULT'] : 1;
@@ -1080,12 +1174,25 @@ class BaseController extends CI_Controller {
 	}
 
 	protected function jenkinsExecutorMonitorStatus($environment = '') {
-		$slotStatus = $this->jenkinsEnvironmentSlotStatus($environment);
+		// Every tick of the dashboard poll used to cost four Jenkins round trips
+		// taken one after another - and two of them were the same queue URL,
+		// fetched once for the slot maths and again for the monitor. These three
+		// reads are independent, so they go out together and the queue is read
+		// once for both consumers.
+		$computerPath = $this->jenkinsComputerPath();
+		$queuePath = $this->jenkinsQueuePath();
+		$responses = $this->requestJenkinsMany(
+			array($this->jenkinsSlotJobsPath(), $queuePath, $computerPath), 3, TRUE
+		);
+
+		$slotStatus = $this->jenkinsEnvironmentSlotStatus($environment, $responses);
 		if (! $slotStatus['ok']) {
 			return $slotStatus;
 		}
 
-		$computerResponse = $this->requestJenkins('GET', 'computer/api/json?tree=computer[displayName,offline,temporarilyOffline,numExecutors,assignedLabels[name],executors[number,idle,currentExecutable[number,url,fullDisplayName,building,result,builtOn,actions[parameters[name,value]]]]]');
+		$computerResponse = isset($responses[$computerPath]) ? $responses[$computerPath] : array('status' => 0, 'body' => '');
+		$queueResponse = isset($responses[$queuePath]) ? $responses[$queuePath] : array('status' => 0, 'body' => '');
+
 		if ((int) $computerResponse['status'] !== 200) {
 			$slotStatus['ok'] = FALSE;
 			$slotStatus['status'] = (int) $computerResponse['status'];
@@ -1093,7 +1200,6 @@ class BaseController extends CI_Controller {
 			return $slotStatus;
 		}
 
-		$queueResponse = $this->requestJenkins('GET', 'queue/api/json?tree=items[id,why,cancelled,params,task[name,fullName],actions[parameters[name,value]]]');
 		if ((int) $queueResponse['status'] !== 200) {
 			$slotStatus['ok'] = FALSE;
 			$slotStatus['status'] = (int) $queueResponse['status'];
@@ -1428,10 +1534,35 @@ class BaseController extends CI_Controller {
 		$limits[$key] = (int) $limit;
 	}
 
-	private function jenkinsEnvironmentSlotUsage() {
+	/**
+	 * The three Jenkins reads this screen family needs, named once so the
+	 * prefetching caller and the functions that consume them cannot drift apart
+	 * - the lookup below is by exact path.
+	 */
+	protected function jenkinsSlotJobsPath() {
+		return 'api/json?tree='.$this->jenkinsEnvironmentSlotJobTree(3);
+	}
+
+	protected function jenkinsQueuePath() {
+		return 'queue/api/json?tree=items[id,why,cancelled,params,task[name,fullName],actions[parameters[name,value]]]';
+	}
+
+	protected function jenkinsComputerPath() {
+		return 'computer/api/json?tree=computer[displayName,offline,temporarilyOffline,numExecutors,assignedLabels[name],executors[number,idle,currentExecutable[number,url,fullDisplayName,building,result,builtOn,actions[parameters[name,value]]]]]';
+	}
+
+	/**
+	 * $prefetched lets a caller that already fetched these paths - in parallel,
+	 * in one batch - hand the bodies in rather than have them read again. Called
+	 * without it, this behaves exactly as before and does its own reads.
+	 */
+	private function jenkinsEnvironmentSlotUsage($prefetched = array()) {
 		$usage = array('ok' => FALSE, 'status' => 0, 'message' => '', 'environments' => array());
 		$jobDefaults = array();
-		$jobsResponse = $this->requestJenkins('GET', 'api/json?tree='.$this->jenkinsEnvironmentSlotJobTree(3));
+		$jobsPath = $this->jenkinsSlotJobsPath();
+		$jobsResponse = isset($prefetched[$jobsPath])
+			? $prefetched[$jobsPath]
+			: $this->requestJenkins('GET', $jobsPath);
 
 		if ((int) $jobsResponse['status'] !== 200) {
 			$usage['status'] = (int) $jobsResponse['status'];
@@ -1448,7 +1579,10 @@ class BaseController extends CI_Controller {
 
 		$this->collectJenkinsEnvironmentSlotJobs(isset($jobsPayload->jobs) ? $jobsPayload->jobs : array(), $usage['environments'], $jobDefaults);
 
-		$queueResponse = $this->requestJenkins('GET', 'queue/api/json?tree=items[id,why,cancelled,params,task[name,fullName],actions[parameters[name,value]]]');
+		$queuePath = $this->jenkinsQueuePath();
+		$queueResponse = isset($prefetched[$queuePath])
+			? $prefetched[$queuePath]
+			: $this->requestJenkins('GET', $queuePath);
 		if ((int) $queueResponse['status'] !== 200) {
 			$usage['status'] = (int) $queueResponse['status'];
 			$usage['message'] = 'Unable to inspect the Jenkins queue before starting the build. HTTP '.$queueResponse['status'].'.';
