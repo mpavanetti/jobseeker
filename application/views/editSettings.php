@@ -215,7 +215,6 @@
         success: function(data){  
             var test = JSON.parse(data);
             $.each(test["data"], function(index, val) {
-                console.log(val)
             $('#components-registered').append('<b>' + val + '</b>');
 
              $( function() {
