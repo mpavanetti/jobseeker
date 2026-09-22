@@ -22,6 +22,7 @@
     "test:email-editor:e2e": "python3 scripts/test-email-template-e2e.py",
     "test:docker-monitor": "node scripts/test-docker-monitor.js",
     "test:job-container-metrics": "node scripts/test-job-container-metrics.js",
+    "test:executors:e2e": "python3 scripts/test-shared-agent-executors-e2e.py",
     "test:connectors": "node scripts/test-job-connectors.js",
     "test:connectors:sdk": "python3 scripts/test-jobseeker-connectors.py",
     "test:connectors:e2e": "python3 scripts/test-job-connectors-e2e.py",

@@ -596,9 +596,8 @@ class BaseController extends CI_Controller {
 			}
 			$environment = $standaloneEnvironment;
 		}
-		$agentCapacity = $this->jenkinsOnlineEnvironmentAgentCapacity($environment);
-		$configuredAgentLabel = $agentCapacity['label'];
-		$agentLabel = (int) $agentCapacity['executors'] > 0 ? $configuredAgentLabel : '';
+		$configuredAgentLabel = $this->jenkinsEnvironmentAgentLabel($environment);
+		$agentLabel = $this->jenkinsEnvironmentExecutionLabel($environment);
 
 		if ($jobName === '') {
 			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => 'No Jenkins job was selected.');
@@ -662,8 +661,7 @@ class BaseController extends CI_Controller {
 				$routingUpdated = TRUE;
 			}
 		} else {
-			// Not pinning to an environment agent (agents disabled, or none is
-			// online for this environment). Make sure the job is plainly
+			// Agent routing is disabled. Make sure the job is plainly
 			// controller-routable and never left as canRoam=false with an empty
 			// assignedNode - that combination ties a freestyle job to the
 			// "built-in" node and produces the confusing
@@ -673,7 +671,7 @@ class BaseController extends CI_Controller {
 			$currentLabel = $assignedNode ? trim((string) $assignedNode->nodeValue) : '';
 			$isJobSeekerAgentPin = $currentLabel !== '' && (
 				$currentLabel === $configuredAgentLabel
-				|| preg_match('/^jobseeker-env-[a-z0-9_-]+$/i', $currentLabel)
+				|| preg_match('/^jobseeker-env-[a-z0-9_-]+(?:\s*\|\|\s*built-in)?$/i', $currentLabel)
 			);
 
 			if ($assignedNode && ($currentLabel === '' || $isJobSeekerAgentPin)) {
@@ -701,7 +699,7 @@ class BaseController extends CI_Controller {
 		$updates += $commandUpdates;
 
 		if ($updates === 0) {
-			$message = $agentLabel !== '' ? 'Jenkins job already targets the online environment agent.' : 'No matching environment agent is online; the Jenkins job can use the controller.';
+			$message = $agentLabel !== '' ? 'Jenkins job already targets the environment agent and shared node.' : 'Agent routing is disabled; the Jenkins job can use the controller.';
 			return array('ok' => TRUE, 'updated' => FALSE, 'environment' => $environment, 'agentLabel' => $agentLabel, 'message' => $message);
 		}
 
@@ -710,7 +708,7 @@ class BaseController extends CI_Controller {
 		$messageParts = array();
 
 		if ($routingUpdated) {
-			$messageParts[] = $agentLabel !== '' ? 'Jenkins job routed to '.$agentLabel.'.' : 'The environment agent is offline; Jenkins job routing returned to the controller.';
+			$messageParts[] = $agentLabel !== '' ? 'Jenkins job routed to '.$agentLabel.'.' : 'Agent routing is disabled; Jenkins job routing returned to the controller.';
 		}
 
 		if ($commandUpdates > 0) {
@@ -911,6 +909,14 @@ class BaseController extends CI_Controller {
 
 		$labels = $this->jenkinsEnvironmentAgentLabels();
 		return isset($labels[$environment]) && trim((string) $labels[$environment]) !== '' ? trim((string) $labels[$environment]) : 'jobseeker-env-'.strtolower($environment);
+	}
+
+	protected function jenkinsEnvironmentExecutionLabel($environment) {
+		$agentLabel = $this->jenkinsEnvironmentAgentLabel($environment);
+		// A label expression lets Jenkins schedule the same environment job on
+		// its dedicated agent or on the shared built-in node. It also keeps the
+		// shared node available when the agent is temporarily offline.
+		return $agentLabel === '' ? '' : $agentLabel.' || built-in';
 	}
 
 	protected function jenkinsOnlineEnvironmentAgentCapacity($environment) {
@@ -1282,17 +1288,6 @@ class BaseController extends CI_Controller {
 		$environmentKey = $requestedEnvironment;
 		$environmentRows = isset($status['environments']) && is_array($status['environments']) ? $status['environments'] : array();
 		$environmentRow = isset($environmentRows[$environmentKey]) ? $environmentRows[$environmentKey] : array();
-		$controllerHasScopedBuild = FALSE;
-		foreach (isset($status['executors']) && is_array($status['executors']) ? $status['executors'] : array() as $executor) {
-			if (! empty($executor['controller']) && empty($executor['idle']) && $this->jenkinsMonitorEnvironmentMatches(isset($executor['environment']) ? $executor['environment'] : '', $requestedEnvironment)) {
-				$controllerHasScopedBuild = TRUE;
-				break;
-			}
-		}
-		$includeControllerCapacity = $requestedEnvironment === 'LOCAL'
-			|| empty($status['environmentAgentsEnabled'])
-			|| (isset($environmentRow['onlineAgentExecutors']) ? (int) $environmentRow['onlineAgentExecutors'] : 0) < 1
-			|| $controllerHasScopedBuild;
 		$status['environments'] = array(
 			$environmentKey => $environmentRow ? $environmentRow : array(
 				'running' => 0,
@@ -1305,12 +1300,15 @@ class BaseController extends CI_Controller {
 
 		foreach (array('nodes', 'executors', 'queue') as $collection) {
 			$rows = isset($status[$collection]) && is_array($status[$collection]) ? $status[$collection] : array();
-			$status[$collection] = array_values(array_filter($rows, function($row) use ($requestedEnvironment, $includeControllerCapacity) {
+			$status[$collection] = array_values(array_filter($rows, function($row) use ($requestedEnvironment) {
 				if (! is_array($row)) {
 					return FALSE;
 				}
 
-				if ($includeControllerCapacity && ! empty($row['controller'])) {
+				if (! empty($row['controller'])) {
+					// The built-in node is shared worker capacity for every
+					// environment. Its busy executors also reduce the capacity
+					// available to every environment, regardless of build scope.
 					return TRUE;
 				}
 
@@ -1320,9 +1318,9 @@ class BaseController extends CI_Controller {
 
 		$global = array('totalExecutors' => 0, 'busyExecutors' => 0, 'idleExecutors' => 0, 'offlineNodes' => 0, 'onlineNodes' => 0, 'agentNodes' => 0, 'onlineAgentNodes' => 0);
 		foreach ($status['nodes'] as $node) {
+			$isControllerNode = ! empty($node['controller']);
 			$offline = ! empty($node['offline']);
 			$global[$offline ? 'offlineNodes' : 'onlineNodes']++;
-			$isControllerNode = ! empty($node['controller']);
 			if (! $isControllerNode) {
 				$global['agentNodes']++;
 			}

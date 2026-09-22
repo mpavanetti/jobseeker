@@ -428,14 +428,12 @@ class JobCreation extends BaseController
     }
 
     private function appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment) {
-      $agentCapacity = $this->jenkinsOnlineEnvironmentAgentCapacity($environment);
-      if ((int) $agentCapacity['executors'] < 1) {
-        log_message('debug', 'No online Jenkins agent executors found for '.$this->normalizeJobSeekerEnvironment($environment).'; the new job will remain controller-routable.');
+      $executionLabel = $this->jenkinsEnvironmentExecutionLabel($environment);
+      if ($executionLabel === '') {
         return;
       }
 
-      $agentLabel = $agentCapacity['label'];
-      $this->appendTextElement($dom, $root, 'assignedNode', $agentLabel);
+      $this->appendTextElement($dom, $root, 'assignedNode', $executionLabel);
       $this->appendTextElement($dom, $root, 'canRoam', 'false');
     }
 
