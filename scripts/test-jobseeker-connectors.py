@@ -208,7 +208,6 @@ def test_azure_key_vault_backend():
             else:
                 sys.modules[name] = module
 
-
 def test_aws_secrets_manager_backend():
     calls = {}
 
@@ -331,6 +330,17 @@ def test_connection_tester():
     scrubbed = conntest.ConnectionTestResult(connector="x", type="mysql")
     scrubbed.add("connect", False, "Access denied for user 'etl' (using password: YES) token=supersecret")
     assert "supersecret" not in scrubbed.to_json()
+    driver_leak = conntest.ConnectionTestResult(connector="x", type="mysql")
+    driver_leak.add("connect", False, "driver repeated exact-value-without-a-label")
+    driver_leak.finish(conntest.UNREACHABLE, "failure: exact-value-without-a-label")
+    protected = conntest._redact_connector_secrets(
+        driver_leak,
+        Connector(
+            key="x", type="mysql", environment="DEV", job="*",
+            config={}, secrets={"password": "exact-value-without-a-label"},
+        ),
+    )
+    assert "exact-value-without-a-label" not in protected.to_json()
 
     # HTTP endpoint check via a local server
     http_server = ThreadingHTTPServer(("127.0.0.1", 0), _OkHandler)
@@ -340,9 +350,31 @@ def test_connection_tester():
         http_port = http_server.server_address[1]
         result = Connector(
             key="api", type="http_api", environment="DEV", job="*",
-            config={"host": "http://127.0.0.1:%d/health" % http_port, "port": http_port}, secrets={},
+            config={"host": "http://127.0.0.1:%d/health" % http_port, "port": http_port},
+            secrets={"token": "bearer-value"},
         ).test(timeout=3)
         assert result.status == conntest.PASSED and result.ok, result.to_dict()
+        assert _OkHandler.last_headers["Authorization"] == "Bearer bearer-value"
+
+        result = Connector(
+            key="api-key", type="http_api", environment="DEV", job="*",
+            config={
+                "host": "http://127.0.0.1:%d/health" % http_port,
+                "port": http_port,
+                "additional_parameters": "api_key_header=X-Test-Key",
+            },
+            secrets={"api_key": "api-key-value"},
+        ).test(timeout=3)
+        assert result.status == conntest.PASSED and result.ok, result.to_dict()
+        assert _OkHandler.last_headers["X-Test-Key"] == "api-key-value"
+
+        result = Connector(
+            key="basic", type="http_api", environment="DEV", job="*",
+            config={"host": "http://127.0.0.1:%d/health" % http_port, "port": http_port},
+            secrets={"username": "api-user", "password": "api-password"},
+        ).test(timeout=3)
+        assert result.status == conntest.PASSED and result.ok, result.to_dict()
+        assert _OkHandler.last_headers["Authorization"].startswith("Basic ")
     finally:
         http_server.shutdown()
         http_server.server_close()
@@ -413,8 +445,205 @@ def test_connection_tester():
         assert payload["connector"] == "vault-key" and payload["ok"] is True, payload
 
 
+def test_protocol_driver_configuration():
+    conntest = jobseeker.conntest
+    Connector = jobseeker.Connector
+
+    calls = {}
+    azure_modules = {
+        "azure": types.ModuleType("azure"),
+        "azure.storage": types.ModuleType("azure.storage"),
+        "azure.storage.filedatalake": types.ModuleType("azure.storage.filedatalake"),
+        "azure.core": types.ModuleType("azure.core"),
+        "azure.core.exceptions": types.ModuleType("azure.core.exceptions"),
+    }
+
+    class AzureError(Exception):
+        pass
+
+    class ClientAuthenticationError(AzureError):
+        pass
+
+    class DataLakeServiceClient:
+        def __init__(self, **kwargs):
+            calls["azure_data_lake"] = kwargs
+
+        def get_service_properties(self):
+            return {"hour_metrics": {"enabled": True}}
+
+    azure_modules["azure.storage.filedatalake"].DataLakeServiceClient = DataLakeServiceClient
+    azure_modules["azure.core.exceptions"].AzureError = AzureError
+    azure_modules["azure.core.exceptions"].ClientAuthenticationError = ClientAuthenticationError
+    previous = {name: sys.modules.get(name) for name in azure_modules}
+    sys.modules.update(azure_modules)
+    try:
+        result = Connector(
+            key="lake", type="azure_data_lake", environment="DEV", job="*",
+            config={"host": "lakeaccount", "port": 443},
+            secrets={"account_key": "lake-account-secret"},
+        ).test(timeout=2)
+        assert result.status == conntest.PASSED, result.to_dict()
+        assert calls["azure_data_lake"] == {
+            "account_url": "https://lakeaccount.dfs.core.windows.net",
+            "credential": "lake-account-secret",
+            "connection_timeout": 2,
+        }
+        assert "lake-account-secret" not in result.to_json()
+    finally:
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+    modules = {
+        "google": types.ModuleType("google"),
+        "google.cloud": types.ModuleType("google.cloud"),
+        "google.cloud.storage": types.ModuleType("google.cloud.storage"),
+        "google.api_core": types.ModuleType("google.api_core"),
+        "google.api_core.exceptions": types.ModuleType("google.api_core.exceptions"),
+        "google.oauth2": types.ModuleType("google.oauth2"),
+        "google.oauth2.service_account": types.ModuleType("google.oauth2.service_account"),
+    }
+
+    class GoogleApiError(Exception):
+        pass
+
+    class Forbidden(GoogleApiError):
+        pass
+
+    class NotFound(GoogleApiError):
+        pass
+
+    class ServiceAccountCredentials:
+        @classmethod
+        def from_service_account_info(cls, info):
+            calls["gcs_info"] = info
+            return "gcs-credentials"
+
+    class StorageClient:
+        def __init__(self, **kwargs):
+            calls["gcs_client"] = kwargs
+
+        def get_bucket(self, bucket, timeout):
+            calls["gcs_bucket"] = (bucket, timeout)
+            return object()
+
+    modules["google.cloud"].storage = modules["google.cloud.storage"]
+    modules["google.cloud.storage"].Client = StorageClient
+    modules["google.api_core.exceptions"].GoogleAPICallError = GoogleApiError
+    modules["google.api_core.exceptions"].Forbidden = Forbidden
+    modules["google.api_core.exceptions"].NotFound = NotFound
+    modules["google.oauth2"].service_account = modules["google.oauth2.service_account"]
+    modules["google.oauth2.service_account"].Credentials = ServiceAccountCredentials
+    previous = {name: sys.modules.get(name) for name in modules}
+    sys.modules.update(modules)
+    try:
+        service_account = json.dumps({"project_id": "safe-project", "private_key": "gcs-private-value"})
+        result = Connector(
+            key="gcs", type="gcs", environment="DEV", job="*",
+            config={"database": "safe-bucket", "port": 443},
+            secrets={"service_account_json": service_account},
+        ).test(timeout=2)
+        assert result.status == conntest.PASSED, result.to_dict()
+        assert calls["gcs_client"] == {"credentials": "gcs-credentials", "project": "safe-project"}
+        assert calls["gcs_bucket"] == ("safe-bucket", 2)
+        assert "gcs-private-value" not in result.to_json()
+    finally:
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+    pika = types.ModuleType("pika")
+
+    class ProbableAuthenticationError(Exception):
+        pass
+
+    class PlainCredentials:
+        def __init__(self, username, password):
+            calls["rabbit_credentials"] = (username, password)
+
+    class ConnectionParameters:
+        def __init__(self, **kwargs):
+            calls["rabbit_parameters"] = kwargs
+
+    class BlockingConnection:
+        def __init__(self, parameters):
+            self.is_open = True
+
+        def close(self):
+            self.is_open = False
+            calls["rabbit_closed"] = True
+
+    pika.PlainCredentials = PlainCredentials
+    pika.ConnectionParameters = ConnectionParameters
+    pika.BlockingConnection = BlockingConnection
+    pika.exceptions = types.SimpleNamespace(ProbableAuthenticationError=ProbableAuthenticationError)
+    previous_pika = sys.modules.get("pika")
+    sys.modules["pika"] = pika
+    try:
+        result = Connector(
+            key="queue", type="rabbitmq", environment="DEV", job="*",
+            config={"host": "rabbit.internal", "port": 5672, "database": "/events"},
+            secrets={"username": "queue-user", "password": "queue-password"},
+        ).test(timeout=2)
+        assert result.status == conntest.PASSED, result.to_dict()
+        assert calls["rabbit_credentials"] == ("queue-user", "queue-password")
+        assert calls["rabbit_parameters"]["virtual_host"] == "/events"
+        assert calls["rabbit_closed"] is True
+        assert "queue-password" not in result.to_json()
+    finally:
+        if previous_pika is None:
+            sys.modules.pop("pika", None)
+        else:
+            sys.modules["pika"] = previous_pika
+
+    kafka = types.ModuleType("kafka")
+    kafka_errors = types.ModuleType("kafka.errors")
+
+    class KafkaError(Exception):
+        pass
+
+    class KafkaAdminClient:
+        def __init__(self, **kwargs):
+            calls["kafka"] = kwargs
+
+        def list_topics(self):
+            return set()
+
+        def close(self):
+            calls["kafka_closed"] = True
+
+    kafka.KafkaAdminClient = KafkaAdminClient
+    kafka_errors.KafkaError = KafkaError
+    previous = {"kafka": sys.modules.get("kafka"), "kafka.errors": sys.modules.get("kafka.errors")}
+    sys.modules.update({"kafka": kafka, "kafka.errors": kafka_errors})
+    try:
+        result = Connector(
+            key="events", type="kafka", environment="DEV", job="*",
+            config={"host": "broker.internal", "port": 9093, "additional_parameters": "sasl_mechanism=PLAIN"},
+            secrets={"username": "event-user", "password": "event-password"},
+        ).test(timeout=2)
+        assert result.status == conntest.PASSED, result.to_dict()
+        assert calls["kafka"]["security_protocol"] == "SASL_SSL"
+        assert calls["kafka"]["sasl_plain_username"] == "event-user"
+        assert calls["kafka"]["sasl_plain_password"] == "event-password"
+        assert calls["kafka_closed"] is True
+    finally:
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
 class _OkHandler(BaseHTTPRequestHandler):
+    last_headers = {}
+
     def do_GET(self):
+        type(self).last_headers = dict(self.headers)
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"ok")
@@ -427,6 +656,7 @@ def main():
     test_azure_key_vault_backend()
     test_aws_secrets_manager_backend()
     test_connection_tester()
+    test_protocol_driver_configuration()
     server = ThreadingHTTPServer(("127.0.0.1", 0), CatalogHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
