@@ -1,5 +1,14 @@
 const assert = require('assert');
+const fs = require('fs');
 const consoleGroups = require('../assets/js/job-console-groups');
+
+const consoleCss = fs.readFileSync('assets/dist/css/job-console-groups.css', 'utf8');
+const header = fs.readFileSync('application/views/includes/header.php', 'utf8');
+for (const kind of ['docker-execution', 'python-tests', 'shell', 'hop-execution']) {
+  assert(consoleCss.includes('.job-console-section-' + kind), kind + ' needs an explicit console style');
+}
+assert(header.includes('job-console-groups.css?v=4'));
+assert(header.includes('job-console-groups.js?v=7'));
 
 const dockerLog = [
   'Started by user jobseeker',
@@ -118,6 +127,8 @@ assert(emailSection.text.includes('From: JobSeeker <jobseeker@local.test>'));
 assert(emailSection.text.includes('To: operator@example.com'));
 assert(emailSection.text.includes('Subject: [ABORTED] sample #42'));
 assert(!abortedEmail.sections.find((section) => section.kind === 'python').text.includes('Sending email'));
+assert.strictEqual(abortedEmail.sections.filter((section) => section.kind === 'result').some((section) => section.hasError), false,
+  'a user-aborted build should not be presented as an application error');
 
 const legacyDockerCleanup = consoleGroups.parse([
   '[JobSeeker] Python execution',
@@ -165,6 +176,58 @@ const explicitShellMarker = consoleGroups.parse([
 assert.deepStrictEqual(explicitShellMarker.sections.map((section) => section.kind), ['shell', 'result']);
 assert(explicitShellMarker.sections[0].text.includes('second shell line'));
 
+const prebuiltDocker = consoleGroups.parse([
+  'Started by user jobseeker',
+  '[JobSeeker] Docker runtime setup',
+  'Preparing Python Docker build context...',
+  'Using prebuilt image python:3.13-slim',
+  '[JobSeeker] Docker container execution',
+  'container output',
+  '[JobSeeker] Cleanup',
+  'removed runtime volumes',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.deepStrictEqual(prebuiltDocker.sections.map((section) => section.kind), [
+  'jenkins',
+  'docker-runtime',
+  'docker-execution',
+  'cleanup',
+  'result'
+]);
+assert.strictEqual(prebuiltDocker.sections.some((section) => section.kind === 'docker-build'), false,
+  'using a prebuilt image must not be presented as an image build');
+
+const hopJenkinsLog = consoleGroups.parse([
+  'Started by user jobseeker',
+  '[JobSeeker] Apache Hop execution (container)',
+  '[JobSeeker] Apache Hop container run',
+  '[JobSeeker] project=orders file=pipelines/main.hpl environment=DEV run-config=local',
+  '[JobSeeker] Context variables: Custom',
+  '[JobSeeker] Data Asset variables: JOBSEEKER_ASSET_ORDERS',
+  '2026/09/04 22:01:13 - main - Execution started for pipeline [main]',
+  '2026/09/04 22:01:13 - main - Finished processing (I=0, O=0, R=1, W=1, U=0, E=0)',
+  '[JobSeeker] Completed pipelines/main.hpl in 0.5s (read 1, written 1, errors 0)',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.deepStrictEqual(hopJenkinsLog.sections.map((section) => section.kind), [
+  'jenkins',
+  'hop-execution',
+  'result'
+]);
+assert.strictEqual(hopJenkinsLog.sections.find((section) => section.kind === 'hop-execution').hasError, false);
+
+const successfulBusinessStatuses = consoleGroups.parse([
+  '[JobSeeker] Python execution',
+  'status = error',
+  '{"status":"failed","error":null}',
+  '0 failed, 12 passed',
+  'failure notifications disabled',
+  'error handling mode = continue',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.strictEqual(successfulBusinessStatuses.sections.some((section) => section.hasError), false,
+  'business values and zero-failure summaries must not paint a successful build red');
+
 const successfulHopInventory = [
   'Hop Server result: OK',
   'Pipeline executed successfully',
@@ -177,6 +240,19 @@ const successfulHopInventory = [
   'Finished: SUCCESS'
 ].join('\n');
 const successfulHopConsole = consoleGroups.parse(successfulHopInventory);
+const activeHopNode = consoleGroups.hopNodeState(successfulHopInventory.split('\n').slice(0, 4).join('\n'), {kind: 'pipeline'});
+assert.strictEqual(activeHopNode.nodes['write inventory to log'].status, 'Running',
+  'a transform should light up when its first log line arrives, before final counters');
+const finishedHopNode = consoleGroups.hopNodeState(successfulHopInventory, {kind: 'pipeline'});
+assert.strictEqual(finishedHopNode.nodes['write inventory to log'].status, 'Finished');
+assert.strictEqual(finishedHopNode.nodes['write inventory to log'].written, 3);
+const failedHopNode = consoleGroups.hopNodeState([
+  '2026/09/04 22:01:13 - read inventory.0 - ERROR: Source unavailable',
+  '2026/09/04 22:01:14 - read inventory.0 - Finished processing (I=0, O=0, R=0, W=0, U=0, E=1)'
+].join('\n'), {kind: 'pipeline'});
+assert.strictEqual(failedHopNode.nodes['read inventory'].status, 'Failed');
+assert.strictEqual(failedHopNode.nodes['read inventory'].errors, 1,
+  'the same error in a log line and final counters must only count once');
 assert.strictEqual(successfulHopConsole.sections.some((section) => section.hasError), false,
   'a Hop data row whose value is error must not mark a successful Jenkins section as failed');
 const successfulHopLog = consoleGroups.parseHop(successfulHopInventory, {name: 'tmf-inventory'});
@@ -208,5 +284,6 @@ assert(
 // A real exception still does, with or without a trailing colon.
 assert(consoleGroups.parse('java.lang.NullPointerException').sections[0].hasError);
 assert(consoleGroups.parse('org.apache.hop.core.exception.HopXmlException: bad').sections[0].hasError);
+assert(consoleGroups.parse('2026-09-21 12:00:00 ERROR worker connection failed').sections[0].hasError);
 
 console.log('Job console grouping tests passed.');

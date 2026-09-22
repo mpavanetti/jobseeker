@@ -78,7 +78,8 @@ trait JobCreationExecutionTrait
           '  --label "com.jobseeker.job.name=${JOB_NAME:-${JOBSEEKER_JOB_NAME:-job}}" \\',
           '  --label "com.jobseeker.build.number=${BUILD_NUMBER:-0}" \\',
           '  --label "com.jobseeker.environment=${JOBSEEKER_ENVIRONMENT:-}" \\',
-          '  --label "com.jobseeker.runtime=${JOBSEEKER_CONTAINER_RUNTIME}" \\'
+          '  --label "com.jobseeker.runtime=${JOBSEEKER_CONTAINER_RUNTIME}" \\',
+          '  -e "ENVIRONMENT=${JOBSEEKER_ENVIRONMENT:-}" \\'
         );
       }
 
@@ -105,6 +106,7 @@ trait JobCreationExecutionTrait
         }
 
         $lines = array_merge(array('set -e'), $runtimeLines);
+        $lines[] = 'printf "%s\n" "[JobSeeker] Docker runtime setup"';
         $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
         $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
         $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
@@ -168,6 +170,7 @@ trait JobCreationExecutionTrait
         ));
 
         $lines = array_merge(array('set -e'), $runtimeLines);
+        $lines[] = 'printf "%s\n" "[JobSeeker] Docker runtime setup"';
         $lines[] = 'export JOBSEEKER_LINUX_RUNTIME=\'docker\'';
         $lines[] = 'export JOBSEEKER_LINUX_SCRIPT_TYPE='.escapeshellarg($execution['scriptType']);
         $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
@@ -322,7 +325,7 @@ trait JobCreationExecutionTrait
 
           $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
           $lines = array_merge($lines, $this->dockerJobResourceLines($runtimeOptions));
-          $lines[] = 'printf "%s\n" "[JobSeeker] Docker image build"';
+          $lines[] = 'printf "%s\n" "[JobSeeker] Docker runtime setup"';
           $lines[] = 'echo "Preparing Python Docker build context..."';
           $lines[] = 'JOBSEEKER_RESTORE_XTRACE=0; case "$-" in *x*) JOBSEEKER_RESTORE_XTRACE=1; set +x ;; esac';
           if (trim($requirementsText) !== '') {
@@ -363,7 +366,7 @@ trait JobCreationExecutionTrait
           $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
           $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile"; fi';
           $lines[] = 'JOBSEEKER_DOCKER_RUN_IMAGE="$JOBSEEKER_DOCKER_IMAGE"';
-          $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILT_IMAGE="$JOBSEEKER_DOCKER_RUN_IMAGE"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; DOCKER_BUILDKIT=1 docker build --network host --pull -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
+          $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then printf "%s\n" "[JobSeeker] Docker image build"; JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILT_IMAGE="$JOBSEEKER_DOCKER_RUN_IMAGE"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; DOCKER_BUILDKIT=1 docker build --network host --pull -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
           $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME="$(printf "jobseeker-email-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
           $lines[] = 'docker volume create "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null';
           $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "chmod 0777 /jobseeker-email"';

@@ -68,6 +68,7 @@ assert(controller.includes('\\x27\\s+sh\\s+'), 'Deployment must rewrite the lega
 const executionTrait = fs.readFileSync('application/controllers/concerns/JobCreationExecutionTrait.php', 'utf8');
 assert(/pythonEnvironmentArgument[\s\S]*?"\$JOBSEEKER_ENVIRONMENT"/.test(executionTrait), 'Python entrypoint must receive the runtime environment, not a baked literal.');
 assert(!/pythonEnvironmentArgument\([^)]*\)\s*\{\s*return[^\}]*escapeshellarg\(\$environment\)/.test(executionTrait), 'Python environment argument must not be a baked-in literal.');
+assert(executionTrait.includes('-e "ENVIRONMENT=${JOBSEEKER_ENVIRONMENT:-}"'), 'Every Docker runtime must expose the selected Jenkins environment to job code.');
 assert(controller.includes("'schedule_cron' => $source->schedule_cron"));
 assert(controller.includes('syncObservedRuns'));
 assert(controller.includes('TimerTriggerCause'));
