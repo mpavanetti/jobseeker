@@ -4,6 +4,15 @@ updates:
   # scripts/sync-frontend-assets.js from these npm pins. Keeping them current is
   # the main way client-side CVEs (jQuery UI, CKEditor, Select2, ...) get fixed
   # in this project, since the built assets are not committed.
+  #
+  # Patches and minors are grouped because they are the updates that carry the
+  # security fixes and can be reviewed as one safe batch. Majors are deliberately
+  # left out of the group so each arrives as its own pull request: this UI is
+  # AdminLTE 2 on Bootstrap 3, and the majors waiting upstream are not drop-in
+  # (Chart.js 3+ removed the xAxes/yAxes option shape the dashboard is written
+  # against, and animate.css 4 renamed every class to the animate__ prefix).
+  # Grouping them together is what left one unmergeable pull request holding the
+  # security patches hostage behind breaking rewrites.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -13,3 +22,29 @@ updates:
       frontend-assets:
         patterns:
           - "*"
+        update-types:
+          - "patch"
+          - "minor"
+
+  # The Jenkins workers install this file, so a vulnerable pin here reaches
+  # every build agent.
+  - package-ecosystem: "pip"
+    directory: "/docker/jenkins"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # The JobSeeker Python SDK ships inside the platform and runs in every Python
+  # and Apache Hop job.
+  - package-ecosystem: "pip"
+    directory: "/application/third_party/python/jobseeker_sdk"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # NOTE: the container base images in docker/ are NOT covered here. Dependabot's
+  # docker ecosystem only discovers files called Dockerfile (or Dockerfile.*),
+  # and these are named php_image, nginx_image, jenkins_image and so on, so it
+  # would silently find nothing. Renaming them means touching every
+  # `dockerfile:` key in the three compose files, which is a deliberate change
+  # rather than something to slip into a Dependabot config.
