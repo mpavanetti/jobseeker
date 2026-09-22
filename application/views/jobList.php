@@ -192,6 +192,48 @@ pre {
   cursor: pointer;
   margin: 0;
 }
+
+/*
+ * These tables take their rows from ajax, so DataTables sizes the columns once
+ * against an empty table and again when the data lands. The second measurement
+ * is the correct one; the first is what made the table appear to collapse and
+ * then snap open. Holding the table behind a placeholder until the first draw
+ * has happened means only the settled layout is ever on screen.
+ */
+.jobtable-settling {
+  position: relative;
+  min-height: 220px;
+}
+
+.jobtable-settling > .dataTables_wrapper {
+  opacity: 0;
+}
+
+.jobtable-settling::after {
+  content: "Loading jobs\2026";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a9199;
+  font-size: 13px;
+  background: repeating-linear-gradient(
+    180deg,
+    #fafbfc 0px, #fafbfc 34px,
+    #f1f3f5 34px, #f1f3f5 35px
+  );
+  border: 1px solid #e4e7ea;
+  border-radius: 3px;
+}
+
+/* The reveal is a fade rather than a jump, so a fast load still looks settled. */
+.dataTables_wrapper {
+  transition: opacity 120ms ease-in;
+}
 </style>
 
 <!-- Content Wrapper. Contains page content -->
@@ -337,7 +379,7 @@ pre {
           </div>
           <span class="job-bulk-hint">Use the first column to select jobs. Selections persist while paging and filtering.</span>
         </div>
-        <div class="table-responsive">
+        <div class="table-responsive jobtable-settling">
         <table id="listTable" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
             <tr>
@@ -1650,6 +1692,16 @@ pre {
     return !!(settings && settings.jqXHR && settings.jqXHR.readyState !== 4);
   }
 
+  /**
+   * The element that stands in for a table while it settles. Only the main
+   * table has a .table-responsive wrapper; the failed and success tables sit
+   * directly inside their box body, so fall back to the immediate parent.
+   */
+  function tableHolder(selector) {
+    var $wrapper = $(selector).closest('.table-responsive');
+    return $wrapper.length ? $wrapper : $(selector).parent();
+  }
+
   function destroyDataTable(selector) {
     if ($.fn.DataTable.isDataTable(selector)) {
       var table = $(selector).DataTable();
@@ -1661,6 +1713,39 @@ pre {
 
       table.clear().destroy();
     }
+
+    // A rebuilt table measures itself from scratch, so it goes back behind the
+    // placeholder until its own first draw.
+    tableHolder(selector).addClass('jobtable-settling');
+  }
+
+  /**
+   * Reveal a table once its first draw has happened.
+   *
+   * Column widths are only trustworthy after the ajax rows are in, so the
+   * placeholder stays up until then and the widths are re-measured once on the
+   * way out. Reloads keep the settled layout rather than flashing again, which
+   * is why this only fires for the first draw after a build.
+   */
+  function revealTableOnFirstDraw(selector) {
+    var $table = $(selector);
+    var $holder = tableHolder(selector);
+
+    // init.dt, not draw.dt: an ajax table can draw once while still empty, and
+    // revealing on that draw would show exactly the half-measured layout this
+    // is meant to hide. init.dt fires after the first data load.
+    $table.one('init.dt', function() {
+      $holder.removeClass('jobtable-settling');
+      if ($.fn.DataTable.isDataTable(selector)) {
+        $(selector).DataTable().columns.adjust();
+      }
+    });
+
+    // A table that never draws - Jenkins unreachable, or no rows at all - must
+    // not be left stuck behind the placeholder.
+    window.setTimeout(function() {
+      $holder.removeClass('jobtable-settling');
+    }, 15000);
   }
 
   function reloadJobTables() {
@@ -1867,6 +1952,7 @@ pre {
         ensureDataTablesErrorModeConfigured();
         destroyDataTable('#listTable');
         var jobListHeaders = {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)};
+        revealTableOnFirstDraw('#listTable');
         var listTable = $('#listTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
@@ -1977,6 +2063,7 @@ pre {
       $('#box2').boxWidget('expand');
 
         destroyDataTable('#listFailedTable');
+        revealTableOnFirstDraw('#listFailedTable');
         $('#listFailedTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
@@ -2027,6 +2114,7 @@ pre {
         $('#box3').boxWidget('expand');
 
         destroyDataTable('#listSuccessTable');
+        revealTableOnFirstDraw('#listSuccessTable');
         $('#listSuccessTable').DataTable({
           "lengthMenu": [3,5,10,15,20,100,200,500,1000],
           "pageLength": 20,
