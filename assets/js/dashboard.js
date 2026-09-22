@@ -394,7 +394,21 @@
       renderTrend();
     });
     $('#dashboardRefresh').on('click', function() { refreshAll(true); });
-    window.jobseekerDashboardJenkinsTimer = window.jobseekerDashboardJenkinsTimer || window.setInterval(loadJenkins, 30000);
+
+    // Every tick asks Jenkins for its executors, queue and job tree. Doing that
+    // for a tab nobody is looking at is the same waste the job list and the
+    // executor monitor already skip, so this poller skips it too - and catches
+    // up once as soon as the tab is looked at again, rather than leaving the
+    // figures frozen until the next tick.
+    if (! window.jobseekerDashboardJenkinsTimer) {
+      window.jobseekerDashboardJenkinsTimer = window.setInterval(function() {
+        if (! document.hidden) { loadJenkins(); }
+      }, 30000);
+
+      $(document).on('visibilitychange.jobseekerDashboard', function() {
+        if (! document.hidden) { loadJenkins(); }
+      });
+    }
   });
 
   window.JobSeekerDashboard = {
