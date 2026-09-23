@@ -54,7 +54,12 @@ ob_start();
  *
  * NOTE: If you change these, also change the error_reporting() code below
  */
-	define('ENVIRONMENT', isset($_SERVER['CI_ENV']) ? $_SERVER['CI_ENV'] : 'development');
+	// Fail closed. The default used to be 'development', which turns on
+	// error_reporting(-1) and display_errors - so any deployment that simply
+	// forgot to set CI_ENV served PHP warnings and stack traces to visitors.
+	// Both shipped deployments set CI_ENV=production explicitly; a developer who
+	// wants error output now asks for it by name.
+	define('ENVIRONMENT', isset($_SERVER['CI_ENV']) ? $_SERVER['CI_ENV'] : 'production');
 
 /*
  *---------------------------------------------------------------

@@ -16,18 +16,25 @@ function ok(label, condition) {
   checks++;
 }
 
-// 1. The setup wizard must guard access once the instance is provisioned.
-const setup = read('application/controllers/Setup.php');
-ok('Setup calls guardSetupAccess in the constructor',
-  /function __construct[\s\S]*?guardSetupAccess\s*\(\s*\)/.test(setup));
-ok('Setup.guardSetupAccess redirects anonymous callers to login',
-  /guardSetupAccess[\s\S]*?redirect\('login'\)/.test(setup));
-ok('Setup.guardSetupAccess requires the admin role',
-  /guardSetupAccess[\s\S]*?ROLE_ADMIN/.test(setup));
-ok('Setup still allows first-run bootstrap before any user exists',
-  /table_exists\('tbl_users'\)[\s\S]*?count_all_results\('tbl_users'\)/.test(setup));
-ok('Setup no longer reflects the Jenkins authorization blob',
-  !setup.includes('jenkins_authorization'));
+// 1. The setup wizard is gone for good. It rewrote application/config/config.json
+// with the Jenkins credentials, opened server-side database connections to any
+// host the form supplied, and enumerated Jenkins - and nothing linked to it.
+// Runtime configuration now comes from .env and the Kubernetes ConfigMap.
+for (const path of [
+  'application/controllers/Setup.php',
+  'application/views/setup.php',
+  'application/views/setupDatabase.php',
+  'application/views/setupEnv.php',
+  'application/views/setupJenkins.php',
+  'application/views/includes/setupHeader.php',
+  'application/views/includes/setupFooter.php'
+]) {
+  ok(path + ' must stay deleted', !fs.existsSync(path));
+}
+ok('no route may resolve to a Setup controller',
+  !/=>?\s*["'][Ss]etup\//.test(read('application/config/routes.php')));
+ok('CI core Controller no longer fetches config.json over HTTP',
+  !read('system/core/Controller.php').includes('config.json'));
 
 // 2. The Jenkins credential must never be handed to the browser.
 ok('BaseController does not expose jenkins_authorization',
@@ -86,5 +93,63 @@ for (const field of ['$name', '$userId', '$mobile', '$email']) {
   ok('profile.php escapes ' + field + ' in attribute output',
     !new RegExp('="<\\?php echo \\' + field + '; \\?>"').test(profile));
 }
+
+// 8. Cookie and header hardening that CodeIgniter 3.1.10 cannot express itself.
+//    CI sets its cookies through the positional setcookie() and
+//    session_set_cookie_params() signatures, neither of which takes a SameSite
+//    argument, so the session cookie gets it from the PHP ini instead. Browsers
+//    treat an unset SameSite as Lax, but only after a grace period on top-level
+//    POSTs - declaring it closes that window.
+const phpIni = read('docker/php/security.ini');
+ok('the session cookie declares SameSite', /^\s*session\.cookie_samesite\s*=\s*Lax\s*$/m.test(phpIni));
+ok('PHP does not advertise its version', /^\s*expose_php\s*=\s*Off\s*$/m.test(phpIni));
+ok('the php image installs the hardening ini',
+  read('docker/php_image').includes('COPY docker/php/security.ini /usr/local/etc/php/conf.d/'));
+
+// 9. The Jenkins credential must not be reachable from the tracked runtime
+//    config. scripts/test-jenkins-runtime-config.js covers the full contract;
+//    this is the security-relevant half, asserted here so a security run alone
+//    still catches it.
+ok('config.json carries no Jenkins credential',
+  !/"(username|token)"\s*:/.test(read('application/config/config.json')));
+ok('BaseController reads the Jenkins credential from the environment only',
+  !/\$config->jenkins->(username|token)/.test(read('application/libraries/BaseController.php')));
+
+// 10. Uploads: a .php is refused whatever the caller's allowlist says.
+//     getUploadedFile() only consults an allowlist when one is supplied, and
+//     Upload::do_upload() builds its list from a database column - a row with no
+//     usable extension in it left every type permitted.
+const uploads = read('application/libraries/BaseController.php');
+ok('an unconditional web-executable deny list exists',
+  /private static \$webExecutableUploadExtensions = array\(/.test(uploads));
+ok('the deny list is applied regardless of the caller allowlist',
+  /in_array\(\$extension, self::\$webExecutableUploadExtensions, TRUE\)/.test(uploads));
+const denyList = (uploads.match(/\$webExecutableUploadExtensions = array\(([\s\S]*?)\);/) || [])[1] || '';
+for (const ext of ['php', 'phtml', 'phar', 'htaccess']) {
+  ok('uploads refuse .' + ext, new RegExp("'" + ext + "'").test(denyList));
+}
+// JobSeeker runs operator-authored Python and shell, so these are legitimate
+// uploads (JobCreation allows py for python jobs and sh for bash jobs). The
+// deny list must never grow to cover them or job creation breaks.
+for (const ext of ['py', 'sh', 'zip', 'hpl', 'hwf', 'csv']) {
+  ok('uploads still accept .' + ext, !new RegExp("'" + ext + "'").test(denyList));
+}
+
+// 11. Nothing under repository/ is served. Roughly a dozen call sites fall back
+//     to FCPATH.'repository' - inside the document root - when jenkins_home is
+//     unset, which would put uploads where nginx can reach them.
+const nginxConf = read('nginx/default.conf');
+ok('nginx refuses to serve repository/',
+  /location ~ \^\/\(application\|system\|repository\)\/ \{/.test(nginxConf));
+const denyBlock = nginxConf.indexOf('location ~ ^/(application|system|repository)/');
+const phpBlock = nginxConf.indexOf('location ~* \\.php$ {');
+ok('the deny block is matched before the php handler',
+  denyBlock !== -1 && phpBlock !== -1 && denyBlock < phpBlock);
+
+// 12. The application environment fails closed. Defaulting to 'development'
+//     turns on error_reporting(-1) and display_errors, so a deployment that
+//     forgot CI_ENV served warnings and stack traces to visitors.
+ok('ENVIRONMENT defaults to production when CI_ENV is unset',
+  /define\('ENVIRONMENT', isset\(\$_SERVER\['CI_ENV'\]\) \? \$_SERVER\['CI_ENV'\] : 'production'\);/.test(read('index.php')));
 
 console.log('Security hardening regression checks passed (' + checks + ' assertions).');
