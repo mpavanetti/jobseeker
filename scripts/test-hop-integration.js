@@ -310,6 +310,34 @@ assert(jobExecutionView.includes('hop-canvas.js'));
 assert(hopCanvas.includes('options.nodeState'), 'the canvas must be able to draw run state');
 assert(jobExecutionView.includes('document.hidden'), 'a hidden tab must not keep polling the Hop Server');
 
+// The canvas is the one thing an operator watches a Hop job for, so it is part
+// of the run pane rather than behind a modal they have to go and open. It sits
+// above the Docker runtime block, and only a Hop job grows one.
+assert(jobExecutionView.includes("'<div class=\"execution-hop-panel\" id=\"hopCanvas-' + run.id + '\""),
+  'every run pane must carry its own Hop canvas panel');
+assert(
+  jobExecutionView.indexOf('execution-hop-panel') < jobExecutionView.lastIndexOf("'<div class=\"execution-runtime-metrics\""),
+  'the canvas must be drawn above the Docker runtime block'
+);
+assert(/function hopPanelFor\(run\)[\s\S]{0,260}hopJob\(run\.jobName\)/.test(jobExecutionView),
+  'a job that is not a Hop job must not grow a canvas panel');
+assert(/function updateExecutionUI\(run\)[\s\S]{0,2000}refreshHopCanvas\(run, false\)/.test(jobExecutionView),
+  'the canvas must refresh on the same poll ticks as the rest of the pane');
+assert(jobExecutionView.includes('HOP_CANVAS_MIN_INTERVAL_MS'),
+  'those refreshes must be throttled');
+assert(jobExecutionView.includes('state.finalFetched = true'),
+  'a finished build must get one last read so the last node lands');
+assert(/if \(cached && ! force && ! serverEngine\)/.test(jobExecutionView),
+  'a container job must re-render from the console it already streams, not re-request the file');
+assert(jobExecutionView.includes('function hopConsoleStateFor(run, kind)') &&
+  jobExecutionView.includes('function hopRunForJob(jobName)') &&
+  jobExecutionView.includes('function hopUsesServerEngine(jobName)'),
+  'the live-state helpers must be scoped to a run, not to whatever the modal last opened');
+assert(jobExecutionView.includes('focusExecutionPane(openRun.id)'),
+  'a canvas link must go to the open pane rather than covering it with a modal');
+assert(jobExecutionView.includes('.execution-hop-reload'),
+  'the panel must be able to re-read the Hop file on demand');
+
 // Apache Hop is the platform's own ETL integration, so it leads the choice.
 assert(
   jobCreationView.indexOf('data-linux-etl-choice="hop"') < jobCreationView.indexOf('data-linux-etl-choice="talend"'),

@@ -580,6 +580,34 @@
   .hop-canvas-modal-spacer { flex: 1 1 auto; }
   .hop-canvas-detail { font-size: 12px; margin-top: 8px; }
   #hopCanvasModal .modal-dialog { width: min(1100px, calc(100% - 30px)); }
+  /* The canvas as part of the run pane, above the Docker runtime block. */
+  .execution-hop-panel {
+    background: #fff;
+    border: 1px solid #e4e7ea;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+  }
+  .execution-hop-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 8px;
+  }
+  .execution-hop-file { font-size: 12px; }
+  .execution-hop-state {
+    color: #3c8dbc;
+    font-size: 12px;
+    margin-left: auto;
+  }
+  .execution-hop-detail { font-size: 12px; margin-top: 8px; }
+  .execution-hop-panel .hop-canvas-host { max-height: 46vh; }
+
+  @media (max-width: 767px) {
+    .execution-hop-state { margin-left: 0; }
+  }
+
   .hop-canvas-host { position: relative; background: #f7f9fb; border: 1px solid #e4e7ea; border-radius: 4px; overflow: auto; max-height: 60vh; }
   .hop-canvas { display: block; width: 100%; min-height: 280px; }
   .hop-canvas-empty { padding: 34px; text-align: center; color: #8a9199; }
@@ -729,20 +757,24 @@
      * never registers with the server, so asking it is always a wasted request
      * and always answers "nothing is running" - even mid-run.
      */
-    function hopCanvasUsesServerEngine() {
-      var metadata = hopJob(hopCanvasJobName);
+    function hopUsesServerEngine(jobName) {
+      var metadata = hopJob(jobName);
       return !! metadata && String(metadata.engine || 'container') === 'server';
+    }
+
+    function hopCanvasUsesServerEngine() {
+      return hopUsesServerEngine(hopCanvasJobName);
     }
 
     /**
      * The run this screen is showing for the Hop job the canvas is open on,
      * preferring one that is still going over a finished one.
      */
-    function hopCanvasRun() {
+    function hopRunForJob(jobName) {
       var best = null;
       Object.keys(executions).forEach(function(id) {
         var run = executions[id];
-        if (! run || run.jobName !== hopCanvasJobName || ! run.buildNumber) {
+        if (! run || run.jobName !== jobName || ! run.buildNumber) {
           return;
         }
         if (! best ||
@@ -754,13 +786,16 @@
       return best;
     }
 
+    function hopCanvasRun() {
+      return hopRunForJob(hopCanvasJobName);
+    }
+
     /**
      * Per-node state for a container run, read out of the build console this
      * screen is already streaming. It is the same shape the Hop Server path
      * returns, so the canvas overlay does not care which engine produced it.
      */
-    function hopCanvasConsoleState(kind) {
-      var run = hopCanvasRun();
+    function hopConsoleStateFor(run, kind) {
       if (! run || ! window.JobSeekerConsole || ! window.JobSeekerConsole.hopNodeState) {
         return null;
       }
@@ -774,6 +809,10 @@
       }
       var state = window.JobSeekerConsole.hopNodeState(text, { kind: kind });
       return state.nodeCount ? { run: run, nodes: state.nodes } : null;
+    }
+
+    function hopCanvasConsoleState(kind) {
+      return hopConsoleStateFor(hopCanvasRun(), kind);
     }
 
     function renderHopCanvas(graph) {
@@ -803,7 +842,7 @@
       });
     }
 
-    function hopCanvasStateText(live, fromConsole) {
+    function hopStateText(jobName, live, fromConsole) {
       if (live) {
         return (live.status || live.state) + ' · started ' + (live.started_at || 'unknown');
       }
@@ -811,10 +850,14 @@
         return (fromConsole.run.finished ? 'Build #' : 'Running · build #') + fromConsole.run.buildNumber +
           ' · metrics read from the build console';
       }
-      if (hopCanvasUsesServerEngine()) {
+      if (hopUsesServerEngine(jobName)) {
         return 'Design view · no live Hop Server run is currently attached';
       }
       return 'Design view · run this job to see its transforms light up';
+    }
+
+    function hopCanvasStateText(live, fromConsole) {
+      return hopStateText(hopCanvasJobName, live, fromConsole);
     }
 
     function drawHopCanvas(options) {
@@ -1848,7 +1891,6 @@
               '<span class="run-status"></span> <span class="text-muted run-queue"></span>' +
             '</div>' +
             '<div>' +
-              (hopJob(run.jobName) ? '<button type="button" class="btn btn-info btn-sm execution-hop-canvas" data-hop-job="' + escapeAttribute(run.jobName) + '"><i class="fa fa-random"></i> Explore canvas</button> ' : '') +
               '<button type="button" class="btn btn-danger btn-sm execution-abort" data-execution-id="' + run.id + '"><i class="fa fa-stop"></i> Stop</button>' +
               ' <button type="button" class="btn btn-default btn-sm execution-remove" data-execution-id="' + run.id + '"><i class="fa fa-times"></i> Close</button>' +
             '</div>' +
@@ -1860,6 +1902,16 @@
             '<div class="execution-meta-item"><span>Started</span><strong class="run-started"></strong></div>' +
             '<div class="execution-meta-item"><span>Duration</span><strong class="run-duration"></strong></div>' +
             '<div class="execution-meta-item"><span>Console</span><strong class="run-console-size"></strong></div>' +
+          '</div>' +
+          '<div class="execution-hop-panel" id="hopCanvas-' + run.id + '" style="display:none;">' +
+            '<div class="execution-hop-header">' +
+              '<strong><i class="fa fa-random"></i> Apache Hop canvas</strong>' +
+              '<span class="execution-hop-file text-muted"></span>' +
+              '<span class="execution-hop-state"></span>' +
+              '<button type="button" class="btn btn-default btn-xs execution-hop-reload" data-execution-id="' + run.id + '" title="Re-read the Hop file"><i class="fa fa-refresh"></i></button>' +
+            '</div>' +
+            '<div class="execution-hop-canvas"></div>' +
+            '<div class="execution-hop-detail text-muted">Select a transform or action to inspect its run metrics.</div>' +
           '</div>' +
           '<div class="execution-runtime-metrics" style="display:none;">' +
             '<div class="execution-runtime-header">' +
@@ -1894,7 +1946,123 @@
       }
 
       refreshTaskGraph(run, true);
+      refreshHopCanvas(run, true);
     }
+
+    // Inline Apache Hop canvas.
+    //
+    // The canvas used to live behind an "Explore canvas" modal, which meant the
+    // one thing an operator watches a Hop job for was the one thing they had to
+    // go and open. It is now part of the run pane, above the Docker runtime
+    // block, and refreshed on the same poll ticks as everything else - so the
+    // transforms light up while the build runs rather than when someone clicks.
+    //
+    // Only Hop jobs grow the panel; every other job's pane is unchanged.
+    var hopPanelState = {};
+    var HOP_CANVAS_MIN_INTERVAL_MS = 4000;
+
+    function hopPanelFor(run) {
+      if (! run || ! hopJob(run.jobName) || ! window.JobSeekerHopCanvas) {
+        return null;
+      }
+      var panel = $('#hopCanvas-' + run.id);
+      return panel.length ? panel : null;
+    }
+
+    function renderHopPanel(run, panel, graph) {
+      var metadata = hopJob(run.jobName) || {};
+      var live = graph.live || null;
+      var nodes = (live && live.nodes) || {};
+      var fromConsole = hopConsoleStateFor(run, graph.kind);
+
+      // A finished build's console is the whole truth; a stale server-side
+      // "running" record must not outrank it.
+      if (fromConsole && fromConsole.run.finished) { live = null; }
+      else if (live) { fromConsole = null; }
+      if (fromConsole) { nodes = fromConsole.nodes; }
+
+      panel.find('.execution-hop-file').text(graph.file || metadata.entry_file || '');
+      panel.find('.execution-hop-state').text(hopStateText(run.jobName, live, fromConsole));
+
+      var detail = panel.find('.execution-hop-detail');
+      window.JobSeekerHopCanvas.render(panel.find('.execution-hop-canvas').get(0), graph, {
+        nodeState: nodes,
+        onSelect: function(node) {
+          var state = nodes[node.name];
+          detail.text(
+            node.name + (node.type ? ' · ' + node.type : '') +
+            (state ? ' · ' + state.status + ' · read ' + state.read + ', written ' + state.written + ', errors ' + state.errors : '')
+          );
+        }
+      });
+    }
+
+    function refreshHopCanvas(run, force) {
+      var panel = hopPanelFor(run);
+      if (! panel) {
+        return;
+      }
+      panel.show();
+
+      var state = hopPanelState[run.id];
+      if (! state) {
+        state = hopPanelState[run.id] = { pending: false, last: 0, finalFetched: false };
+      }
+      if (state.pending) {
+        return;
+      }
+
+      var cached = hopCanvasGraphCache[run.jobName];
+      var serverEngine = hopUsesServerEngine(run.jobName);
+
+      // A container job has no server-side live state to collect, so once the
+      // file has been read every later tick is a local re-render against the
+      // console this screen is already streaming - no request at all.
+      if (cached && ! force && ! serverEngine) {
+        renderHopPanel(run, panel, cached);
+        return;
+      }
+
+      var finalPass = !! run.finished && ! state.finalFetched;
+      if (! force && ! finalPass && (state.finalFetched || Date.now() - state.last < HOP_CANVAS_MIN_INTERVAL_MS)) {
+        return;
+      }
+
+      state.pending = true;
+      state.last = Date.now();
+      var reload = panel.find('.execution-hop-reload');
+      reload.prop('disabled', true).find('i').addClass('fa-spin');
+
+      $.getJSON(hopGraphUrl, {
+        job: run.jobName,
+        live: serverEngine ? '1' : '0',
+        started_after: ! run.finished && run.timestamp ? String(run.timestamp) : ''
+      })
+        .done(function(graph) {
+          hopCanvasGraphCache[run.jobName] = graph;
+          renderHopPanel(run, panel, graph);
+          if (run.finished) {
+            state.finalFetched = true;
+          }
+        })
+        .fail(function(response) {
+          var message = (response && response.responseJSON && response.responseJSON.error) ||
+            'The Apache Hop canvas could not be read.';
+          panel.find('.execution-hop-canvas').html('<div class="hop-canvas-empty">' + escapeHtml(message) + '</div>');
+          panel.find('.execution-hop-state').text('');
+        })
+        .always(function() {
+          state.pending = false;
+          reload.prop('disabled', false).find('i').removeClass('fa-spin');
+        });
+    }
+
+    $(document).on('click', '.execution-hop-reload', function() {
+      var run = executions[$(this).attr('data-execution-id')];
+      if (run) {
+        refreshHopCanvas(run, true);
+      }
+    });
 
     // Task graph for a live build.
     //
@@ -2024,6 +2192,7 @@
 
       $('#tab-' + run.id + ' a').attr('title', run.jobName + ' - ' + run.environment + ' - ' + (run.status || 'Pending'));
       refreshTaskGraph(run, false);
+      refreshHopCanvas(run, false);
       renderExecutionRows();
       updateExecutionSummary();
     }
@@ -2653,7 +2822,24 @@
     $(document).on('click', '.execution-hop-job-link, .execution-hop-canvas', function(event) {
       event.preventDefault();
       event.stopPropagation();
-      openHopCanvas($(this).attr('data-hop-job'));
+      var hopJobName = $(this).attr('data-hop-job');
+
+      // This screen now draws the canvas inside the run pane. When the job
+      // already has one open, take the operator there rather than covering it
+      // with a modal of the same drawing; the modal stays for a Hop job that is
+      // only listed, with no run to attach to.
+      var openRun = hopRunForJob(hopJobName);
+      if (openRun && $('#hopCanvas-' + openRun.id).length) {
+        focusExecutionPane(openRun.id);
+        refreshHopCanvas(openRun, true);
+        var canvas = document.getElementById('hopCanvas-' + openRun.id);
+        if (canvas && typeof canvas.scrollIntoView === 'function') {
+          canvas.scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+        return;
+      }
+
+      openHopCanvas(hopJobName);
     });
 
     $('#hopCanvasModal').on('shown.bs.modal', function() {
