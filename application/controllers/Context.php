@@ -125,6 +125,18 @@ public function contextDetails() {
     }
     $data["contexts"] = $this->model->listAvailableContexts($selectedEnvironment);
     $data["activeContexts"] = $this->model->listActiveContexts($selectedEnvironment);
+
+    // Values the deployment supplies through JOBSEEKER_CONTEXT_* in .env. They
+    // are shown alongside the stored ones and resolve in jobs the same way, but
+    // they belong to whoever owns the environment, so the page renders them
+    // without edit or delete actions.
+    $this->load->library('EnvironmentContext');
+    $storedKeys = array();
+    foreach ((array) $data["list"] as $storedRow) {
+      $storedKeys[] = $storedRow->ContextKey;
+    }
+    $data["environmentContexts"] = $this->environmentcontext->rows($storedKeys);
+
     $data["selectedEnvironment"] = $selectedEnvironment;
     $this->global['selectedEnvironment'] = $selectedEnvironment;
     $data["role"] = $this->isManager();

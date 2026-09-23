@@ -31,6 +31,33 @@ trait JobCreationExecutionTrait
         );
       }
 
+      private function environmentContext() {
+        $this->load->library('EnvironmentContext');
+        return $this->environmentcontext;
+      }
+
+      /**
+       * Context values the deployment supplies through JOBSEEKER_CONTEXT_* in
+       * .env, exported into the job so a script can read them directly as well
+       * as through the SDK resolver. They are baked into the generated command
+       * rather than read from the worker's own environment, because a Jenkins
+       * agent or a job container does not inherit the app's .env.
+       *
+       * Only that prefix is ever exported - see EnvironmentContext.
+       */
+      private function environmentContextLines() {
+        return $this->environmentContext()->exportLines();
+      }
+
+      /** `-e NAME` lines so a containerised job receives the same values. */
+      private function dockerContextEnvLines() {
+        $lines = array();
+        foreach ($this->environmentContext()->variableNames() as $name) {
+          $lines[] = '  -e '.$name.' \\';
+        }
+        return $lines;
+      }
+
       private function connectorRuntimeLines() {
         return array(
           'export JOBSEEKER_CONNECTORS_DIR="$WORKSPACE/.jobseeker-connectors"',
@@ -96,7 +123,7 @@ trait JobCreationExecutionTrait
         $commandText = str_replace(array("\r\n", "\r"), "\n", (string) $commandText);
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : 'alpine:3.20';
-        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
+        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->environmentContextLines(), $this->connectorRuntimeLines());
 
         if ($runtimeMode !== 'docker') {
           $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
@@ -133,6 +160,7 @@ trait JobCreationExecutionTrait
         $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
         $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
         $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+        $lines = array_merge($lines, $this->dockerContextEnvLines());
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc \'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"; printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
@@ -149,7 +177,7 @@ trait JobCreationExecutionTrait
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
         $dockerImage = isset($runtimeOptions['dockerImage']) ? $runtimeOptions['dockerImage'] : ($execution['scriptType'] === 'talend' ? 'eclipse-temurin:17-jre-alpine' : 'alpine:3.20');
 
-        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
+        $runtimeLines = array_merge($this->dataAssetsRuntimeLines($repositoryRoot), $this->environmentContextLines(), $this->connectorRuntimeLines());
 
         if ($runtimeMode !== 'docker') {
           $runtimeLines[] = 'trap \'rm -rf "$JOBSEEKER_CONNECTORS_DIR"\' EXIT';
@@ -206,6 +234,7 @@ trait JobCreationExecutionTrait
         $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
         $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
         $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+        $lines = array_merge($lines, $this->dockerContextEnvLines());
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
         $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
@@ -247,6 +276,7 @@ trait JobCreationExecutionTrait
         $lines = array_merge(
           array('set -e'),
           $this->dataAssetsRuntimeLines($repositoryRoot),
+          $this->environmentContextLines(),
           $this->connectorRuntimeLines(),
           $this->dagRuntimeLines()
         );
@@ -414,6 +444,7 @@ trait JobCreationExecutionTrait
           $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
           $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
           $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+          $lines = array_merge($lines, $this->dockerContextEnvLines());
           $lines[] = '  -e JOBSEEKER_DAG_RESUME -e JOBSEEKER_DAG_TASKS -e JOBSEEKER_DAG_MAX_PARALLEL \\';
           $lines[] = '  -e JOBSEEKER_DAG_FAIL_FAST -e JOBSEEKER_DAG_STATE \\';
           $lines[] = '  -e PYTHONUNBUFFERED \\';
@@ -463,7 +494,7 @@ trait JobCreationExecutionTrait
        */
       private function buildHopExecutionCommand($execution, $repositoryRoot) {
         $engine = isset($execution['engine']) ? (string) $execution['engine'] : 'container';
-        $lines = array_merge(array('set -e', 'export PYTHONUNBUFFERED=1'), $this->dataAssetsRuntimeLines($repositoryRoot));
+        $lines = array_merge(array('set -e', 'export PYTHONUNBUFFERED=1'), $this->dataAssetsRuntimeLines($repositoryRoot), $this->environmentContextLines());
         $lines[] = 'command -v jobseeker-hop >/dev/null || { echo "The JobSeeker Apache Hop runner is not installed on this Jenkins worker. Rebuild the Jenkins image to pick up the bundled SDK." >&2; exit 127; }';
         $lines[] = 'printf "%s\n" '.escapeshellarg('[JobSeeker] Apache Hop execution ('.$engine.')');
 

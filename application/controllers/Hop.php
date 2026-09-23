@@ -499,14 +499,16 @@ class Hop extends BaseController
                 continue;
             }
             $backend = isset($row['secret_backend']) ? (string) $row['secret_backend'] : 'local';
-            if ($backend !== 'local') {
+            if (! in_array($backend, array('local', 'deployment'), TRUE)) {
                 // A cloud-held secret is resolved by the connector runtime at run
                 // time on purpose. Copying it onto the server volume would defeat
                 // the reason it is held there.
                 $skipped[] = array('key' => (string) $row['connector_key'], 'reason' => 'held in '.$backend.', so it stays run-scoped');
                 continue;
             }
-            $secrets = $this->connectors->decryptLocalSecret(isset($row['secret_encrypted']) ? $row['secret_encrypted'] : '');
+            $secrets = $backend === 'deployment'
+                ? (isset($row['_secret_values']) && is_array($row['_secret_values']) ? $row['_secret_values'] : array())
+                : $this->connectors->decryptLocalSecret(isset($row['secret_encrypted']) ? $row['secret_encrypted'] : '');
             if ($secrets === FALSE) {
                 $skipped[] = array('key' => (string) $row['connector_key'], 'reason' => 'its secret could not be read');
                 continue;

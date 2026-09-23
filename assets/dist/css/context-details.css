@@ -472,6 +472,29 @@
   color: #fff;
 }
 
+/* A value the deployment supplies through JOBSEEKER_CONTEXT_* in .env. It reads
+   like any other context; the tint is what says this page cannot change it. */
+.context-badge-readonly {
+  background-color: #6c757d;
+  color: #fff;
+}
+
+.context-row-environment > td {
+  background-color: #fbfcfd;
+}
+
+.context-row-environment .context-key::after {
+  background: #eef2f7;
+  border-radius: 9px;
+  color: #5a6b7d;
+  content: "from .env";
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 6px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+
 .context-page .context-datatable-footer {
   align-items: center;
   border-top: 1px solid #f4f4f4;

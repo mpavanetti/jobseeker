@@ -1127,4 +1127,53 @@ check(any(row["task_key"] == "skips" and row["status"] == dagmod.SKIPPED for row
 
 check("SkipTask" in dagmod.__all__, "SkipTask must be part of the module's public API.")
 
+# --- 19. Context values supplied by the deployment ---------------------------
+#
+# A value in .env named JOBSEEKER_CONTEXT_<KEY> resolves like a stored Context
+# value, behind it: a stored value for a specific environment is an operator's
+# deliberate override of whatever the deployment shipped with.
+
+check(sdk.context_environment_variable("batch_size") == "JOBSEEKER_CONTEXT_BATCH_SIZE",
+      "A key maps to its variable name.")
+check(sdk.context_environment_variable("quality.threshold") == "JOBSEEKER_CONTEXT_QUALITY_THRESHOLD",
+      "Dots in a key become underscores in the variable.")
+check(sdk.context_environment_variable("full-reload") == "JOBSEEKER_CONTEXT_FULL_RELOAD",
+      "Dashes in a key become underscores in the variable.")
+
+os.environ["JOBSEEKER_CONTEXT_E2E_SAMPLE"] = "from-the-environment"
+os.environ["JOBSEEKER_CONTEXT_EMPTY_ONE"] = ""
+os.environ["JOBSEEKER_CONTEXT_DATABASE_PASSWORD"] = "must-not-leak"
+try:
+    check(sdk.context_from_environment("e2e_sample") == "from-the-environment",
+          "A deployment value is readable by its key.")
+    check(sdk.context_from_environment("E2E_SAMPLE") == "from-the-environment",
+          "Key lookup does not care about case.")
+    check(sdk.context_from_environment("not_set") is None,
+          "A key the deployment does not supply resolves to nothing.")
+    check(sdk.context_from_environment("empty_one") is None,
+          "An empty variable is not a value.")
+    check(sdk.context_from_environment("database_password") is None,
+          "Credential-shaped context keys are reserved for Connectors.")
+
+    # ctx.context() goes through the same resolver, and a task must get the
+    # deployment value without a database in sight.
+    graph = new_dag()
+    seen = {}
+
+    @graph.task(id="reads_context")
+    def reads_context(ctx):
+        seen["value"] = ctx.context("e2e_sample", default="MISSING")
+        seen["absent"] = ctx.context("not_set", default="fallback")
+
+    result = run(graph)
+    check(result.status == dagmod.SUCCESS, "A task may resolve context with no database.")
+    check(seen["value"] == "from-the-environment",
+          "ctx.context must fall back to the deployment value: %r" % seen.get("value"))
+    check(seen["absent"] == "fallback",
+          "An unsupplied key still returns the caller's default.")
+finally:
+    os.environ.pop("JOBSEEKER_CONTEXT_E2E_SAMPLE", None)
+    os.environ.pop("JOBSEEKER_CONTEXT_EMPTY_ONE", None)
+    os.environ.pop("JOBSEEKER_CONTEXT_DATABASE_PASSWORD", None)
+
 print("JobSeeker task DAG checks passed (%d assertions)." % CHECKS)

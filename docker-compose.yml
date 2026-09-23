@@ -109,6 +109,13 @@ services:
       - ./index.php:/var/www/html/index.php
       - ./repository:/php/repository
       #- ./logs/php.log:/var/log/fpm-php.www.log
+    env_file:
+      # Compose substitutes .env into this file but does not put it inside the
+      # container. The app needs it there for JOBSEEKER_CONTEXT_* values, whose
+      # names an operator chooses and which therefore cannot be listed below.
+      # Entries under `environment:` still win over anything in the file.
+      - path: ./.env
+        required: false
     environment:
       - CI_ENV=${CI_ENV:-production}
       - JOBSEEKER_DEPLOYMENT_MODE=${JOBSEEKER_DEPLOYMENT_MODE:-multi}
