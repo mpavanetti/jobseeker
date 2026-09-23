@@ -50,23 +50,14 @@ metadata:
   labels:
     app.kubernetes.io/name: jobseeker
 data:
+  # Only "enabled" and "jenkins_home" are read from here. Both URLs and every
+  # environment setting come from the JOBSEEKER_JENKINS_* variables above, which
+  # take precedence over this file. The Jenkins credential is never read from
+  # this file at all - it comes from the jobseeker-secrets Secret.
   config.json: |
     {
       "jenkins": {
         "enabled": true,
-        "url": "https://jenkins.jobseeker.example/",
-        "username": "jobseeker",
-        "token": "provided-by-JOBSEEKER_JENKINS_TOKEN",
-        "authorization": "Basic",
-        "jenkins_home": "/php",
-        "environment_slots": {"default": 1, "DEV": 5, "QA": 3, "UAT": 2, "PROD": 5},
-        "environment_agents_enabled": true,
-        "environment_agent_labels": {
-          "DEV": "jobseeker-env-dev",
-          "QA": "jobseeker-env-qa",
-          "UAT": "jobseeker-env-uat",
-          "PROD": "jobseeker-env-prod"
-        }
-      },
-      "setup": {"enabled": true, "env": "production"}
+        "jenkins_home": "/php"
+      }
     }
