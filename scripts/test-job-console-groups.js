@@ -4,11 +4,11 @@ const consoleGroups = require('../assets/js/job-console-groups');
 
 const consoleCss = fs.readFileSync('assets/dist/css/job-console-groups.css', 'utf8');
 const header = fs.readFileSync('application/views/includes/header.php', 'utf8');
-for (const kind of ['docker-execution', 'python-tests', 'shell', 'hop-execution']) {
+for (const kind of ['docker-execution', 'python-tests', 'shell', 'hop-execution', 'task', 'dag']) {
   assert(consoleCss.includes('.job-console-section-' + kind), kind + ' needs an explicit console style');
 }
-assert(header.includes('job-console-groups.css?v=4'));
-assert(header.includes('job-console-groups.js?v=7'));
+assert(header.includes('job-console-groups.css?v=5'));
+assert(header.includes('job-console-groups.js?v=8'));
 
 const dockerLog = [
   'Started by user jobseeker',
@@ -285,5 +285,92 @@ assert(
 assert(consoleGroups.parse('java.lang.NullPointerException').sections[0].hasError);
 assert(consoleGroups.parse('org.apache.hop.core.exception.HopXmlException: bad').sections[0].hasError);
 assert(consoleGroups.parse('2026-09-21 12:00:00 ERROR worker connection failed').sections[0].hasError);
+
+// --- Task DAG sections -------------------------------------------------------
+//
+// A job that declares tasks prints one marker per task, and the runtime tags
+// every line a task writes with that task's id. Both matter: tasks run
+// concurrently, so without per-line ownership one task's traceback lands under
+// another task's heading and paints a task that succeeded red.
+const dagLog = [
+  'Started by user jobseeker',
+  '[JobSeeker] Python execution',
+  '[JobSeeker DAG] start | 4 task(s) | run nightly-DEV-42 | max parallel 4',
+  '[JobSeeker Task] extract | RUNNING | attempt 1/1',
+  '[extract] pulled 1200 rows',
+  '[JobSeeker Task] extract | SUCCESS | attempt 1/1 | 1.204s',
+  '[JobSeeker Task] enrich | RUNNING | attempt 1/2',
+  '[JobSeeker Task] validate | RUNNING | attempt 1/1',
+  '[enrich] Traceback (most recent call last):',
+  '[validate] 1180 of 1200 rows passed validation',
+  '[enrich] ValueError: bad row',
+  '[JobSeeker Task] enrich | RETRY | attempt 1/2 | 0.100s | ValueError: bad row',
+  '[JobSeeker Task] validate | SUCCESS | attempt 1/1 | 0.300s',
+  '[JobSeeker Task] enrich | RUNNING | attempt 2/2',
+  '[JobSeeker Task] enrich | FAILURE | attempt 2/2 | 0.120s | ValueError: bad row',
+  '[JobSeeker Task] publish | UPSTREAM_FAILED | upstream failed',
+  '[JobSeeker DAG] finish | FAILURE | 2 succeeded, 2 failed, 0 skipped | 2.100s',
+  '[JobSeeker] Cleanup',
+  'Finished: FAILURE'
+].join('\n');
+
+const dagSections = consoleGroups.parse(dagLog).sections;
+const taskSections = dagSections.filter((section) => section.kind === 'task');
+assert.strictEqual(taskSections.length, 4,
+  'interleaved output must still produce exactly one section per task');
+assert.deepStrictEqual(taskSections.map((section) => section.title),
+  ['Task extract', 'Task enrich', 'Task validate', 'Task publish'],
+  'each task section must be titled with its task id, in first-seen order');
+
+const byTask = {};
+taskSections.forEach((section) => { byTask[section.taskId] = section; });
+
+assert(byTask.extract.text.indexOf('[extract] pulled 1200 rows') !== -1,
+  "a task's own stdout must stay under that task's heading");
+assert.strictEqual(byTask.extract.hasError, false, 'a task that succeeded must not be flagged');
+
+assert(byTask.enrich.text.indexOf('ValueError: bad row') !== -1,
+  "a task's traceback must stay under that task's heading");
+assert.strictEqual(byTask.enrich.hasError, true, 'a task that failed must be flagged');
+assert(byTask.enrich.text.indexOf('attempt 2/2') !== -1,
+  'every attempt of one task belongs to the same section');
+
+// This is the regression that per-line attribution exists to prevent.
+assert.strictEqual(byTask.validate.hasError, false,
+  "a concurrent task's traceback must never flag the task that was running beside it");
+assert(byTask.validate.text.indexOf('Traceback') === -1,
+  "one task's output must never leak into another task's section");
+assert(byTask.validate.text.indexOf('1180 of 1200 rows passed validation') !== -1,
+  'a task interleaved with another must keep its own output');
+
+const dagFrames = dagSections.filter((section) => section.kind === 'dag');
+assert.strictEqual(dagFrames.length, 2, 'the run start and the run outcome are their own sections');
+assert.strictEqual(dagFrames[1].hasError, true, 'a failed run outcome must be flagged');
+assert(dagSections.some((section) => section.kind === 'cleanup'),
+  'an explicit JobSeeker section heading must still end the task sections');
+assert.deepStrictEqual(dagSections.map((section) => section.kind),
+  ['jenkins', 'python', 'dag', 'task', 'task', 'task', 'task', 'dag', 'cleanup', 'result'],
+  'regrouping the tasks must not move the surrounding sections');
+assert.strictEqual(new Set(dagSections.map((section) => section.id)).size, dagSections.length,
+  'section ids must stay unique after regrouping');
+
+// A bracketed prefix is only a task tag once a marker has introduced that task.
+const lookalike = consoleGroups.parse([
+  'Started by user jobseeker',
+  '[worker] starting up',
+  'Finished: SUCCESS'
+].join('\n')).sections;
+assert(!lookalike.some((section) => section.kind === 'task'),
+  'an ordinary bracketed log prefix must not be mistaken for a task tag');
+
+// A job that declares no tasks must be grouped exactly as before.
+const plainPython = consoleGroups.parse([
+  'Started by user jobseeker',
+  '[JobSeeker] Python execution',
+  'hello from a single script',
+  'Finished: SUCCESS'
+].join('\n')).sections;
+assert(!plainPython.some((section) => section.kind === 'task' || section.kind === 'dag'),
+  'a single-script job must not grow task sections');
 
 console.log('Job console grouping tests passed.');

@@ -4,13 +4,16 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
-    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:hop && npm run test:dashboard && npm run test:security",
+    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
     "test:samples": "node scripts/test-job-samples-dataset-generator.js && python3 scripts/test-job-sample-syntax.py",
     "test:samples:runtime:e2e": "python3 scripts/test-job-sample-runtime-e2e.py",
     "test:samples:jobs:e2e": "python3 scripts/test-job-samples-e2e.py",
     "test:dataset-generator": "python3 scripts/test-performance-dataset-generator.py",
     "test:data-assets:sdk": "PYTHONPATH=application/third_party/python/jobseeker_sdk/src python3 scripts/test-jobseeker-data-assets.py",
     "test:security": "node scripts/test-security-hardening.js",
+    "test:jenkins-config": "node scripts/test-jenkins-runtime-config.js",
+    "test:query-efficiency": "node scripts/test-query-efficiency.js",
+    "test:job-metadata": "node scripts/test-job-metadata.js",
     "test:console-groups": "node scripts/test-job-console-groups.js",
     "test:python-git": "node scripts/test-python-git-integration.js",
     "test:draft-cache": "node scripts/test-job-draft-cache.js",
@@ -37,11 +40,15 @@
     "test:command-guard": "php scripts/test-command-guard.php",
     "test:cron-schedule": "php scripts/test-cron-schedule.php",
     "test:dashboard": "node scripts/test-dashboard.js",
+    "test:tmf-performance": "python3 scripts/test-tmf-query-performance.py",
     "test:hop": "node scripts/test-hop-integration.js && python3 scripts/test-hop-runtime.py",
     "test:hop:e2e": "python3 scripts/test-hop-e2e.py",
     "test:hop:ui": "python3 scripts/test-hop-ui-e2e.py",
     "test:hop:jobs:e2e": "python3 scripts/test-hop-job-creation-e2e.py",
-    "postinstall": "npm run assets:sync"
+    "postinstall": "npm run assets:sync",
+    "test:task-dag": "node scripts/test-job-task-graph.js && python3 scripts/test-jobseeker-dag.py",
+    "test:task-dag:scanner": "php scripts/test-task-graph-scanner.php",
+    "test:task-dag:e2e": "python3 scripts/test-task-dag-e2e.py"
   },
   "engines": {
     "node": ">=18"
