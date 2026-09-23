@@ -7,8 +7,8 @@ const header = fs.readFileSync('application/views/includes/header.php', 'utf8');
 for (const kind of ['docker-execution', 'python-tests', 'shell', 'hop-execution', 'task', 'dag']) {
   assert(consoleCss.includes('.job-console-section-' + kind), kind + ' needs an explicit console style');
 }
-assert(header.includes('job-console-groups.css?v=5'));
-assert(header.includes('job-console-groups.js?v=8'));
+assert(header.includes('job-console-groups.css?v=7'));
+assert(header.includes('job-console-groups.js?v=10'));
 
 const dockerLog = [
   'Started by user jobseeker',
@@ -212,9 +212,47 @@ const hopJenkinsLog = consoleGroups.parse([
 assert.deepStrictEqual(hopJenkinsLog.sections.map((section) => section.kind), [
   'jenkins',
   'hop-execution',
+  'hop-step',
+  'hop-execution',
   'result'
 ]);
 assert.strictEqual(hopJenkinsLog.sections.find((section) => section.kind === 'hop-execution').hasError, false);
+
+const interleavedHopLog = consoleGroups.parse([
+  '[JobSeeker] Apache Hop execution (container)',
+  '2026/09/04 22:01:13 - extract customers.0 - reading page 1',
+  '2026/09/04 22:01:13 - validate rows.0 - validating batch 1',
+  '2026/09/04 22:01:14 - extract customers.1 - reading page 2',
+  '2026/09/04 22:01:14 - validate rows.0 - Finished processing (I=0, O=0, R=2, W=2, U=0, E=0)',
+  '2026/09/04 22:01:14 - extract customers.0 - Finished processing (I=2, O=0, R=0, W=2, U=0, E=0)',
+  '[JobSeeker] Completed pipelines/customers.hpl in 0.5s (read 2, written 2, errors 0)',
+  'Finished: SUCCESS'
+].join('\n'));
+const hopSteps = interleavedHopLog.sections.filter((section) => section.kind === 'hop-step');
+assert.deepStrictEqual(hopSteps.map((section) => section.owner), ['extract customers', 'validate rows'],
+  'Hop copy suffixes must map back to the transform names used by the canvas');
+assert.strictEqual(hopSteps[0].lineCount, 3,
+  'interleaved output and multiple copies must be regrouped into one complete transform section');
+assert(hopSteps[0].text.includes('extract customers.1'));
+assert(!hopSteps[0].text.includes('[JobSeeker] Completed'),
+  'a JobSeeker phase marker must not be swallowed as a transform continuation');
+
+const hyphenatedHopLog = consoleGroups.parse([
+  '[JobSeeker] Apache Hop execution (container)',
+  '2026/09/04 22:01:13 - extract-customers.0 - read 2 rows',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.strictEqual(hyphenatedHopLog.sections.find((section) => section.kind === 'hop-step').owner, 'extract-customers',
+  'hyphens in a transform name must not prevent it from matching its canvas node');
+
+const workflowHopLog = consoleGroups.parse([
+  '[JobSeeker] Apache Hop execution (container)',
+  '2026/09/04 22:01:13 - nightly - Starting action [load warehouse]',
+  '2026/09/04 22:01:14 - nightly - Finished action [load warehouse] (result=[true])',
+  'Finished: SUCCESS'
+].join('\n'));
+assert.strictEqual(workflowHopLog.sections.find((section) => section.kind === 'hop-step').owner, 'load warehouse',
+  'workflow boundary messages must map to the action name used by the canvas');
 
 const successfulBusinessStatuses = consoleGroups.parse([
   '[JobSeeker] Python execution',
@@ -372,5 +410,43 @@ const plainPython = consoleGroups.parse([
 ].join('\n')).sections;
 assert(!plainPython.some((section) => section.kind === 'task' || section.kind === 'dag'),
   'a single-script job must not grow task sections');
+
+// The DOM behavior is deliberately small enough to verify without a browser:
+// focusing opens the matching group, remembers that choice for live redraws,
+// scrolls it into view, and applies the highlight class.
+let focusedScrolled = false;
+let focusedSummary = false;
+const focusedClasses = new Set();
+const focusedSection = {
+  open: false,
+  offsetWidth: 100,
+  getAttribute(name) {
+    return {
+      'data-console-owner': 'extract customers',
+      'data-console-section-id': 'hop-step-1'
+    }[name] || '';
+  },
+  scrollIntoView() { focusedScrolled = true; },
+  querySelector(selector) {
+    return selector === '.job-console-summary' ? {focus() { focusedSummary = true; }} : null;
+  },
+  classList: {
+    add(name) { focusedClasses.add(name); },
+    remove(name) { focusedClasses.delete(name); }
+  }
+};
+const focusedHost = {
+  querySelectorAll() { return [focusedSection]; }
+};
+assert.strictEqual(consoleGroups.focusSection(focusedHost, 'Extract Customers.0'), focusedSection,
+  'the focus helper must tolerate Hop copy suffixes and case differences');
+assert.strictEqual(focusedSection.open, true);
+assert.strictEqual(focusedScrolled, true);
+assert.strictEqual(focusedSummary, true, 'the focused section heading must receive keyboard focus');
+assert.strictEqual(focusedClasses.has('job-console-section-focus'), true);
+assert.strictEqual(focusedHost.__jobSeekerConsoleState.openById['hop-step-1'], true,
+  'a focused section must stay open across live console redraws');
+assert.strictEqual(focusedHost.__jobSeekerConsoleState.focusedOwner, 'extract customers',
+  'live redraws must retain the focused owner while the focus animation is active');
 
 console.log('Job console grouping tests passed.');

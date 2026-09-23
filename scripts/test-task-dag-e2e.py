@@ -410,6 +410,7 @@ def main():
         queued_run = json.loads(body)
         ok("running a single task is accepted", queued_run["ok"] is True)
         ok("it reports the build it queued", queued_run["expectedBuild"] is not None)
+        ok("it reports the exact Jenkins queue item", queued_run["queueId"] is not None)
 
         number_three, result_three = wait_for_build(browser, job_name, queued_run["expectedBuild"])
         ok("a single-task run succeeds, got %s" % result_three, result_three == "SUCCESS")

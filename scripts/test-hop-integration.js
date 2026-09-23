@@ -37,6 +37,8 @@ const hopCanvas = read('assets/js/hop-canvas.js');
 const consoleGroups = read('assets/js/job-console-groups.js');
 const jobExecutionView = read('application/views/jobExecution.php');
 const jobExecutionController = read('application/controllers/JobExecution.php');
+const jobView = read('application/views/jobView.php');
+const jobViewController = read('application/controllers/JobView.php');
 const schema = read('db_setup.sql');
 const baseController = read('application/libraries/BaseController.php');
 const hopE2e = read('scripts/test-hop-e2e.py');
@@ -312,13 +314,15 @@ assert(jobExecutionView.includes('document.hidden'), 'a hidden tab must not keep
 
 // The canvas is the one thing an operator watches a Hop job for, so it is part
 // of the run pane rather than behind a modal they have to go and open. It sits
-// above the Docker runtime block, and only a Hop job grows one.
+// where the Python task graph sits - under the Docker runtime block - and only
+// a Hop job grows one.
 assert(jobExecutionView.includes("'<div class=\"execution-hop-panel\" id=\"hopCanvas-' + run.id + '\""),
   'every run pane must carry its own Hop canvas panel');
-assert(
-  jobExecutionView.indexOf('execution-hop-panel') < jobExecutionView.lastIndexOf("'<div class=\"execution-runtime-metrics\""),
-  'the canvas must be drawn above the Docker runtime block'
-);
+const paneMarkupOrder = ['execution-runtime-metrics', 'job-dependency-panel', 'execution-hop-panel', 'job-task-panel']
+  .map((cls) => jobExecutionView.indexOf("'<div class=\"" + cls));
+assert(paneMarkupOrder.every((index) => index > 0), 'every pane block must be present');
+assert(paneMarkupOrder.every((index, i) => i === 0 || index > paneMarkupOrder[i - 1]),
+  'the canvas must be drawn under the Docker runtime block, beside the task graph');
 assert(/function hopPanelFor\(run\)[\s\S]{0,260}hopJob\(run\.jobName\)/.test(jobExecutionView),
   'a job that is not a Hop job must not grow a canvas panel');
 assert(/function updateExecutionUI\(run\)[\s\S]{0,2000}refreshHopCanvas\(run, false\)/.test(jobExecutionView),
@@ -337,6 +341,37 @@ assert(jobExecutionView.includes('focusExecutionPane(openRun.id)'),
   'a canvas link must go to the open pane rather than covering it with a modal');
 assert(jobExecutionView.includes('.execution-hop-reload'),
   'the panel must be able to re-read the Hop file on demand');
+assert(/onSelect: function\(node\)[\s\S]{0,420}focusConsoleFor\(run, node\.name, 'transform'\)/.test(jobExecutionView),
+  'selecting a Hop node must focus that transform or action in the build console');
+assert(consoleGroups.includes("replace(HOP_COPY_SUFFIX, '')"),
+  'Hop copy ids must be normalized to the transform names used by the canvas');
+
+// `meet` scales the viewBox up to fill the element, so a short workflow in a
+// wide panel was drawn at more than twice size with the nodes against the
+// edges. The fit is capped and the view widened around the content instead,
+// which xMidYMid then centres.
+assert(hopCanvas.includes('MAX_FIT_SCALE'), 'the fit scale must be capped');
+assert(/hostWidth \/ MAX_FIT_SCALE/.test(hopCanvas),
+  'the cap must be computed from the element the canvas is drawn into');
+assert(hopCanvas.includes('FALLBACK_VIEW_WIDTH'),
+  'a host that is not laid out yet still needs a sensible view');
+assert(/baseView\.x -= \(widthFloor - baseView\.width\) \/ 2/.test(hopCanvas),
+  'the extra width must be split either side so the graph stays centred');
+assert(/preserveAspectRatio: 'xMidYMid meet'/.test(hopCanvas),
+  'the drawing must be centred in both directions');
+assert(/view = \{ x: baseView\.x, y: baseView\.y, width: baseView\.width, height: baseView\.height \}/.test(hopCanvas),
+  'Fit must return to the same view the canvas opens with');
+assert(hopCanvas.includes('var NODE_HEIGHT = 36') && hopCanvas.includes('var NODE_MAX_WIDTH = 176'),
+  'Hop nodes must stay compact in the embedded canvases');
+
+// View Job shows the same graph beside the job details and points a selected
+// transform at the latest grouped console, just like Job Execution.
+assert(jobViewController.includes("'hop_jobs' => $hopJobs"),
+  'View Job must receive the Hop job catalog');
+assert(jobView.includes('job-view-hop-panel') && jobView.includes('mountJobViewHopCanvas'),
+  'View Job must mount an Apache Hop canvas for Hop jobs');
+assert(/onSelect: function\(node\)[\s\S]{0,500}focusJobViewConsole\(panel, node\.name, 'transform'\)/.test(jobView),
+  'a Hop node in View Job must focus its console section');
 
 // Apache Hop is the platform's own ETL integration, so it leads the choice.
 assert(

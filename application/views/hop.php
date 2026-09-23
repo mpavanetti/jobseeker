@@ -28,7 +28,7 @@ $availableConnections = isset($available_connections) && is_array($available_con
 $serverEnvironment = isset($server_environment) ? (string) $server_environment : 'DEV';
 $publishableConnections = array();
 foreach ($availableConnections as $availableConnection) {
-    if (! empty($availableConnection['relational']) && $availableConnection['backend'] === 'local') {
+    if (! empty($availableConnection['relational']) && in_array($availableConnection['backend'], array('local', 'deployment'), TRUE)) {
         $publishableConnections[] = $availableConnection;
     }
 }
@@ -71,15 +71,15 @@ foreach ($executions as $execution) {
   .hop-canvas .hop-node rect { fill: #fff; stroke: #b8c2cc; stroke-width: 1.5; }
   .hop-canvas .hop-node:hover rect, .hop-canvas .hop-node:focus rect { stroke: #3c8dbc; stroke-width: 2; }
   .hop-canvas .hop-node { cursor: pointer; }
-  .hop-canvas .hop-node-name { font: 600 12px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #2f3d4a; }
-  .hop-canvas .hop-node-type { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #8a9199; }
+  .hop-canvas .hop-node-name { font: 600 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #2f3d4a; }
+  .hop-canvas .hop-node-type { font: 9px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #8a9199; }
   .hop-canvas .hop-node-start rect { fill: #eef7ee; stroke: #6fae6f; }
   .hop-canvas .hop-node-success rect { fill: #eef7ee; stroke: #45a145; }
   .hop-canvas .hop-node-failure rect { fill: #fdeeee; stroke: #d9534f; }
   .hop-canvas .hop-node.is-running rect { fill: #dcefff; stroke: #3c8dbc; stroke-width: 2.5; animation: hop-running-pulse 1.8s ease-in-out infinite; }
   .hop-canvas .hop-node.is-complete rect { fill: #e9f7e9; stroke: #45a145; stroke-width: 2; }
   .hop-canvas .hop-node.is-failed rect { fill: #fdeeee; stroke: #d9534f; stroke-width: 2.5; }
-  .hop-canvas .hop-node-metrics { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
+  .hop-canvas .hop-node-metrics { font: 9px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
   @keyframes hop-running-pulse { 50% { stroke-width: 4; fill: #c8e8ff; } }
   @media (prefers-reduced-motion: reduce) { .hop-canvas .hop-node.is-running rect { animation: none; } }
   .hop-canvas .hop-node-passthrough rect { stroke-dasharray: 4 3; }
@@ -100,7 +100,7 @@ foreach ($executions as $execution) {
   .hop-canvas-toolbar { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 4px; }
   .hop-canvas-toolbar .btn { width: 26px; padding: 1px 0; font-size: 13px; line-height: 18px; }
 </style>
-<script src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=3" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=4" type="text/javascript"></script>
 
 <div class="content-wrapper hop-page">
   <section class="content-header">

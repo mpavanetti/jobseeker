@@ -22,7 +22,17 @@ class JobView extends BaseController
     {
 
         $this->global['pageTitle'] = 'Job Seeker : View Job';
-                $data = array('job_creation_dates' => $this->readJobCreationDates());
+                $hopJobs = array();
+                $hopSetting = strtolower(trim((string) getenv('JOBSEEKER_HOP_ENABLED')));
+                $hopEnabled = ! in_array($hopSetting, array('0', 'false', 'off', 'no'), TRUE);
+                if ($hopEnabled && $this->db->table_exists('hop_project_jobs')) {
+                    $this->load->model('Hop_model');
+                    $hopJobs = $this->Hop_model->hopJobs();
+                }
+                $data = array(
+                    'job_creation_dates' => $this->readJobCreationDates(),
+                    'hop_jobs' => $hopJobs
+                );
         
                 $this->loadViews("jobView", $this->global, $data, NULL);
     }
@@ -104,7 +114,23 @@ class JobView extends BaseController
             $runKey = '';
         }
         $buildNumber = (int) $this->input->get('build', TRUE);
-        echo json_encode(array_merge(array('ok' => TRUE, 'job' => $jobName), $this->jobTaskOverview($jobName, $environment, $runKey, $buildNumber)));
+        $queueId = (int) $this->input->get('queue', TRUE);
+        if ($queueId > 0) {
+            $queueResponse = $this->requestJenkins(
+                'GET',
+                'queue/item/'.rawurlencode((string) $queueId).'/api/json?tree=cancelled,executable[number]'
+            );
+            if ((int) $queueResponse['status'] === 200) {
+                $queue = json_decode((string) $queueResponse['body'], TRUE);
+                if (isset($queue['executable']['number'])) {
+                    $buildNumber = (int) $queue['executable']['number'];
+                }
+            }
+        }
+        echo json_encode(array_merge(
+            array('ok' => TRUE, 'job' => $jobName, 'queueId' => $queueId ?: NULL),
+            $this->jobTaskOverview($jobName, $environment, $runKey, $buildNumber)
+        ));
     }
 
 

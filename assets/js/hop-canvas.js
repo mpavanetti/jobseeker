@@ -23,17 +23,28 @@
   'use strict';
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
-  var NODE_HEIGHT = 44;
-  var NODE_MIN_WIDTH = 110;
-  var NODE_MAX_WIDTH = 220;
-  var CHARACTER_WIDTH = 7.1;
-  var PADDING = 48;
+  var NODE_HEIGHT = 36;
+  var NODE_MIN_WIDTH = 88;
+  var NODE_MAX_WIDTH = 176;
+  var CHARACTER_WIDTH = 6.3;
+  var PADDING = 40;
+  // `meet` fits the whole viewBox into the element, which means a short
+  // workflow in a big panel is scaled *up* to fill it - on a wide screen a
+  // four-action file rendered at more than twice size, nodes crowding the
+  // edges. Widening the view until the fit scale drops to this cap keeps a
+  // small graph at a readable size, and xMidYMid then centres it in the space
+  // rather than stretching it. Scale is min(w, h), so capping the width is
+  // enough to cap both.
+  var MAX_FIT_SCALE = 1.15;
+  // Used when the canvas is drawn into a host that is not laid out yet - a
+  // modal that has not opened - where the element's width is still 0.
+  var FALLBACK_VIEW_WIDTH = 900;
   // Hop positions a 32px icon; a readable box is several times wider, so the
   // designer's coordinates are spread out until no two boxes touch. Without
   // this, two adjacent actions overlap and the hop between them has no room to
   // be drawn at all.
-  var MIN_GAP_X = 46;
-  var MIN_GAP_Y = 26;
+  var MIN_GAP_X = 38;
+  var MIN_GAP_Y = 20;
   var MAX_SCALE = 6;
 
   // Hop's own vocabulary for the handful of actions that are control flow
@@ -60,7 +71,7 @@
 
   function nodeWidth(node) {
     var label = String(node.name || '');
-    return Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, Math.round(label.length * CHARACTER_WIDTH) + 44));
+    return Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, Math.round(label.length * CHARACTER_WIDTH) + 34));
   }
 
   /**
@@ -256,7 +267,15 @@
     var width = (box.maxX - box.minX) + PADDING * 2;
     var height = (box.maxY - box.minY) + PADDING * 2;
 
-    var view = { x: box.minX - PADDING, y: box.minY - PADDING, width: width, height: height };
+    var baseView = { x: box.minX - PADDING, y: box.minY - PADDING, width: width, height: height };
+    var hostWidth = target.clientWidth || 0;
+    var widthFloor = hostWidth > 0 ? hostWidth / MAX_FIT_SCALE : FALLBACK_VIEW_WIDTH;
+    if (baseView.width < widthFloor) {
+      baseView.x -= (widthFloor - baseView.width) / 2;
+      baseView.width = widthFloor;
+    }
+
+    var view = { x: baseView.x, y: baseView.y, width: baseView.width, height: baseView.height };
     if (previousView.length === 4 && previousView.every(isFinite) && previousView[2] > 0 && previousView[3] > 0) {
       view = { x: previousView[0], y: previousView[1], width: previousView[2], height: previousView[3] };
     }
@@ -325,16 +344,16 @@
         'aria-label': item.node.name + (state ? ', ' + status + ', ' + state.written + ' rows written' : '')
       });
       group.appendChild(element('rect', { width: item.width, height: item.height, rx: 6 }));
-      group.appendChild(element('text', { class: 'hop-node-name', x: 12, y: 20 }, truncate(item.node.name, Math.floor(item.width / CHARACTER_WIDTH) - 2)));
+      group.appendChild(element('text', { class: 'hop-node-name', x: 10, y: 16 }, truncate(item.node.name, Math.floor(item.width / CHARACTER_WIDTH) - 2)));
 
       if (state) {
         group.appendChild(element(
           'text',
-          { class: 'hop-node-metrics', x: 12, y: 35 },
+          { class: 'hop-node-metrics', x: 10, y: 29 },
           truncate('→ ' + (parseInt(state.written, 10) || 0) + ' rows · ' + (state.status || ''), Math.floor(item.width / 6.2) - 2)
         ));
       } else {
-        group.appendChild(element('text', { class: 'hop-node-type', x: 12, y: 35 }, truncate(item.node.type || 'step', Math.floor(item.width / 6.2) - 2)));
+        group.appendChild(element('text', { class: 'hop-node-type', x: 10, y: 29 }, truncate(item.node.type || 'step', Math.floor(item.width / 5.8) - 2)));
       }
 
       group.appendChild(element('title', {}, describe(item.node) + (state
@@ -365,7 +384,7 @@
       control.textContent = item[2];
       control.addEventListener('click', function() {
         if (item[0] === 'fit') {
-          view = { x: box.minX - PADDING, y: box.minY - PADDING, width: width, height: height };
+          view = { x: baseView.x, y: baseView.y, width: baseView.width, height: baseView.height };
         } else {
           var factor = item[0] === 'in' ? 1 / 1.25 : 1.25;
           var centreX = view.x + view.width / 2;

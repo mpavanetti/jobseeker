@@ -67,6 +67,46 @@
 /* Task DAG: the graph header and one section per task inside a job run. */
 .job-console-section-dag { border-left-color: #f59e0b; }
 .job-console-section-task { border-left-color: #34d399; }
+
+/* Flashed when a task or transform is clicked on its graph, so the reader's
+   eye lands on the section that answers the question they just asked. */
+.job-console-section-focus {
+  animation: job-console-focus 3s ease-out;
+  scroll-margin: 72px 12px;
+}
+
+.job-console-section-focus > .job-console-summary {
+  animation: job-console-summary-focus 3s ease-out;
+  outline: 2px solid #60a5fa;
+  outline-offset: -2px;
+}
+
+@keyframes job-console-focus {
+  0%, 30% {
+    background: #1e3a5f;
+    box-shadow: 0 0 0 2px #60a5fa;
+  }
+  100% {
+    background: #0b1220;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0);
+  }
+}
+
+@keyframes job-console-summary-focus {
+  0%, 30% { background: #1d4f7a; }
+  100% { background: #172033; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-console-section-focus {
+    animation: none;
+    box-shadow: 0 0 0 2px #60a5fa;
+  }
+  .job-console-section-focus > .job-console-summary {
+    animation: none;
+    background: #1d4f7a;
+  }
+}
 .job-console-section.has-error { border-left-color: #f87171; }
 
 .job-console-summary {
