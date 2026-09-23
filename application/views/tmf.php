@@ -188,14 +188,42 @@ pre {
 
 .tmf-results-toolbar {
   align-items: center;
+  column-gap: 16px;
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   margin-top: 15px;
+  row-gap: 10px;
 }
 
+.tmf-results-toolbar > .btn {
+  flex: 0 0 auto;
+}
+
+/* Pushed to the right edge by the free space rather than by
+   justify-content, so a third item can wrap onto its own line without
+   the first two drifting apart. */
 .tmf-refresh-note {
   color: #52616f;
   font-weight: 600;
+  margin-left: auto;
+}
+
+.tmf-result-limit {
+  background: #eef6fb;
+  border: 1px solid #cde3f0;
+  border-left: 3px solid #3c8dbc;
+  border-radius: 4px;
+  color: #31708f;
+  flex: 1 0 100%;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 7px 12px;
+}
+
+.tmf-result-limit code {
+  background: #dceaf4;
+  color: #245269;
 }
 
 .tmf-workbench {
@@ -289,6 +317,16 @@ pre {
 .tmf-results-page .box {
   border-radius: 6px;
   box-shadow: 0 10px 24px rgba(16, 42, 67, .08);
+}
+
+.tmf-task-run-scope {
+  color: #4b5563;
+  margin: 6px 0 0;
+}
+
+.tmf-task-run-scope code {
+  background: #eef2ff;
+  color: #4338ca;
 }
 
 .tmf-results-page .box-header {
@@ -407,6 +445,12 @@ pre {
     gap: 12px;
   }
 
+  /* In a column the auto margin would push the note to the right edge,
+     away from the button it belongs beside. */
+  .tmf-refresh-note {
+    margin-left: 0;
+  }
+
   .tmf-workbench-actions {
     align-items: flex-start;
     flex-direction: column;
@@ -442,10 +486,12 @@ pre {
         <div class="tmf-results-toolbar">
           <a href="<?php echo base_url(); ?>Tmf" class="btn btn-warning"><i class="fa fa-arrow-left"></i> Back to Query</a>
           <span class="tmf-refresh-note"><i class="fa fa-database"></i> <?php echo number_format($totalJobs); ?><?php echo $resultsTruncated ? '+' : ''; ?> rows matched &middot; latest <?php echo $latestActivityLabel; /* js_time() output or the static 'No activity' string, both HTML-safe */ ?></span>
+          <?php if ($resultsTruncated) { ?>
+            <?php /* This explains the "+" in the row count beside it, so it belongs
+                     with the toolbar rather than as a full-width alert under it. */ ?>
+            <p class="tmf-result-limit"><i class="fa fa-info-circle"></i> Showing the newest <?php echo number_format($resultLimit); ?> matching rows. Refine the query to inspect older results; operators can raise <code>JOBSEEKER_TMF_RESULT_LIMIT</code> up to 10,000.</p>
+          <?php } ?>
         </div>
-        <?php if ($resultsTruncated) { ?>
-          <div class="alert alert-info"><i class="fa fa-info-circle"></i> Showing the newest <?php echo number_format($resultLimit); ?> matching rows. Refine the query to inspect older results; operators can raise <code>JOBSEEKER_TMF_RESULT_LIMIT</code> up to 10,000.</div>
-        <?php } ?>
         <div class="tmf-workbench animated fadeIn">
           <div class="tmf-result-signals">
             <span class="tmf-signal"><strong><?php echo number_format($totalJobs); ?></strong> rows</span>
@@ -486,6 +532,14 @@ pre {
                     </div>
             <div class="box-header">
               <h3 class="box-title"><b>Transaction Runs</b></h3>
+<?php if (isset($taskRunKey) && $taskRunKey !== '') { ?>
+              <p class="tmf-task-run-scope">
+                <i class="fa fa-code-fork"></i>
+                Showing the transactions opened by the tasks of one job run
+                (<code><?php echo html_escape($taskRunKey); ?></code>).
+                <a href="<?php echo base_url(); ?>tmf">Show every transaction</a>
+              </p>
+<?php } ?>
             </div>
             <!-- /.box-header -->
             <div class="box-body tmf-table-wrap">
