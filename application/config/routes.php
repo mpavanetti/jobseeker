@@ -106,7 +106,6 @@ $route['resetPasswordConfirmUser'] = "login/resetPasswordConfirmUser";
 $route['resetPasswordConfirmUser/(:any)'] = "login/resetPasswordConfirmUser/$1";
 $route['resetPasswordConfirmUser/(:any)/(:any)'] = "login/resetPasswordConfirmUser/$1/$2";
 $route['createPasswordUser'] = "login/createPasswordUser";
-$route['setup/testJenkinsApi'] = "Setup/testJenkinsApi";
 
 #Input and Output Settings
 
@@ -122,8 +121,12 @@ $route['jobCreation/samples'] = "JobCreation/samples";
 $route['jobCreation/scanDependencies'] = "JobCreation/scanDependencies";
 $route['jobCreation/testDependencies'] = "JobCreation/testDependencies";
 $route['jobCreation/validateSchedule'] = "JobCreation/validateSchedule";
+$route['jobCreation/scanTasks'] = "JobCreation/scanTasks";
 $route['jobView/dependencies'] = "JobView/dependencies";
+$route['jobView/tasks'] = "JobView/tasks";
 $route['jobExecution/dependencies'] = "JobExecution/dependencies";
+$route['jobExecution/tasks'] = "JobExecution/tasks";
+$route['jobExecution/runTasks'] = "JobExecution/runTasks";
 $route['hop'] = "Hop/index";
 $route['hop/projects'] = "Hop/projects";
 $route['hop/inspect'] = "Hop/inspect";

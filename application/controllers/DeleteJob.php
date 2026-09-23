@@ -184,6 +184,10 @@ class DeleteJob extends BaseController
                     $this->load->model('Hop_model');
                     $this->Hop_model->unlinkJob($jobName);
                 }
+                if ($this->db->table_exists('job_task_graphs')) {
+                    $this->load->model('JobTask_model', 'jobTaskModel');
+                    $this->jobTaskModel->deleteForJob($jobName);
+                }
                 $deleted++;
             }
             $results[] = array(

@@ -407,7 +407,7 @@ class JobCreation extends BaseController
       return $threshold;
     }
 
-    private function createRuntimeEnvironmentProperties($dom, $environment) {
+    private function createRuntimeEnvironmentProperties($dom, $environment, $includeTaskParameters = FALSE) {
       $properties = $dom->createElement('properties');
       $parametersProperty = $dom->createElement('hudson.model.ParametersDefinitionProperty');
       $parameterDefinitions = $dom->createElement('parameterDefinitions');
@@ -419,6 +419,28 @@ class JobCreation extends BaseController
       $this->appendTextElement($dom, $environmentParameter, 'trim', 'true');
 
       $parameterDefinitions->appendChild($environmentParameter);
+
+      // Python jobs may declare a task DAG. Re-running only the failed tasks,
+      // or a single task, is a build parameter rather than a separate job, so
+      // the re-run stays an ordinary build of this job: same history, same
+      // environment, same notifications. Only Python jobs get these, so a
+      // shell job's Build with Parameters screen stays as it was.
+      if ($includeTaskParameters) {
+        $resumeParameter = $dom->createElement('hudson.model.StringParameterDefinition');
+        $this->appendTextElement($dom, $resumeParameter, 'name', 'JOBSEEKER_DAG_RESUME');
+        $this->appendTextElement($dom, $resumeParameter, 'description', 'Task DAG: a previous run key. Tasks that succeeded in that run are not run again.');
+        $this->appendTextElement($dom, $resumeParameter, 'defaultValue', '');
+        $this->appendTextElement($dom, $resumeParameter, 'trim', 'true');
+        $parameterDefinitions->appendChild($resumeParameter);
+
+        $tasksParameter = $dom->createElement('hudson.model.StringParameterDefinition');
+        $this->appendTextElement($dom, $tasksParameter, 'name', 'JOBSEEKER_DAG_TASKS');
+        $this->appendTextElement($dom, $tasksParameter, 'description', 'Task DAG: comma separated task ids to run. Everything else is skipped.');
+        $this->appendTextElement($dom, $tasksParameter, 'defaultValue', '');
+        $this->appendTextElement($dom, $tasksParameter, 'trim', 'true');
+        $parameterDefinitions->appendChild($tasksParameter);
+      }
+
       $parametersProperty->appendChild($parameterDefinitions);
       $properties->appendChild($parametersProperty);
 
@@ -775,7 +797,10 @@ class JobCreation extends BaseController
           return;
         }
 
-        $command = "export JOBSEEKER_PREVIEW=1\nexport JOBSEEKER_PREVIEW_MAX_ROWS=5\nexport JOBSEEKER_DATA_ASSET_JOB=".escapeshellarg($assetJobName)."\n" . $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, 1), array(
+        // JOBSEEKER_DAG_STATE=0: a preview is throwaway, so a job that declares
+        // tasks must not leave a run in the task history that Job View would
+        // then show as the job's latest run.
+        $command = "export JOBSEEKER_PREVIEW=1\nexport JOBSEEKER_PREVIEW_MAX_ROWS=5\nexport JOBSEEKER_DAG_STATE=0\nexport JOBSEEKER_DATA_ASSET_JOB=".escapeshellarg($assetJobName)."\n" . $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, 1), array(
           'mode' => 'local',
           'pythonExecutable' => $pythonExecutable,
           'requirementsText' => $requirementsText,
@@ -936,7 +961,13 @@ class JobCreation extends BaseController
 
       $cleanDates = array();
       foreach ($dates as $jobName => $createdAt) {
-        if (is_string($jobName) && is_string($createdAt) && $jobName !== '' && $createdAt !== '') {
+        // json_decode() with assoc=TRUE hands back a PHP array, and a PHP array
+        // key that looks like an integer becomes one. A job named "1" therefore
+        // arrives here as int 1, failed is_string(), and was dropped - which is
+        // why numerically named jobs reported "Created: Not tracked" even though
+        // their date had been recorded. Only the value needs checking.
+        $jobName = (string) $jobName;
+        if (is_string($createdAt) && $jobName !== '' && $createdAt !== '') {
           $cleanDates[$jobName] = $createdAt;
         }
       }
@@ -3714,6 +3745,91 @@ class JobCreation extends BaseController
         $this->jsonJobCreationResponse($resolved);
       }
 
+      private function taskGraphScanner() {
+        $this->load->library('TaskGraphScanner');
+        return $this->taskgraphscanner;
+      }
+
+      /**
+       * Text bundle to scan for @dag.task declarations.
+       *
+       * Prefers whatever is in the editor right now so the graph updates as the
+       * job is written, and falls back to the saved workspace on disk for a job
+       * that is being re-opened rather than authored.
+       */
+      private function collectTaskSources($jobName) {
+        $sources = array();
+
+        $inlineCode = (string) $this->input->post('pythonInlineCode');
+        if (trim($inlineCode) !== '') {
+          $sources[] = array('text' => $inlineCode, 'from' => 'code');
+        }
+        $filesJson = (string) $this->input->post('pythonInlineFilesJson');
+        if (trim($filesJson) !== '' && strlen($filesJson) < 400000) {
+          $payload = json_decode($filesJson, TRUE);
+          if (is_array($payload) && isset($payload['files']) && is_array($payload['files'])) {
+            foreach ($payload['files'] as $file) {
+              if (is_array($file) && isset($file['path']) && isset($file['content'])
+                  && is_string($file['content']) && substr((string) $file['path'], -3) === '.py') {
+                $sources[] = array('text' => $file['content'], 'from' => 'code');
+              }
+            }
+          }
+        }
+
+        if (empty($sources) && $jobName !== '') {
+          $repositoryRoot = $this->inlinePythonRepositoryRoot();
+          foreach (array('python/inline', 'python/jobs') as $location) {
+            $relative = $this->safeRelativePath($location.'/'.$jobName);
+            if ($relative === FALSE) {
+              continue;
+            }
+            $directory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.$relative;
+            if (is_dir($directory)) {
+              foreach ($this->taskGraphScanner()->sourcesForDirectory($directory) as $source) {
+                $sources[] = $source;
+              }
+            }
+          }
+        }
+
+        return $sources;
+      }
+
+      /**
+       * Live task graph for the execution editor.
+       *
+       * Static analysis only - the job's code is never executed here. A graph
+       * that only the runtime can produce (tasks built in a loop, ids computed
+       * at import time) simply shows fewer nodes until the job runs once and
+       * the runner stores its own manifest.
+       */
+      public function scanTasks() {
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+
+        $environment = $this->dependencyEnvironment();
+        $jobName = '';
+        $rawJobName = $this->input->post('job_name');
+        if (trim((string) $rawJobName) !== '') {
+          $clean = $this->cleanSubmittedJobName($rawJobName);
+          if ($clean['ok']) {
+            $jobName = $clean['name'];
+          }
+        }
+
+        $graph = $this->taskGraphScanner()->scan($this->collectTaskSources($jobName));
+        if ($jobName !== '' && $graph['ok'] && (string) $this->input->post('persist') === '1') {
+          $this->load->model('JobTask_model', 'jobTaskModel');
+          $graph['persisted'] = $this->jobTaskModel->saveGraph($jobName, $environment, $graph, 'scan');
+        }
+        $graph['environment'] = $environment;
+        $graph['jobName'] = $jobName;
+        $this->jsonJobCreationResponse($graph);
+      }
+
       public function testDependencies() {
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
@@ -3783,6 +3899,27 @@ class JobCreation extends BaseController
        * triggered by the client after the redirect (testDependencies) so the
        * form submit stays fast. Never blocks save.
        */
+      /**
+       * Store the task graph a job declares when the job is saved, so Job View
+       * can draw it before the job has ever run. A job that declares no tasks
+       * clears any graph left over from an earlier version of its code.
+       */
+      private function persistJobTaskGraph($jobName, $environment) {
+        try {
+          $environment = $this->normalizeJobSeekerEnvironment((string) $environment) ?: 'ALL';
+          $graph = $this->taskGraphScanner()->scan($this->collectTaskSources($jobName));
+          if (! $graph['ok']) {
+            return NULL;
+          }
+          $this->load->model('JobTask_model', 'jobTaskModel');
+          $this->jobTaskModel->saveGraph($jobName, $environment, $graph, 'scan');
+          return array('tasks' => count($graph['tasks']), 'edges' => count($graph['edges']));
+        } catch (Exception $exception) {
+          log_message('error', 'Job task graph persistence failed for '.$jobName.': '.$exception->getMessage());
+          return NULL;
+        }
+      }
+
       private function persistJobDependencies($jobName, $environment) {
         try {
           $environment = $this->normalizeJobSeekerEnvironment((string) $environment) ?: 'ALL';
@@ -4548,7 +4685,11 @@ class JobCreation extends BaseController
                 $node_description = $dom->createElement('description', $description);
 
                 $root->appendChild($node_description);
-                $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment));
+                $declaresTasks = $linuxCommand == 1 && (
+                  $linuxExecutionStrategy === 'python_inline' ||
+                  ($linuxExecutionStrategy === 'script' && ($linuxScriptType === 'python' || $linuxScriptType === 'python_inline'))
+                );
+                $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment, $declaresTasks));
                 $this->appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment);
 
                 // Create Trigger Elements - one TimerTrigger with the spec built above,
@@ -4830,6 +4971,7 @@ class JobCreation extends BaseController
                   if ($summary !== NULL && $dependencySummary === NULL) {
                     $dependencySummary = $summary;
                   }
+                  $this->persistJobTaskGraph($targetJobName, $environment);
                 }
 
                 foreach ($upstreamJobNames as $upstreamJobName) {
