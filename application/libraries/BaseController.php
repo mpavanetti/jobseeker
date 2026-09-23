@@ -21,10 +21,10 @@ class BaseController extends CI_Controller {
 
 	/**
 	 * The runtime config is read on every Jenkins call, and an endpoint that
-	 * talks to Jenkins once per job reads it once per job. The file only changes
-	 * when Setup writes it - which ends the request in a redirect - so one read
-	 * per request is enough. Callers that rewrite the file call
-	 * forgetRuntimeConfig() so a later read in the same request sees it.
+	 * talks to Jenkins once per job reads it once per job. Nothing rewrites the
+	 * file while the application is running - it is deployed with the image, the
+	 * compose bind mount or the Kubernetes ConfigMap - so one read per request
+	 * is enough.
 	 */
 	protected function getRuntimeConfig() {
 		if ($this->runtimeConfigCache !== NULL) {
@@ -39,7 +39,7 @@ class BaseController extends CI_Controller {
 		$configJson = file_get_contents(JOBSEEKER_CONFIG_PATH);
 		$config = json_decode($configJson);
 
-		if (! is_object($config) || empty($config->jenkins) || empty($config->setup)) {
+		if (! is_object($config) || empty($config->jenkins)) {
 			log_message('error', 'Runtime config file is invalid: ' . JOBSEEKER_CONFIG_PATH);
 			show_error('Application configuration is invalid.', 500);
 		}
@@ -49,9 +49,63 @@ class BaseController extends CI_Controller {
 		return $config;
 	}
 
-	/** Drop the memoized runtime config after JOBSEEKER_CONFIG_PATH is rewritten. */
-	protected function forgetRuntimeConfig() {
-		$this->runtimeConfigCache = NULL;
+	/**
+	 * How this process reaches Jenkins, and how it authenticates.
+	 *
+	 * The internal URL is a container or service name, so it is deployment
+	 * specific and only ever comes from the environment; on a single host,
+	 * where the server and the browser share one address, it falls back to the
+	 * public URL. The credential is read from the environment alone and is
+	 * deliberately not accepted from application/config/config.json, which is
+	 * tracked in git.
+	 *
+	 * @return array Root URL with no trailing slash, and the Authorization header line.
+	 */
+	private function jenkinsConnection() {
+		$url = rtrim(trim((string) getenv('JOBSEEKER_JENKINS_INTERNAL_URL')), '/');
+
+		if ($url === '') {
+			$url = rtrim($this->jenkinsPublicUrl(), '/');
+		}
+
+		$username = trim((string) getenv('JOBSEEKER_JENKINS_USER'));
+		$token = trim((string) getenv('JOBSEEKER_JENKINS_TOKEN'));
+
+		// Not fatal: a Jenkins that allows anonymous reads still works without a
+		// credential. It is logged because the alternative symptom - Jenkins
+		// answering 401 and the page showing an empty job list - says nothing
+		// about the cause. log_threshold is 0 by default, so this only reaches
+		// application/logs once error logging is switched on.
+		if ($username === '' || $token === '') {
+			log_message('error', 'Jenkins credentials are missing. Set JOBSEEKER_JENKINS_USER and JOBSEEKER_JENKINS_TOKEN.');
+		}
+
+		return array(
+			'url' => $url,
+			'authorization' => 'Authorization: Basic ' . base64_encode($username . ':' . $token)
+		);
+	}
+
+	/**
+	 * The Jenkins root a browser should use. Server-side traffic goes to the
+	 * internal URL, which resolves nowhere outside the cluster, so anything
+	 * rendered into a page has to use the public one instead. The runtime
+	 * config keeps a fallback for a single-host install that sets no
+	 * environment at all.
+	 */
+	protected function jenkinsPublicUrl() {
+		$url = trim((string) getenv('JOBSEEKER_JENKINS_PUBLIC_URL'));
+
+		if ($url === '') {
+			$config = $this->getRuntimeConfig();
+			$url = isset($config->jenkins->url) ? trim((string) $config->jenkins->url) : '';
+		}
+
+		if ($url === '') {
+			$url = 'http://localhost:8080/';
+		}
+
+		return rtrim($url, '/') . '/';
 	}
 
 	/**
@@ -154,10 +208,9 @@ class BaseController extends CI_Controller {
 			return $results;
 		}
 
-		$jenkinsUrl = rtrim(getenv('JOBSEEKER_JENKINS_INTERNAL_URL') ?: $config->jenkins->url, '/');
-		$jenkinsUsername = getenv('JOBSEEKER_JENKINS_USER') ?: $config->jenkins->username;
-		$jenkinsToken = getenv('JOBSEEKER_JENKINS_TOKEN') ?: $config->jenkins->token;
-		$authorizationHeader = 'Authorization: Basic ' . base64_encode($jenkinsUsername . ':' . $jenkinsToken);
+		$connection = $this->jenkinsConnection();
+		$jenkinsUrl = $connection['url'];
+		$authorizationHeader = $connection['authorization'];
 		$concurrency = max(1, min(16, (int) $concurrency));
 
 		foreach (array_chunk($paths, $concurrency) as $chunk) {
@@ -220,11 +273,10 @@ class BaseController extends CI_Controller {
 			return array('status' => 503, 'content_type' => 'text/plain', 'body' => 'Jenkins integration is disabled.', 'headers' => array());
 		}
 
-		$jenkinsUrl = getenv('JOBSEEKER_JENKINS_INTERNAL_URL') ?: $config->jenkins->url;
-		$requestUrl = rtrim($jenkinsUrl, '/') . '/' . ltrim($path, '/');
-		$jenkinsUsername = getenv('JOBSEEKER_JENKINS_USER') ?: $config->jenkins->username;
-		$jenkinsToken = getenv('JOBSEEKER_JENKINS_TOKEN') ?: $config->jenkins->token;
-		$authorizationHeader = 'Authorization: Basic ' . base64_encode($jenkinsUsername . ':' . $jenkinsToken);
+		$connection = $this->jenkinsConnection();
+		$jenkinsUrl = $connection['url'];
+		$requestUrl = $jenkinsUrl . '/' . ltrim($path, '/');
+		$authorizationHeader = $connection['authorization'];
 		$headers = array($authorizationHeader);
 
 		if (! empty($contentType)) {
@@ -257,14 +309,20 @@ class BaseController extends CI_Controller {
 		$statusCode = 502;
 		$responseContentType = 'text/plain';
 
-		if (! empty($responseHeaders[0]) && preg_match('/\s(\d{3})\s/', $responseHeaders[0], $matches)) {
-			$statusCode = (int) $matches[1];
-		}
-
+		// PHP follows redirects itself and appends every response in the chain to
+		// $http_response_header, so the first status line and the first
+		// Content-Type belong to the redirect rather than to the body that was
+		// actually returned. Reading the first ones made this proxy answer
+		// "302 Found" carrying a 200's payload - which jQuery routes to .fail()
+		// - and label a JSON body with whatever the redirect declared, leaving
+		// callers a raw string whose every field then reads undefined. Walk the
+		// whole chain and keep the last response's status and type.
 		foreach ($responseHeaders as $header) {
-			if (stripos($header, 'Content-Type:') === 0) {
+			if (preg_match('#^HTTP/[\d.]+\s+(\d{3})#', $header, $matches)) {
+				$statusCode = (int) $matches[1];
+				$responseContentType = 'text/plain';
+			} elseif (stripos($header, 'Content-Type:') === 0) {
 				$responseContentType = trim(substr($header, strlen('Content-Type:')));
-				break;
 			}
 		}
 
@@ -976,10 +1034,6 @@ class BaseController extends CI_Controller {
 			$this->mergeJenkinsEnvironmentSlotConfig($limits, $config->jenkins->environment_slots);
 		}
 
-		if (isset($config->jenkins->environmentSlots)) {
-			$this->mergeJenkinsEnvironmentSlotConfig($limits, $config->jenkins->environmentSlots);
-		}
-
 		$envConfig = getenv('JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS');
 		if ($envConfig !== FALSE && trim($envConfig) !== '') {
 			$this->mergeJenkinsEnvironmentSlotConfig($limits, $envConfig);
@@ -1054,10 +1108,6 @@ class BaseController extends CI_Controller {
 			return $this->jenkinsBooleanValue($config->jenkins->environment_agents_enabled);
 		}
 
-		if (isset($config->jenkins->environmentAgentsEnabled)) {
-			return $this->jenkinsBooleanValue($config->jenkins->environmentAgentsEnabled);
-		}
-
 		return FALSE;
 	}
 
@@ -1080,10 +1130,6 @@ class BaseController extends CI_Controller {
 
 		if (isset($config->jenkins->environment_agent_labels)) {
 			$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $config->jenkins->environment_agent_labels);
-		}
-
-		if (isset($config->jenkins->environmentAgentLabels)) {
-			$this->mergeJenkinsEnvironmentAgentLabelConfig($labels, $config->jenkins->environmentAgentLabels);
 		}
 
 		$envConfig = getenv('JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS');
@@ -1933,6 +1979,78 @@ class BaseController extends CI_Controller {
 		return $resolved;
 	}
 
+	/**
+	 * Task DAG and run state for a saved job.
+	 *
+	 * The graph comes from `job_task_graphs` when the job has been saved or has
+	 * run at least once. A job whose source is on disk but whose graph was never
+	 * stored - an older job, or one restored from a backup - is scanned live so
+	 * Job View never shows an empty panel for a job that clearly declares tasks.
+	 */
+	protected function jobTaskOverview($jobName, $environment, $runKey = '', $buildNumber = 0) {
+		$jobName = trim((string) $jobName);
+		$environment = $this->normalizeJobSeekerEnvironment((string) $environment);
+		$environment = $environment === '' ? 'ALL' : $environment;
+		// Only a role that may run jobs sees the re-run controls, so the panel
+		// never offers an action the endpoint would refuse.
+		$canRun = $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER;
+
+		if ($jobName === '') {
+			return array('graph' => NULL, 'runs' => array(), 'run' => NULL, 'runKey' => '', 'tasks' => array(),
+				'runState' => 'none', 'stored' => FALSE, 'canRun' => $canRun);
+		}
+
+		$this->load->model('JobTask_model', 'jobTaskModel');
+		$overview = $this->jobTaskModel->overview($jobName, $environment, $runKey, $buildNumber);
+		$overview['canRun'] = $canRun;
+		if (! empty($overview['graph']['tasks'])) {
+			$overview['stored'] = TRUE;
+			$overview['environment'] = $environment;
+			$overview['job'] = $jobName;
+			return $overview;
+		}
+
+		$this->load->library('TaskGraphScanner');
+		$sources = array();
+		$repositoryRoot = $this->repositoryRootPath();
+		foreach (array('python/inline', 'python/jobs') as $location) {
+			$relative = $this->safeRelativePath($location.'/'.$jobName);
+			if ($relative === FALSE) {
+				continue;
+			}
+			$directory = rtrim($repositoryRoot, '/\\').DIRECTORY_SEPARATOR.$relative;
+			if (is_dir($directory)) {
+				foreach ($this->taskgraphscanner->sourcesForDirectory($directory) as $source) {
+					$sources[] = $source;
+				}
+			}
+		}
+
+		$scanned = $this->taskgraphscanner->scan($sources);
+		$overview['graph'] = empty($scanned['tasks']) ? NULL : $scanned;
+		$overview['stored'] = FALSE;
+		$overview['environment'] = $environment;
+		$overview['job'] = $jobName;
+		return $overview;
+	}
+
+	/**
+	 * Extensions the web server itself would execute, refused whatever a
+	 * caller's allowlist says.
+	 *
+	 * This is deliberately limited to things nginx hands to the PHP handler, or
+	 * that reconfigure the server. It must not grow to cover scripting
+	 * languages in general: JobSeeker exists to run operator-authored Python
+	 * and shell, so .py and .sh are legitimate uploads and are screened by
+	 * CommandGuard and the container controls instead. The danger here is
+	 * narrower - a .php landing anywhere the document root can reach is remote
+	 * code execution regardless of what the file is for.
+	 */
+	private static $webExecutableUploadExtensions = array(
+		'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phps', 'pht', 'phtm', 'phtml',
+		'phar', 'htaccess', 'htpasswd', 'user.ini'
+	);
+
 	protected function getUploadedFile($field, $allowedExtensions = array(), $maxBytes = 104857600) {
 		if (empty($_FILES[$field]) || ! is_array($_FILES[$field])) {
 			return array('ok' => FALSE, 'message' => 'No file was uploaded.');
@@ -1963,6 +2081,14 @@ class BaseController extends CI_Controller {
 		}
 
 		if (! empty($allowed) && ! in_array($extension, $allowed, TRUE)) {
+			return array('ok' => FALSE, 'message' => 'Uploaded file type is not allowed.');
+		}
+
+		// The allowlist above is only consulted when a caller supplies one, and
+		// Upload::do_upload() derives its list from a database column - so a row
+		// holding no usable extension silently permits anything. A .php is
+		// refused whatever the allowlist says.
+		if (in_array($extension, self::$webExecutableUploadExtensions, TRUE)) {
 			return array('ok' => FALSE, 'message' => 'Uploaded file type is not allowed.');
 		}
 
@@ -2170,12 +2296,11 @@ class BaseController extends CI_Controller {
 
 			// Set global var to be used on Controllers
 			$this->global ['jenkins_enabled'] = $jsonToArray->jenkins->enabled;
-			$this->global ['jenkins_url'] = $jsonToArray->jenkins->url;
-			$this->global ['jenkins_username'] = '';
-			$this->global ['jenkins_token'] = '';
-			// The Jenkins credential is never exposed to the browser. All Jenkins
-			// traffic goes through the authenticated server-side proxy, which
-			// builds its own Authorization header from the runtime config.
+			// The browser cannot reach the internal URL, so pages get the public one.
+			// The Jenkins credential is never exposed to the browser at all: every
+			// Jenkins call goes through the authenticated server-side proxy, which
+			// builds its own Authorization header from the environment.
+			$this->global ['jenkins_url'] = $this->jenkinsPublicUrl();
 			$this->global ['jenkins_home'] = $jsonToArray->jenkins->jenkins_home;
 
 
@@ -2265,13 +2390,6 @@ class BaseController extends CI_Controller {
         $this->load->view('includes/header', $headerInfo);
         $this->load->view($viewName, $pageInfo);
         $this->load->view('includes/footer', $footerInfo);
-    }
-
-    function loadViewsSetup($viewName = "", $headerInfo = NULL, $pageInfo = NULL, $footerInfo = NULL){
-
-        $this->load->view('includes/setupHeader', $headerInfo);
-        $this->load->view($viewName, $pageInfo);
-        $this->load->view('includes/setupFooter', $footerInfo);
     }
 	
 	/**

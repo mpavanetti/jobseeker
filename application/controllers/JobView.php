@@ -47,7 +47,13 @@ class JobView extends BaseController
 
             $cleanDates = array();
             foreach ($dates as $jobName => $createdAt) {
-                if (is_string($jobName) && is_string($createdAt) && $jobName !== '' && $createdAt !== '') {
+                // json_decode() with assoc=TRUE hands back a PHP array, and a PHP array
+            // key that looks like an integer becomes one. A job named "1" therefore
+            // arrives here as int 1, failed is_string(), and was dropped - which is
+            // why numerically named jobs reported "Created: Not tracked" even though
+            // their date had been recorded. Only the value needs checking.
+            $jobName = (string) $jobName;
+            if (is_string($createdAt) && $jobName !== '' && $createdAt !== '') {
                     $cleanDates[$jobName] = $createdAt;
                 }
             }
@@ -70,6 +76,35 @@ class JobView extends BaseController
             return;
         }
         echo json_encode(array_merge(array('ok' => TRUE, 'job' => $jobName), $this->jobDependencyMap($jobName, $environment)));
+    }
+
+    /**
+     * Task DAG and the per-task outcome of a run, for the Job View task graph.
+     *
+     * The page polls this on a timer while a build is running, so it stays a
+     * bounded three-query read: the declared graph, the recent run list, and the
+     * latest attempt of every task in the run being shown.
+     */
+    public function tasks()
+    {
+        $this->output->set_content_type('application/json');
+        $jobName = trim((string) $this->input->get('job', TRUE));
+        $environment = trim((string) $this->input->get('environment', TRUE));
+        $runKey = trim((string) $this->input->get('run', TRUE));
+        if ($environment === '') {
+            $environment = $this->jobSeekerEnvironmentPreference();
+        }
+        $environment = $this->jobSeekerEffectiveEnvironment($environment);
+        if ($jobName === '' || strlen($jobName) > 400) {
+            $this->output->set_status_header(400);
+            echo json_encode(array('ok' => FALSE, 'message' => 'A job name is required.'));
+            return;
+        }
+        if (strlen($runKey) > 64) {
+            $runKey = '';
+        }
+        $buildNumber = (int) $this->input->get('build', TRUE);
+        echo json_encode(array_merge(array('ok' => TRUE, 'job' => $jobName), $this->jobTaskOverview($jobName, $environment, $runKey, $buildNumber)));
     }
 
 

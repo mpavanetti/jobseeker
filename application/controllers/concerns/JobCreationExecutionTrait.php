@@ -216,6 +216,25 @@ trait JobCreationExecutionTrait
         return implode("\n", $lines);
       }
 
+      /**
+       * Environment the task DAG runtime reads.
+       *
+       * Forwarded from the build rather than baked into the job so a re-run can
+       * resume a previous run, narrow itself to a few tasks, or turn off state
+       * recording, by setting a Jenkins build parameter - without the job having
+       * to be regenerated. Defaults match jobseeker.dag's own defaults so a job
+       * behaves the same whether or not the parameters are present.
+       */
+      private function dagRuntimeLines() {
+        return array(
+          'export JOBSEEKER_DAG_RESUME="${JOBSEEKER_DAG_RESUME:-}"',
+          'export JOBSEEKER_DAG_TASKS="${JOBSEEKER_DAG_TASKS:-}"',
+          'export JOBSEEKER_DAG_MAX_PARALLEL="${JOBSEEKER_DAG_MAX_PARALLEL:-4}"',
+          'export JOBSEEKER_DAG_FAIL_FAST="${JOBSEEKER_DAG_FAIL_FAST:-0}"',
+          'export JOBSEEKER_DAG_STATE="${JOBSEEKER_DAG_STATE:-1}"'
+        );
+      }
+
       private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument, $runtimeOptions = array()) {
         $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
@@ -225,7 +244,12 @@ trait JobCreationExecutionTrait
         $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
         $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $runTests = ! isset($runtimeOptions['runTests']) || (bool) $runtimeOptions['runTests'];
-        $lines = array_merge(array('set -e'), $this->dataAssetsRuntimeLines($repositoryRoot), $this->connectorRuntimeLines());
+        $lines = array_merge(
+          array('set -e'),
+          $this->dataAssetsRuntimeLines($repositoryRoot),
+          $this->connectorRuntimeLines(),
+          $this->dagRuntimeLines()
+        );
 
         if ($execution['mode'] === 'git') {
           $lines[] = 'printf "%s\n" "[JobSeeker] Git source checkout"';
@@ -390,6 +414,8 @@ trait JobCreationExecutionTrait
           $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
           $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
           $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+          $lines[] = '  -e JOBSEEKER_DAG_RESUME -e JOBSEEKER_DAG_TASKS -e JOBSEEKER_DAG_MAX_PARALLEL \\';
+          $lines[] = '  -e JOBSEEKER_DAG_FAIL_FAST -e JOBSEEKER_DAG_STATE \\';
           $lines[] = '  -e PYTHONUNBUFFERED \\';
           $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
