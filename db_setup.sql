@@ -140,6 +140,54 @@ CREATE TABLE IF NOT EXISTS `job_pipeline_runs` (
   CONSTRAINT `job_pipeline_runs_pipeline_fk` FOREIGN KEY (`pipeline_id`) REFERENCES `job_pipelines` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
+-- The task DAG a single job declares. A Pipeline is a graph of jobs; this is
+-- the layer below it, a graph of tasks inside one job, and one row holds the
+-- whole declared graph for a job in one environment. `source` records who wrote
+-- it: 'scan' for the static scan performed when the job is saved, 'runtime' for
+-- the authoritative manifest the running job emitted.
+CREATE TABLE IF NOT EXISTS `job_task_graphs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `graph_json` longtext COLLATE utf8_unicode_ci NOT NULL,
+  `source` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'scan',
+  `task_count` int(11) unsigned NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `job_task_graph_scope` (`job_name`,`environment`),
+  KEY `job_task_graph_job` (`job_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Orchestration state for one attempt of one task: did it run, which attempt,
+-- how long it took, why it was skipped. Deliberately separate from `tmf`, which
+-- keeps the business telemetry a task chooses to publish (dimension, rows read
+-- and written, errors); the two join on `tmf_instance_id`. Keeping them apart is
+-- what makes "re-run only the failed tasks" possible without reinterpreting
+-- someone's row counts as run state.
+CREATE TABLE IF NOT EXISTS `job_task_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `run_key` varchar(64) COLLATE utf8_unicode_ci NOT NULL,
+  `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
+  `build_number` int(11) unsigned DEFAULT NULL,
+  `task_key` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `attempt` int(11) unsigned NOT NULL DEFAULT 1,
+  `status` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'PENDING',
+  `trigger_rule` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'SUCCESS',
+  `upstream_json` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `tmf_instance_id` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `duration_ms` bigint(20) unsigned DEFAULT NULL,
+  `message` varchar(2000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `job_task_run_attempt` (`run_key`,`task_key`,`attempt`),
+  KEY `job_task_run_job` (`job_name`,`environment`,`id`),
+  KEY `job_task_run_key` (`run_key`,`task_key`),
+  KEY `job_task_run_status` (`status`,`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Registry for removable synthetic performance-test batches created from the
 -- admin Dataset Generator or the command-line generator script.
 CREATE TABLE IF NOT EXISTS `generated_datasets` (
@@ -627,13 +675,23 @@ CREATE TABLE IF NOT EXISTS `tmf` (
   `instance_id` varchar(50) COLLATE utf8_unicode_ci DEFAULT NULL,
   `start_time` datetime DEFAULT NULL,
   `msg` text COLLATE utf8_unicode_ci DEFAULT NULL,
+  -- Set when this transaction is a task inside a task DAG. They make a TMF row
+  -- readable as part of one job run rather than as a loose transaction, and let
+  -- the Results page be opened for a single run.
+  `run_key` varchar(64) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `task_key` varchar(128) COLLATE utf8_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
+  KEY `tmf_task_run` (`run_key`,`task_key`),
   KEY `tmf_dashboard_activity` (`last_activity`,`status`,`environment`),
   KEY `tmf_dashboard_environment` (`environment`,`last_activity`,`status`),
   KEY `tmf_results_environment` (`environment`,`id`),
   KEY `tmf_results_status` (`status`,`id`),
   KEY `tmf_results_job` (`job_name`,`id`),
-  KEY `tmf_instance` (`instance_id`)
+  KEY `tmf_instance` (`instance_id`),
+  KEY `tmf_filter_status` (`status`,`environment`,`job_name`),
+  KEY `tmf_filter_job` (`job_name`,`environment`),
+  KEY `tmf_filter_dimension` (`dimension`,`environment`,`job_name`),
+  KEY `tmf_filter_reprocess` (`reprocess`,`job_name`,`environment`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1234 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando dados para a tabela jobseeker.tmf: ~0 rows (aproximadamente)
