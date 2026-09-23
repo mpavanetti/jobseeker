@@ -63,6 +63,10 @@
 .job-console-section-hop-run { border-left-color: #f472b6; }
 .job-console-section-hop-step { border-left-color: #60a5fa; }
 .job-console-section-hop-log { border-left-color: #94a3b8; }
+
+/* Task DAG: the graph header and one section per task inside a job run. */
+.job-console-section-dag { border-left-color: #f59e0b; }
+.job-console-section-task { border-left-color: #34d399; }
 .job-console-section.has-error { border-left-color: #f87171; }
 
 .job-console-summary {
