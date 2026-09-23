@@ -1021,6 +1021,7 @@ class MariaDbTransport(TmfTransport):
     def __init__(self, config: Optional[DatabaseConfig] = None):
         self.config = config or DatabaseConfig.from_env()
         self._connection = None
+        self._task_columns: Optional[bool] = None
 
     def _mysql_connector(self):
         try:
@@ -1072,15 +1073,38 @@ class MariaDbTransport(TmfTransport):
         finally:
             cursor.close()
 
+    def _has_task_columns(self) -> bool:
+        """Whether this database has the task DAG linkage columns on `tmf`.
+
+        The application adds them lazily, so a worker may run against a schema
+        that predates them. Probed once per connection and cached: a task must
+        never fail because its telemetry has one fewer column to fill.
+        """
+
+        if self._task_columns is not None:
+            return self._task_columns
+
+        self._task_columns = False
+        try:
+            connection = self._connect()
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SHOW COLUMNS FROM tmf LIKE 'run_key'")
+                self._task_columns = cursor.fetchone() is not None
+            finally:
+                cursor.close()
+        except Exception:  # noqa: BLE001 - an older schema is not an error
+            self._task_columns = False
+        return self._task_columns
+
     def begin(self, payload: Dict[str, Any]) -> bool:
-        sql = (
-            "INSERT INTO tmf "
-            "(interface_id, status, job_name, reprocess, event_text, dimension, environment, "
+        columns = (
+            "interface_id, status, job_name, reprocess, event_text, dimension, environment, "
             "records_total, records_processed, last_activity, running_time, distict_errors, warnings, "
-            "hostname, username, instance_id, start_time, msg) "
-            "VALUES (%s, 'running', %s, %s, %s, %s, %s, %s, 0, now(), NULL, 0, %s, %s, %s, %s, now(), %s)"
+            "hostname, username, instance_id, start_time, msg"
         )
-        values = (
+        placeholders = "%s, 'running', %s, %s, %s, %s, %s, %s, 0, now(), NULL, 0, %s, %s, %s, %s, now(), %s"
+        values = [
             payload["interface_id"],
             payload["job_name"],
             1 if payload.get("reprocess") else 0,
@@ -1093,8 +1117,19 @@ class MariaDbTransport(TmfTransport):
             payload.get("username") or "",
             payload["instance_id"],
             payload.get("message") or None,
-        )
-        return self._execute_write(((sql, values),))
+        ]
+
+        # A task inside a task DAG records which run and which task it belongs
+        # to, so the TMF row can be read back as part of that job run rather
+        # than as a loose transaction.
+        if (payload.get("run_key") or payload.get("task_key")) and self._has_task_columns():
+            columns += ", run_key, task_key"
+            placeholders += ", %s, %s"
+            values.append(payload.get("run_key") or None)
+            values.append(payload.get("task_key") or None)
+
+        sql = "INSERT INTO tmf (" + columns + ") VALUES (" + placeholders + ")"
+        return self._execute_write(((sql, tuple(values)),))
 
     def finish(self, payload: Dict[str, Any]) -> bool:
         sql = (
@@ -1549,6 +1584,8 @@ class JobSeeker:
         records_total: int = 0,
         reprocess: bool = False,
         msg: Optional[str] = None,
+        run_key: str = "",
+        task_key: str = "",
     ) -> "TmfTask":
         return TmfTask(
             client=self,
@@ -1557,6 +1594,8 @@ class JobSeeker:
             records_total=records_total,
             reprocess=reprocess,
             msg=msg,
+            run_key=run_key,
+            task_key=task_key,
         )
 
     transaction = task
@@ -1600,6 +1639,8 @@ class TmfTask:
         records_total: int = 0,
         reprocess: bool = False,
         msg: Optional[str] = None,
+        run_key: str = "",
+        task_key: str = "",
     ):
         self.client = client
         self.event_text = event_text
@@ -1608,6 +1649,10 @@ class TmfTask:
         self.records_processed = 0
         self.reprocess = reprocess
         self.message = msg or ""
+        # Set when this transaction belongs to a task inside a task DAG, so the
+        # row can be read back as part of that job run.
+        self.run_key = run_key or ""
+        self.task_key = task_key or ""
         self._instance_id = _new_instance_id()
         self.open = False
 
@@ -1627,6 +1672,8 @@ class TmfTask:
                 "records_total": self.records_total,
                 "reprocess": _as_bool(self.reprocess),
                 "message": self.message or None,
+                "run_key": self.run_key,
+                "task_key": self.task_key,
             }
         )
         self.open = self.client.transport.begin(payload)
@@ -1929,12 +1976,18 @@ def _load_conntest():
     return module
 
 
-def __getattr__(name):  # PEP 562: resolve the conntest helpers lazily
+def __getattr__(name):  # PEP 562: resolve the optional submodules lazily
     if name in ("conntest", "ConnectionTestResult", "test_connector"):
         module = _load_conntest()
         if name == "conntest":
             return module
         return getattr(module, name)
+    if name == "dag":
+        # importlib, not `from . import dag`: the from-import form asks this very
+        # __getattr__ for the attribute first and recurses forever.
+        import importlib
+
+        return importlib.import_module(__name__ + ".dag")
     raise AttributeError("module %r has no attribute %r" % (__name__, name))
 
 
@@ -1955,6 +2008,7 @@ __all__ = [
     "TmfTransport",
     "client",
     "conntest",
+    "dag",
     "get_asset",
     "get_connector",
     "get_context",
