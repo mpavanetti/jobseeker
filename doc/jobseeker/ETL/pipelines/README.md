@@ -2,6 +2,8 @@
 
 Pipelines are top-level, environment-aware workflow definitions that coordinate existing Jenkins jobs. They provide a separate drag-and-drop DAG editor without replacing Jenkins as the execution engine.
 
+A Pipeline is a graph of **jobs**. For a graph of steps *inside* one job - tasks that share a container and a dependency set - see [Task DAGs](../task-dags/README.md).
+
 ## Editor
 
 Open **Extract Transform Load > Pipelines** after selecting a global environment. The editor contains:

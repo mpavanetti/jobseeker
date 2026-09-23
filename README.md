@@ -6,7 +6,7 @@ JobSeeker gives data teams one place to create, schedule, run, promote, and moni
 
 JobSeeker supports Python, Apache Hop, Talend, shell, Docker, and other Jenkins-compatible workloads.
 
-> **Project status:** beta. Use the default configuration for local evaluation only, and review the security guidance before deploying to a shared environment.
+> Use the default configuration for local evaluation only, and review the security guidance before deploying to a shared environment.
 
 ## Capabilities
 
@@ -283,6 +283,7 @@ Topic | Guide
 Documentation index | [doc/README.md](doc/README.md)
 Job management | [doc/jobseeker/JobManagement/README.md](doc/jobseeker/JobManagement/README.md)
 Visual pipelines | [doc/jobseeker/ETL/pipelines/README.md](doc/jobseeker/ETL/pipelines/README.md)
+Task DAGs inside a job | [doc/jobseeker/ETL/task-dags/README.md](doc/jobseeker/ETL/task-dags/README.md)
 Security model and hardening | [doc/jobseeker/Security/README.md](doc/jobseeker/Security/README.md)
 Job command hardening | [doc/jobseeker/Security/command-hardening.md](doc/jobseeker/Security/command-hardening.md)
 Data Assets | [doc/jobseeker/ETL/data-assets/README.md](doc/jobseeker/ETL/data-assets/README.md)
