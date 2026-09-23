@@ -5,17 +5,16 @@ node_modules/
 assets/bower_components/
 assets/plugins/
 repository/
-json/result.json
 talend.sql
 old/cias.sql
 .htaccess
 repository/Talend/input/jobInfo.xlsx
 repository/Talend/output/jobInfo.json
 *.xlsx
-json/result.json
 application/cache/job_creation_dates.json
 application/cache/*.json
 application/cache/dashboard_overview_*
+application/cache/tmf_filter_options_*
 application/cache/job_schedules
 application/cache/docker_monitor_storage
 application/cache/promotion_rollbacks/
@@ -25,6 +24,10 @@ config/*
 jenkins/*
 application/cache/promotion_history/
 __pycache__/
+
+# Task DAG value store. A job run by Jenkins writes this into its build
+# workspace; a job run by hand from a checkout writes it here.
+.jobseeker-dag/
 graphify-out/
 
 # Local agent worktrees; never part of the repository.
