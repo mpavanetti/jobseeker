@@ -17,7 +17,6 @@ class Login extends CI_Controller
      */
     public function index()
     {
-        //$this->setup();
         $this->isLoggedIn();
     }
     
@@ -26,7 +25,6 @@ class Login extends CI_Controller
      */
     function isLoggedIn()
     {
-       // $this->setup();
         $isLoggedIn = $this->session->userdata('isLoggedIn');
         
         if(!isset($isLoggedIn) || $isLoggedIn != TRUE)
