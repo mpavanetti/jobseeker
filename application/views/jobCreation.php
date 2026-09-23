@@ -2150,6 +2150,7 @@
               <option value="database">Database connector</option>
               <option value="email_metrics">Email metrics</option>
               <option value="pipelines">Pipelines</option>
+              <option value="task_dag">Task DAG</option>
               <option value="jenkins">Jenkins runtime</option>
               <option value="docker">Docker</option>
               <option value="tests">Automated tests</option>
@@ -2445,6 +2446,15 @@
                           <button type="button" class="btn btn-default btn-xs" id="jobDependencyTest" disabled><i class="fa fa-plug"></i> Test connections</button>
                         </div>
                         <div id="jobDependencyList"><p class="text-muted jd-empty">Add code that calls <code>js.connector(...)</code> or <code>js.asset(...)</code> to see the map.</p></div>
+                      </div>
+                    </div>
+                    <div id="jobTaskPanel" class="job-task-panel box box-default" style="display:none;">
+                      <div class="box-body">
+                        <div class="jd-toolbar">
+                          <strong><i class="fa fa-code-fork"></i> Tasks this job runs</strong>
+                          <span class="text-muted">Read from <code>@dag.task(...)</code> declarations. The job records per-task status when it runs.</span>
+                        </div>
+                        <div id="jobTaskList"></div>
                       </div>
                     </div>
                     <div class="linux-execution-section linux-shell-options" style="display: none;">
@@ -3748,7 +3758,8 @@
         jenkins: 'Jenkins',
         environments: 'Environments',
         docker: 'Docker',
-        tests: 'Tests'
+        tests: 'Tests',
+        task_dag: 'Task DAG'
       };
       var selectedJobSampleId = '';
       var environmentHelper = window.JobSeekerEnvironment || {
@@ -9513,7 +9524,9 @@ $(document).on('click', '.inspectJenkinsJob', function() {
 
 </script>
 
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-task-graph.css?v=2">
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-task-graph.js?v=2"></script>
 <script type="text/javascript">
 (function($) {
   var deps = window.JobSeekerJobDependencies;
@@ -9554,11 +9567,30 @@ $(document).on('click', '.inspectJenkinsJob', function() {
     $('#jobDependencyTest').prop('disabled', !((data.connectors || []).length));
   }
 
+  // Task graph preview. Static analysis of the editor buffer, so the graph
+  // appears while the job is being written and without running any of it.
+  var tasks = window.JobSeekerTaskGraph;
+
+  function paintTasks(data) {
+    if (!tasks) { return; }
+    var declared = data && data.tasks ? data.tasks.length : 0;
+    $('#jobTaskPanel').toggle(declared > 0);
+    if (!declared) {
+      $('#jobTaskList').empty();
+      return;
+    }
+    tasks.render('#jobTaskList', {graph: data, tasks: [], runs: [], stored: false}, {runPicker: false});
+  }
+
   var timer = null;
   function schedule() {
     window.clearTimeout(timer);
     timer = window.setTimeout(function() {
       deps.scan(currentPayload()).done(paint).fail(function() {});
+      if (tasks) {
+        var request = tasks.scan(currentPayload());
+        if (request) { request.done(paintTasks).fail(function() {}); }
+      }
     }, 600);
   }
 
