@@ -36,10 +36,38 @@ against it.
 
 | Severity | Issue | Fix |
 | --- | --- | --- |
-| **High** | The setup wizard (`/setup/*`) was reachable **unauthenticated** on a provisioned instance. `POST /setup/saveJenkins` rewrites `application/config/config.json` (Jenkins URL + credentials); `POST /setup/databaseCheck` opens a server-side database connection to an arbitrary host (SSRF / internal port probe); `testJenkinsApi` enumerates Jenkins. | `Setup::guardSetupAccess()` in the constructor: once the instance is provisioned (config flag **or** any active `tbl_users` row), the wizard requires an authenticated **admin** session; anonymous requests are redirected to login. First-run bootstrap (no users yet) is still open. |
+| **High** | The setup wizard (`/setup/*`) was reachable **unauthenticated** on a provisioned instance. `POST /setup/saveJenkins` rewrites `application/config/config.json` (Jenkins URL + credentials); `POST /setup/databaseCheck` opens a server-side database connection to an arbitrary host (SSRF / internal port probe); `testJenkinsApi` enumerates Jenkins. | First guarded with `Setup::guardSetupAccess()` (admin session required once the instance was provisioned), then **removed entirely** - see the note below. |
 | **Medium** | `jenkins.authorization` (the Basic-auth blob from the runtime config) was emitted into page source as `var jenkins_authorization = '...'` on Job List, Job Creation and TMF. Dead in the current code, but a real credential leak the moment an operator fills the setup "API Authorization" field. | Removed every emission (`BaseController`, `Setup`, `jobList.php` x4, `jobCreation.php`, `tmf.php`). Jenkins auth stays server-side only. |
 | **Low** | `users.php` reflected the `searchText` query value into an `<input value="...">` without escaping (reflected XSS). | `html_escape()`. |
 | **Low** | In production the only secret check was `empty()` on `JOBSEEKER_ENCRYPTION_KEY` - the documented placeholder values and short keys passed. | `config.php` now logs a clear error when `JOBSEEKER_ENCRYPTION_KEY` or `JOBSEEKER_CONNECTOR_API_TOKEN` is still a shipped placeholder or below the recommended length. (A warning, not a hard stop, because the documented local-evaluation stack also runs with `ENVIRONMENT=production`.) |
+
+**Update - the setup wizard has since been deleted.** Nothing in the application
+linked to it, two of its four steps were inert, the database step only tested a
+connection and never wrote `database.php`, and `saveJenkins()` rewrote
+`application/config/config.json` from a fixed template - silently dropping
+`environment_slots`, `environment_agents_enabled` and `environment_agent_labels`,
+which `BaseController` reads. The credentials it wrote were overridden by
+`JOBSEEKER_JENKINS_INTERNAL_URL` / `_USER` / `_TOKEN` in every shipped deployment
+anyway. Runtime configuration now comes from `.env` and the Kubernetes ConfigMap
+only; `scripts/test-security-hardening.js` asserts the wizard stays deleted.
+
+### Follow-up pass - configuration and transport
+
+| Severity | Issue | Fix |
+| --- | --- | --- |
+| **Medium** | `application/config/config.json` is tracked in git and carried `jenkins.username` / `jenkins.token`. Nothing read them - Docker Compose and Kubernetes both set `JOBSEEKER_JENKINS_USER` / `_TOKEN`, which take precedence - but the slot invited a real token being committed. | Both keys removed from the file and from the Kubernetes ConfigMap, and `BaseController::jenkinsConnection()` no longer accepts a credential from the runtime config at all. `scripts/test-jenkins-runtime-config.js` asserts they stay out. |
+| **Low** | The session cookie carried no `SameSite` attribute. CodeIgniter 3.1.10 sets its cookies through the positional `setcookie()` / `session_set_cookie_params()` signatures, neither of which takes one. Browsers default an unset value to Lax, but only after a grace period on top-level POSTs. | `docker/php/security.ini` sets `session.cookie_samesite = Lax`, installed into the image's `conf.d`. Verified on the wire: `ci_sessions=...; HttpOnly; SameSite=Lax`. The CSRF cookie still lacks it - CI sets that one directly - but it carries only the token, and the protection is the token matching a value an attacker cannot read. |
+| **Low** | `X-Powered-By: PHP/8.3.33` disclosed the exact patch version on every response. | `expose_php = Off` in the same ini. |
+
+**Also reviewed in this pass, no change needed:** the connector runtime endpoint
+(`/connector-runtime`) authenticates with `hash_equals` against
+`JOBSEEKER_CONNECTOR_API_TOKEN`, rejects an empty expected token, normalises
+environment and job name against strict allowlists, scopes every lookup through
+parameterised `where_in` on environment plus job, sends `no-store`, and writes a
+granted/failed audit row per connector. No SQL is built by concatenating request
+data; the identifiers interpolated in `Context_model` / `Visualization_model` /
+`Dashboard_model` are code literals, never request input. No application-level
+shell execution exists outside the CodeIgniter framework's own helpers.
 
 ### Reviewed - no change needed
 
