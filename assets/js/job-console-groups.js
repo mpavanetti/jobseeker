@@ -30,8 +30,24 @@
     // line, which is how Hop's own UI presents a run.
     'hop-run': { title: 'Apache Hop run', icon: 'fa-sitemap' },
     'hop-step': { title: 'Transform or action', icon: 'fa-cog' },
-    'hop-log': { title: 'Run log', icon: 'fa-file-text-o' }
+    'hop-log': { title: 'Run log', icon: 'fa-file-text-o' },
+    // A job that declares tasks prints one marker per task, so each task's
+    // output folds into its own section the way Hop groups by transform.
+    task: { title: 'Task', icon: 'fa-check-square-o' },
+    dag: { title: 'Task DAG', icon: 'fa-sitemap' }
   };
+
+  // [JobSeeker Task] extract | SUCCESS | attempt 1/3 | 1.204s
+  var TASK_LINE = /^\[JobSeeker Task\]\s+([A-Za-z][A-Za-z0-9_-]{0,63})\s*\|\s*([A-Z_]+)\b/;
+
+  // [JobSeeker DAG] start | 5 task(s) | run nightly-DEV-42 | max parallel 4
+  var DAG_LINE = /^\[JobSeeker DAG\]\s+\S+/;
+
+  // The runtime tags every line a task writes with that task's id, because
+  // tasks run concurrently and their output interleaves in one console. The id
+  // is only honoured once a marker has introduced that task, so an ordinary
+  // bracketed log prefix is never mistaken for one.
+  var TASK_OWNED_LINE = /^\[([A-Za-z][A-Za-z0-9_-]{0,63})\]\s/;
 
   // 2026/09/04 17:38:00 - Copy files - ERROR: File/folder [...] does not exist!
   var HOP_LINE = /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+-\s+([^-]+?)\s+-\s?([\s\S]*)$/;
@@ -159,6 +175,20 @@
       return explicitKind;
     }
 
+    if (TASK_LINE.test(line)) {
+      return 'task';
+    }
+
+    if (DAG_LINE.test(line)) {
+      return 'dag';
+    }
+
+    // Anything a task printed - stdout, a traceback - belongs to that task,
+    // until the next task marker or an explicit JobSeeker section heading.
+    if (currentKind === 'task') {
+      return 'task';
+    }
+
     if (/^\[JobSeeker\]/.test(line)) {
       if (currentKind === 'hop-execution') {
         return 'hop-execution';
@@ -233,26 +263,118 @@
       lines.pop();
     }
 
-    lines.forEach(function(line) {
-      var kind = classifyLine(line, current ? current.kind : '');
+    var knownTasks = {};
 
-      if (! current || current.kind !== kind) {
+    lines.forEach(function(line) {
+      var normalized = normalizedLine(line);
+      var kind = classifyLine(line, current ? current.kind : '');
+      var taskMatch = TASK_LINE.exec(normalized);
+      var ownerMatch = taskMatch ? null : TASK_OWNED_LINE.exec(normalized);
+      var attributed = false;
+      var taskId = '';
+
+      if (taskMatch) {
+        knownTasks[taskMatch[1]] = true;
+        kind = 'task';
+        taskId = taskMatch[1];
+        attributed = true;
+      } else if (ownerMatch && knownTasks[ownerMatch[1]]) {
+        kind = 'task';
+        taskId = ownerMatch[1];
+        attributed = true;
+      } else if (kind === 'task' && current && current.kind === 'task') {
+        taskId = current.taskId;
+      }
+
+      // Two tasks in a row are the same kind but must not share a section, and
+      // concurrent tasks interleave, so the owning task breaks the group as
+      // well as the kind does.
+      var startsSection = ! current || current.kind !== kind ||
+        (kind === 'task' && attributed && current.taskId !== taskId);
+
+      if (startsSection) {
         occurrences[kind] = (occurrences[kind] || 0) + 1;
         current = {
           id: kind + '-' + occurrences[kind],
           kind: kind,
-          title: SECTION_META[kind].title,
+          title: kind === 'task' && taskId ? 'Task ' + taskId : SECTION_META[kind].title,
           icon: SECTION_META[kind].icon,
           lines: [],
           lineCount: 0,
           hasError: false
         };
+        if (kind === 'task') {
+          current.taskId = taskId;
+        }
         sections.push(current);
       }
 
       current.lines.push(line);
       current.lineCount += 1;
       current.hasError = current.hasError || hasError(normalizedLine(line));
+    });
+
+    // Concurrent tasks interleave line by line. Every line is attributed to the
+    // task that wrote it, so a run of task sections can be regrouped into one
+    // section per task - which is what makes a parallel DAG readable at all.
+    // Order inside a task is preserved; only the interleaving between
+    // simultaneous tasks is undone, and that ordering carried no meaning.
+    // Non-task sections are left where they are, so the console still reads
+    // Jenkins, then setup, then the tasks, then the build result.
+    var regrouped = [];
+    var cursor = 0;
+    while (cursor < sections.length) {
+      if (sections[cursor].kind !== 'task') {
+        regrouped.push(sections[cursor]);
+        cursor += 1;
+        continue;
+      }
+      var end = cursor;
+      while (end < sections.length && sections[end].kind === 'task') {
+        end += 1;
+      }
+      var byTask = {};
+      var seenOrder = [];
+      sections.slice(cursor, end).forEach(function(section) {
+        var key = section.taskId || '';
+        if (! byTask[key]) {
+          byTask[key] = section;
+          seenOrder.push(key);
+          return;
+        }
+        var target = byTask[key];
+        target.lines = target.lines.concat(section.lines);
+        target.lineCount += section.lineCount;
+        target.hasError = target.hasError || section.hasError;
+      });
+      seenOrder.forEach(function(key) { regrouped.push(byTask[key]); });
+      cursor = end;
+    }
+    sections = regrouped;
+
+    // Ids stay unique after regrouping so the UI can address each section.
+    var idCounts = {};
+    sections.forEach(function(section) {
+      idCounts[section.kind] = (idCounts[section.kind] || 0) + 1;
+      section.id = section.kind + '-' + idCounts[section.kind];
+    });
+
+    // A task can still own two separate stretches when an unrelated section
+    // falls between them. Number those rather than repeating a heading.
+    var taskSectionCounts = {};
+    sections.forEach(function(section) {
+      if (section.kind === 'task' && section.taskId) {
+        taskSectionCounts[section.taskId] = (taskSectionCounts[section.taskId] || 0) + 1;
+      }
+    });
+    var taskSectionSeen = {};
+    sections.forEach(function(section) {
+      if (section.kind === 'task' && section.taskId && taskSectionCounts[section.taskId] > 1) {
+        taskSectionSeen[section.taskId] = (taskSectionSeen[section.taskId] || 0) + 1;
+        section.part = taskSectionSeen[section.taskId];
+        section.parts = taskSectionCounts[section.taskId];
+        section.title = section.title + ' (' + section.part + '/' + section.parts + ')';
+      }
     });
 
     sections.forEach(function(section) {
