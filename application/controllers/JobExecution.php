@@ -215,7 +215,11 @@ class JobExecution extends BaseController
         }
 
         $body = http_build_query($parameters, '', '&', PHP_QUERY_RFC3986);
-        $response = $this->requestJenkins('POST', $jobPath.'/buildWithParameters', $body, 'application/x-www-form-urlencoded');
+        // Use the same guarded build path as the Jenkins proxy. Besides
+        // applying environment-agent routing, this preserves Jenkins' Location
+        // header, whose queue id is the only race-free identity for the build
+        // we just created.
+        $response = $this->requestJenkinsBuild($jobPath.'/buildWithParameters', $body, 'application/x-www-form-urlencoded');
         if (! in_array((int) $response['status'], array(200, 201, 202, 302, 303), TRUE)) {
             $this->output->set_status_header(502);
             echo json_encode(array(
@@ -226,14 +230,27 @@ class JobExecution extends BaseController
             return;
         }
 
+        $queueId = $this->taskRunQueueId($response['headers']);
         echo json_encode(array(
             'ok' => TRUE,
             'job' => $jobName,
             'environment' => $environment,
             'mode' => $mode,
             'expectedBuild' => $expectedBuild,
+            'queueId' => $queueId,
             'parameters' => array_keys($parameters)
         ));
+    }
+
+    /** Jenkins identifies the exact queued build in its Location header. */
+    private function taskRunQueueId($headers)
+    {
+        foreach (is_array($headers) ? $headers : array() as $header) {
+            if (preg_match('#^Location:.*?/queue/item/(\d+)/?#i', trim((string) $header), $matches)) {
+                return (int) $matches[1];
+            }
+        }
+        return NULL;
     }
 
     private function taskRunJobPath($jobName)

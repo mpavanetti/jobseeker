@@ -580,7 +580,7 @@
   .hop-canvas-modal-spacer { flex: 1 1 auto; }
   .hop-canvas-detail { font-size: 12px; margin-top: 8px; }
   #hopCanvasModal .modal-dialog { width: min(1100px, calc(100% - 30px)); }
-  /* The canvas as part of the run pane, above the Docker runtime block. */
+  /* The canvas as part of the run pane, beside the Python task graph. */
   .execution-hop-panel {
     background: #fff;
     border: 1px solid #e4e7ea;
@@ -602,7 +602,8 @@
     margin-left: auto;
   }
   .execution-hop-detail { font-size: 12px; margin-top: 8px; }
-  .execution-hop-panel .hop-canvas-host { max-height: 46vh; }
+  .execution-hop-panel .hop-canvas-host { max-height: 52vh; }
+  .execution-hop-panel .hop-canvas { min-height: 300px; }
 
   @media (max-width: 767px) {
     .execution-hop-state { margin-left: 0; }
@@ -616,8 +617,8 @@
   .hop-canvas .hop-node rect { fill: #fff; stroke: #b8c2cc; stroke-width: 1.5; }
   .hop-canvas .hop-node { cursor: pointer; }
   .hop-canvas .hop-node:hover rect { stroke: #3c8dbc; stroke-width: 2; }
-  .hop-canvas .hop-node-name { font: 600 12px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #2f3d4a; }
-  .hop-canvas .hop-node-type { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #8a9199; }
+  .hop-canvas .hop-node-name { font: 600 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #2f3d4a; }
+  .hop-canvas .hop-node-type { font: 9px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #8a9199; }
   .hop-canvas .hop-node-start rect { fill: #eef7ee; stroke: #6fae6f; }
   .hop-canvas .hop-node-success rect { fill: #eef7ee; stroke: #45a145; }
   .hop-canvas .hop-node-failure rect { fill: #fdeeee; stroke: #d9534f; }
@@ -627,7 +628,7 @@
   .hop-canvas .hop-node.is-failed rect { fill: #fdeeee; stroke: #d9534f; stroke-width: 2.5; }
   @keyframes hop-running-pulse { 50% { stroke-width: 4; fill: #c8e8ff; } }
   @media (prefers-reduced-motion: reduce) { .hop-canvas .hop-node.is-running rect { animation: none; } }
-  .hop-canvas .hop-node-metrics { font: 10px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
+  .hop-canvas .hop-node-metrics { font: 9px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #3c8dbc; }
   .hop-canvas .hop-edge { fill: none; stroke: #9aa5b1; stroke-width: 1.8; }
   .hop-canvas .hop-edge-success { stroke: #45a145; }
   .hop-canvas .hop-edge-failure { stroke: #d9534f; }
@@ -639,7 +640,7 @@
   .hop-canvas .hop-note rect { fill: #fffbe6; stroke: #e6d999; }
   .hop-canvas .hop-note text { font: 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #7a6f3d; }
 </style>
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=3"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=4"></script>
 <?php } ?>
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
@@ -1720,9 +1721,60 @@
       };
     }
 
-    function activeExecutionForBuild(jobName, buildNumber) {
+    /**
+     * Follow a build that something other than the Trigger button queued.
+     *
+     * The task graph's re-run controls queue a build through JobSeeker rather
+     * than through this screen's own trigger path, so nothing here knew the
+     * build existed and the pane carried on watching the previous one. This
+     * registers it the same way a triggered run is registered: a pane in Queued
+     * state with the expected number, and the ordinary discovery poll to
+     * attach to it once Jenkins starts it.
+     */
+    function watchQueuedBuild(jobName, expectedBuild, queueId, environmentInfo) {
+      if (! jobName) {
+        return null;
+      }
+
+      var existing = activeExecutionForBuild(jobName, expectedBuild, queueId);
+      if (existing) {
+        focusExecutionPane(existing.id);
+        return existing;
+      }
+
+      var run = createExecution({
+        fullName: jobName,
+        name: jobName,
+        nextBuildNumber: expectedBuild || '',
+        environmentInfo: environmentInfo || null
+      });
+
+      run.status = 'Queued';
+      run.queueId = queueId || '';
+      run.queueWhy = run.queueId
+        ? 'Queue #' + run.queueId
+        : (expectedBuild ? 'Waiting for build #' + expectedBuild : 'Waiting for Jenkins queue item');
+      appendConsole(run, '[JobSeeker] Task run queued for ' + jobName +
+        (expectedBuild ? ' as build #' + expectedBuild : '') + '.\n');
+      appendQueueMessage(run, run.queueWhy);
+      updateExecutionUI(run);
+      focusExecutionPane(run.id);
+
+      // Queue identity wins over the pre-trigger nextBuildNumber, so even if a
+      // second caller queued a build at the same moment this pane follows the
+      // build created by this click.
+      discoverBuild(run);
+      return run;
+    }
+
+    function activeExecutionForBuild(jobName, buildNumber, queueId) {
       var normalizedBuild = String(buildNumber || '');
+      var normalizedQueue = String(queueId || '');
       var found = null;
+
+      if (normalizedBuild === '' && normalizedQueue === '') {
+        return null;
+      }
 
       $.each(executionOrder, function(index, id) {
         var run = executions[id];
@@ -1730,7 +1782,15 @@
           return;
         }
 
-        if (normalizedBuild === '' || String(run.buildNumber || '') === normalizedBuild) {
+        var sameQueue = normalizedQueue !== '' && String(run.queueId || '') === normalizedQueue;
+        // `nextBuildNumber` is only a prediction. Two requests queued close
+        // together can receive the same prediction, so once Jenkins gave us a
+        // queue id it is the sole identity until that queue item names its
+        // executable build.
+        var sameBuild = normalizedQueue === '' && normalizedBuild !== '' &&
+          (String(run.buildNumber || '') === normalizedBuild ||
+           String(run.expectedBuildNumber || '') === normalizedBuild);
+        if (sameQueue || sameBuild) {
           found = run;
           return false;
         }
@@ -1903,16 +1963,6 @@
             '<div class="execution-meta-item"><span>Duration</span><strong class="run-duration"></strong></div>' +
             '<div class="execution-meta-item"><span>Console</span><strong class="run-console-size"></strong></div>' +
           '</div>' +
-          '<div class="execution-hop-panel" id="hopCanvas-' + run.id + '" style="display:none;">' +
-            '<div class="execution-hop-header">' +
-              '<strong><i class="fa fa-random"></i> Apache Hop canvas</strong>' +
-              '<span class="execution-hop-file text-muted"></span>' +
-              '<span class="execution-hop-state"></span>' +
-              '<button type="button" class="btn btn-default btn-xs execution-hop-reload" data-execution-id="' + run.id + '" title="Re-read the Hop file"><i class="fa fa-refresh"></i></button>' +
-            '</div>' +
-            '<div class="execution-hop-canvas"></div>' +
-            '<div class="execution-hop-detail text-muted">Select a transform or action to inspect its run metrics.</div>' +
-          '</div>' +
           '<div class="execution-runtime-metrics" style="display:none;">' +
             '<div class="execution-runtime-header">' +
               '<div><strong><i class="fa fa-cube"></i> Docker Runtime</strong><span class="execution-runtime-identity run-container-identity"></span></div>' +
@@ -1927,6 +1977,16 @@
             '</div>' +
           '</div>' +
           '<div class="job-dependency-panel execution-dependency-panel" id="deps-' + run.id + '"></div>' +
+          '<div class="execution-hop-panel" id="hopCanvas-' + run.id + '" style="display:none;">' +
+            '<div class="execution-hop-header">' +
+              '<strong><i class="fa fa-random"></i> Apache Hop canvas</strong>' +
+              '<span class="execution-hop-file text-muted"></span>' +
+              '<span class="execution-hop-state"></span>' +
+              '<button type="button" class="btn btn-default btn-xs execution-hop-reload" data-execution-id="' + run.id + '" title="Re-read the Hop file"><i class="fa fa-refresh"></i></button>' +
+            '</div>' +
+            '<div class="execution-hop-canvas"></div>' +
+            '<div class="execution-hop-detail text-muted">Select a transform or action to inspect its run metrics.</div>' +
+          '</div>' +
           '<div class="job-task-panel execution-task-panel" id="tasks-' + run.id + '" style="display:none;"></div>' +
           '<div class="execution-console job-console-host" id="console-' + run.id + '"><div class="job-console-empty">Waiting for Jenkins to start this build...</div></div>' +
         '</div>'
@@ -1949,11 +2009,35 @@
       refreshHopCanvas(run, true);
     }
 
+    /**
+     * Open and flash the console section a graph node belongs to.
+     *
+     * Apache Hop output is grouped by the transform that wrote each line, and a
+     * task DAG's output is tagged with the task that wrote it, so both graphs
+     * can point at a section by name. When a node produced no output there is
+     * nothing to show, and saying so is better than a click that does nothing.
+     */
+    function focusConsoleFor(run, owner, label) {
+      if (! run || ! owner || ! window.JobSeekerConsole || ! window.JobSeekerConsole.focusSection) {
+        return;
+      }
+      var host = $('#console-' + run.id);
+      if (! host.length) {
+        return;
+      }
+
+      var section = window.JobSeekerConsole.focusSection(host.get(0), owner);
+      if (! section && window.toastr) {
+        window.toastr.info('This ' + label + ' has not written anything to the console yet.',
+          String(owner), {timeOut: 2500});
+      }
+    }
+
     // Inline Apache Hop canvas.
     //
     // The canvas used to live behind an "Explore canvas" modal, which meant the
     // one thing an operator watches a Hop job for was the one thing they had to
-    // go and open. It is now part of the run pane, above the Docker runtime
+    // go and open. It is now part of the run pane, below the Docker runtime
     // block, and refreshed on the same poll ticks as everything else - so the
     // transforms light up while the build runs rather than when someone clicks.
     //
@@ -1993,6 +2077,7 @@
             node.name + (node.type ? ' · ' + node.type : '') +
             (state ? ' · ' + state.status + ' · read ' + state.read + ', written ' + state.written + ', errors ' + state.errors : '')
           );
+          focusConsoleFor(run, node.name, 'transform');
         }
       });
     }
@@ -2091,8 +2176,24 @@
         return;
       }
 
+      // Before Jenkins starts the build this pane is waiting on, its number is
+      // only the expected one - but asking with no number at all makes the
+      // server answer with the job's latest run, so a queued pane would show a
+      // previous build's outcomes as if they were its own.
+      var watching = run.buildNumber || run.expectedBuildNumber || '';
+
+      // Discovery replaces the expected number with the real one. That is a new
+      // subject, so it refreshes at once rather than waiting out the throttle,
+      // and a graph already marked final has to be read again.
+      var changedBuild = state.watching !== undefined && state.watching !== watching;
+      if (changedBuild) {
+        state.finalFetched = false;
+      }
+      state.watching = watching;
+
       var finalPass = !! run.finished && ! state.finalFetched;
-      if (! force && ! finalPass && (state.finalFetched || Date.now() - state.last < TASK_GRAPH_MIN_INTERVAL_MS)) {
+      if (! force && ! changedBuild && ! finalPass &&
+          (state.finalFetched || Date.now() - state.last < TASK_GRAPH_MIN_INTERVAL_MS)) {
         return;
       }
 
@@ -2100,7 +2201,7 @@
       state.pending = true;
       state.last = Date.now();
 
-      var request = window.JobSeekerTaskGraph.load('JobExecution', run.jobName, environment, '', run.buildNumber);
+      var request = window.JobSeekerTaskGraph.load('JobExecution', run.jobName, environment, '', watching);
       if (! request) {
         state.pending = false;
         return;
@@ -2115,12 +2216,24 @@
           window.JobSeekerTaskGraph.render(panel.get(0), data, {
             environment: environment,
             runPicker: false,
+            onSelect: function(taskId) {
+              focusConsoleFor(run, taskId, 'task');
+            },
             onRun: function(response) {
               if (window.toastr) {
                 window.toastr.success(
                   response.expectedBuild ? 'Queued as build #' + response.expectedBuild + '.' : 'Build queued.',
                   'Task run');
               }
+              // Open a pane on the build that was just queued. Without this the
+              // screen keeps watching the run the graph was drawn from, and the
+              // re-run looks as though it did nothing.
+              watchQueuedBuild(
+                run.jobName,
+                response && response.expectedBuild,
+                response && response.queueId,
+                run.environmentInfo
+              );
             },
             onRunFailed: function(xhr) {
               if (window.toastr) {

@@ -647,6 +647,13 @@
     options.selected = options.selected === taskId ? '' : taskId;
     element.jobseekerTaskOptions = options;
     repaint(element);
+
+    // Selecting a task is usually the start of "what did this one print?", and
+    // the answer is already on the page - just some way down a log of
+    // everything. Take the reader to it rather than making them hunt.
+    if (options.selected && typeof options.onSelect === 'function') {
+      options.onSelect(options.selected);
+    }
   }
 
   function attach(element) {
@@ -750,7 +757,7 @@
    * `buildNumber` matters on Job Execution: it watches one build, and asking
    * for "the latest run" would show a concurrent build of the same job.
    */
-  function load(controller, jobName, environment, runKey, buildNumber) {
+  function load(controller, jobName, environment, runKey, buildNumber, queueId) {
     var jQueryRef = typeof window !== 'undefined' ? window.jQuery : null;
     if (!jQueryRef) {
       return null;
@@ -759,7 +766,8 @@
       job: jobName,
       environment: environment || '',
       run: runKey || '',
-      build: buildNumber || ''
+      build: buildNumber || '',
+      queue: queueId || ''
     });
   }
 

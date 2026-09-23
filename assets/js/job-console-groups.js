@@ -50,10 +50,24 @@
   var TASK_OWNED_LINE = /^\[([A-Za-z][A-Za-z0-9_-]{0,63})\]\s/;
 
   // 2026/09/04 17:38:00 - Copy files - ERROR: File/folder [...] does not exist!
-  var HOP_LINE = /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+-\s+([^-]+?)\s+-\s?([\s\S]*)$/;
+  var HOP_LINE = /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+-\s+([\s\S]+?)\s+-\s?([\s\S]*)$/;
+  var HOP_ACTION_START = /^Starting action \[([\s\S]+)\]\s*$/;
+  var HOP_ACTION_END = /^Finished action \[([\s\S]+?)\]\s*\(result=\[([^\]]*)\]\)/;
+  // A transform logs once per copy, as "<name>.<copy>", while the canvas
+  // addresses the transform itself. All copies therefore share one owner.
+  var HOP_COPY_SUFFIX = /\.\d+$/;
 
   function normalizedLine(line) {
     return String(line == null ? '' : line).replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, '');
+  }
+
+  function hopOwner(origin, message) {
+    var action = HOP_ACTION_START.exec(String(message || '').trim()) ||
+      HOP_ACTION_END.exec(String(message || '').trim());
+    if (action) {
+      return String(action[1] || '').trim();
+    }
+    return String(origin || '').trim().replace(HOP_COPY_SUFFIX, '');
   }
 
   function isBuildResult(line) {
@@ -267,7 +281,30 @@
 
     lines.forEach(function(line) {
       var normalized = normalizedLine(line);
-      var kind = classifyLine(line, current ? current.kind : '');
+      // A hop-step section is still inside the Hop execution as far as
+      // classification is concerned; it is only grouped more finely.
+      var carriedKind = current ? (current.kind === 'hop-step' ? 'hop-execution' : current.kind) : '';
+      var kind = classifyLine(line, carriedKind);
+
+      // Apache Hop stamps every line with the transform or action that wrote
+      // it. The Hop page already groups by that; doing it here too means a
+      // build console can be pointed at one transform - which is what makes
+      // clicking a node on the canvas able to answer "what did this print?".
+      var hopSectionOwner = '';
+      if (kind === 'hop-execution') {
+        var hopMatch = HOP_LINE.exec(normalized);
+        var hopOrigin = hopMatch ? String(hopMatch[2]).trim() : '';
+        if (hopOrigin !== '') {
+          kind = 'hop-step';
+          hopSectionOwner = hopOwner(hopOrigin, hopMatch[3]);
+        } else if (current && current.kind === 'hop-step' && ! /^\[JobSeeker\]/.test(normalized)) {
+          // A continuation line - a stack trace, a wrapped message - belongs to
+          // whichever transform is currently speaking.
+          kind = 'hop-step';
+          hopSectionOwner = current.owner || '';
+        }
+      }
+
       var taskMatch = TASK_LINE.exec(normalized);
       var ownerMatch = taskMatch ? null : TASK_OWNED_LINE.exec(normalized);
       var attributed = false;
@@ -288,16 +325,19 @@
 
       // Two tasks in a row are the same kind but must not share a section, and
       // concurrent tasks interleave, so the owning task breaks the group as
-      // well as the kind does.
+      // well as the kind does. The same holds for two transforms in a row.
       var startsSection = ! current || current.kind !== kind ||
-        (kind === 'task' && attributed && current.taskId !== taskId);
+        (kind === 'task' && attributed && current.taskId !== taskId) ||
+        (kind === 'hop-step' && hopSectionOwner !== '' && current.owner !== hopSectionOwner);
 
       if (startsSection) {
         occurrences[kind] = (occurrences[kind] || 0) + 1;
         current = {
           id: kind + '-' + occurrences[kind],
           kind: kind,
-          title: kind === 'task' && taskId ? 'Task ' + taskId : SECTION_META[kind].title,
+          title: kind === 'task' && taskId
+            ? 'Task ' + taskId
+            : (kind === 'hop-step' && hopSectionOwner ? hopSectionOwner : SECTION_META[kind].title),
           icon: SECTION_META[kind].icon,
           lines: [],
           lineCount: 0,
@@ -305,6 +345,10 @@
         };
         if (kind === 'task') {
           current.taskId = taskId;
+          current.owner = taskId;
+        }
+        if (kind === 'hop-step' && hopSectionOwner) {
+          current.owner = hopSectionOwner;
         }
         sections.push(current);
       }
@@ -314,40 +358,38 @@
       current.hasError = current.hasError || hasError(normalizedLine(line));
     });
 
-    // Concurrent tasks interleave line by line. Every line is attributed to the
-    // task that wrote it, so a run of task sections can be regrouped into one
-    // section per task - which is what makes a parallel DAG readable at all.
-    // Order inside a task is preserved; only the interleaving between
-    // simultaneous tasks is undone, and that ordering carried no meaning.
-    // Non-task sections are left where they are, so the console still reads
-    // Jenkins, then setup, then the tasks, then the build result.
+    // Concurrent tasks and Hop transforms interleave line by line. Regroup each
+    // contiguous run by owner so a graph click opens the complete output for
+    // that node rather than whichever one-line fragment happened to come first.
+    // Order inside an owner is preserved; unrelated phases stay in place.
     var regrouped = [];
     var cursor = 0;
     while (cursor < sections.length) {
-      if (sections[cursor].kind !== 'task') {
+      var ownedKind = sections[cursor].kind;
+      if (ownedKind !== 'task' && ownedKind !== 'hop-step') {
         regrouped.push(sections[cursor]);
         cursor += 1;
         continue;
       }
       var end = cursor;
-      while (end < sections.length && sections[end].kind === 'task') {
+      while (end < sections.length && sections[end].kind === ownedKind) {
         end += 1;
       }
-      var byTask = {};
+      var byOwner = {};
       var seenOrder = [];
       sections.slice(cursor, end).forEach(function(section) {
-        var key = section.taskId || '';
-        if (! byTask[key]) {
-          byTask[key] = section;
+        var key = section.owner || '';
+        if (! byOwner[key]) {
+          byOwner[key] = section;
           seenOrder.push(key);
           return;
         }
-        var target = byTask[key];
+        var target = byOwner[key];
         target.lines = target.lines.concat(section.lines);
         target.lineCount += section.lineCount;
         target.hasError = target.hasError || section.hasError;
       });
-      seenOrder.forEach(function(key) { regrouped.push(byTask[key]); });
+      seenOrder.forEach(function(key) { regrouped.push(byOwner[key]); });
       cursor = end;
     }
     sections = regrouped;
@@ -418,6 +460,9 @@
         byOrigin[origin] = {
           id: 'hop-' + order.length,
           kind: kind,
+          // What this section is about, so a caller can ask for "the console
+          // for the transform I just clicked on the canvas".
+          owner: origin === '' ? '' : origin,
           title: origin === '' ? SECTION_META['hop-log'].title : origin,
           icon: SECTION_META[kind].icon,
           lines: [],
@@ -447,11 +492,7 @@
   //   main - Starting action [load]
   //   main - Finished action [load] (result=[true])
   var HOP_METRICS = /\(\s*I\s*=\s*(\d+)\s*,\s*O\s*=\s*(\d+)\s*,\s*R\s*=\s*(\d+)\s*,\s*W\s*=\s*(\d+)\s*,\s*U\s*=\s*(\d+)\s*,\s*E\s*=\s*(\d+)\s*\)/;
-  var HOP_ACTION_START = /^Starting action \[([\s\S]+)\]\s*$/;
-  var HOP_ACTION_END = /^Finished action \[([\s\S]+?)\]\s*\(result=\[([^\]]*)\]\)/;
   var HOP_TIMESTAMP = /^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+-\s+([\s\S]*)$/;
-  // A transform logs once per copy, as "<name>.<copy>".
-  var HOP_COPY_SUFFIX = /\.\d+$/;
 
   /**
    * Split a Hop log line into its origin and message.
@@ -568,7 +609,9 @@
         touchedById: {},
         knownIds: {},
         rawVisible: false,
-        lastSectionId: ''
+        lastSectionId: '',
+        focusedOwner: '',
+        focusUntil: 0
       };
     }
 
@@ -638,6 +681,7 @@
   function render(host, parsed, options) {
     options = options || {};
     var state = stateFor(host);
+    state.options = options;
     var previousLastId = state.lastSectionId;
     var fragment = document.createDocumentFragment();
     var toolbar = element('div', 'job-console-toolbar');
@@ -662,6 +706,9 @@
 
       details.setAttribute('data-console-section-id', section.id);
       details.setAttribute('data-console-kind', section.kind);
+      if (section.owner) {
+        details.setAttribute('data-console-owner', section.owner);
+      }
 
       if (isNew) {
         state.openById[section.id] = defaultOpen(section, index, parsed.sections.length, options);
@@ -670,6 +717,12 @@
         if (options.live && previousLastId && previousLastId !== section.id && ! state.touchedById[previousLastId]) {
           state.openById[previousLastId] = false;
         }
+      }
+
+      if (section.owner && state.focusedOwner && Date.now() < state.focusUntil &&
+          String(section.owner).replace(HOP_COPY_SUFFIX, '').toLowerCase() === state.focusedOwner) {
+        details.classList.add('job-console-section-focus');
+        state.openById[section.id] = true;
       }
 
       details.open = !! state.openById[section.id];
@@ -742,6 +795,86 @@
     });
   }
 
+  /**
+   * Open, scroll to and flash the console section belonging to one task or Hop
+   * transform.
+   *
+   * Clicking a node on a graph is a question - "what did *this* one print?" -
+   * and the answer is already on screen, just some distance down a log of
+   * everything. This takes the reader there instead of making them hunt.
+   *
+   * Returns the section element, or null when the run produced no output for
+   * that owner, so a caller can say so rather than appearing to do nothing.
+   */
+  function focusSection(target, owner, options) {
+    options = options || {};
+    var host = resolveHost(target);
+    owner = String(owner == null ? '' : owner).trim();
+    if (! host || owner === '') {
+      return null;
+    }
+
+    var state = stateFor(host);
+    // A graph click always means "show me the grouped section". If the reader
+    // had switched to the raw log, restore the grouped view before locating it.
+    if (state.rawVisible) {
+      state.rawVisible = false;
+      render(host, parserFor(state.options)(state.text), state.options);
+    }
+
+    var sections = host.querySelectorAll('[data-console-owner]');
+    var match = null;
+    var ownerKey = owner.replace(HOP_COPY_SUFFIX, '').toLowerCase();
+    Array.prototype.forEach.call(sections, function(details) {
+      var candidate = String(details.getAttribute('data-console-owner') || '').trim();
+      if (! match && (candidate === owner || candidate.replace(HOP_COPY_SUFFIX, '').toLowerCase() === ownerKey)) {
+        match = details;
+      }
+    });
+    if (! match) {
+      return null;
+    }
+
+    // Opening it counts as the reader's own choice, so live polling must not
+    // fold it shut again on the next tick.
+    var id = match.getAttribute('data-console-section-id');
+    if (id) {
+      state.openById[id] = true;
+      state.touchedById[id] = true;
+    }
+    state.focusedOwner = ownerKey;
+    state.focusUntil = Date.now() + 3000;
+    match.open = true;
+
+    if (options.scroll !== false && typeof match.scrollIntoView === 'function') {
+      match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    var summary = match.querySelector('.job-console-summary');
+    if (options.focus !== false && summary && typeof summary.focus === 'function') {
+      try { summary.focus({preventScroll: true}); } catch (error) { summary.focus(); }
+    }
+
+    if (options.highlight !== false) {
+      match.classList.remove('job-console-section-focus');
+      // Reading offsetWidth restarts the animation when the same section is
+      // clicked twice; without it the class is added back in the same frame
+      // and nothing appears to happen.
+      void match.offsetWidth;
+      match.classList.add('job-console-section-focus');
+      if (typeof window !== 'undefined' && window.setTimeout) {
+        window.setTimeout(function() {
+          match.classList.remove('job-console-section-focus');
+          if (state.focusedOwner === ownerKey) {
+            state.focusedOwner = '';
+            state.focusUntil = 0;
+          }
+        }, 3000);
+      }
+    }
+
+    return match;
+  }
+
   function resolveHost(target) {
     if (typeof target === 'string') {
       return document.querySelector(target);
@@ -783,6 +916,7 @@
   return {
     appendText: appendText,
     classifyLine: classifyLine,
+    focusSection: focusSection,
     getText: getText,
     hopNodeState: hopNodeState,
     parse: parse,

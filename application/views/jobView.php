@@ -370,6 +370,36 @@
     margin-top: 8px;
   }
 
+  .job-view-hop-panel .job-view-hop-header { align-items:center; display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .job-view-hop-panel .job-view-hop-file { color:#777; font-size:12px; }
+  .job-view-hop-panel .job-view-hop-reload { margin-left:auto; }
+  .job-view-hop-panel .hop-canvas-host { position:relative; background:#f7f9fb; border:1px solid #e4e7ea; border-radius:4px; max-height:48vh; overflow:auto; }
+  .job-view-hop-panel .hop-canvas { display:block; min-height:260px; width:100%; }
+  .job-view-hop-panel .hop-canvas-empty { color:#8a9199; padding:34px; text-align:center; }
+  .job-view-hop-panel .hop-canvas-toolbar { display:flex; gap:4px; position:absolute; right:8px; top:8px; z-index:2; }
+  .job-view-hop-panel .hop-canvas-toolbar .btn { font-size:13px; line-height:18px; padding:1px 0; width:26px; }
+  .job-view-hop-panel .hop-node { cursor:pointer; }
+  .job-view-hop-panel .hop-node rect { fill:#fff; stroke:#b8c2cc; stroke-width:1.5; }
+  .job-view-hop-panel .hop-node:hover rect,.job-view-hop-panel .hop-node:focus rect { stroke:#3c8dbc; stroke-width:2; }
+  .job-view-hop-panel .hop-node-name { fill:#2f3d4a; font:600 11px/1 "Helvetica Neue",Helvetica,Arial,sans-serif; }
+  .job-view-hop-panel .hop-node-type { fill:#8a9199; font:9px/1 "Helvetica Neue",Helvetica,Arial,sans-serif; }
+  .job-view-hop-panel .hop-node-metrics { fill:#3c8dbc; font:9px/1 "Helvetica Neue",Helvetica,Arial,sans-serif; }
+  .job-view-hop-panel .hop-node-start rect,.job-view-hop-panel .hop-node-success rect,.job-view-hop-panel .hop-node.is-complete rect { fill:#eef7ee; stroke:#45a145; }
+  .job-view-hop-panel .hop-node-failure rect,.job-view-hop-panel .hop-node.is-failed rect { fill:#fdeeee; stroke:#d9534f; }
+  .job-view-hop-panel .hop-node.is-running rect { fill:#dcefff; stroke:#3c8dbc; stroke-width:2.5; }
+  .job-view-hop-panel .hop-node-passthrough rect { stroke-dasharray:4 3; }
+  .job-view-hop-panel .hop-edge { fill:none; stroke:#9aa5b1; stroke-width:1.8; }
+  .job-view-hop-panel .hop-edge-success { stroke:#45a145; }
+  .job-view-hop-panel .hop-edge-failure { stroke:#d9534f; }
+  .job-view-hop-panel .hop-edge.is-disabled { stroke:#c9d2d9; stroke-dasharray:5 4; }
+  .job-view-hop-panel .hop-edge-head { fill:#9aa5b1; stroke:none; }
+  .job-view-hop-panel .hop-edge-head.hop-edge-success { fill:#45a145; }
+  .job-view-hop-panel .hop-edge-head.hop-edge-failure { fill:#d9534f; }
+  .job-view-hop-panel .hop-edge-head.hop-edge-disabled { fill:#c9d2d9; }
+  .job-view-hop-panel .hop-note rect { fill:#fffbe6; stroke:#e6d999; }
+  .job-view-hop-panel .hop-note text { fill:#7a6f3d; font:10px/1 "Helvetica Neue",Helvetica,Arial,sans-serif; }
+  .job-view-hop-detail { color:#777; font-size:12px; margin-top:7px; }
+
   details.job-xml-details summary {
     cursor: pointer;
     font-weight: 700;
@@ -588,6 +618,7 @@
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-task-graph.css?v=2">
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=4"></script>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-task-graph.js?v=2"></script>
 
 <script type="text/javascript">
@@ -611,6 +642,9 @@
     // mistyped number can be answered with the range that would have worked.
     var runComparisonRange = null;
     var loadedJobDetails = {};
+    var hopGraphUrl = <?php echo json_encode(base_url() . 'hop/graph'); ?>;
+    var hopJobs = <?php echo json_encode(isset($hop_jobs) && is_array($hop_jobs) ? $hop_jobs : array(), JSON_UNESCAPED_SLASHES); ?> || [];
+    var hopJobsByName = {};
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
     var environmentHelper = window.JobSeekerEnvironment || {
       detectFromConfig: function(xmlText, jobName) { return this.detectFromJob({name: jobName}); },
@@ -620,6 +654,10 @@
       label: function() { return '<span class="label label-default">Unknown</span>'; },
       text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
     };
+
+    $.each(hopJobs, function(index, job) {
+      if (job && job.job_name) { hopJobsByName[String(job.job_name)] = job; }
+    });
 
     if (jenkinsUrl && jenkinsUrl.charAt(jenkinsUrl.length - 1) !== '/') {
       jenkinsUrl += '/';
@@ -1946,6 +1984,7 @@
         var config = detail.config || parseJobConfig('', detail.name);
         var consoleText = detail.consoleText || '';
         var consoleId = 'jobViewConsoleLog-' + index;
+        var hopMetadata = hopJobsByName[detail.name] || null;
         consoleMounts.push({id: consoleId, text: consoleText || 'No console output available.', live: detail.status === 'RUNNING'});
         var boxClass = detail.status === 'FAILURE' || detail.status === 'ABORTED' || detail.status === 'UNSTABLE' ? 'box-danger' : (detail.status === 'SUCCESS' ? 'box-success' : 'box-primary');
         var description = detail.description || 'No description.';
@@ -1979,7 +2018,8 @@
             '<div class="job-detail-section"><h4>Description</h4><p>' + escapeHtml(description) + '</p>' + healthText(detail) + '</div>' +
             '<div class="job-detail-section"><h4>Execution Runtime</h4>' + renderRuntimeConfig(config) + '</div>' +
             '<div class="job-detail-section"><h4>Connectors &amp; datasets</h4><div class="job-dependency-panel" id="jobDependencies-' + index + '" data-job="' + escapeAttribute(detail.name) + '" data-env="' + escapeAttribute(environmentHelper.text(config.environmentInfo)) + '"><p class="text-muted jd-empty">Loading…</p></div></div>' +
-            '<div class="job-detail-section"><h4>Task graph</h4><div class="job-task-panel" id="jobTasks-' + index + '" data-job="' + escapeAttribute(detail.name) + '" data-env="' + escapeAttribute(environmentHelper.text(config.environmentInfo)) + '"><p class="text-muted jtg-empty">Loading…</p></div></div>' +
+            (hopMetadata ? '<div class="job-detail-section job-view-hop-panel" data-job="' + escapeAttribute(detail.name) + '" data-console="#' + consoleId + '" data-live="' + (detail.status === 'RUNNING' ? '1' : '0') + '"><div class="job-view-hop-header"><h4 style="margin:0">Apache Hop canvas</h4><span class="job-view-hop-file">' + escapeHtml(hopMetadata.entry_file || '') + '</span><button type="button" class="btn btn-default btn-xs job-view-hop-reload" title="Re-read the Hop file"><i class="fa fa-refresh"></i></button></div><div class="job-view-hop-canvas"><p class="text-muted">Loading…</p></div><div class="job-view-hop-detail">Select a transform or action to focus its console output.</div></div>' : '') +
+            '<div class="job-detail-section"><h4>Task graph</h4><div class="job-task-panel" id="jobTasks-' + index + '" data-job="' + escapeAttribute(detail.name) + '" data-env="' + escapeAttribute(environmentHelper.text(config.environmentInfo)) + '" data-console="#' + consoleId + '"><p class="text-muted jtg-empty">Loading…</p></div></div>' +
             '<div class="job-detail-section"><h4>Build History</h4>' + renderBuildHistory(detail.builds) + '</div>' +
             '<div class="row">' +
               '<div class="col-md-6"><div class="job-detail-section"><h4>Schedule</h4>' + renderList(config.schedules) + '</div></div>' +
@@ -2022,6 +2062,12 @@
         });
       }
 
+      if (window.JobSeekerHopCanvas) {
+        $('#jobDetailsGrid .job-view-hop-panel[data-job]').each(function() {
+          mountJobViewHopCanvas($(this));
+        });
+      }
+
       $.each(consoleMounts, function(index, mount) {
         if (window.JobSeekerConsole) {
           window.JobSeekerConsole.setText('#' + mount.id, mount.text, {live: mount.live});
@@ -2030,6 +2076,57 @@
         }
       });
     }
+
+    function focusJobViewConsole(panel, owner, label) {
+      var target = panel.attr('data-console');
+      if (! target || ! window.JobSeekerConsole || ! window.JobSeekerConsole.focusSection) {
+        return;
+      }
+      var section = window.JobSeekerConsole.focusSection(target, owner, {scroll: true, highlight: true});
+      if (! section && window.toastr) {
+        window.toastr.info('This ' + label + ' has not written anything to the latest console yet.', String(owner), {timeOut: 2500});
+      }
+    }
+
+    function mountJobViewHopCanvas(panel) {
+      var jobName = String(panel.attr('data-job') || '');
+      var metadata = hopJobsByName[jobName] || {};
+      var canvas = panel.find('.job-view-hop-canvas');
+      var reload = panel.find('.job-view-hop-reload');
+      if (! jobName || ! window.JobSeekerHopCanvas) { return; }
+
+      reload.prop('disabled', true).find('i').addClass('fa-spin');
+      $.getJSON(hopGraphUrl, {
+        job: jobName,
+        live: panel.attr('data-live') === '1' && String(metadata.engine || '') === 'server' ? '1' : '0'
+      }).done(function(graph) {
+        panel.find('.job-view-hop-file').text(graph.file || metadata.entry_file || '');
+        var nodes = graph.live && graph.live.nodes ? graph.live.nodes : {};
+        var consoleTarget = panel.attr('data-console');
+        if (! Object.keys(nodes).length && consoleTarget && window.JobSeekerConsole && window.JobSeekerConsole.hopNodeState) {
+          nodes = window.JobSeekerConsole.hopNodeState(window.JobSeekerConsole.getText(consoleTarget), {kind: graph.kind}).nodes;
+        }
+        window.JobSeekerHopCanvas.render(canvas.get(0), graph, {
+          nodeState: nodes,
+          onSelect: function(node) {
+            var state = nodes[node.name];
+            panel.find('.job-view-hop-detail').text(node.name + (node.type ? ' · ' + node.type : '') +
+              (state ? ' · ' + state.status + ' · read ' + state.read + ', written ' + state.written + ', errors ' + state.errors : ''));
+            focusJobViewConsole(panel, node.name, 'transform');
+          }
+        });
+      }).fail(function(xhr) {
+        var message = xhr && xhr.responseJSON && xhr.responseJSON.error
+          ? xhr.responseJSON.error : 'The Apache Hop canvas could not be read.';
+        canvas.html('<div class="hop-canvas-empty">' + escapeHtml(message) + '</div>');
+      }).always(function() {
+        reload.prop('disabled', false).find('i').removeClass('fa-spin');
+      });
+    }
+
+    $(document).on('click', '.job-view-hop-reload', function() {
+      mountJobViewHopCanvas($(this).closest('.job-view-hop-panel'));
+    });
 
     // Task graph loader. Kept next to the dependency panel loader so both
     // read-only job panels behave the same: fetch once per render, and let the
@@ -2053,24 +2150,31 @@
       }
     }
 
-    function mountTaskGraph(panel, runKey) {
+    function mountTaskGraph(panel, runKey, buildNumber, queueId) {
       var jobName = panel.data('job');
       var environment = panel.data('env');
       if (!jobName || !window.JobSeekerTaskGraph) { return; }
 
       clearTaskGraphTimer(panel);
-      window.JobSeekerTaskGraph.load('JobView', jobName, environment, runKey).done(function(data) {
+      window.JobSeekerTaskGraph.load('JobView', jobName, environment, runKey, buildNumber, queueId).done(function(data) {
         window.JobSeekerTaskGraph.render(panel.get(0), data, {
           environment: environment,
+          onSelect: function(taskId) {
+            focusJobViewConsole(panel, taskId, 'task');
+          },
           onRun: function(response) {
             if (window.toastr) {
               window.toastr.success(
                 response.expectedBuild ? 'Queued as build #' + response.expectedBuild + '.' : 'Build queued.',
                 'Task run');
             }
-            // Follow the build that was just queued rather than the run that is
-            // on screen, so the panel switches to it as soon as it starts.
-            window.setTimeout(function() { mountTaskGraph(panel, ''); }, 2000);
+            // Follow the build that was just queued, by number rather than by
+            // "the latest run": the panel then shows it as queued and fills in
+            // as its tasks start, instead of sitting on the previous run until
+            // the new one happens to overtake it.
+            var queued = response && response.expectedBuild;
+            var queue = response && response.queueId;
+            mountTaskGraph(panel, '', queued || '', queue || '');
           },
           onRunFailed: function(xhr) {
             if (window.toastr) {
@@ -2079,9 +2183,9 @@
           }
         });
 
-        if (data && data.runState === 'running') {
+        if (data && (data.runState === 'running' || data.runState === 'pending')) {
           taskGraphTimers[taskGraphKey(panel)] = window.setTimeout(function() {
-            mountTaskGraph(panel, runKey);
+            mountTaskGraph(panel, runKey, buildNumber, queueId);
           }, TASK_GRAPH_LIVE_INTERVAL_MS);
         }
       }).fail(function() {

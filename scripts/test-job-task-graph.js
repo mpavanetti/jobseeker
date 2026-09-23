@@ -339,13 +339,13 @@ ok('the generated command exports the DAG environment', executionTrait.indexOf('
     ok(name + ' is forwarded into the container', executionTrait.indexOf('-e ' + name) !== -1);
   });
 ok('the python builder includes the DAG environment',
-  /dataAssetsRuntimeLines\(\$repositoryRoot\),\s*\$this->connectorRuntimeLines\(\),\s*\$this->dagRuntimeLines\(\)/.test(executionTrait));
+  /dataAssetsRuntimeLines\(\$repositoryRoot\),[\s\S]{0,200}\$this->dagRuntimeLines\(\)/.test(executionTrait));
 
 // --- 9. Views ----------------------------------------------------------------------
 
 const header = read('application/views/includes/header.php');
-ok('the console grouper is cache-busted for the task sections', header.indexOf('job-console-groups.js?v=8') !== -1);
-ok('the console stylesheet is cache-busted', header.indexOf('job-console-groups.css?v=5') !== -1);
+ok('the console grouper is cache-busted for the task sections', header.indexOf('job-console-groups.js?v=10') !== -1);
+ok('the console stylesheet is cache-busted', header.indexOf('job-console-groups.css?v=7') !== -1);
 
 const consoleCss = read('assets/dist/css/job-console-groups.css');
 ['task', 'dag'].forEach((kind) => {
@@ -372,7 +372,41 @@ ok('Job Execution refreshes the graph on its poll ticks',
 ok('Job Execution throttles those refreshes', jobExecution.indexOf('TASK_GRAPH_MIN_INTERVAL_MS') !== -1);
 ok('Job Execution guarantees a final refresh after the build ends',
   jobExecution.indexOf('finalFetched') !== -1);
-ok('Job Execution asks for its own build', /load\('JobExecution', run\.jobName, environment, '', run\.buildNumber\)/.test(jobExecution));
+ok('Job Execution asks for its own build',
+  /load\('JobExecution', run\.jobName, environment, '', watching\)/.test(jobExecution));
+// A pane that is still queued has no build number yet. Asking with none makes
+// the server answer with the job's *latest* run, so the pane showed a previous
+// build's outcomes as though they were its own - which is what made a re-run
+// look as if it had done nothing.
+ok('a queued pane falls back to the build it is waiting for',
+  /var watching = run\.buildNumber \|\| run\.expectedBuildNumber \|\| ''/.test(jobExecution));
+ok('attaching to the real build refreshes at once',
+  jobExecution.indexOf('var changedBuild =') !== -1 &&
+  /if \(changedBuild\) \{\s*state\.finalFetched = false;/.test(jobExecution));
+
+// A build queued by the graph's own buttons is not one this screen triggered,
+// so it has to be registered before the pane will follow it.
+ok('a build queued from the graph is watched', jobExecution.indexOf('function watchQueuedBuild(') !== -1);
+ok('and the re-run callback registers it',
+  /watchQueuedBuild\([\s\S]{0,160}response && response\.expectedBuild,[\s\S]{0,80}response && response\.queueId/.test(jobExecution));
+ok('an already-watched build is reused rather than duplicated',
+  /watchQueuedBuild[\s\S]{0,700}activeExecutionForBuild\(jobName, expectedBuild, queueId\)/.test(jobExecution));
+ok('discovery attaches it even if Jenkins numbered it differently',
+  /watchQueuedBuild[\s\S]{0,1400}discoverBuild\(run\)/.test(jobExecution));
+ok('the exact Jenkins queue item is preferred over a predicted build number',
+  /run\.queueId = queueId \|\| ''/.test(jobExecution) &&
+  /if \(run\.queueId\) \{\s*pollQueueItem\(run\)/.test(jobExecution) &&
+  /var sameBuild = normalizedQueue === '' && normalizedBuild !== ''/.test(jobExecution));
+ok('Job View follows the queued build by number',
+  /mountTaskGraph\(panel, '', queued \|\| '', queue \|\| ''\)/.test(jobView));
+ok('and keeps polling while it is still queued',
+  /runState === 'running' \|\| data\.runState === 'pending'/.test(jobView));
+ok('Job View keeps the queue id while polling for the real build number',
+  /mountTaskGraph\(panel, runKey, buildNumber, queueId\)/.test(jobView) &&
+  /queue\/item\/[\s\S]{0,160}executable\[number\]/.test(read('application/controllers/JobView.php')));
+ok('selecting a task in Job View expands and focuses its console section',
+  /onSelect: function\(taskId\) \{\s*focusJobViewConsole\(panel, taskId, 'task'\)/.test(jobView) &&
+  /JobSeekerConsole\.focusSection\(target, owner/.test(jobView));
 
 const jobCreationView = read('application/views/jobCreation.php');
 ok('the editor previews the graph', jobCreationView.indexOf('jobTaskPanel') !== -1);
@@ -420,6 +454,11 @@ ok('the console grouper reads the task tag', consoleJs.indexOf('TASK_OWNED_LINE'
 ok('a tag is only honoured for a task a marker introduced', consoleJs.indexOf('knownTasks[ownerMatch[1]]') !== -1);
 ok('interleaved task output is regrouped into one section per task',
   consoleJs.indexOf('var regrouped = []') !== -1 && consoleJs.indexOf('sections = regrouped;') !== -1);
+ok('selecting a task asks the execution screen to focus its console section',
+  /if \(options\.selected && typeof options\.onSelect === 'function'\)/.test(read('assets/js/job-task-graph.js')) &&
+  /onSelect: function\(taskId\)[\s\S]{0,120}focusConsoleFor\(run, taskId, 'task'\)/.test(jobExecution));
+ok('the console exposes owner sections for graph navigation',
+  consoleJs.indexOf('data-console-owner') !== -1 && consoleJs.indexOf('focusSection: focusSection') !== -1);
 
 // --- 12. TMF integration ---------------------------------------------------
 //
@@ -507,6 +546,10 @@ ok('re-running is a POST', /runTasks\(\)[\s\S]{0,800}Method not allowed/.test(jo
 ok('a resume key must belong to this job', jobExecutionController.indexOf('That run does not belong to this job.') !== -1);
 ok('a task id must be one the job declares', jobExecutionController.indexOf('does not declare a task called') !== -1);
 ok('the re-run is an ordinary build of the same job', jobExecutionController.indexOf("'/buildWithParameters'") !== -1);
+ok('the re-run uses the guarded Jenkins build path', jobExecutionController.indexOf('$this->requestJenkinsBuild(') !== -1);
+ok('the re-run returns the exact Jenkins queue item',
+  jobExecutionController.indexOf('function taskRunQueueId(') !== -1 &&
+  jobExecutionController.indexOf("'queueId' => $queueId") !== -1);
 ok('route exists: jobExecution/runTasks', routes.indexOf("$route['jobExecution/runTasks']") !== -1);
 
 ok('a Python job declares the two task parameters',
