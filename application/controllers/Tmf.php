@@ -6,6 +6,17 @@ require APPPATH . '/libraries/BaseController.php';
 class Tmf extends BaseController
 {
     /**
+     * The four filter dropdowns are SELECT DISTINCT over the whole tmf table.
+     * Covering indexes keep each one off the table itself, but the environment
+     * predicate is UPPER(TRIM(...)) and so still has to be evaluated for every
+     * index entry - about 250k of them on a populated instance. The values feed
+     * filter lists that change only when a genuinely new job name or dimension
+     * first appears, so a short cache is worth far more here than another index.
+     * Same adapter, TTL shape and ?fresh=1 bypass as Dashboard::overview().
+     */
+    const FILTER_CACHE_TTL = 30;
+
+    /**
      * This is default constructor of the class
      */
    public function __construct()
@@ -81,6 +92,34 @@ class Tmf extends BaseController
     }
 
     /**
+     * Build the filter dropdown option lists, cached per environment.
+     *
+     * The cache is bypassed with ?fresh=1 so an operator who has just run a new
+     * job can force the new name into the lists without waiting out the TTL.
+     */
+    private function filterOptions($environment)
+    {
+        $this->load->driver('cache', array('adapter' => 'file'));
+        $cacheKey = 'tmf_filter_options_' . preg_replace('/[^A-Za-z0-9_]/', '_', (string) $environment);
+        $fresh = in_array((string) $this->input->get('fresh'), array('1', 'true', 'yes'), TRUE);
+
+        $options = $fresh ? FALSE : $this->cache->get($cacheKey);
+
+        if ($options === FALSE) {
+            $options = array(
+                'status' => $this->model->listStatus($environment),
+                'jobName' => $this->model->listJobName($environment),
+                'dimension' => $this->model->listDimension($environment),
+                'reprocess' => $this->model->listReprocess($environment),
+                'environment' => $this->model->listEnvironment()
+            );
+            $this->cache->save($cacheKey, $options, self::FILTER_CACHE_TTL);
+        }
+
+        return $options;
+    }
+
+    /**
      * Index Page for this controller.
      */
     public function index()
@@ -89,11 +128,12 @@ class Tmf extends BaseController
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
           $selectedEnvironment = $this->selectedEnvironmentFilter();
 
-          $data["listStatus"] = $this->model->listStatus($selectedEnvironment);
-          $data["listJobName"] = $this->model->listJobName($selectedEnvironment);
-          $data["listDimension"] = $this->model->listDimension($selectedEnvironment);
-          $data["listReprocess"] = $this->model->listReprocess($selectedEnvironment);
-		  $data["listEnvironment"] = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironment(), 'environment');
+          $filters = $this->filterOptions($selectedEnvironment);
+          $data["listStatus"] = $filters['status'];
+          $data["listJobName"] = $filters['jobName'];
+          $data["listDimension"] = $filters['dimension'];
+          $data["listReprocess"] = $filters['reprocess'];
+		  $data["listEnvironment"] = $this->jobSeekerFilterEnvironmentRows($filters['environment'], 'environment');
           $data["selectedEnvironment"] = $selectedEnvironment;
           $this->global['selectedEnvironment'] = $data["selectedEnvironment"];
 
@@ -115,6 +155,34 @@ class Tmf extends BaseController
 
         $this->loadViews("tmf", $this->global, $data, NULL);
 
+    }
+
+    /**
+     * Results for a single task DAG run.
+     *
+     * A task inside a task DAG opens an ordinary TMF transaction, so its row is
+     * already on this page; what was missing was a way to see the rows of one
+     * job run together. The task graph on Job View links here.
+     */
+    public function taskRun($runKey = '')
+    {
+        $runKey = trim((string) $runKey);
+        if ($runKey === '' || strlen($runKey) > 64 || ! preg_match('/^[A-Za-z0-9._-]+$/', $runKey)) {
+            redirect('tmf');
+            return;
+        }
+
+        $environment = $this->selectedEnvironmentFilter();
+        $data["jobs"] = $this->model->listByRun($runKey, $environment);
+        $this->addResultWindowMetadata($data);
+        $data["role"] = $this->role;
+        $data["selectedEnvironment"] = $environment;
+        $data["taskRunKey"] = $runKey;
+
+        $this->global['pageTitle'] = 'Job Seeker : Task run '.$runKey;
+        $this->global['selectedEnvironment'] = $environment;
+
+        $this->loadViews("tmf", $this->global, $data, NULL);
     }
 
      function fetchData()

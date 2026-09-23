@@ -37,12 +37,6 @@ class DbSettings_model extends CI_Model
             'updated_at' => "datetime DEFAULT NULL AFTER `creation_date`"
         );
 
-        foreach ($columns as $name => $definition) {
-            if (! $this->db->field_exists($name, 'database_settings')) {
-                $this->db->query('ALTER TABLE `database_settings` ADD `'.$name.'` '.$definition);
-            }
-        }
-
         $lengths = array(
             'address' => 255,
             'schema' => 200,
@@ -51,12 +45,33 @@ class DbSettings_model extends CI_Model
             'oracle_ServiceName' => 200,
             'oracle_sid' => 200
         );
+
+        // This runs in the constructor, so every page that touches a connector
+        // pays for it. CodeIgniter's list_fields() has no cache - unlike
+        // list_tables() - so field_exists() costs a SHOW COLUMNS every single
+        // call: eight here, plus one information_schema round trip per width
+        // check, fourteen schema queries per request. One read answers both
+        // questions for every column at once.
+        //
+        // The snapshot is taken before the ALTERs below, which is safe because
+        // no column appears in both lists: a column this adds is created at its
+        // final width and never needs widening.
+        $existing = array();
+        foreach ($this->db->query(
+            'SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',
+            array('database_settings')
+        )->result_array() as $row) {
+            $existing[$row['COLUMN_NAME']] = $row['CHARACTER_MAXIMUM_LENGTH'];
+        }
+
+        foreach ($columns as $name => $definition) {
+            if (! array_key_exists($name, $existing)) {
+                $this->db->query('ALTER TABLE `database_settings` ADD `'.$name.'` '.$definition);
+            }
+        }
+
         foreach ($lengths as $name => $length) {
-            $column = $this->db->query(
-                'SELECT CHARACTER_MAXIMUM_LENGTH AS max_length FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',
-                array('database_settings', $name)
-            )->row();
-            if ($column && (int) $column->max_length < $length) {
+            if (array_key_exists($name, $existing) && (int) $existing[$name] < $length) {
                 $this->db->query('ALTER TABLE `database_settings` MODIFY `'.$name.'` varchar('.$length.') COLLATE utf8_unicode_ci NOT NULL');
             }
         }
