@@ -117,9 +117,93 @@ def main():
             assert page.locator(".run-compare-log .job-console-section").count() >= 3
             logs = page.evaluate("() => [...document.querySelectorAll('.run-compare-log .job-console-host')].map(host => JobSeekerConsole.getText(host))")
             assert all("batch=%s" % batch in log for batch, log in zip(("300", "200", "100"), logs))
+
+            # A build number that was never used is an ordinary typo. It used to
+            # repeat "could not be loaded (HTTP 404)" in all five detail rows and
+            # again over an empty console viewer, mark every parameter as
+            # "differs" because the absent run supplied nothing, and still claim
+            # to be comparing the full set of runs.
+            missing = 4096
+            page.fill("#runCompareBuilds", "1, 2, %d" % missing)
+            page.click("#runCompareGo")
+            page.wait_for_function(
+                "() => document.querySelectorAll('#runCompareResults th').length === 4", timeout=30000)
+            results = page.locator("#runCompareResults").inner_text()
+            status = page.locator("#runCompareStatus").inner_text()
+
+            assert "HTTP 404" not in results and "HTTP 404" not in status, results
+            # The explanation is stated once where the column is introduced, and
+            # once more as the body of that build's console panel, which is a
+            # different question being answered. What it must never do again is
+            # repeat itself down every detail row.
+            note = "No build #%d" % missing
+            header_text = page.locator("#runCompareResults thead").inner_text()
+            body_text = page.locator("#runCompareResults tbody").inner_text()
+            logs_text = page.locator(".run-compare-logs").inner_text()
+            assert header_text.count(note) == 1, header_text
+            assert body_text.count(note) == 0, body_text
+            assert logs_text.count(note) == 1, logs_text
+            assert results.count(note) == 2, results.count(note)
+            # Two real builds keep their console viewers; the absent one gets none.
+            assert page.locator(".run-compare-log").count() == 3
+            assert page.locator(".run-compare-log .job-console-host").count() == 2
+            # The absent column is marked, and its cells carry no invented values.
+            assert page.locator("#runCompareResults th.run-compare-absent").count() == 1
+            assert "Not supplied" not in results, results
+            # BATCH_SIZE genuinely differs across builds 1 and 2, so that row must
+            # still be highlighted - the fix suppresses false positives only.
+            batch_row = page.locator("#runCompareResults tr").filter(
+                has=page.locator("td strong", has_text="BATCH_SIZE")).first
+            assert "run-compare-different" in batch_row.get_attribute("class")
+            # The status line reports what was actually compared, and says which
+            # build numbers would have worked.
+            assert "2 of the 3 runs" in status, status
+            assert "#%d does not exist" % missing in status, status
+            assert "builds #1 to #3" in status, status
+
+            # Console differences. The three builds ran with BATCH_SIZE 100/200/300,
+            # so their logs differ in exactly that - but every log also carries
+            # timestamps, a PID and a random /tmp/jenkins<n>.sh path, which differ
+            # on every run. A raw line comparison would report that everything
+            # changed, so the volatile parts are masked before comparing.
+            page.fill("#runCompareBuilds", "3, 2, 1")
+            page.click("#runCompareGo")
+            page.wait_for_selector(".run-compare-diff-block", timeout=30000)
+            console_row = page.locator("#runCompareResults tr").filter(
+                has=page.locator("td strong", has_text="Console")).first
+            console_text = console_row.inner_text()
+            assert "Baseline for comparison" in console_text, console_text
+            assert console_text.count("Differs from #3") == 2, console_text
+
+            diff_text = page.locator(".run-compare-diff").inner_text()
+            # The batch values are the real difference and must be surfaced.
+            assert "batch=200" in diff_text and "batch=300" in diff_text, diff_text
+            # The masked noise must not be: no bare timestamps and no temp script
+            # path should have been reported as a difference.
+            assert "/tmp/jenkins" not in diff_text, diff_text
+            assert page.locator(".run-compare-diff-block").count() == 2
+            # Two builds, each compared to the baseline, both ways round.
+            assert page.locator(".run-compare-diff-added").count() >= 1
+            assert page.locator(".run-compare-diff-removed").count() >= 1
+
+            # Two runs of the same parameters have nothing left to differ on once
+            # the volatile parts are masked.
+            page.fill("#runCompareBuilds", "1, 1")
+            page.click("#runCompareGo")
+            page.wait_for_timeout(2000)
+
+            # Who started the run, and what code changed, are worth as much as the
+            # result when working out why two runs behaved differently.
+            page.fill("#runCompareBuilds", "3, 1")
+            page.click("#runCompareGo")
+            page.wait_for_selector(".run-compare-diff-block", timeout=30000)
+            labels = [t.strip() for t in page.locator("#runCompareResults tbody td strong").all_inner_texts()]
+            for expected in ("Triggered by", "Changes", "Console"):
+                assert expected in labels, labels
+
             assert not errors, errors
             browser.close()
-        print("Job run comparison end-to-end passed (3 builds, parameters, full logs, secret masking).")
+        print("Job run comparison end-to-end passed (3 builds, parameters, full logs, secret masking, absent build).")
     finally:
         if created:
             request("/job/%s/doDelete" % JOB, "POST", b"", "application/x-www-form-urlencoded", crumb)

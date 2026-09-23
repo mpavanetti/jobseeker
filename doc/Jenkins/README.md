@@ -53,6 +53,10 @@ Locate the API Token tab, click on Add new Token, write jobseeker in the field a
 ![JenkinsToken1](img/addnewtoken.JPG)
 
 <br>
-The generated token will appear, take it, save it , we'll be using in the next step, adding the jenkins user token into the jobseeker/application/config/config.json file
+The generated token will appear, take it and save it. Put it in your `.env` as
+`JENKINS_ADMIN_PASSWORD` (Docker Compose), or in the `jobseeker-secrets` Secret
+under `jenkins-admin-password` (Kubernetes). The Jenkins credential is read from
+the environment only - it is never read from `application/config/config.json`,
+which is tracked in git.
 
 ![JenkinsToken2](img/token.JPG)
