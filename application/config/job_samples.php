@@ -988,5 +988,578 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 PYTHON
+    ),
+    array(
+        'id' => 'python-task-dag',
+        'name' => 'Task DAG with retries and a cleanup step',
+        'family' => 'python',
+        'complexity' => 'intermediate',
+        'description' => 'Split one job into tasks that run in dependency order, with fan-out, per-task retries, a failure handler, and an always-runs cleanup.',
+        'tags' => array('task dag', 'tasks', 'retries', 'parallel'),
+        'integrations' => array('task_dag', 'jenkins', 'environments'),
+        'job_description' => 'A JobSeeker task DAG: several tasks inside one job, run in dependency order.',
+        'entry_point' => 'main.py',
+        'runtime' => 'local',
+        'code' => <<<'PYTHON'
+"""A JobSeeker task DAG.
+
+The job stays one Jenkins build on one executor. Inside it, `dag.run()` walks
+the graph: independent tasks overlap, a failed task retries on its own, and
+Job View draws every task with its own status.
+"""
+
+import random
+
+from jobseeker import dag
+
+
+@dag.task(id="extract", description="Read the source batch")
+def extract(ctx):
+    rows = [{"id": index, "amount": index * 3.5} for index in range(1, 25)]
+    # Small values travel between tasks with push/pull. Anything large belongs
+    # in a Data Asset instead.
+    ctx.push("rows", rows)
+    ctx.push("count", len(rows))
+    ctx.log(f"extracted {len(rows)} rows")
+
+
+@dag.task(id="validate", depends_on=["extract"], description="Reject malformed rows")
+def validate(ctx):
+    rows = ctx.pull("extract", "rows", [])
+    clean = [row for row in rows if row["amount"] >= 0]
+    ctx.push("clean", clean)
+    ctx.log(f"{len(clean)} of {len(rows)} rows passed validation")
+
+
+@dag.task(id="enrich", depends_on=["extract"], retries=2, retry_delay=2,
+          description="Call a flaky downstream service")
+def enrich(ctx):
+    # retries=2 means up to three attempts. ctx.attempt says which one this is,
+    # which is the honest way to write a test for flaky behaviour.
+    if ctx.attempt < 2 and random.random() < 0.6:
+        raise TimeoutError("the enrichment service did not answer in time")
+    ctx.push("enriched", True)
+    ctx.log(f"enrichment succeeded on attempt {ctx.attempt}")
+
+
+@dag.task(id="publish", depends_on=["validate", "enrich"], description="Write the curated batch")
+def publish(ctx):
+    clean = ctx.pull("validate", "clean", [])
+    total = sum(row["amount"] for row in clean)
+    ctx.log(f"published {len(clean)} rows totalling {total:.2f}")
+
+
+@dag.task(id="alert", depends_on=["publish"], trigger="FAILURE",
+          description="Runs only when an upstream task failed")
+def alert(ctx):
+    failed = [task for task, status in ctx.upstream.items() if status != "SUCCESS"]
+    ctx.log(f"would notify the on-call owner about: {', '.join(failed)}")
+
+
+@dag.task(id="cleanup", depends_on=["publish", "alert"], trigger="ALWAYS",
+          description="Runs whatever happened upstream")
+def cleanup(ctx):
+    ctx.log("released temporary resources")
+
+
+if __name__ == "__main__":
+    dag.run()
+PYTHON
+    ),
+    array(
+        'id' => 'python-task-dag-assets',
+        'name' => 'Task DAG over governed data assets',
+        'family' => 'python',
+        'complexity' => 'advanced',
+        'description' => 'A multi-file task DAG that declares the Data Assets each task consumes and produces, tracks two tasks in TMF, and ships pytest coverage.',
+        'tags' => array('task dag', 'data asset', 'tmf', 'multi-file', 'tests'),
+        'integrations' => array('task_dag', 'tmf', 'data_assets', 'tests', 'jenkins', 'environments'),
+        'job_description' => 'A JobSeeker task DAG whose tasks declare the datasets they read and write.',
+        'entry_point' => 'main.py',
+        'runtime' => 'local',
+        'run_tests' => TRUE,
+        'requirements' => '',
+        'code' => <<<'PYTHON'
+"""A task DAG whose edges follow the data.
+
+Each task names the Data Assets it consumes and produces. Those declarations
+are what Job View shows next to the graph, and they make the dependency between
+two tasks readable without tracing the code.
+
+Every asset lookup degrades to a built-in sample when nothing is registered, so
+this job runs on a fresh stack before any Data Asset exists.
+
+Two tasks are declared with track=True and a dimension, which opens a TMF
+transaction for them; the row counts they report show up in the task graph's
+Rows column and on the Results page.
+"""
+
+from jobseeker import dag
+
+from pipeline.rules import reject_reasons, summarise
+
+
+SAMPLE_ROWS = [
+    {"customer_id": "1001", "email": "ada@example.com", "spend": "128.40"},
+    {"customer_id": "1002", "email": "grace@example.com", "spend": "64.00"},
+    {"customer_id": "", "email": "broken@example.com", "spend": "10.00"},
+]
+
+
+@dag.task(id="load_customers", produces=["customers-raw"],
+          description="Read the inbound customer batch")
+def load_customers(ctx):
+    # required=False covers both an asset that is not in the catalog and a stack
+    # that has no catalog at all, so this starter runs before any Data Asset
+    # has been published.
+    source = ctx.asset("customers-inbound", required=False)
+    rows = source.read() if source is not None else SAMPLE_ROWS
+    if source is None:
+        ctx.log("customers-inbound is not registered; using the built-in sample batch")
+    ctx.push("rows", list(rows))
+    ctx.log(f"loaded {len(rows)} rows")
+
+
+@dag.task(id="quality_gate", depends_on=["load_customers"], consumes=["customers-raw"],
+          produces=["customers-clean"], track=True, dimension="DQ_CUSTOMER",
+          description="Reject rows that break the contract")
+def quality_gate(ctx):
+    rows = ctx.pull("load_customers", "rows", [])
+    failures = reject_reasons(rows)
+    clean = [row for row in rows if str(row.get("customer_id", "")).strip()]
+
+    # ctx.progress reports row counts to this task's TMF transaction, and does
+    # nothing when the worker cannot reach the database. Orchestration state is
+    # recorded either way; this is the business telemetry Results shows.
+    ctx.progress(total=len(rows), processed=len(clean), msg=f"Rejected {len(failures)} rows")
+
+    if len(clean) == 0:
+        raise ValueError("Every row was rejected: " + "; ".join(failures[:5]))
+
+    ctx.push("clean", clean)
+    ctx.push("rejected", len(failures))
+
+
+@dag.task(id="summarise", depends_on=["quality_gate"], consumes=["customers-clean"],
+          description="Compute the batch summary")
+def summarise_batch(ctx):
+    summary = summarise(ctx.pull("quality_gate", "clean", []))
+    ctx.push("summary", summary)
+    ctx.log(f"total spend {summary['total_spend']:.2f} across {summary['customers']} customers")
+
+
+@dag.task(id="publish", depends_on=["summarise"], produces=["customers-curated"],
+          track=True, dimension="DM_CUSTOMER", retries=1, retry_delay=5,
+          description="Write the curated batch")
+def publish(ctx):
+    clean = ctx.pull("quality_gate", "clean", [])
+    target = ctx.asset("customers-curated", mode="output", required=False)
+    if target is None:
+        ctx.log("customers-curated is not registered; printing a bounded preview")
+        ctx.log(str(clean[:3]))
+    else:
+        target.write(clean)
+        ctx.log(f"published {len(clean)} rows to {target.uri}")
+
+    ctx.progress(total=len(clean), processed=len(clean), msg="Curated batch published")
+
+
+@dag.task(id="report_failure", depends_on=["publish"], trigger="FAILURE",
+          description="Only runs when the batch could not be published")
+def report_failure(ctx):
+    broken = [task for task, status in ctx.upstream.items() if status != "SUCCESS"]
+    ctx.log(f"batch was not published; failed upstream: {', '.join(broken) or 'unknown'}")
+
+
+if __name__ == "__main__":
+    dag.run()
+PYTHON
+        ,
+        'files' => array(
+            array(
+                'path' => 'pipeline/__init__.py',
+                'content' => "from .rules import reject_reasons, summarise\n\n__all__ = [\"reject_reasons\", \"summarise\"]\n"
+            ),
+            array(
+                'path' => 'pipeline/rules.py',
+                'content' => <<<'PYTHON'
+"""Pure rules, kept out of the task bodies so they can be unit tested."""
+
+from typing import Any, Iterable
+
+
+def reject_reasons(rows: Iterable[dict[str, Any]]) -> list[str]:
+    reasons: list[str] = []
+    for index, row in enumerate(rows, start=1):
+        if not str(row.get("customer_id", "")).strip():
+            reasons.append(f"row {index}: customer_id is required")
+        if "@" not in str(row.get("email", "")):
+            reasons.append(f"row {index}: email is invalid")
+    return reasons
+
+
+def summarise(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    total = 0.0
+    customers = 0
+    for row in rows:
+        customers += 1
+        try:
+            total += float(row.get("spend", 0))
+        except (TypeError, ValueError):
+            continue
+    return {"customers": customers, "total_spend": round(total, 2)}
+PYTHON
+            ),
+            array(
+                'path' => 'tests/test_rules.py',
+                'content' => <<<'PYTHON'
+from pipeline.rules import reject_reasons, summarise
+
+
+def test_clean_rows_are_accepted() -> None:
+    assert reject_reasons([{"customer_id": "1", "email": "a@example.com"}]) == []
+
+
+def test_missing_fields_are_reported() -> None:
+    assert len(reject_reasons([{"customer_id": "", "email": "invalid"}])) == 2
+
+
+def test_summary_adds_spend() -> None:
+    summary = summarise([{"spend": "1.50"}, {"spend": "2.25"}])
+    assert summary == {"customers": 2, "total_spend": 3.75}
+PYTHON
+            )
+        )
+    ),
+    array(
+        'id' => 'python-task-dag-parallel',
+        'name' => 'Parallel partition loader',
+        'family' => 'python',
+        'complexity' => 'intermediate',
+        'description' => 'Fan out one batch into independent partition loads that run at the same time, report row counts to TMF, and fan back into a single reconciliation.',
+        'tags' => array('task dag', 'parallel', 'partitions', 'metrics'),
+        'integrations' => array('task_dag', 'tmf', 'jenkins', 'environments'),
+        'job_description' => 'A JobSeeker task DAG that loads partitions in parallel and reconciles the totals.',
+        'entry_point' => 'main.py',
+        'runtime' => 'local',
+        'code' => <<<'PYTHON'
+"""Fan out, then fan back in.
+
+Four partition loads have no dependency on each other, so the runner starts
+them together - up to JOBSEEKER_DAG_MAX_PARALLEL at a time, four by default.
+Each one reports its row count, which is what puts a Rows column on the task
+graph and a transaction on the Results page.
+
+Threads are the right shape here because the work is IO bound. CPU-bound work
+would not go faster; split that across Pipeline jobs instead, where each job
+gets its own executor.
+"""
+
+import time
+
+from jobseeker import dag
+
+
+PARTITIONS = ("north", "south", "east", "west")
+
+
+def load_partition(ctx, name):
+    # Stands in for a query or an API call: slow, and waiting rather than
+    # computing, which is exactly what overlaps well.
+    rows = 250 + len(name) * 37
+    time.sleep(0.4)
+    ctx.progress(total=rows, processed=rows, msg=f"Loaded {name}")
+    ctx.push("rows", rows)
+    ctx.log(f"loaded {rows} rows from {name}")
+
+
+@dag.task(id="prepare", description="Claim the batch window")
+def prepare(ctx):
+    ctx.push("window", "2026-09-22")
+    ctx.progress(total=len(PARTITIONS), processed=len(PARTITIONS), msg="Batch window claimed")
+
+
+@dag.task(id="load_north", depends_on=["prepare"], description="Load the north partition")
+def load_north(ctx):
+    load_partition(ctx, "north")
+
+
+@dag.task(id="load_south", depends_on=["prepare"], description="Load the south partition")
+def load_south(ctx):
+    load_partition(ctx, "south")
+
+
+@dag.task(id="load_east", depends_on=["prepare"], description="Load the east partition")
+def load_east(ctx):
+    load_partition(ctx, "east")
+
+
+@dag.task(id="load_west", depends_on=["prepare"], description="Load the west partition")
+def load_west(ctx):
+    load_partition(ctx, "west")
+
+
+@dag.task(
+    id="reconcile",
+    depends_on=["load_north", "load_south", "load_east", "load_west"],
+    description="Check the partitions add up",
+)
+def reconcile(ctx):
+    total = sum(ctx.pull(f"load_{name}", "rows", 0) for name in PARTITIONS)
+    missing = [name for name in PARTITIONS if not ctx.pull(f"load_{name}", "rows", 0)]
+    if missing:
+        raise ValueError("No rows arrived from: " + ", ".join(missing))
+
+    ctx.progress(total=total, processed=total, msg=f"Reconciled {len(PARTITIONS)} partitions")
+    ctx.log(f"batch {ctx.pull('prepare', 'window')} totalled {total} rows")
+
+
+if __name__ == "__main__":
+    dag.run()
+PYTHON
+    ),
+    array(
+        'id' => 'python-task-dag-branch',
+        'name' => 'Branching load with a skipped path',
+        'family' => 'python',
+        'complexity' => 'intermediate',
+        'description' => 'Decide between a full reload and an incremental one, let the path not taken skip itself, and join both branches back together.',
+        'tags' => array('task dag', 'branch', 'skip', 'trigger rules'),
+        'integrations' => array('task_dag', 'tmf', 'contexts', 'jenkins', 'environments'),
+        'job_description' => 'A JobSeeker task DAG that branches on the size of the change set.',
+        'entry_point' => 'main.py',
+        'runtime' => 'local',
+        'code' => <<<'PYTHON'
+"""Two paths, one of which is skipped.
+
+JobSeeker has no separate "branch" task type. A branch is an ordinary task that
+raises SkipTask when its path should not be taken. That ends the task as
+SKIPPED rather than FAILURE, so the run stays green, the task is not retried,
+and everything below that branch skips with it. The join task is declared with
+trigger="ALWAYS" so it runs whichever branch was taken.
+
+Read the graph on Job View after a run: one branch is green, the other is grey,
+and it is obvious which way the decision went.
+"""
+
+from jobseeker import dag
+from jobseeker.dag import SkipTask
+
+
+@dag.task(id="detect_changes", description="Count what changed since the watermark")
+def detect_changes(ctx):
+    # A Context value lets an operator move the threshold per environment
+    # without touching the job.
+    threshold = ctx.context("full_reload_threshold", default=500, cast=int)
+    changed = ctx.context("sample_changed_rows", default=120, cast=int)
+
+    ctx.push("changed", changed)
+    ctx.push("full_reload", changed >= threshold)
+    ctx.progress(total=changed, processed=changed, msg=f"{changed} changed rows")
+    ctx.log(f"{changed} changed rows, threshold {threshold}")
+
+
+@dag.task(id="incremental_load", depends_on=["detect_changes"],
+          description="Apply only the changed rows")
+def incremental_load(ctx):
+    if ctx.pull("detect_changes", "full_reload", False):
+        raise SkipTask("the change set is large enough to warrant a full reload")
+
+    changed = ctx.pull("detect_changes", "changed", 0)
+    ctx.progress(total=changed, processed=changed, msg="Incremental load applied")
+    ctx.push("loaded", changed)
+
+
+@dag.task(id="full_reload", depends_on=["detect_changes"],
+          description="Rebuild the table from scratch")
+def full_reload(ctx):
+    if not ctx.pull("detect_changes", "full_reload", False):
+        raise SkipTask("the change set is small enough for an incremental load")
+
+    rows = 10000
+    ctx.progress(total=rows, processed=rows, msg="Full reload applied")
+    ctx.push("loaded", rows)
+
+
+@dag.task(id="publish", depends_on=["incremental_load", "full_reload"], trigger="ALWAYS",
+          description="Publish whichever branch ran")
+def publish(ctx):
+    loaded = ctx.pull("incremental_load", "loaded", None)
+    path = "incremental"
+    if loaded is None:
+        loaded = ctx.pull("full_reload", "loaded", None)
+        path = "full reload"
+
+    if loaded is None:
+        raise RuntimeError("Neither branch produced a load; nothing to publish.")
+
+    ctx.progress(total=loaded, processed=loaded, msg=f"Published after {path}")
+    ctx.log(f"published {loaded} rows via the {path} path")
+
+
+if __name__ == "__main__":
+    dag.run()
+PYTHON
+    ),
+    array(
+        'id' => 'python-task-dag-resume',
+        'name' => 'Resumable incremental load',
+        'family' => 'python',
+        'complexity' => 'advanced',
+        'description' => 'A long graph whose tasks are safe to re-run, so a failure part way through can be resumed instead of replayed. Includes pytest coverage of the idempotency rules.',
+        'tags' => array('task dag', 'resume', 'idempotent', 'multi-file', 'tests'),
+        'integrations' => array('task_dag', 'tmf', 'data_assets', 'tests', 'jenkins', 'environments'),
+        'job_description' => 'A JobSeeker task DAG designed to be resumed after a partial failure.',
+        'entry_point' => 'main.py',
+        'runtime' => 'local',
+        'run_tests' => TRUE,
+        'requirements' => '',
+        'code' => <<<'PYTHON'
+"""A graph you can resume.
+
+Resuming re-runs only the tasks that did not succeed, which is only safe if a
+task that runs twice leaves the same result as a task that ran once. That is a
+property of the code, not of the runner, so this starter shows the three habits
+that buy it:
+
+  * a task reads its inputs rather than assuming a previous task's memory
+  * a task writes to a deterministic key, so a repeat overwrites rather than
+    appends
+  * a task checks whether its work is already done before doing it again
+
+Fail the publish step on purpose by setting FAIL_PUBLISH=1 as a build
+parameter, then use "Re-run failed tasks" on the task graph: only publish and
+what follows it runs again.
+"""
+
+import os
+
+from jobseeker import dag
+
+from incremental.state import Watermark, partition_key
+
+
+@dag.task(id="read_watermark", description="Where the last run got to")
+def read_watermark(ctx):
+    watermark = Watermark.load(ctx.context("last_watermark", default="", cast=str))
+    ctx.push("watermark", watermark.value)
+    ctx.log(f"resuming from watermark {watermark.value}")
+
+
+@dag.task(id="stage", depends_on=["read_watermark"], produces=["orders-staged"],
+          description="Stage the new rows")
+def stage(ctx):
+    watermark = ctx.pull("read_watermark", "watermark", "")
+    rows = [{"order_id": f"{watermark}-{index}", "amount": index * 12.5} for index in range(1, 41)]
+
+    # Deterministic: the same watermark always stages the same key, so running
+    # this task twice replaces the batch instead of doubling it.
+    ctx.push("staging_key", partition_key(watermark))
+    ctx.push("rows", len(rows))
+    ctx.progress(total=len(rows), processed=len(rows), msg="Rows staged")
+
+
+@dag.task(id="validate", depends_on=["stage"], consumes=["orders-staged"],
+          description="Check the staged batch")
+def validate(ctx):
+    rows = ctx.pull("stage", "rows", 0)
+    if rows == 0:
+        raise ValueError("Nothing was staged; refusing to publish an empty batch.")
+    ctx.progress(total=rows, processed=rows, msg="Batch validated")
+
+
+@dag.task(id="publish", depends_on=["validate"], produces=["orders-current"], retries=1, retry_delay=5,
+          description="Swap the staged batch into place")
+def publish(ctx):
+    if os.getenv("FAIL_PUBLISH", "0") == "1" and ctx.attempt == 1:
+        raise RuntimeError("Publish failed on purpose. Use Re-run failed tasks on the graph.")
+
+    rows = ctx.pull("stage", "rows", 0)
+    ctx.progress(total=rows, processed=rows, msg="Batch published")
+    ctx.push("published", rows)
+
+
+@dag.task(id="advance_watermark", depends_on=["publish"],
+          description="Only move the watermark once the batch is live")
+def advance_watermark(ctx):
+    # Last, and only after publish succeeded: a watermark moved too early is
+    # what turns a resumable failure into lost data.
+    published = ctx.pull("publish", "published", 0)
+    ctx.log(f"watermark would advance after publishing {published} rows")
+
+
+@dag.task(id="report", depends_on=["advance_watermark"], trigger="ALWAYS",
+          description="Say what happened, either way")
+def report(ctx):
+    published = ctx.pull("publish", "published", 0)
+    ctx.log(f"run finished with {published} rows published")
+
+
+if __name__ == "__main__":
+    dag.run()
+PYTHON
+        ,
+        'files' => array(
+            array(
+                'path' => 'incremental/__init__.py',
+                'content' => "from .state import Watermark, partition_key\n\n__all__ = [\"Watermark\", \"partition_key\"]\n"
+            ),
+            array(
+                'path' => 'incremental/state.py',
+                'content' => <<<'PYTHON'
+"""The rules that make this graph safe to resume, kept testable."""
+
+from dataclasses import dataclass
+
+
+DEFAULT_WATERMARK = "1970-01-01"
+
+
+@dataclass(frozen=True)
+class Watermark:
+    value: str
+
+    @classmethod
+    def load(cls, raw: str) -> "Watermark":
+        cleaned = (raw or "").strip()
+        return cls(cleaned if cleaned else DEFAULT_WATERMARK)
+
+
+def partition_key(watermark: str) -> str:
+    """A staging key derived only from its input.
+
+    Deriving the key rather than generating one is what makes a repeated run
+    overwrite its own batch instead of appending a second copy.
+    """
+
+    cleaned = (watermark or DEFAULT_WATERMARK).strip() or DEFAULT_WATERMARK
+    return "orders-staged-" + cleaned.replace("-", "")
+PYTHON
+            ),
+            array(
+                'path' => 'tests/test_state.py',
+                'content' => <<<'PYTHON'
+from incremental.state import DEFAULT_WATERMARK, Watermark, partition_key
+
+
+def test_missing_watermark_falls_back() -> None:
+    assert Watermark.load("").value == DEFAULT_WATERMARK
+    assert Watermark.load("   ").value == DEFAULT_WATERMARK
+
+
+def test_watermark_is_trimmed() -> None:
+    assert Watermark.load(" 2026-09-22 ").value == "2026-09-22"
+
+
+def test_partition_key_is_deterministic() -> None:
+    assert partition_key("2026-09-22") == partition_key("2026-09-22")
+    assert partition_key("2026-09-22") != partition_key("2026-09-23")
+
+
+def test_partition_key_handles_a_missing_watermark() -> None:
+    assert partition_key("") == partition_key(DEFAULT_WATERMARK)
+PYTHON
+            )
+        )
     )
 );
