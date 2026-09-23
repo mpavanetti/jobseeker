@@ -466,18 +466,6 @@ class SmtpSettings extends BaseController
         return 'jobseeker@local.test';
     }
 
-    private function jenkinsPublicUrl()
-    {
-        $url = getenv('JOBSEEKER_JENKINS_PUBLIC_URL');
-
-        if($url === FALSE || trim($url) === '') {
-            $config = $this->getRuntimeConfig();
-            $url = isset($config->jenkins->url) ? $config->jenkins->url : 'http://localhost:8080/';
-        }
-
-        return rtrim(trim($url), '/') . '/';
-    }
-
     private function mailpitPublicUrl()
     {
         $url = getenv('JOBSEEKER_MAILPIT_PUBLIC_URL');
