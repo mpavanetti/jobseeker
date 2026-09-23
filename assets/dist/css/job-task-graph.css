@@ -1,0 +1,313 @@
+/* Task DAG panel: the graph of tasks inside one job, shown read-only on Job
+   View, Job Execution and the Job Creation editor preview. */
+
+.jtg-panel {
+  font-size: 12px;
+}
+
+.jtg-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.jtg-summary {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.jtg-source {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  color: #4338ca;
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.jtg-run-picker {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.jtg-run-picker label {
+  color: #6b7280;
+  font-weight: 600;
+  margin: 0;
+}
+
+.jtg-run-picker .jtg-run-select {
+  max-width: 320px;
+  width: auto;
+}
+
+.jtg-empty {
+  margin: 0;
+}
+
+.jtg-empty code {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.jtg-canvas {
+  background: #fbfbfd;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 4px;
+}
+
+.jtg-svg {
+  display: block;
+  min-width: 100%;
+}
+
+/* --- edges --- */
+
+.jtg-edge {
+  fill: none;
+  stroke: #9ca3af;
+  stroke-width: 1.5;
+}
+
+.jtg-edge-failure {
+  stroke: #ef4444;
+  stroke-dasharray: 5 3;
+}
+
+.jtg-edge-always {
+  stroke: #6b7280;
+  stroke-dasharray: 2 3;
+}
+
+.jtg-arrow-head {
+  fill: #9ca3af;
+}
+
+/* --- nodes --- */
+
+.jtg-node-box {
+  fill: #ffffff;
+  stroke: #d1d5db;
+  stroke-width: 1;
+}
+
+.jtg-node-bar {
+  fill: #d1d5db;
+}
+
+.jtg-node-id {
+  fill: #111827;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.jtg-node-meta {
+  fill: #6b7280;
+  font-family: Arial, sans-serif;
+  font-size: 10.5px;
+}
+
+.jtg-node.jtg-success .jtg-node-box { fill: #f0fdf4; stroke: #86efac; }
+.jtg-node.jtg-success .jtg-node-bar { fill: #16a34a; }
+
+.jtg-node.jtg-failure .jtg-node-box { fill: #fef2f2; stroke: #fca5a5; }
+.jtg-node.jtg-failure .jtg-node-bar { fill: #dc2626; }
+
+.jtg-node.jtg-upstream-failed .jtg-node-box { fill: #fff7ed; stroke: #fdba74; }
+.jtg-node.jtg-upstream-failed .jtg-node-bar { fill: #ea580c; }
+
+.jtg-node.jtg-running .jtg-node-box { fill: #eff6ff; stroke: #93c5fd; }
+.jtg-node.jtg-running .jtg-node-bar { fill: #2563eb; }
+
+.jtg-node.jtg-skipped .jtg-node-box { fill: #f9fafb; stroke: #e5e7eb; }
+.jtg-node.jtg-skipped .jtg-node-bar { fill: #9ca3af; }
+.jtg-node.jtg-skipped .jtg-node-id { fill: #6b7280; }
+
+.jtg-node.jtg-declared .jtg-node-box { fill: #ffffff; stroke: #d1d5db; stroke-dasharray: 4 3; }
+
+.jtg-node.jtg-pending .jtg-node-box,
+.jtg-node.jtg-queued .jtg-node-box { fill: #fafafa; stroke: #cbd5e1; stroke-dasharray: 4 3; }
+.jtg-node.jtg-pending .jtg-node-bar,
+.jtg-node.jtg-queued .jtg-node-bar { fill: #cbd5e1; }
+.jtg-node.jtg-pending .jtg-node-id,
+.jtg-node.jtg-queued .jtg-node-id { fill: #64748b; }
+
+.jtg-node.jtg-running .jtg-node-bar {
+  animation: jtg-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes jtg-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jtg-node.jtg-running .jtg-node-bar { animation: none; }
+}
+
+/* --- table --- */
+
+.jtg-table {
+  margin-bottom: 6px;
+}
+
+.jtg-table > thead > tr > th {
+  border-bottom-width: 1px;
+  color: #6b7280;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.jtg-table > tbody > tr > td {
+  vertical-align: middle;
+}
+
+.jtg-table .jtg-cell-id code {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.jtg-table .jtg-cell-detail {
+  color: #6b7280;
+  max-width: 420px;
+  word-break: break-word;
+}
+
+.jtg-table-declared .jtg-status {
+  color: #9ca3af;
+}
+
+.jtg-status i { margin-right: 4px; }
+
+.jtg-table > tbody > tr.jtg-success .jtg-status { color: #16a34a; }
+.jtg-table > tbody > tr.jtg-failure .jtg-status { color: #dc2626; }
+.jtg-table > tbody > tr.jtg-upstream-failed .jtg-status { color: #ea580c; }
+.jtg-table > tbody > tr.jtg-running .jtg-status { color: #2563eb; }
+.jtg-table > tbody > tr.jtg-skipped .jtg-status { color: #9ca3af; }
+
+.jtg-warnings {
+  color: #b45309;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.jtg-warnings li i { margin-right: 5px; }
+
+/* --- which run is on screen --- */
+
+.jtg-scope {
+  font-size: 11.5px;
+  margin: -2px 0 8px;
+}
+
+.jtg-scope-pending { color: #b45309; }
+.jtg-scope-running { color: #1d4ed8; }
+.jtg-scope-finished { color: #6b7280; }
+.jtg-scope-none { color: #6b7280; }
+
+/* --- re-run controls --- */
+
+.jtg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.jtg-actions .btn { font-size: 11px; }
+
+/* --- selection --- */
+
+.jtg-node { cursor: pointer; }
+.jtg-node:focus { outline: none; }
+.jtg-node:focus .jtg-node-box { stroke-width: 2; stroke: #2563eb; }
+
+.jtg-node.jtg-selected .jtg-node-box {
+  stroke-width: 2;
+  stroke: #2563eb;
+}
+
+.jtg-node.jtg-dimmed { opacity: 0.35; }
+.jtg-edge-dimmed { opacity: 0.25; }
+
+.jtg-edge-active {
+  stroke: #2563eb;
+  stroke-width: 2.25;
+}
+
+.jtg-table > tbody > tr.jtg-row-selected > td { background: #eff6ff; }
+.jtg-table > tbody > tr { cursor: pointer; }
+
+/* --- task detail --- */
+
+.jtg-detail-hint {
+  font-size: 11.5px;
+  margin: 0 0 10px;
+}
+
+.jtg-detail {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+}
+
+.jtg-detail-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.jtg-detail-head .close { margin-left: auto; }
+
+.jtg-detail-description {
+  color: #475569;
+  margin: 0 0 8px;
+}
+
+.jtg-detail-grid {
+  display: grid;
+  gap: 6px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.jtg-detail-item span {
+  color: #6b7280;
+  display: block;
+  font-size: 10.5px;
+  text-transform: uppercase;
+}
+
+.jtg-detail-item strong {
+  color: #111827;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.jtg-detail-flag {
+  color: #b91c1c;
+  font-size: 11px;
+}
+
+.jtg-detail-message {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 11.5px;
+  margin: 10px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+}

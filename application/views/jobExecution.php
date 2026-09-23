@@ -615,7 +615,9 @@
 <?php } ?>
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-task-graph.css?v=2">
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-task-graph.js?v=2"></script>
 
 <script type="text/javascript">
   $(document).ready(function() {
@@ -1873,6 +1875,7 @@
             '</div>' +
           '</div>' +
           '<div class="job-dependency-panel execution-dependency-panel" id="deps-' + run.id + '"></div>' +
+          '<div class="job-task-panel execution-task-panel" id="tasks-' + run.id + '" style="display:none;"></div>' +
           '<div class="execution-console job-console-host" id="console-' + run.id + '"><div class="job-console-empty">Waiting for Jenkins to start this build...</div></div>' +
         '</div>'
       );
@@ -1889,6 +1892,81 @@
           }
         });
       }
+
+      refreshTaskGraph(run, true);
+    }
+
+    // Task graph for a live build.
+    //
+    // This screen polls Jenkins continuously, so the graph is refreshed on the
+    // same ticks rather than only when the pane is created - otherwise a DAG
+    // would stay frozen on whatever it looked like at the first paint. Fetches
+    // are throttled while the build runs and one final fetch is guaranteed once
+    // it finishes, so the last task's outcome always lands.
+    var taskGraphState = {};
+    var TASK_GRAPH_MIN_INTERVAL_MS = 4000;
+
+    function refreshTaskGraph(run, force) {
+      if (! run || ! window.JobSeekerTaskGraph) {
+        return;
+      }
+      var panel = $('#tasks-' + run.id);
+      if (! panel.length) {
+        return;
+      }
+
+      var state = taskGraphState[run.id];
+      if (! state) {
+        state = taskGraphState[run.id] = {last: 0, pending: false, finalFetched: false};
+      }
+      if (state.pending) {
+        return;
+      }
+
+      var finalPass = !! run.finished && ! state.finalFetched;
+      if (! force && ! finalPass && (state.finalFetched || Date.now() - state.last < TASK_GRAPH_MIN_INTERVAL_MS)) {
+        return;
+      }
+
+      var environment = environmentHelper.text(run.environmentInfo);
+      state.pending = true;
+      state.last = Date.now();
+
+      var request = window.JobSeekerTaskGraph.load('JobExecution', run.jobName, environment, '', run.buildNumber);
+      if (! request) {
+        state.pending = false;
+        return;
+      }
+
+      request.done(function(data) {
+        var tasks = data && data.graph && data.graph.tasks ? data.graph.tasks : [];
+        if (! tasks.length) {
+          panel.hide().empty();
+        } else {
+          panel.show();
+          window.JobSeekerTaskGraph.render(panel.get(0), data, {
+            environment: environment,
+            runPicker: false,
+            onRun: function(response) {
+              if (window.toastr) {
+                window.toastr.success(
+                  response.expectedBuild ? 'Queued as build #' + response.expectedBuild + '.' : 'Build queued.',
+                  'Task run');
+              }
+            },
+            onRunFailed: function(xhr) {
+              if (window.toastr) {
+                window.toastr.error((xhr.responseJSON && xhr.responseJSON.message) || 'The run could not be queued.', 'Task run');
+              }
+            }
+          });
+        }
+        if (run.finished) {
+          state.finalFetched = true;
+        }
+      }).always(function() {
+        state.pending = false;
+      });
     }
 
     function updateConsoleViewLayout() {
@@ -1945,6 +2023,7 @@
       pane.find('.execution-abort').prop('disabled', isTerminal(run));
 
       $('#tab-' + run.id + ' a').attr('title', run.jobName + ' - ' + run.environment + ' - ' + (run.status || 'Pending'));
+      refreshTaskGraph(run, false);
       renderExecutionRows();
       updateExecutionSummary();
     }

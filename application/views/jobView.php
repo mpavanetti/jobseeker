@@ -202,7 +202,26 @@
   .run-compare-results { overflow-x: auto; margin-top: 16px; }
   .run-compare-results .job-compare-table { min-width: 760px; }
   .run-compare-different td { background: #fff8e8; }
+  /* A column for a build that does not exist stays legible but visibly inert,
+     so the eye goes to the run that does have data. */
+  .job-compare-table th.run-compare-absent,
+  .job-compare-table td.run-compare-absent { background: #fafafa; color: #999; }
+  .run-compare-different td.run-compare-absent { background: #faf6ee; }
+  .job-compare-table th.run-compare-absent small { font-weight: normal; display: block; margin-top: 2px; }
   .run-compare-logs { display: flex; gap: 12px; overflow-x: auto; margin-top: 18px; }
+  .run-compare-change { margin-bottom: 3px; }
+  .run-compare-diff-counts { margin-top: 4px; font-size: 12px; }
+  .run-compare-diff { margin-top: 18px; border: 1px solid #e3e3e3; border-radius: 3px; padding: 10px 12px; background: #fcfcfc; }
+  .run-compare-diff > summary { cursor: pointer; font-weight: 600; }
+  .run-compare-diff-note { margin: 8px 0 4px; font-size: 12px; }
+  .run-compare-diff-block { margin-top: 12px; }
+  .run-compare-diff-block h5 { font-weight: 600; margin-bottom: 6px; }
+  .run-compare-diff-list { font-family: Consolas, Monaco, "Courier New", monospace; font-size: 12px; border-left: 3px solid #ddd; padding-left: 8px; margin-bottom: 8px; max-height: 260px; overflow: auto; }
+  .run-compare-diff-added { border-left-color: #3c8dbc; background: #f4fbf6; }
+  .run-compare-diff-removed { border-left-color: #d9534f; background: #fdf5f5; }
+  .run-compare-diff-line { white-space: pre-wrap; word-break: break-word; padding: 1px 0; }
+  .run-compare-diff-sign { display: inline-block; width: 14px; font-weight: 700; opacity: 0.7; }
+  .run-compare-diff-more { padding-top: 4px; }
   .run-compare-log { flex: 1 0 360px; min-width: 0; }
   .run-compare-log .job-console-host { max-height: 520px; min-height: 180px; }
 
@@ -567,7 +586,9 @@
 </div>
 
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-task-graph.css?v=2">
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-task-graph.js?v=2"></script>
 
 <script type="text/javascript">
   $(document).ready(function() {
@@ -586,6 +607,9 @@
     var comparisonSourceJob = '';
     var runComparisonJob = '';
     var runComparisonRequest = 0;
+    // Oldest and newest build Jenkins still holds for the open job, so a
+    // mistyped number can be answered with the range that would have worked.
+    var runComparisonRange = null;
     var loadedJobDetails = {};
     var jobCreationDates = <?php echo json_encode(isset($job_creation_dates) && is_array($job_creation_dates) ? $job_creation_dates : array()); ?> || {};
     var environmentHelper = window.JobSeekerEnvironment || {
@@ -1955,6 +1979,7 @@
             '<div class="job-detail-section"><h4>Description</h4><p>' + escapeHtml(description) + '</p>' + healthText(detail) + '</div>' +
             '<div class="job-detail-section"><h4>Execution Runtime</h4>' + renderRuntimeConfig(config) + '</div>' +
             '<div class="job-detail-section"><h4>Connectors &amp; datasets</h4><div class="job-dependency-panel" id="jobDependencies-' + index + '" data-job="' + escapeAttribute(detail.name) + '" data-env="' + escapeAttribute(environmentHelper.text(config.environmentInfo)) + '"><p class="text-muted jd-empty">Loading…</p></div></div>' +
+            '<div class="job-detail-section"><h4>Task graph</h4><div class="job-task-panel" id="jobTasks-' + index + '" data-job="' + escapeAttribute(detail.name) + '" data-env="' + escapeAttribute(environmentHelper.text(config.environmentInfo)) + '"><p class="text-muted jtg-empty">Loading…</p></div></div>' +
             '<div class="job-detail-section"><h4>Build History</h4>' + renderBuildHistory(detail.builds) + '</div>' +
             '<div class="row">' +
               '<div class="col-md-6"><div class="job-detail-section"><h4>Schedule</h4>' + renderList(config.schedules) + '</div></div>' +
@@ -1991,6 +2016,12 @@
         });
       }
 
+      if (window.JobSeekerTaskGraph) {
+        $('#jobDetailsGrid .job-task-panel[data-job]').each(function() {
+          mountTaskGraph($(this), '');
+        });
+      }
+
       $.each(consoleMounts, function(index, mount) {
         if (window.JobSeekerConsole) {
           window.JobSeekerConsole.setText('#' + mount.id, mount.text, {live: mount.live});
@@ -1999,6 +2030,69 @@
         }
       });
     }
+
+    // Task graph loader. Kept next to the dependency panel loader so both
+    // read-only job panels behave the same: fetch once per render, and let the
+    // run picker re-read a previous run without reloading the page.
+    //
+    // A run that is still going is re-read on a timer until it finishes, so a
+    // graph opened mid-build fills in rather than staying frozen on whatever it
+    // looked like when the card was first drawn.
+    var TASK_GRAPH_LIVE_INTERVAL_MS = 5000;
+    var taskGraphTimers = {};
+
+    function taskGraphKey(panel) {
+      return panel.attr('id') || panel.data('job');
+    }
+
+    function clearTaskGraphTimer(panel) {
+      var key = taskGraphKey(panel);
+      if (taskGraphTimers[key]) {
+        window.clearTimeout(taskGraphTimers[key]);
+        delete taskGraphTimers[key];
+      }
+    }
+
+    function mountTaskGraph(panel, runKey) {
+      var jobName = panel.data('job');
+      var environment = panel.data('env');
+      if (!jobName || !window.JobSeekerTaskGraph) { return; }
+
+      clearTaskGraphTimer(panel);
+      window.JobSeekerTaskGraph.load('JobView', jobName, environment, runKey).done(function(data) {
+        window.JobSeekerTaskGraph.render(panel.get(0), data, {
+          environment: environment,
+          onRun: function(response) {
+            if (window.toastr) {
+              window.toastr.success(
+                response.expectedBuild ? 'Queued as build #' + response.expectedBuild + '.' : 'Build queued.',
+                'Task run');
+            }
+            // Follow the build that was just queued rather than the run that is
+            // on screen, so the panel switches to it as soon as it starts.
+            window.setTimeout(function() { mountTaskGraph(panel, ''); }, 2000);
+          },
+          onRunFailed: function(xhr) {
+            if (window.toastr) {
+              window.toastr.error((xhr.responseJSON && xhr.responseJSON.message) || 'The run could not be queued.', 'Task run');
+            }
+          }
+        });
+
+        if (data && data.runState === 'running') {
+          taskGraphTimers[taskGraphKey(panel)] = window.setTimeout(function() {
+            mountTaskGraph(panel, runKey);
+          }, TASK_GRAPH_LIVE_INTERVAL_MS);
+        }
+      }).fail(function() {
+        panel.html('<p class="text-muted jtg-empty">The task graph is unavailable.</p>');
+      });
+    }
+
+    $(document).on('change', '.job-task-panel .jtg-run-select', function() {
+      var select = $(this);
+      mountTaskGraph(select.closest('.job-task-panel'), select.val());
+    });
 
     function runNumbersFromInput() {
       var raw = $.trim($('#runCompareBuilds').val());
@@ -2020,15 +2114,180 @@
     function fetchRunForComparison(jobName, number) {
       var deferred = $.Deferred();
       var path = jenkinsJobPath(jobName) + '/' + number;
-      var tree = 'number,result,building,timestamp,duration,builtOn,url,description,actions[parameters[name,value]]';
-      jenkinsRequest(path + '/api/json?tree=' + tree).done(function(build) {
+      var tree = 'number,result,building,timestamp,duration,builtOn,url,description,estimatedDuration,actions[parameters[name,value],causes[shortDescription,userName]],changeSet[items[commitId,msg,author[fullName]]]';
+      jenkinsRequest(path + '/api/json?tree=' + tree, 'GET', {dataType: 'json'}).done(function(build) {
+        // Without an explicit dataType jQuery picks a parser from the response
+        // Content-Type, and anything that is not JSON leaves `build` a raw
+        // string. Every field then reads undefined and the column renders as a
+        // blank build number, "No result" and "Not available" - looking like a
+        // real run with no data rather than a failed request. Pin the type, and
+        // still refuse anything that did not come back as a build.
+        if (! build || typeof build !== 'object' || ! build.number) {
+          deferred.resolve({number: number, error: 'Build #' + number + ' returned a response Jenkins could not be read from.'});
+          return;
+        }
         jenkinsRequest(path + '/consoleText', 'GET', {dataType: 'text'})
           .done(function(log) { deferred.resolve({build: build, log: String(log || '')}); })
           .fail(function(xhr) { deferred.resolve({build: build, log: '', logError: 'Console log unavailable (HTTP ' + xhr.status + ').'}); });
       }).fail(function(xhr) {
-        deferred.resolve({number: number, error: 'Build #' + number + ' could not be loaded (HTTP ' + xhr.status + ').'});
+        // Jenkins answers 404 for a build number that was never used or has
+        // since been discarded. That is an ordinary typo, not a fault, so it
+        // gets plain wording and no HTTP status - only a genuine failure is
+        // worth showing a code for.
+        deferred.resolve({
+          number: number,
+          missing: xhr.status === 404,
+          error: xhr.status === 404
+            ? 'No build #' + number + '. It was never run, or it has been discarded.'
+            : 'Build #' + number + ' could not be loaded (HTTP ' + xhr.status + ').'
+        });
       });
       return deferred.promise();
+    }
+
+    /**
+     * Console logs never match line for line even when two runs did the same
+     * thing: timestamps, PIDs, durations and commit hashes change every build.
+     * Comparing raw lines therefore reports that everything differs, which is
+     * the same as reporting nothing. Masking the volatile parts leaves the
+     * differences that actually explain why one run behaved differently.
+     */
+    function normalizeConsoleLine(line) {
+      return String(line == null ? '' : line)
+        .replace(/\d{4}[-\/]\d{2}[-\/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?/g, '<time>')
+        .replace(/\b\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b/g, '<time>')
+        .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '<uuid>')
+        .replace(/\b[0-9a-f]{12,40}\b/gi, '<hash>')
+        .replace(/\bPID[: ]+\d+/gi, 'PID <n>')
+        // Jenkins writes each shell step to /tmp/jenkins<random>.sh, so the
+        // command line that launches a build never repeats between runs.
+        .replace(/\/tmp\/\S*?\d{6,}\S*/g, '/tmp/<temp>')
+        .replace(/\b\d+(?:\.\d+)?\s?(?:ms|sec|secs|seconds|min|mins|minutes)\b/gi, '<duration>')
+        .replace(/\s+$/, '');
+    }
+
+    /** Line counts keyed by normalised text, so repeats are not lost. */
+    function consoleLineCounts(log) {
+      var counts = {};
+      $.each(String(log || '').split('\n'), function(index, line) {
+        var key = normalizeConsoleLine(line);
+        if (key === '') { return; }
+        if (! counts[key]) { counts[key] = {count: 0, sample: line}; }
+        counts[key].count++;
+      });
+      return counts;
+    }
+
+    // A whole console log can be tens of thousands of lines, and this runs for
+    // every column on every comparison. Past this size the summary is skipped
+    // rather than left to block the page.
+    var CONSOLE_DIFF_LINE_LIMIT = 20000;
+
+    function compareConsoleToBaseline(baselineLog, log) {
+      var baseLines = String(baselineLog || '').split('\n').length;
+      var runLines = String(log || '').split('\n').length;
+      if (baseLines > CONSOLE_DIFF_LINE_LIMIT || runLines > CONSOLE_DIFF_LINE_LIMIT) {
+        return {skipped: true};
+      }
+
+      var base = consoleLineCounts(baselineLog);
+      var mine = consoleLineCounts(log);
+      var added = [];
+      var removed = [];
+
+      Object.keys(mine).forEach(function(key) {
+        var extra = mine[key].count - (base[key] ? base[key].count : 0);
+        if (extra > 0) { added.push({text: mine[key].sample, count: extra}); }
+      });
+      Object.keys(base).forEach(function(key) {
+        var missing = base[key].count - (mine[key] ? mine[key].count : 0);
+        if (missing > 0) { removed.push({text: base[key].sample, count: missing}); }
+      });
+
+      return {
+        skipped: false,
+        added: added,
+        removed: removed,
+        addedLines: added.reduce(function(total, row) { return total + row.count; }, 0),
+        removedLines: removed.reduce(function(total, row) { return total + row.count; }, 0)
+      };
+    }
+
+    /** Who or what started a run, from the Jenkins cause records. */
+    function runTriggerLabel(build) {
+      var causes = [];
+      $.each(build && build.actions ? build.actions : [], function(index, action) {
+        $.each(action && action.causes ? action.causes : [], function(causeIndex, cause) {
+          var text = cause.userName || cause.shortDescription || '';
+          if (text) { causes.push(text); }
+        });
+      });
+      return uniqueValues(causes).join(', ');
+    }
+
+    /** Commits Jenkins recorded for a run, newest first. */
+    function runChangeItems(build) {
+      var items = [];
+      var sets = build && build.changeSet ? (Array.isArray(build.changeSet) ? build.changeSet : [build.changeSet]) : [];
+      $.each(sets, function(index, set) {
+        $.each(set && set.items ? set.items : [], function(itemIndex, item) {
+          items.push({
+            id: String(item.commitId || '').slice(0, 8),
+            message: $.trim(String(item.msg || '')),
+            author: item.author && item.author.fullName ? item.author.fullName : ''
+          });
+        });
+      });
+      return items;
+    }
+
+    // Enough lines to see what happened, few enough that the page stays usable.
+    var CONSOLE_DIFF_DISPLAY_LIMIT = 25;
+
+    /**
+     * The lines that explain a difference, rather than the whole log twice. Each
+     * run is shown against the baseline: what it printed that the baseline did
+     * not, and what the baseline printed that it did not.
+     */
+    function renderConsoleDiffSection(runs, baselineRun) {
+      if (! baselineRun) { return ''; }
+      var comparable = $.grep(runs, function(run) { return run.build && run !== baselineRun && run.consoleDiff; });
+      if (! comparable.length) { return ''; }
+
+      var blocks = $.map(comparable, function(run) {
+        var diff = run.consoleDiff;
+        var header = '<h5>Build #' + escapeHtml(run.build.number) + ' vs #' + escapeHtml(baselineRun.build.number) + '</h5>';
+
+        if (diff.skipped) {
+          return '<div class="run-compare-diff-block">' + header +
+            renderMuted('These logs are too large to compare line by line.') + '</div>';
+        }
+        if (! diff.addedLines && ! diff.removedLines) {
+          return '<div class="run-compare-diff-block">' + header +
+            '<p class="text-success"><i class="fa fa-check"></i> No differences once timestamps, durations and identifiers are set aside.</p></div>';
+        }
+
+        function lineList(rows, kind, sign) {
+          if (! rows.length) { return ''; }
+          var shown = rows.slice(0, CONSOLE_DIFF_DISPLAY_LIMIT);
+          return '<div class="run-compare-diff-list run-compare-diff-' + kind + '">' +
+            $.map(shown, function(row) {
+              return '<div class="run-compare-diff-line"><span class="run-compare-diff-sign">' + sign + '</span>' +
+                escapeHtml(row.text.slice(0, 400)) + (row.count > 1 ? ' <small>(x' + row.count + ')</small>' : '') + '</div>';
+            }).join('') +
+            (rows.length > shown.length ? '<div class="run-compare-diff-more">' + renderMuted('+' + (rows.length - shown.length) + ' more lines') + '</div>' : '') +
+            '</div>';
+        }
+
+        return '<div class="run-compare-diff-block">' + header +
+          '<p>' + renderMuted('Only in #' + run.build.number + ': ' + diff.addedLines + ' lines. Only in #' + baselineRun.build.number + ': ' + diff.removedLines + ' lines.') + '</p>' +
+          lineList(diff.added, 'added', '+') +
+          lineList(diff.removed, 'removed', '\u2212') + '</div>';
+      }).join('');
+
+      return '<details class="run-compare-diff" open><summary>Console differences</summary>' +
+        '<p class="run-compare-diff-note">' + renderMuted('Timestamps, durations, PIDs and commit hashes are masked before comparing, so only meaningful differences are listed.') + '</p>' +
+        blocks + '</details>';
     }
 
     function renderRunComparison(jobName, runs) {
@@ -2043,11 +2302,22 @@
         Object.keys(run.values).forEach(function(name) { parameterNames[name] = true; });
       });
       var names = Object.keys(parameterNames).sort();
+      // Only runs that actually loaded can disagree about anything.
+      var loadedRuns = $.grep(runs, function(run) { return !! run.build; });
+      // Every loaded run is compared against the first one, so the table reads
+      // as "what changed relative to this run" rather than as N unrelated logs.
+      var baselineRun = loadedRuns.length ? loadedRuns[0] : null;
+      $.each(runs, function(index, run) {
+        run.consoleDiff = (run.build && baselineRun && run !== baselineRun)
+          ? compareConsoleToBaseline(baselineRun.log, run.log)
+          : null;
+      });
       var html = '<table class="table table-bordered table-condensed job-compare-table"><thead><tr><th>Detail</th>';
       $.each(runs, function(index, run) {
         var build = run.build;
-        html += '<th>Build #' + escapeHtml(build ? build.number : run.number) +
-          (build && jenkinsJobUrl(jobName) ? ' <a href="' + escapeAttribute(jenkinsJobUrl(jobName) + build.number + '/') + '" target="_blank" rel="noopener" title="Open this build in Jenkins"><i class="fa fa-external-link"></i></a>' : '') + '</th>';
+        html += '<th' + (run.error ? ' class="run-compare-absent"' : '') + '>Build #' + escapeHtml(build ? build.number : run.number) +
+          (build && jenkinsJobUrl(jobName) ? ' <a href="' + escapeAttribute(jenkinsJobUrl(jobName) + build.number + '/') + '" target="_blank" rel="noopener" title="Open this build in Jenkins"><i class="fa fa-external-link"></i></a>' : '') +
+          (run.error ? '<br><small class="' + (run.missing ? 'text-muted' : 'text-danger') + '">' + escapeHtml(run.error) + '</small>' : '') + '</th>';
       });
       html += '</tr></thead><tbody>';
       $.each([
@@ -2055,34 +2325,78 @@
         {label: 'Started', value: function(run) { return run.build ? formatTimeHtml(run.build.timestamp) : renderMuted('Unknown'); }},
         {label: 'Duration', value: function(run) { return run.build ? escapeHtml(formatDuration(run.build.duration)) : renderMuted('Unknown'); }},
         {label: 'Worker', value: function(run) { return run.build ? escapeHtml(workerNodeLabel(run.build)) : renderMuted('Unknown'); }},
-        {label: 'Description', value: function(run) { return run.build ? renderValue(run.build.description) : renderMuted('Unknown'); }}
+        {label: 'Description', value: function(run) { return run.build ? renderValue(run.build.description) : renderMuted('Unknown'); }},
+        {label: 'Triggered by', value: function(run) { return run.build ? renderValue(runTriggerLabel(run.build)) : renderMuted('Unknown'); }},
+        {label: 'Changes', value: function(run) {
+          if (! run.build) { return renderMuted('Unknown'); }
+          var items = runChangeItems(run.build);
+          if (! items.length) { return renderMuted('No recorded changes'); }
+          return $.map(items.slice(0, 5), function(item) {
+            return '<div class="run-compare-change"><code>' + escapeHtml(item.id) + '</code> ' +
+              escapeHtml(item.message.slice(0, 120)) + (item.author ? ' <small>' + escapeHtml(item.author) + '</small>' : '') + '</div>';
+          }).join('') + (items.length > 5 ? renderMuted('+' + (items.length - 5) + ' more') : '');
+        }},
+        {label: 'Console', value: function(run) {
+          if (! run.build) { return renderMuted('Unknown'); }
+          var lines = String(run.log || '').split('\n').length;
+          var size = '<div>' + escapeHtml(lines.toLocaleString()) + ' lines</div>';
+          if (run === baselineRun) { return size + renderMuted('Baseline for comparison'); }
+          var diff = run.consoleDiff;
+          if (! diff) { return size; }
+          if (diff.skipped) { return size + renderMuted('Too large to compare'); }
+          if (! diff.addedLines && ! diff.removedLines) {
+            return size + '<span class="label label-success">Same as #' + escapeHtml(baselineRun.build.number) + '</span>';
+          }
+          return size + '<span class="label label-warning">Differs from #' + escapeHtml(baselineRun.build.number) + '</span>' +
+            '<div class="run-compare-diff-counts"><span class="text-success">+' + diff.addedLines + '</span> ' +
+            '<span class="text-danger">\u2212' + diff.removedLines + '</span> lines</div>';
+        }}
       ], function(index, row) {
         html += '<tr><td><strong>' + row.label + '</strong></td>';
-        $.each(runs, function(runIndex, run) { html += '<td>' + (run.error ? '<span class="text-danger">' + escapeHtml(run.error) + '</span>' : row.value(run)) + '</td>'; });
+        $.each(runs, function(runIndex, run) { html += '<td' + (run.error ? ' class="run-compare-absent"' : '') + '>' + (run.error ? renderMuted('\u2014') : row.value(run)) + '</td>'; });
         html += '</tr>';
       });
+      // A build that does not exist supplied nothing, and counting that as a
+      // difference marked every parameter as "differs" the moment one build
+      // number was mistyped - exactly when the highlight is least trustworthy.
       $.each(names, function(index, name) {
         var parameter = parameterDefinitions[name] || {name: name, type: ''};
-        var values = $.map(runs, function(run) { return Object.prototype.hasOwnProperty.call(run.values, name) ? parameterValueText(run.values[name]) : '\u0000not supplied'; });
-        var different = ! isSensitiveParameter(parameter) && values.some(function(value) { return value !== values[0]; });
+        var values = $.map(loadedRuns, function(run) { return Object.prototype.hasOwnProperty.call(run.values, name) ? parameterValueText(run.values[name]) : '\u0000not supplied'; });
+        var different = loadedRuns.length > 1 && ! isSensitiveParameter(parameter) &&
+          values.some(function(value) { return value !== values[0]; });
         html += '<tr' + (different ? ' class="run-compare-different"' : '') + '><td><strong>' + escapeHtml(name) + '</strong><br><small>Parameter' + (different ? ' · differs' : '') + '</small></td>';
         $.each(runs, function(runIndex, run) {
+          if (run.error) {
+            // "Not supplied" would claim the build ran without the parameter.
+            html += '<td class="run-compare-absent">' + renderMuted('\u2014') + '</td>';
+            return;
+          }
           var supplied = Object.prototype.hasOwnProperty.call(run.values, name);
           html += '<td>' + renderParameterValue(parameter, run.values[name], supplied) + '</td>';
         });
         html += '</tr>';
       });
       if (! names.length) { html += '<tr><td><strong>Parameters</strong></td><td colspan="' + runs.length + '">' + renderMuted('No run parameters recorded') + '</td></tr>'; }
-      html += '</tbody></table><h4>Full console logs</h4><div class="run-compare-logs">';
+      html += '</tbody></table>';
+      html += renderConsoleDiffSection(runs, baselineRun);
+      html += '<h4>Full console logs</h4><div class="run-compare-logs">';
       $.each(runs, function(index, run) {
-        html += '<div class="run-compare-log"><h4>Build #' + escapeHtml(run.build ? run.build.number : run.number) + '</h4>' +
+        // A build with no log has no sections to expand, nothing to copy and no
+        // raw log to open, so mounting the console viewer for it just puts a
+        // row of dead buttons over the words "No console output available".
+        if (run.error) {
+          html += '<div class="run-compare-log"><h4>Build #' + escapeHtml(run.number) + '</h4>' +
+            '<p class="' + (run.missing ? 'text-muted' : 'text-danger') + '">' + escapeHtml(run.error) + '</p></div>';
+          return;
+        }
+        html += '<div class="run-compare-log"><h4>Build #' + escapeHtml(run.build.number) + '</h4>' +
           (run.logError ? '<p class="text-warning">' + escapeHtml(run.logError) + '</p>' : '') +
-          (run.error ? '<p class="text-danger">' + escapeHtml(run.error) + '</p>' : '') +
           '<div id="jobRunCompareConsole-' + index + '"></div></div>';
       });
       html += '</div>';
       $('#runCompareResults').html(html);
       $.each(runs, function(index, run) {
+        if (run.error) { return; }
         var target = '#jobRunCompareConsole-' + index;
         var log = run.log || 'No console output available.';
         if (window.JobSeekerConsole) {
@@ -2093,10 +2407,52 @@
       });
     }
 
+    /** The build numbers this job still has, phrased for a status line. */
+    function runComparisonRangeHint() {
+      if (! runComparisonRange || ! runComparisonRange.last) { return ''; }
+      return runComparisonRange.first && runComparisonRange.first !== runComparisonRange.last
+        ? ' This job has builds #' + runComparisonRange.first + ' to #' + runComparisonRange.last + '.'
+        : ' This job has only build #' + runComparisonRange.last + '.';
+    }
+
+    /**
+     * Report what was actually compared. Claiming "Comparing 2 runs" when one of
+     * them does not exist is the part that misleads: the table then looks like a
+     * real difference between two builds rather than one build and a typo.
+     */
+    function runComparisonSummary(jobName, runs) {
+      var loaded = $.grep(runs, function(run) { return !! run.build; });
+      var absent = $.grep(runs, function(run) { return !! run.missing; });
+      var broken = $.grep(runs, function(run) { return run.error && ! run.missing; });
+      var parts = [];
+
+      if (loaded.length >= 2) {
+        parts.push(loaded.length === runs.length
+          ? 'Comparing ' + loaded.length + ' runs of ' + jobName + '. Differing parameter values are highlighted.'
+          : 'Comparing ' + loaded.length + ' of the ' + runs.length + ' runs you asked for. Differing parameter values are highlighted.');
+      } else {
+        parts.push('Nothing to compare: ' + (loaded.length === 1
+          ? 'only one of the build numbers exists.'
+          : 'none of the build numbers could be loaded.'));
+      }
+
+      if (absent.length) {
+        var numbers = $.map(absent, function(run) { return '#' + run.number; }).join(', ');
+        parts.push((absent.length === 1 ? 'Build ' : 'Builds ') + numbers +
+          (absent.length === 1 ? ' does not exist.' : ' do not exist.') + runComparisonRangeHint());
+      }
+      if (broken.length) {
+        parts.push((broken.length === 1 ? 'Build ' : 'Builds ') +
+          $.map(broken, function(run) { return '#' + run.number; }).join(', ') + ' could not be loaded from Jenkins.');
+      }
+
+      return parts.join(' ');
+    }
+
     function compareRuns() {
       var numbers = runNumbersFromInput();
       if (numbers.length < 2 || numbers.length > 4) {
-        $('#runCompareStatus').text('Enter 2 to 4 valid build numbers separated by commas.');
+        $('#runCompareStatus').text('Enter 2 to 4 valid build numbers separated by commas.' + runComparisonRangeHint());
         return;
       }
       var jobName = runComparisonJob;
@@ -2109,7 +2465,7 @@
         if (requestId !== runComparisonRequest) { return; }
         var runs = Array.prototype.slice.call(arguments);
         renderRunComparison(jobName, runs);
-        $('#runCompareStatus').text('Comparing ' + numbers.length + ' runs of ' + jobName + '. Differing parameter values are highlighted.');
+        $('#runCompareStatus').text(runComparisonSummary(jobName, runs));
       }).always(function() {
         if (requestId === runComparisonRequest) { $('#runCompareGo').prop('disabled', false); }
       });
@@ -2126,6 +2482,7 @@
     function openRunComparison(jobName) {
       if (! loadedJobDetails[jobName]) { return; }
       runComparisonJob = jobName;
+      runComparisonRange = null;
       ++runComparisonRequest;
       $('#runCompareBox').show();
       $('#runCompareJob').text(jobName);
@@ -2134,10 +2491,14 @@
       $('#runCompareStatus').text('Loading recent builds…');
       $('#runCompareBox')[0].scrollIntoView({behavior: 'smooth', block: 'start'});
       var requestId = runComparisonRequest;
-      jenkinsRequest(jenkinsJobPath(jobName) + '/api/json?tree=builds[number,result,building,timestamp,duration]{0,30}')
+      jenkinsRequest(jenkinsJobPath(jobName) + '/api/json?tree=firstBuild[number],lastBuild[number],builds[number,result,building,timestamp,duration]{0,30}')
         .done(function(data) {
           if (requestId !== runComparisonRequest) { return; }
           var builds = Array.isArray(data.builds) ? data.builds : [];
+          runComparisonRange = {
+            first: data.firstBuild && data.firstBuild.number ? Number(data.firstBuild.number) : 0,
+            last: data.lastBuild && data.lastBuild.number ? Number(data.lastBuild.number) : 0
+          };
           $('#runCompareRecent').html($.map(builds, function(build) {
             return '<button type="button" class="btn btn-default btn-xs run-compare-pick" data-build="' + escapeAttribute(build.number) + '">#' +
               escapeHtml(build.number) + ' ' + escapeHtml(build.building ? 'Running' : (build.result || 'No result')) + '</button>';
