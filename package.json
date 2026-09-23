@@ -4,7 +4,7 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
-    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
+    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:context-env && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
     "test:samples": "node scripts/test-job-samples-dataset-generator.js && python3 scripts/test-job-sample-syntax.py",
     "test:samples:runtime:e2e": "python3 scripts/test-job-sample-runtime-e2e.py",
     "test:samples:jobs:e2e": "python3 scripts/test-job-samples-e2e.py",
@@ -27,7 +27,7 @@
     "test:docker-monitor": "node scripts/test-docker-monitor.js",
     "test:job-container-metrics": "node scripts/test-job-container-metrics.js",
     "test:executors:e2e": "python3 scripts/test-shared-agent-executors-e2e.py",
-    "test:connectors": "node scripts/test-job-connectors.js",
+    "test:connectors": "node scripts/test-job-connectors.js && node scripts/test-environment-connectors.js",
     "test:connectors:sdk": "python3 scripts/test-jobseeker-connectors.py",
     "test:connectors:e2e": "python3 scripts/test-job-connectors-e2e.py",
     "test:connection-framework:e2e": "python3 scripts/test-connection-framework-e2e.py",
@@ -48,7 +48,10 @@
     "postinstall": "npm run assets:sync",
     "test:task-dag": "node scripts/test-job-task-graph.js && python3 scripts/test-jobseeker-dag.py",
     "test:task-dag:scanner": "php scripts/test-task-graph-scanner.php",
-    "test:task-dag:e2e": "python3 scripts/test-task-dag-e2e.py"
+    "test:task-dag:e2e": "python3 scripts/test-task-dag-e2e.py",
+    "test:context-env": "node scripts/test-context-environment.js",
+    "test:context-env:lib": "php scripts/test-environment-context.php",
+    "test:connectors:env:lib": "php scripts/test-environment-connector.php"
   },
   "engines": {
     "node": ">=18"

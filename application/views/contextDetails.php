@@ -1,5 +1,11 @@
 <?php
 $contextRows = !empty($list) ? $list : array();
+
+// Values the deployment supplies through JOBSEEKER_CONTEXT_* in .env. They read
+// like any other context and resolve in jobs the same way; what differs is that
+// only whoever owns the environment can change them, so they carry no actions.
+$environmentContextRows = !empty($environmentContexts) ? $environmentContexts : array();
+$contextRows = array_merge($contextRows, $environmentContextRows);
 $environmentNames = array();
 $projectNames = array();
 $encryptedContexts = 0;
@@ -56,7 +62,7 @@ foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
   }
 }
 ?>
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=6">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=7">
 
 <div class="content-wrapper context-page">
   <section class="content-header">
@@ -284,15 +290,20 @@ foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
             </thead>
             <tbody>
               <?php foreach ($contextRows as $record) {
+                $isEnvironmentRow = ! empty($record->readOnly);
                 $createdOn = !empty($record->CreatedOn) ? date('Y-m-d H:i', strtotime($record->CreatedOn)) : '';
                 $modifiedOn = !empty($record->ModifiedOn) ? date('Y-m-d H:i', strtotime($record->ModifiedOn)) : '';
                 $updatedOn = $modifiedOn !== '' ? $modifiedOn : $createdOn;
                 $owner = !empty($record->ModifiedBy) ? $record->ModifiedBy : $record->CreatedBy;
               ?>
-                <tr>
+                <tr<?php echo $isEnvironmentRow ? ' class="context-row-environment"' : ''; ?>>
                   <td>
                     <span class="context-key"><?php echo html_escape($record->ContextKey); ?></span>
-                    <span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span>
+                    <?php if ($isEnvironmentRow) { ?>
+                      <span class="context-row-meta"><code><?php echo html_escape($record->variableName); ?></code></span>
+                    <?php } else { ?>
+                      <span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span>
+                    <?php } ?>
                     <?php if (trim((string) $record->Description) !== '') { ?><span class="context-description" title="<?php echo html_escape($record->Description); ?>"><?php echo html_escape($record->Description); ?></span><?php } ?>
                   </td>
                   <td>
@@ -304,14 +315,18 @@ foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
                   </td>
                   <td><span class="context-badge context-badge-environment"><?php echo html_escape($record->Environment); ?></span></td>
                   <td><?php echo html_escape($record->ProjectName); ?></td>
-                  <td data-order="<?php echo (int) $record->IsActive; ?>"><span class="context-badge <?php echo (int) $record->IsActive === 1 ? 'context-badge-active' : 'context-badge-inactive'; ?>"><?php echo (int) $record->IsActive === 1 ? 'Active' : 'Inactive'; ?></span></td>
-                  <td><?php if ((int) $record->isEncrypted === 1) { ?><span class="context-badge context-badge-secret"><i class="fa fa-lock"></i> Encrypted</span><?php } else { ?><span class="context-row-meta">Standard</span><?php } ?></td>
+                  <td data-order="<?php echo (int) $record->IsActive; ?>"><?php if ($isEnvironmentRow && ! empty($record->shadowed)) { ?><span class="context-badge context-badge-inactive" title="A stored Context value with this key is what jobs resolve">Overridden</span><?php } else { ?><span class="context-badge <?php echo (int) $record->IsActive === 1 ? 'context-badge-active' : 'context-badge-inactive'; ?>"><?php echo (int) $record->IsActive === 1 ? 'Active' : 'Inactive'; ?></span><?php } ?></td>
+                  <td><?php if ($isEnvironmentRow) { ?><span class="context-badge context-badge-readonly" title="Set in the deployment environment; change it there and restart"><i class="fa fa-lock"></i> Read only</span><?php } else if ((int) $record->isEncrypted === 1) { ?><span class="context-badge context-badge-secret"><i class="fa fa-lock"></i> Encrypted</span><?php } else { ?><span class="context-row-meta">Standard</span><?php } ?></td>
                   <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo js_time(!empty($record->ModifiedOn) ? $record->ModifiedOn : $record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
                   <td><?php echo html_escape($owner); ?><?php if (!empty($record->ModifiedBy)) { ?><span class="context-row-meta">Last editor</span><?php } ?></td>
                   <?php if ($role != 1) { ?>
                     <td class="text-nowrap">
-                      <a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editContext/'.(int) $record->Id.'?environment='.rawurlencode($selectedEnvironment); ?>" title="Edit <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-pencil"></i></a>
-                      <button class="btn btn-sm btn-danger delete-context" type="button" data-context-id="<?php echo (int) $record->Id; ?>" data-context-key="<?php echo html_escape($record->ContextKey); ?>" title="Delete <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-trash"></i></button>
+                      <?php if ($isEnvironmentRow) { ?>
+                        <span class="context-row-meta">Set in <code>.env</code></span>
+                      <?php } else { ?>
+                        <a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editContext/'.(int) $record->Id.'?environment='.rawurlencode($selectedEnvironment); ?>" title="Edit <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-pencil"></i></a>
+                        <button class="btn btn-sm btn-danger delete-context" type="button" data-context-id="<?php echo (int) $record->Id; ?>" data-context-key="<?php echo html_escape($record->ContextKey); ?>" title="Delete <?php echo html_escape($record->ContextKey); ?>"><i class="fa fa-trash"></i></button>
+                      <?php } ?>
                     </td>
                   <?php } ?>
                 </tr>

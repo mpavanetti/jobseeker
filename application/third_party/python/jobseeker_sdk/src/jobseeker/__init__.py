@@ -10,6 +10,7 @@ import csv
 import json
 import logging
 import os
+import re
 import signal
 import shutil
 import socket
@@ -1428,9 +1429,26 @@ class JobSeeker:
     ) -> Any:
         payload = self._base_payload()
         payload.update({"key": key, "project": project})
-        value = self.transport.get_context(payload)
+        # A worker that cannot reach the settings database can still be handed a
+        # value by its own environment, so a transport failure is held rather
+        # than raised until the fallback below has had its turn.
+        transport_error = None
+        try:
+            value = self.transport.get_context(payload)
+        except Exception as error:  # noqa: BLE001 - re-raised below if nothing answers
+            transport_error = error
+            value = None
 
         if value is None:
+            value = context_from_environment(key)
+
+        if value is None:
+            # Nothing answered. If the database was the reason, say so: a silent
+            # default would hide an outage behind a plausible-looking value.
+            if transport_error is not None:
+                raise JobSeekerError(
+                    "Context lookup failed for %s (%s): %s" % (key, self.environment, transport_error)
+                ) from transport_error
             if required:
                 raise JobSeekerError("Context value not found: %s (%s)" % (key, self.environment))
             return default
@@ -1816,6 +1834,37 @@ def task(
     return decorator
 
 
+#: Context values a deployment supplies through its environment. The app shows
+#: them on the Context page and exports them into every job it generates, so a
+#: job resolves them whether it asks the SDK or reads os.environ directly.
+CONTEXT_ENVIRONMENT_PREFIX = "JOBSEEKER_CONTEXT_"
+CONTEXT_SENSITIVE_KEY = re.compile(
+    r"(?:^|[._-])(?:user(?:name)?|password|passwd|pwd|secret|token|api[._-]?key|private[._-]?key|credential)(?:$|[._-])",
+    re.IGNORECASE,
+)
+
+
+def context_environment_variable(key: str) -> str:
+    """The environment variable a context key is supplied by."""
+
+    cleaned = str(key or "").strip().replace(".", "_").replace("-", "_")
+    return CONTEXT_ENVIRONMENT_PREFIX + cleaned.upper()
+
+
+def context_from_environment(key: str) -> Optional[str]:
+    """A context value from the environment, or None.
+
+    Deliberately second in line behind the database: a stored Context value for
+    a specific environment is an operator's deliberate override of whatever the
+    deployment shipped with.
+    """
+
+    if CONTEXT_SENSITIVE_KEY.search(str(key or "").strip()):
+        return None
+    value = os.environ.get(context_environment_variable(key))
+    return None if value is None or value == "" else str(value)
+
+
 def get_context(
     key: str,
     default: Any = None,
@@ -2008,6 +2057,8 @@ __all__ = [
     "TmfTransport",
     "client",
     "conntest",
+    "context_environment_variable",
+    "context_from_environment",
     "dag",
     "get_asset",
     "get_connector",

@@ -69,10 +69,11 @@ class JobDependency_model extends CI_Model
         if (empty($keys)) {
             return array();
         }
-        $rows = $this->db->select('id,connector_key,environment,job_name,db_type,is_active')
-            ->from('database_settings')
-            ->where_in('connector_key', $keys)
-            ->get()->result_array();
+        // The connector catalog also contains read-only deployment connectors
+        // from JOBSEEKER_CONNECTOR_*; resolving only database_settings would
+        // incorrectly mark those references as missing in Job View.
+        $this->load->model('DbSettings_model', 'connectorCatalog');
+        $rows = $this->connectorCatalog->catalogSettingsForKeys($keys);
 
         $byKey = array();
         foreach ($rows as $row) {

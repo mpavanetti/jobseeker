@@ -345,13 +345,51 @@ class DbSettings_model extends CI_Model
         if ($environment !== 'ALL') {
             $this->db->where_in('environment', array_merge($this->environmentFilterValues($environment), array('ALL')));
         }
-        return $this->db
+        $stored = $this->db
             ->order_by('is_active', 'DESC')
             ->order_by('connector_key', 'ASC')
             ->order_by('environment', 'ASC')
             ->order_by('job_name', 'ASC')
             ->get()
             ->result();
+
+        $storedScopes = array();
+        foreach ($stored as $row) {
+            $storedScopes[strtolower($row->connector_key).'|'.strtoupper($row->environment).'|'.$row->job_name] = TRUE;
+        }
+        foreach ($this->environmentConnectorRows(FALSE) as $row) {
+            if ($environment !== 'ALL' && ! in_array(strtoupper($row['environment']), array_merge($this->environmentFilterValues($environment), array('ALL')), TRUE)) {
+                continue;
+            }
+            $scope = strtolower($row['connector_key']).'|'.strtoupper($row['environment']).'|'.$row['job_name'];
+            $row['shadowed'] = isset($storedScopes[$scope]);
+            $stored[] = (object) $row;
+        }
+
+        usort($stored, function($left, $right) {
+            $active = (int) $right->is_active - (int) $left->is_active;
+            if ($active !== 0) return $active;
+            return strcasecmp($left->connector_key.'|'.$left->environment.'|'.$left->job_name,
+                $right->connector_key.'|'.$right->environment.'|'.$right->job_name);
+        });
+        return $stored;
+    }
+
+    /** Stored and deployment connectors for dependency resolution. */
+    public function catalogSettingsForKeys($keys)
+    {
+        $keys = array_values(array_unique(array_filter(array_map('strval', (array) $keys))));
+        if (empty($keys)) {
+            return array();
+        }
+        $rows = $this->db->select('id,connector_key,environment,job_name,db_type,is_active')
+            ->from('database_settings')->where_in('connector_key', $keys)->get()->result_array();
+        foreach ($this->environmentConnectorRows(FALSE) as $row) {
+            if (in_array($row['connector_key'], $keys, TRUE)) {
+                $rows[] = $row;
+            }
+        }
+        return $rows;
     }
 
     public function getSetting($id, $includeSecret = FALSE)
@@ -420,6 +458,12 @@ class DbSettings_model extends CI_Model
             ->where_in('job_name', array($jobName, '*'))
             ->get()
             ->result_array();
+        foreach ($this->environmentConnectorRows(TRUE) as $row) {
+            if (in_array($row['environment'], array($environment, 'ALL'), TRUE)
+                && in_array($row['job_name'], array($jobName, '*'), TRUE)) {
+                $rows[] = $row;
+            }
+        }
         $selected = array();
 
         foreach ($rows as $row) {
@@ -432,6 +476,39 @@ class DbSettings_model extends CI_Model
 
         ksort($selected);
         return array_map(function($item) { return $item['row']; }, array_values($selected));
+    }
+
+    /** The effective connector row for a key/scope, including `.env` rows. */
+    public function runtimeSetting($connectorKey, $environment, $jobName = '*')
+    {
+        foreach ($this->runtimeSettings($environment, $jobName) as $row) {
+            if ((string) $row['connector_key'] === (string) $connectorKey) {
+                return (object) $row;
+            }
+        }
+        return NULL;
+    }
+
+    /** Find a catalog row even when the caller is looking across all scopes. */
+    public function catalogSetting($connectorKey, $environment = 'ALL', $jobName = '*')
+    {
+        $environment = strtoupper(trim((string) $environment)) ?: 'ALL';
+        if ($environment !== 'ALL') {
+            return $this->runtimeSetting($connectorKey, $environment, $jobName);
+        }
+        foreach ($this->catalogSettingsForKeys(array($connectorKey)) as $row) {
+            if ((int) $row['is_active'] === 1
+                && ($row['job_name'] === '*' || $jobName === '*' || $row['job_name'] === $jobName)) {
+                return (object) $row;
+            }
+        }
+        return NULL;
+    }
+
+    private function environmentConnectorRows($includeSecrets)
+    {
+        $this->load->library('EnvironmentConnector');
+        return $this->environmentconnector->rows((bool) $includeSecrets);
     }
 
     public function logRuntimeAccess($row, $environment, $jobName, $status)

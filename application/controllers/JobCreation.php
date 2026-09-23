@@ -37,18 +37,15 @@ class JobCreation extends BaseController
     public function index()
     {
 
-        $this->global['pageTitle'] = 'Job Seeker : Job Creation';
+      $this->global['pageTitle'] = 'Job Seeker : Job Creation';
       $gitCredentials = array();
       if ($this->db->table_exists('database_settings')) {
-        $gitCredentials = $this->db
-          ->select('connector_key,environment,job_name,address,auth_type')
-          ->from('database_settings')
-          ->where('db_type', 'git_repository')
-          ->where('is_active', 1)
-          ->order_by('connector_key', 'ASC')
-          ->order_by('environment', 'ASC')
-          ->get()
-          ->result();
+        $this->load->model('DbSettings_model', 'connectorCatalog');
+        foreach ($this->connectorCatalog->listSettings('ALL') as $connector) {
+          if ($connector->db_type === 'git_repository' && (int) $connector->is_active === 1) {
+            $gitCredentials[] = $connector;
+          }
+        }
 		$gitCredentials = $this->jobSeekerFilterEnvironmentRows($gitCredentials, 'environment', TRUE);
       }
       $hopEnabled = $this->hopEnabled();
@@ -3041,17 +3038,9 @@ class JobCreation extends BaseController
           return FALSE;
         }
         if ($credentialKey !== '') {
-          if (! $this->db->table_exists('database_settings')) {
-            return FALSE;
-          }
-          $credentialExists = $this->db
-            ->from('database_settings')
-            ->where('connector_key', $credentialKey)
-            ->where('db_type', 'git_repository')
-            ->where('is_active', 1)
-            ->limit(1)
-            ->count_all_results() > 0;
-          if (! $credentialExists) {
+          $this->load->model('DbSettings_model', 'connectorCatalog');
+          $credential = $this->connectorCatalog->catalogSetting($credentialKey);
+          if (! $credential || $credential->db_type !== 'git_repository' || (int) $credential->is_active !== 1) {
             return FALSE;
           }
         }
@@ -3866,10 +3855,7 @@ class JobCreation extends BaseController
 
         $results = array();
         foreach ($requestedKeys as $key) {
-          $row = $this->db->select('connector_key,environment,job_name,db_type')
-            ->from('database_settings')->where('connector_key', $key)
-            ->order_by("environment = ".$this->db->escape($environment), 'DESC', FALSE)
-            ->limit(1)->get()->row();
+          $row = $this->connectorCatalog->catalogSetting($key, $environment, $jobName !== '' ? $jobName : '*');
           if (! $row) {
             $results[] = array('key' => $key, 'ok' => FALSE, 'status' => 'missing', 'message' => 'Connector is not in the catalog.');
             continue;

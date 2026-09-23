@@ -53,7 +53,16 @@ class ConnectorRuntime extends BaseController
         }
 
         $secret = array('backend' => $backend);
-        if ($backend === 'local') {
+        if ($backend === 'deployment') {
+            // `.env` connector secrets are already in this PHP process. Send
+            // them through the same authenticated, run-scoped value contract
+            // as an encrypted local connector; the worker never needs the
+            // application's whole environment and the UI never receives them.
+            $values = isset($row['_secret_values']) && is_array($row['_secret_values'])
+                ? $row['_secret_values'] : array();
+            $secret['backend'] = 'local';
+            $secret['values'] = (object) array_map(function($value) { return (string) $value; }, $values);
+        } else if ($backend === 'local') {
             $values = $this->connectors->decryptLocalSecret(isset($row['secret_encrypted']) ? $row['secret_encrypted'] : '');
             if ($values === FALSE) {
                 throw new RuntimeException('Connector '.$row['connector_key'].' has an unreadable local secret.');

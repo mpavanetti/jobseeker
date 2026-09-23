@@ -51,6 +51,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
 .connector-status-dot { width:8px; height:8px; border-radius:50%; background:#9aa5b1; }
 .connector-status.active .connector-status-dot { background:#2e8540; }
 .connector-actions { white-space:nowrap; }
+.connector-environment-row td { background:#f4f9fd !important; }
 @media (max-width: 991px) { .connector-form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .connector-form-grid .span-4 { grid-column:span 2; } }
 @media (max-width: 600px) { .connector-toolbar { align-items:flex-start; flex-direction:column; } .connector-form-grid { grid-template-columns:1fr; } .connector-form-grid .span-2,.connector-form-grid .span-4 { grid-column:span 1; } }
 </style>
@@ -139,7 +140,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
               <div class="form-group">
                 <label for="secret_backend">Secret source</label>
                 <select class="form-control" id="secret_backend" name="secret_backend" required>
-                  <?php foreach ($secretBackends as $backend => $label) { ?>
+                  <?php foreach ($editableSecretBackends as $backend => $label) { ?>
                     <option value="<?php echo html_escape($backend); ?>"<?php echo $selectedBackend === $backend ? ' selected' : ''; ?>><?php echo html_escape($label); ?></option>
                   <?php } ?>
                 </select>
@@ -213,16 +214,18 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
             <tbody>
             <?php foreach ($settings as $record) {
               $isBuiltin = ($record->owner === 'system' && $record->connector_key === 'jobseeker-mariadb');
+              $isEnvironmentConnector = ! empty($record->readOnly) && isset($record->source) && $record->source === 'environment';
+              $secretFields = $isEnvironmentConnector && ! empty($record->secretFields) ? (array) $record->secretFields : array();
             ?>
-              <tr data-connector-key="<?php echo html_escape($record->connector_key); ?>">
-                <td class="connector-key"><?php echo html_escape($record->connector_key); ?><?php echo $isBuiltin ? ' <span class="label label-info" title="Seeded by JobSeeker; editable">Built-in</span>' : ''; ?></td>
+              <tr data-connector-key="<?php echo html_escape($record->connector_key); ?>"<?php echo $isEnvironmentConnector ? ' class="connector-environment-row"' : ''; ?>>
+                <td class="connector-key"><?php echo html_escape($record->connector_key); ?><?php echo $isBuiltin ? ' <span class="label label-info" title="Seeded by JobSeeker; editable">Built-in</span>' : ''; ?><?php echo $isEnvironmentConnector ? ' <span class="label label-primary" title="Defined in .env and read only">.env</span>' : ''; ?></td>
                 <td class="connector-scope"><?php echo html_escape($record->environment); ?> / <?php echo $record->job_name === '*' ? 'shared' : html_escape($record->job_name); ?></td>
                 <td><?php echo html_escape(isset($connectorTypes[$record->db_type]) ? $connectorTypes[$record->db_type] : $record->db_type); ?><br><small><?php echo html_escape(isset($authenticationTypes[$record->auth_type]) ? $authenticationTypes[$record->auth_type] : $record->auth_type); ?></small></td>
                 <td class="connector-endpoint"><?php echo html_escape($record->address); ?>:<?php echo html_escape($record->port); ?><br><small><?php echo html_escape($record->schema); ?></small></td>
-                <td><?php echo html_escape(isset($secretBackends[$record->secret_backend]) ? $secretBackends[$record->secret_backend] : $record->secret_backend); ?></td>
-                <td><span class="connector-status <?php echo (int) $record->is_active === 1 ? 'active' : ''; ?>"><span class="connector-status-dot"></span><?php echo (int) $record->is_active === 1 ? 'Active' : 'Inactive'; ?></span></td>
+                <td><?php echo html_escape(isset($secretBackends[$record->secret_backend]) ? $secretBackends[$record->secret_backend] : $record->secret_backend); ?><?php if ($isEnvironmentConnector && ! empty($secretFields)) { ?><br><small title="Values are never displayed"><i class="fa fa-lock"></i> <?php echo html_escape(implode(', ', $secretFields)); ?>: &bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</small><?php } ?></td>
+                <td><?php if ($isEnvironmentConnector && ! empty($record->shadowed)) { ?><span class="label label-default" title="A stored connector with the same key and scope takes precedence">Overridden</span><?php } else { ?><span class="connector-status <?php echo (int) $record->is_active === 1 ? 'active' : ''; ?>"><span class="connector-status-dot"></span><?php echo (int) $record->is_active === 1 ? 'Active' : 'Inactive'; ?></span><?php } ?></td>
                 <td><?php echo js_time($record->updated_at ?: $record->creation_date); ?></td>
-                <td class="connector-actions"><button class="btn btn-default btn-xs connectorHelp" type="button" data-key="<?php echo html_escape($record->connector_key); ?>" data-type="<?php echo html_escape($record->db_type); ?>" data-auth="<?php echo html_escape($record->auth_type); ?>" data-backend="<?php echo html_escape($record->secret_backend); ?>" title="Usage"><i class="fa fa-code"></i></button> <button class="btn btn-info btn-xs testConnector" type="button" data-id="<?php echo (int) $record->id; ?>" data-key="<?php echo html_escape($record->connector_key); ?>" title="Run a live connection test on a Jenkins worker"><i class="fa fa-plug"></i> Test</button> <a class="btn btn-warning btn-xs" href="<?php echo base_url().'dbSettings?edit='.(int) $record->id.'&amp;environment='.$environmentQuery; ?>" title="Edit"><i class="fa fa-pencil"></i></a> <button class="btn btn-danger btn-xs deleteConnector" type="button" data-id="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
+                <td class="connector-actions"><button class="btn btn-default btn-xs connectorHelp" type="button" data-key="<?php echo html_escape($record->connector_key); ?>" data-type="<?php echo html_escape($record->db_type); ?>" data-auth="<?php echo html_escape($record->auth_type); ?>" data-backend="<?php echo html_escape($record->secret_backend); ?>" title="Usage"><i class="fa fa-code"></i></button> <button class="btn btn-info btn-xs testConnector" type="button" data-id="<?php echo (int) $record->id; ?>" data-key="<?php echo html_escape($record->connector_key); ?>" data-environment="<?php echo html_escape($record->environment); ?>" data-job="<?php echo html_escape($record->job_name); ?>" title="Run a live connection test on a Jenkins worker"><i class="fa fa-plug"></i> Test</button><?php if ($isEnvironmentConnector) { ?> <span class="label label-default" title="Change this connector in .env and restart PHP"><i class="fa fa-lock"></i> Read only</span><?php } else { ?> <a class="btn btn-warning btn-xs" href="<?php echo base_url().'dbSettings?edit='.(int) $record->id.'&amp;environment='.$environmentQuery; ?>" title="Edit"><i class="fa fa-pencil"></i></a> <button class="btn btn-danger btn-xs deleteConnector" type="button" data-id="<?php echo (int) $record->id; ?>" title="Delete"><i class="fa fa-trash"></i></button><?php } ?></td>
               </tr>
             <?php } ?>
             </tbody>
@@ -370,7 +373,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     $('#connectorTestRunning').show();
     $('#connectorTestOutcome').hide();
     $('#connectorTestModal').modal('show');
-    $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/testConnector?environment=' + encodeURIComponent(<?php echo json_encode($globalEnvironment); ?>), data:{id:button.data('id'), mode:'live'}}).done(function(response) {
+    $.ajax({type:'POST', dataType:'json', url:baseURL + 'dbSettings/testConnector?environment=' + encodeURIComponent(<?php echo json_encode($globalEnvironment); ?>), data:{id:button.data('id'), key:button.data('key'), connector_environment:button.data('environment'), connector_job:button.data('job'), mode:'live'}}).done(function(response) {
       renderConnectorTest(response);
     }).fail(function(xhr) {
       renderConnectorTest(xhr.responseJSON || {ok:false, status:'error', message:'Connector test failed.'});
@@ -387,6 +390,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     var backendNotes = {
       local: 'Values are decrypted only during build materialization. Leave all local value fields blank while editing to preserve the saved credential.',
       environment: 'Each connector field is read from the mapped Jenkins worker environment variable when the build starts.',
+      deployment: 'This connector is defined in .env. Its secret values are masked, read only, and delivered only through the authenticated run-scoped connector catalog.',
       azure_key_vault: 'The Jenkins worker uses the selected Azure credential mode, then reads each mapped Key Vault secret.',
       aws_secrets_manager: 'The Jenkins worker uses the selected AWS credential mode, then reads mapped fields from the secret JSON object.'
     };

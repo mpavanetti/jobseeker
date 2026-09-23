@@ -425,13 +425,16 @@ class DbSettings extends BaseController
         }
 
         $this->global['pageTitle'] = 'Job Seeker : Connectors';
+        $secretBackendLabels = $this->secretBackends();
+        $secretBackendLabels['deployment'] = 'Deployment environment';
         $data = array(
             'settings' => $this->model->listSettings($selectedEnvironment),
             'editing' => $editing,
             'showForm' => $this->input->get('create') === '1' || $editing !== NULL,
             'connectorTypes' => $this->connectorTypes(),
             'authenticationTypes' => $this->authenticationTypes(),
-            'secretBackends' => $this->secretBackends(),
+            'secretBackends' => $secretBackendLabels,
+            'editableSecretBackends' => $this->secretBackends(),
             'environments' => $this->environments(),
             'selectedEnvironment' => $selectedEnvironment
         );
@@ -517,7 +520,22 @@ class DbSettings extends BaseController
             return;
         }
 
-        $connector = $this->model->getSetting((int) $this->input->post('id'), TRUE);
+        $connectorId = (int) $this->input->post('id');
+        $connector = $connectorId > 0 ? $this->model->getSetting($connectorId, TRUE) : NULL;
+        if (! $connector) {
+            $connectorKey = $this->normalizeConnectorKey($this->input->post('key'));
+            $connectorEnvironment = $this->normalizeJobSeekerEnvironment((string) $this->input->post('connector_environment'));
+            $connectorJob = $this->normalizeJobName($this->input->post('connector_job'));
+            if ($connectorEnvironment === '' || $connectorEnvironment === 'ALL') {
+                $connectorEnvironment = $this->connectionTestEnvironment('ALL');
+            }
+            if ($connectorJob === FALSE || $connectorJob === '*') {
+                $connectorJob = 'jobseeker-connection-test';
+            }
+            if ($connectorKey !== '') {
+                $connector = $this->model->runtimeSetting($connectorKey, $connectorEnvironment, $connectorJob);
+            }
+        }
         if (! $connector) {
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Connector not found.'), 404);
             return;
@@ -567,7 +585,15 @@ class DbSettings extends BaseController
     {
         $secretReady = FALSE;
         $credentialStatus = 'Credential reference is invalid.';
-        if ($connector->secret_backend === 'local') {
+        if ($connector->secret_backend === 'deployment') {
+            $values = isset($connector->_secret_values) && is_array($connector->_secret_values)
+                ? $connector->_secret_values : array();
+            $secretReady = $connector->auth_type === 'none' || ! empty($values);
+            $credentialStatus = $secretReady
+                ? 'Deployment values are available to the connector runtime.'
+                : 'The deployment connector has no usable secret values.';
+            unset($values);
+        } else if ($connector->secret_backend === 'local') {
             $values = $this->model->decryptLocalSecret($connector->secret_encrypted);
             $secretReady = is_array($values) && ($connector->auth_type === 'none' || ! empty($values));
             $credentialStatus = $secretReady ? 'Encrypted values are readable.' : 'Encrypted values could not be read.';
