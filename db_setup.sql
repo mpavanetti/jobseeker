@@ -431,12 +431,29 @@ CREATE TABLE IF NOT EXISTS `hop_server_executions` (
 CREATE TABLE IF NOT EXISTS `projectdetails` (
   `Id` int(11) NOT NULL AUTO_INCREMENT,
   `ProjectName` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
-  `GitPath` varchar(510) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `GitPath` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `GitCredentialKey` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
   `IsActive` tinyint(1) NOT NULL,
   `CreatedOn` datetime NOT NULL,
   `ModifiedOn` datetime DEFAULT NULL,
   PRIMARY KEY (`Id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Branch defaults stay separate from runtime contexts so deploying a context
+-- cannot accidentally copy a DEV source branch into production. The build
+-- credential is one connector key on the project (projectdetails.GitCredentialKey);
+-- the connector catalog already resolves that key per environment.
+CREATE TABLE IF NOT EXISTS `project_git_defaults` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` int(11) NOT NULL,
+  `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'DEFAULT',
+  `branch` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `project_git_environment` (`project_id`,`environment`),
+  CONSTRAINT `project_git_defaults_project_fk` FOREIGN KEY (`project_id`) REFERENCES `projectdetails` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando dados para a tabela jobseeker.projectdetails: ~0 rows (aproximadamente)
 /*!40000 ALTER TABLE `projectdetails` DISABLE KEYS */;
@@ -653,6 +670,27 @@ INSERT INTO `tbl_users` (`userId`, `email`, `password`, `name`, `mobile`, `group
 	(17, 'keyuser@example.com', '$2y$10$wSC09UX5gpLKPZUxxGIpfOx3mRTGNXGqYu7BSO42BpVuht.ilnGUm', 'Key User', '012981992589', 18, 3, 0, 1, '2021-08-11 19:26:20', 1, '2021-08-11 19:26:56'),
 	(18, 'developer@example.com', '$2y$10$EuKfsYSVZM3z693lBFuTpuDnER4W3UhqbDSn.yRT4y1OSlVCm9Zw.', 'Developer', '012981992589', 2, 2, 0, 1, '2021-08-11 19:26:44', NULL, NULL);
 /*!40000 ALTER TABLE `tbl_users` ENABLE KEYS */;
+
+-- Personal Git accounts used by OpenVSCode workspaces. Protected values in
+-- secret_encrypted are encrypted with the application encryption key.
+CREATE TABLE IF NOT EXISTS `user_git_accounts` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `provider` varchar(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'generic',
+  `label` varchar(255) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `host` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `path_prefix` varchar(255) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `auth_type` varchar(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'token',
+  `username` varchar(255) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `secret_encrypted` text COLLATE utf8_unicode_ci NOT NULL,
+  `public_key` text COLLATE utf8_unicode_ci,
+  `fingerprint` varchar(255) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `last_used_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_git_account_scope` (`user_id`,`host`,`path_prefix`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando estrutura para tabela jobseeker.tmf
 CREATE TABLE IF NOT EXISTS `tmf` (

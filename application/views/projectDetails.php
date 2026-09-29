@@ -6,9 +6,10 @@ foreach ($projectRows as $projectRecord) {
     $projectsWithRepository++;
   }
 }
+$projectGitDefaultsByProject = isset($projectGitDefaultsByProject) && is_array($projectGitDefaultsByProject) ? $projectGitDefaultsByProject : array();
 ?>
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=5">
 
 <div class="content-wrapper context-page settings-page">
   <section class="content-header">
@@ -64,24 +65,19 @@ foreach ($projectRows as $projectRecord) {
         <div class="box-header with-border context-card-header">
           <div class="context-card-title">
             <span class="context-card-title-icon"><i class="fa fa-plus"></i></span>
-            <div><h3>Add a project</h3><p>Create a reusable scope for contexts and source configuration.</p></div>
+            <div><h3>Add a project</h3><p>A scope for context variables, optionally with the Git repository its jobs run.</p></div>
           </div>
         </div>
         <form action="<?php echo base_url(); ?>Context/addProject" method="POST" id="projectCreateForm">
           <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
           <div class="box-body context-card-body">
             <div class="context-form-grid">
-              <div class="context-field settings-field-name">
+              <div class="context-field project-field-name">
                 <label for="name">Project name <span class="text-danger">*</span></label>
-                <input id="name" type="text" name="name" class="form-control" placeholder="e.g. Customer Analytics" maxlength="1000" autocomplete="off" required>
+                <input id="name" type="text" name="name" class="form-control" placeholder="e.g. Customer Analytics" maxlength="255" autocomplete="off" required>
                 <span class="context-help">This name identifies the project in context selectors.</span>
               </div>
-              <div class="context-field settings-field-wide">
-                <label for="gitpath">Git path</label>
-                <input id="gitpath" type="text" name="gitpath" class="form-control" placeholder="https://github.com/organization/repository.git" maxlength="2000" autocomplete="off">
-                <span class="context-help">Optional source repository or local Git path.</span>
-              </div>
-              <div class="context-field settings-field-status">
+              <div class="context-field project-field-status">
                 <label for="active">Status</label>
                 <select id="active" class="form-control" name="active">
                   <option value="1">Active</option>
@@ -89,6 +85,7 @@ foreach ($projectRows as $projectRecord) {
                 </select>
               </div>
             </div>
+            <?php $this->load->view('includes/projectGitFields', array('repositoryUrl' => '', 'credentialKey' => '', 'branchDefaults' => array())); ?>
           </div>
           <div class="box-footer context-form-footer">
             <span class="context-form-note"><i class="fa fa-info-circle"></i> Project names must be unique.</span>
@@ -127,7 +124,7 @@ foreach ($projectRows as $projectRecord) {
 
         <div class="context-table-wrap">
           <table id="settingsDetailsTable" class="table table-hover context-table">
-            <thead><tr><th>Project</th><th>Git path</th><th>Status</th><th>Updated</th><?php if ($role != 1) { ?><th class="settings-actions-column">Actions</th><?php } ?></tr></thead>
+            <thead><tr><th>Project</th><th>Git repository and branches</th><th>Status</th><th>Updated</th><?php if ($role != 1) { ?><th class="settings-actions-column">Actions</th><?php } ?></tr></thead>
             <tbody>
               <?php foreach ($projectRows as $record) {
                 $createdOn = !empty($record->CreatedOn) ? date('Y-m-d H:i', strtotime($record->CreatedOn)) : '';
@@ -136,7 +133,18 @@ foreach ($projectRows as $projectRecord) {
               ?>
                 <tr>
                   <td><span class="settings-name"><?php echo html_escape($record->ProjectName); ?></span><span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span></td>
-                  <td><?php if (trim((string) $record->GitPath) !== '') { ?><code class="settings-path" title="<?php echo html_escape($record->GitPath); ?>"><?php echo html_escape($record->GitPath); ?></code><?php } else { ?><span class="settings-empty-value">Not configured</span><?php } ?></td>
+                  <td><?php if (trim((string) $record->GitPath) !== '') { ?><code class="settings-path" title="<?php echo html_escape($record->GitPath); ?>"><?php echo html_escape($record->GitPath); ?></code><?php } else { ?><span class="settings-empty-value">No Git repository</span><?php } ?>
+                    <?php
+                      $rowCredential = isset($record->GitCredentialKey) ? trim((string) $record->GitCredentialKey) : '';
+                      $rowDefaults = isset($projectGitDefaultsByProject[(int) $record->Id]) ? $projectGitDefaultsByProject[(int) $record->Id] : array();
+                      if (trim((string) $record->GitPath) !== '') {
+                    ?>
+                      <span class="project-git-summary">
+                        <?php if ($rowCredential !== '') { ?><span class="project-git-chip" title="Build credential"><i class="fa fa-lock"></i> <?php echo html_escape($rowCredential); ?></span><?php } else { ?><span class="project-git-chip is-muted" title="Builds clone without a credential"><i class="fa fa-globe"></i> public</span><?php } ?>
+                        <?php $onlyFallback = count($rowDefaults) === 1 && isset($rowDefaults['DEFAULT']); foreach ($rowDefaults as $environmentKey => $setting) { ?><span class="project-git-chip" title="Branch for <?php echo html_escape($environmentKey === 'DEFAULT' ? ($onlyFallback ? 'every environment' : 'environments without their own branch') : $environmentKey); ?>"><i class="fa fa-code-fork"></i> <?php echo html_escape(($environmentKey === 'DEFAULT' ? ($onlyFallback ? 'all' : 'others') : $environmentKey).': '.$setting['branch']); ?></span><?php } ?>
+                      </span>
+                    <?php } ?>
+                  </td>
                   <td><span class="context-badge <?php echo (int) $record->IsActive === 1 ? 'context-badge-active' : 'context-badge-inactive'; ?>"><?php echo (int) $record->IsActive === 1 ? 'Active' : 'Inactive'; ?></span></td>
                   <td data-order="<?php echo html_escape($updatedOn); ?>"><?php echo js_time(!empty($record->ModifiedOn) ? $record->ModifiedOn : $record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?><?php if ($modifiedOn === '') { ?><span class="context-row-meta">Created</span><?php } ?></td>
                   <?php if ($role != 1) { ?><td class="settings-actions"><a class="btn btn-sm btn-default" href="<?php echo base_url().'Context/editProject/'.(int) $record->Id; ?>" title="Edit <?php echo html_escape($record->ProjectName); ?>"><i class="fa fa-pencil"></i></a><button type="button" class="btn btn-sm btn-danger delete-setting" data-setting-id="<?php echo (int) $record->Id; ?>" data-setting-name="<?php echo html_escape($record->ProjectName); ?>" title="Delete <?php echo html_escape($record->ProjectName); ?>"><i class="fa fa-trash"></i></button></td><?php } ?>

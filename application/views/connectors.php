@@ -7,8 +7,11 @@ $value = function($field, $default = '') use ($editing, $isEditing) {
 $globalEnvironment = isset($selectedEnvironment) ? $selectedEnvironment : 'ALL';
 $connectorEnvironment = $isEditing ? $value('environment', $globalEnvironment) : $globalEnvironment;
 $environmentQuery = rawurlencode($globalEnvironment);
-$selectedType = $value('db_type', 'mysql');
-$selectedAuthType = $value('auth_type', 'username_password');
+// Other pages link here with ?create=1&type=<connector type> to preset the form.
+$requestedType = $isEditing ? '' : (string) $this->input->get('type', TRUE);
+$presetType = isset($connectorTypes[$requestedType]) ? $requestedType : 'mysql';
+$selectedType = $value('db_type', $presetType);
+$selectedAuthType = $value('auth_type', $presetType === 'git_repository' ? 'token' : 'username_password');
 $selectedBackend = $value('secret_backend', 'local');
 $mappingLines = function($mappings) {
   $lines = array();

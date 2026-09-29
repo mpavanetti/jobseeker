@@ -1,5 +1,5 @@
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=5">
 
 <div class="content-wrapper context-page settings-page">
   <section class="content-header">
@@ -35,10 +35,10 @@
               <div><strong>Last modified</strong><?php echo js_time($project->ModifiedOn, array('format' => 'Y-m-d H:i', 'empty' => 'Never')); ?></div>
             </div>
             <div class="context-form-grid">
-              <div class="context-field settings-field-name"><label for="name">Project name <span class="text-danger">*</span></label><input id="name" type="text" name="name" value="<?php echo html_escape($project->ProjectName); ?>" class="form-control" maxlength="1000" autocomplete="off" required><span class="context-help">The name must remain unique.</span></div>
-              <div class="context-field settings-field-wide"><label for="gitpath">Git path</label><input id="gitpath" type="text" name="gitpath" value="<?php echo html_escape($project->GitPath); ?>" class="form-control" placeholder="https://github.com/organization/repository.git" maxlength="2000" autocomplete="off"><span class="context-help">Optional source repository or local Git path.</span></div>
-              <div class="context-field settings-field-status"><label for="active">Status</label><select id="active" class="form-control" name="active"><option value="1" <?php echo (int) $project->IsActive === 1 ? 'selected' : ''; ?>>Active</option><option value="0" <?php echo (int) $project->IsActive === 0 ? 'selected' : ''; ?>>Inactive</option></select></div>
+              <div class="context-field project-field-name"><label for="name">Project name <span class="text-danger">*</span></label><input id="name" type="text" name="name" value="<?php echo html_escape($project->ProjectName); ?>" class="form-control" maxlength="255" autocomplete="off" required><span class="context-help">The name must remain unique.</span></div>
+              <div class="context-field project-field-status"><label for="active">Status</label><select id="active" class="form-control" name="active"><option value="1" <?php echo (int) $project->IsActive === 1 ? 'selected' : ''; ?>>Active</option><option value="0" <?php echo (int) $project->IsActive === 0 ? 'selected' : ''; ?>>Inactive</option></select></div>
             </div>
+            <?php $this->load->view('includes/projectGitFields', array('repositoryUrl' => (string) $project->GitPath, 'credentialKey' => isset($projectGitCredentialKey) ? $projectGitCredentialKey : '', 'branchDefaults' => isset($projectGitDefaults) ? $projectGitDefaults : array())); ?>
           </div>
           <div class="box-footer context-form-footer"><span class="context-form-note"><i class="fa fa-info-circle"></i> Existing contexts keep their project association.</span><div class="context-form-actions"><a href="<?php echo base_url(); ?>Context/projectDetails" class="btn btn-default">Cancel</a><button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Save changes</button></div></div>
         </form>

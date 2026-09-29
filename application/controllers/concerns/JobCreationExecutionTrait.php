@@ -264,6 +264,31 @@ trait JobCreationExecutionTrait
         );
       }
 
+      /**
+       * A project-bound Git job asks JobSeeker, as the build starts, which
+       * repository, branch and credential its project uses in this
+       * environment. The values saved here are only a snapshot for the form
+       * and the dependency scanner; a non-empty branch is a deliberate pin.
+       * Runs before connectorRuntimeLines(), which clears the worker token.
+       */
+      private function projectGitSourceLines($execution) {
+        return array(
+          'printf "%s\n" "[JobSeeker] Git source from project "'.escapeshellarg(isset($execution['projectName']) ? $execution['projectName'] : ''),
+          'export JOBSEEKER_PROJECT_ID='.escapeshellarg((string) (int) $execution['projectId']),
+          'export JOBSEEKER_PROJECT_NAME='.escapeshellarg(isset($execution['projectName']) ? $execution['projectName'] : ''),
+          'export JOBSEEKER_GIT_FOLLOW_PROJECT=1',
+          'export JOBSEEKER_GIT_REPOSITORY_URL='.escapeshellarg($execution['repositoryUrl']),
+          'export JOBSEEKER_GIT_REPOSITORY_BRANCH='.escapeshellarg($execution['branch']),
+          'export JOBSEEKER_GIT_CREDENTIAL_KEY='.escapeshellarg(isset($execution['credentialKey']) ? $execution['credentialKey'] : ''),
+          'JOBSEEKER_GIT_SOURCE="$(PYTHONPATH="$JOBSEEKER_REPOSITORY_ROOT/python/lib/jobseeker-sdk/src${PYTHONPATH:+:$PYTHONPATH}" python3 -c \'from jobseeker import connector_cli; connector_cli()\' git-source --project "$JOBSEEKER_PROJECT_ID" --environment "${JOBSEEKER_ENVIRONMENT:-LOCAL}")" || { echo "JobSeeker could not resolve the Git repository of project $JOBSEEKER_PROJECT_NAME for ${JOBSEEKER_ENVIRONMENT:-LOCAL}." >&2; exit 78; }',
+          'JOBSEEKER_GIT_REPOSITORY_URL="$(printf "%s\n" "$JOBSEEKER_GIT_SOURCE" | sed -n 1p)"',
+          'if [ -z "$JOBSEEKER_GIT_REPOSITORY_BRANCH" ]; then JOBSEEKER_GIT_REPOSITORY_BRANCH="$(printf "%s\n" "$JOBSEEKER_GIT_SOURCE" | sed -n 2p)"; JOBSEEKER_GIT_BRANCH_SOURCE=project; else JOBSEEKER_GIT_BRANCH_SOURCE=pinned; fi',
+          'JOBSEEKER_GIT_CREDENTIAL_KEY="$(printf "%s\n" "$JOBSEEKER_GIT_SOURCE" | sed -n 3p)"',
+          'unset JOBSEEKER_GIT_SOURCE',
+          'printf "%s\n" "[JobSeeker] ${JOBSEEKER_ENVIRONMENT:-LOCAL} runs $JOBSEEKER_GIT_REPOSITORY_BRANCH ($JOBSEEKER_GIT_BRANCH_SOURCE) from $JOBSEEKER_GIT_REPOSITORY_URL${JOBSEEKER_GIT_CREDENTIAL_KEY:+ with $JOBSEEKER_GIT_CREDENTIAL_KEY}"'
+        );
+      }
+
       private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument, $runtimeOptions = array()) {
         $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
@@ -273,19 +298,33 @@ trait JobCreationExecutionTrait
         $pyprojectText = isset($runtimeOptions['pyprojectText']) ? (string) $runtimeOptions['pyprojectText'] : '';
         $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $runTests = ! isset($runtimeOptions['runTests']) || (bool) $runtimeOptions['runTests'];
+        $followsProject = $execution['mode'] === 'git' && ! empty($execution['followProject']) && ! empty($execution['projectId']);
         $lines = array_merge(
           array('set -e'),
           $this->dataAssetsRuntimeLines($repositoryRoot),
           $this->environmentContextLines(),
+          $followsProject ? $this->projectGitSourceLines($execution) : array(),
           $this->connectorRuntimeLines(),
           $this->dagRuntimeLines()
         );
 
-        if ($execution['mode'] === 'git') {
+        if ($followsProject) {
+          $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
+          $lines[] = 'if [ -n "$JOBSEEKER_GIT_CREDENTIAL_KEY" ]; then'
+            .' command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; };'
+            .' JOBSEEKER_CONNECTOR_KEY="$JOBSEEKER_GIT_CREDENTIAL_KEY" jobseeker-git clone --connector-dir "$JOBSEEKER_CONNECTORS_DIR/$JOBSEEKER_GIT_CREDENTIAL_KEY" --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH" -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source";'
+            .' else git clone --depth 1 --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH" -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source"; fi';
+          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
+          $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
+          $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
+          $lines[] = '[ -f "$JOBSEEKER_SCRIPT_PATH" ] || { echo "Python entry point was not found after the Git checkout: $JOBSEEKER_ENTRYPOINT" >&2; exit 66; }';
+        } else if ($execution['mode'] === 'git') {
           $lines[] = 'printf "%s\n" "[JobSeeker] Git source checkout"';
           $lines[] = 'export JOBSEEKER_GIT_REPOSITORY_URL='.escapeshellarg($execution['repositoryUrl']);
           $lines[] = 'export JOBSEEKER_GIT_REPOSITORY_BRANCH='.escapeshellarg($execution['branch']);
           $lines[] = 'export JOBSEEKER_GIT_CREDENTIAL_KEY='.escapeshellarg(isset($execution['credentialKey']) ? $execution['credentialKey'] : '');
+          $lines[] = 'export JOBSEEKER_PROJECT_ID='.escapeshellarg(isset($execution['projectId']) ? (string) $execution['projectId'] : '');
+          $lines[] = 'export JOBSEEKER_PROJECT_NAME='.escapeshellarg(isset($execution['projectName']) ? $execution['projectName'] : '');
           $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
           if (! empty($execution['credentialKey'])) {
             $lines[] = 'command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; }';
@@ -342,7 +381,7 @@ trait JobCreationExecutionTrait
             'if [ -n "$JOBSEEKER_PROJECT_DIR" ]; then',
             '  if [ "${JOBSEEKER_DEPENDENCIES_PREINSTALLED:-0}" != "1" ]; then',
             '    PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check "poetry==2.4.1"',
-            '    (cd "$JOBSEEKER_PROJECT_DIR" && POETRY_VIRTUALENVS_CREATE=false poetry install --no-root --no-interaction --no-ansi)',
+            '    (cd "$JOBSEEKER_PROJECT_DIR" && export POETRY_VIRTUALENVS_CREATE=false && if [ -f poetry.lock ] && ! poetry check --lock --no-interaction >/dev/null 2>&1; then echo "poetry.lock does not match pyproject.toml; refreshing it for this run."; poetry lock --no-interaction --no-ansi; fi && poetry install --no-root --no-interaction --no-ansi)',
             '  fi',
             'elif [ -n "$JOBSEEKER_REQUIREMENTS" ]; then',
             '  rm -rf /tmp/jobseeker-python-libs',

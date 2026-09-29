@@ -17,6 +17,269 @@ class Context extends BaseController
       $this->isLoggedIn();   
     }
 
+    private function gitBranchPolicy()
+    {
+      $this->load->library('GitBranchPolicy');
+      return $this->gitbranchpolicy;
+    }
+
+    private function projectGitSettings()
+    {
+      $this->load->model('ProjectGitSettings_model', 'projectGitSettingsCatalog');
+      return $this->projectGitSettingsCatalog;
+    }
+
+    private function projectGitCredentials()
+    {
+      if (! $this->db->table_exists('database_settings')) {
+        return array();
+      }
+      $this->load->model('DbSettings_model', 'projectGitConnectorCatalog');
+      return array_values(array_filter($this->projectGitConnectorCatalog->listSettings('ALL'), function($connector) {
+        return isset($connector->db_type) && $connector->db_type === 'git_repository'
+          && (int) $connector->is_active === 1 && isset($connector->job_name)
+          && (string) $connector->job_name === '*';
+      }));
+    }
+
+    /**
+     * The shared Git connectors a project can name, one entry per key with
+     * every environment scope that defines it. A key resolves per
+     * environment at build time (an environment row wins over ALL), so the
+     * page can show what each environment will actually use.
+     */
+    private function projectGitCredentialCatalog()
+    {
+      $catalog = array();
+      foreach ($this->projectGitCredentials() as $credential) {
+        $key = trim((string) $credential->connector_key);
+        if ($key === '') {
+          continue;
+        }
+        if (! isset($catalog[$key])) {
+          $catalog[$key] = array('key' => $key, 'scopes' => array());
+        }
+        $catalog[$key]['scopes'][strtoupper(trim((string) $credential->environment))] = array(
+          'host' => strtolower(trim((string) $credential->address)),
+          'authType' => (string) $credential->auth_type
+        );
+      }
+      ksort($catalog);
+      return $catalog;
+    }
+
+    private function addProjectGitViewData(&$data, $projectId = 0)
+    {
+      $data['projectEnvironments'] = $this->jobSeekerFilterEnvironmentRows($this->model->listEnvironments());
+      $data['gitCredentialCatalog'] = $this->projectGitCredentialCatalog();
+      $data['projectGitDefaults'] = $projectId > 0 ? $this->projectGitSettings()->settings($projectId) : array();
+      $data['projectGitCredentialKey'] = $projectId > 0 ? $this->projectGitSettings()->credentialKey($projectId) : '';
+      $data['globalGitBranchDefaults'] = $this->gitBranchPolicy()->mapping();
+      // Only what the page needs to match the viewer's own account to the
+      // repository; secrets never leave the model.
+      $this->load->model('UserGitAccount_model', 'projectPersonalGitAccounts');
+      $data['personalGitAccounts'] = array_map(function($account) {
+        return array('provider' => $account->provider, 'label' => $account->label, 'host' => $account->host,
+          'path_prefix' => $account->path_prefix, 'auth_type' => $account->auth_type, 'username' => $account->username);
+      }, $this->projectPersonalGitAccounts->accounts($this->vendorId));
+      $this->load->library('GitHubOAuth');
+      $data['githubOAuthEnabled'] = $this->githuboauth->enabled();
+    }
+
+    /**
+     * Git is optional. With it off the project keeps no repository, credential
+     * or branches. With it on it needs a repository URL, and its branches are
+     * either one branch for every environment or one per environment.
+     */
+    private function readProjectGitSettingsInput()
+    {
+      if ($this->input->post('gitEnabled') !== '1') {
+        return array('ok' => TRUE, 'repositoryUrl' => '', 'credentialKey' => '', 'branches' => array());
+      }
+
+      $repositoryUrl = $this->cleanProjectRepositoryUrl($this->input->post('gitpath'));
+      if ($repositoryUrl === FALSE) {
+        return array('ok' => FALSE, 'message' => 'Use an HTTP(S), SSH or Git scp-style repository URL without embedded credentials, query strings or fragments.');
+      }
+      if ($repositoryUrl === '') {
+        return array('ok' => FALSE, 'message' => 'Enter the repository URL, or turn off Git for this project.');
+      }
+
+      $postedBranches = $this->input->post('gitBranch');
+      $postedBranches = is_array($postedBranches) ? $postedBranches : array();
+      $singleBranch = $this->input->post('gitBranchMode') === 'single';
+      $allowedEnvironments = array('DEFAULT' => TRUE);
+      if (! $singleBranch) {
+        foreach ($this->model->listEnvironments() as $environment) {
+          $key = strtoupper(trim((string) $environment->Environment));
+          if ($key !== '') {
+            $allowedEnvironments[$key] = TRUE;
+          }
+        }
+      }
+
+      $branches = array();
+      foreach ($allowedEnvironments as $environment => $unused) {
+        $branch = isset($postedBranches[$environment]) ? trim((string) $postedBranches[$environment]) : '';
+        $branch = $this->gitBranchPolicy()->cleanBranch($branch);
+        if ($branch === FALSE) {
+          return array('ok' => FALSE, 'message' => 'The '.($environment === 'DEFAULT' ? ($singleBranch ? '' : 'fallback ') : $environment.' ').'branch is not a valid branch or tag name.');
+        }
+        $branches[$environment] = $branch;
+      }
+      // One branch everywhere must not fall through to the per-environment
+      // global policy (develop in DEV), so it is always stored.
+      if ($singleBranch && $branches['DEFAULT'] === '') {
+        $branches['DEFAULT'] = $this->gitBranchPolicy()->forEnvironment('DEFAULT');
+      }
+
+      $credentialKey = trim((string) $this->input->post('gitCredentialKey'));
+      if ($credentialKey !== '' && ! isset($this->projectGitCredentialCatalog()[$credentialKey])) {
+        return array('ok' => FALSE, 'message' => 'The build credential must be an active Git connector available to all jobs.');
+      }
+
+      return array('ok' => TRUE, 'repositoryUrl' => $repositoryUrl, 'credentialKey' => $credentialKey, 'branches' => $branches);
+    }
+
+    /**
+     * Creates a project's build credential without leaving Project Details:
+     * an access token, or a deploy key JobSeeker generates (the private key
+     * never leaves the server). It is an ordinary Git connector for every
+     * environment and job, so Connectors can rotate or remove it later.
+     */
+    public function projectGitCredential()
+    {
+      $this->output->set_content_type('application/json')->set_header('Cache-Control: no-store, max-age=0');
+      $fail = function($message, $status) {
+        $this->output->set_status_header($status)->set_output(json_encode(array('ok' => FALSE, 'message' => $message)));
+      };
+      if ($this->isManager() == TRUE) {
+        $fail('Access denied.', 403);
+        return;
+      }
+      if (strtoupper((string) $this->input->method(TRUE)) !== 'POST') {
+        $fail('Use POST to create a build credential.', 405);
+        return;
+      }
+
+      $repositoryUrl = $this->cleanProjectRepositoryUrl($this->input->post('repository_url'));
+      $location = $repositoryUrl ? $this->projectRepositoryLocation($repositoryUrl) : FALSE;
+      if ($location === FALSE) {
+        $fail('Enter the repository URL first.', 400);
+        return;
+      }
+      $kind = (string) $this->input->post('kind');
+      $secretValues = array();
+      $publicKey = '';
+      $fingerprint = '';
+      if ($kind === 'token') {
+        $token = trim((string) $this->input->post('token'));
+        $username = trim((string) $this->input->post('username'));
+        if ($location['transport'] !== 'http') {
+          $fail('A token signs in over HTTPS. Use the HTTPS URL of the repository, or a deploy key.', 422);
+          return;
+        }
+        if ($token === '' || strlen($token) > 2000 || preg_match('/[\s\x00-\x1F\x7F]/', $token)
+          || strlen($username) > 255 || preg_match('/[\s\x00-\x1F\x7F]/', $username)) {
+          $fail('Paste the access token, and the username only if your provider needs one.', 422);
+          return;
+        }
+        $secretValues['token'] = $token;
+        if ($username !== '') {
+          $secretValues['username'] = $username;
+        }
+      } else if ($kind === 'deploy_key') {
+        $knownHosts = trim((string) $this->input->post('known_hosts'));
+        if ($knownHosts === '' || strlen($knownHosts) > 50000
+          || ! preg_match('/(?:^|\n)[^#\s]\S*\s+(?:ssh-|ecdsa-)[A-Za-z0-9+\/=]+/m', $knownHosts)) {
+          $fail('Fetch and confirm the provider host keys first.', 422);
+          return;
+        }
+        $this->load->library('GitSshKeys');
+        $privateKey = $this->gitsshkeys->generate('jobseeker-'.$location['host']);
+        $metadata = $privateKey === '' ? array('error' => 'keygen') : $this->gitsshkeys->metadata($privateKey);
+        if (isset($metadata['error'])) {
+          $fail('JobSeeker could not generate a deploy key on this server.', 500);
+          return;
+        }
+        $secretValues = array('private_key' => $privateKey, 'known_hosts' => $knownHosts."\n");
+        $publicKey = $metadata['public_key'];
+        $fingerprint = $metadata['fingerprint'];
+      } else {
+        $fail('Choose an access token or a deploy key.', 400);
+        return;
+      }
+
+      $this->load->model('DbSettings_model', 'projectGitConnectorCatalog');
+      $baseKey = substr(trim(preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $this->input->post('project_name'))), '-'), 0, 100);
+      $baseKey = ($baseKey === '' ? $location['host'] : $baseKey).'-git';
+      $baseKey = trim(preg_replace('/[^a-z0-9]+/', '-', $baseKey), '-');
+      $connectorKey = $baseKey;
+      for ($suffix = 2; $this->projectGitConnectorCatalog->catalogSetting($connectorKey) !== NULL || $this->projectGitConnectorCatalog->scopeExists($connectorKey, 'ALL', '*'); $suffix++) {
+        $connectorKey = $baseKey.'-'.$suffix;
+      }
+      $encrypted = $this->projectGitConnectorCatalog->encryptSecretValues($secretValues);
+      if ($encrypted === FALSE || $encrypted === NULL) {
+        $fail('The credential could not be encrypted.', 500);
+        return;
+      }
+      $now = date('Y-m-d H:i:s');
+      $projectName = trim((string) $this->input->post('project_name'));
+      $saved = $this->projectGitConnectorCatalog->saveSetting(array(
+        'connector_key' => $connectorKey,
+        'job_name' => '*',
+        'environment' => 'ALL',
+        'db_type' => 'git_repository',
+        'auth_type' => $kind === 'token' ? 'token' : 'ssh_key',
+        'login' => '',
+        'password' => '',
+        'address' => $location['host'],
+        'port' => $location['transport'] === 'http' && $kind === 'token' ? '443' : '22',
+        'schema' => $repositoryUrl,
+        'description' => substr(($kind === 'token' ? 'Access token' : 'Deploy key').' for '.($projectName !== '' ? 'project '.$projectName : $repositoryUrl).', created in Project Details.', 0, 2000),
+        'secret_backend' => 'local',
+        'secret_reference' => json_encode(array()),
+        'secret_encrypted' => $encrypted,
+        'is_active' => 1,
+        'additional_parameters' => '',
+        'oracle_ServiceName' => '',
+        'oracle_sid' => '',
+        'creation_date' => $now,
+        'updated_at' => $now,
+        'owner' => isset($this->name) ? $this->name : ''
+      ));
+      if ((int) $saved <= 0) {
+        $fail('The credential could not be saved.', 500);
+        return;
+      }
+      $this->output->set_output(json_encode(array(
+        'ok' => TRUE,
+        'key' => $connectorKey,
+        'catalogEntry' => array('key' => $connectorKey, 'scopes' => array('ALL' => array('host' => $location['host'], 'authType' => $kind === 'token' ? 'token' : 'ssh_key'))),
+        'publicKey' => $publicKey,
+        'fingerprint' => $fingerprint
+      ), JSON_UNESCAPED_SLASHES));
+    }
+
+    /** Host (without port) and transport, as jobseeker-git compares them. */
+    private function projectRepositoryLocation($repositoryUrl)
+    {
+      if (preg_match('/^[^@\s\/]+@([^:\s\/]+):(.+)$/', $repositoryUrl, $matches)) {
+        return array('host' => strtolower($matches[1]), 'transport' => 'ssh');
+      }
+      $parts = parse_url($repositoryUrl);
+      if (empty($parts['host']) || empty($parts['scheme'])) {
+        return FALSE;
+      }
+      return array('host' => strtolower($parts['host']), 'transport' => strtolower($parts['scheme']) === 'ssh' ? 'ssh' : 'http');
+    }
+
+    private function cleanProjectRepositoryUrl($repositoryUrl)
+    {
+      $repositoryUrl = trim((string) $repositoryUrl);
+      return $repositoryUrl === '' ? '' : $this->gitBranchPolicy()->cleanRepositoryUrl($repositoryUrl);
+    }
+
     private function selectedContextEnvironment()
     {
 	  if ($this->jobSeekerIsStandaloneDeployment()) {
@@ -55,10 +318,16 @@ class Context extends BaseController
 
       $this->global['pageTitle'] = 'Job Seeker : Project Config';
 
+      $this->projectGitSettings();
       $data["list"] = $this->model->listProjects();
       $data["projects"] = $this->model->listAvailableProjects();
       $data["activeprojects"] = $this->model->listActiveProjects();
       $data["role"] = $this->isManager();
+      $this->addProjectGitViewData($data);
+      $data['projectGitDefaultsByProject'] = array();
+      foreach ($data['list'] as $project) {
+        $data['projectGitDefaultsByProject'][(int) $project->Id] = $this->projectGitSettings()->settings($project->Id);
+      }
 
       $this->loadViews("projectDetails", $this->global, $data, NULL);
     }
@@ -168,6 +437,8 @@ public function promotion() {
     $data["jenkinsError"] = $jenkinsJobs['error'];
     $data["jenkinsStatus"] = $jenkinsJobs['status'];
     $data["promotionHistory"] = $this->listPromotionHistory();
+    $data["gitBranchDefaults"] = $this->gitBranchPolicy()->mapping();
+    $data["gitProjects"] = $this->projectGitSettings()->projects(FALSE);
     $data["selectedEnvironment"] = $selectedEnvironment;
     $this->global['selectedEnvironment'] = $selectedEnvironment;
     $data["role"] = $this->isManager();
@@ -290,7 +561,7 @@ public function promoteJob() {
         $action = $result['target_exists'] ? 'updated' : 'created';
         $contextSummary = !empty($result['context_promotion']['enabled']) ? ' Contexts: '.$result['context_promotion']['result']['created'].' created, '.$result['context_promotion']['result']['updated'].' updated, '.$result['context_promotion']['result']['skipped'].' skipped.' : '';
         $rollbackSummary = !empty($result['rollback_id']) ? ' Rollback checkpoint: '.$result['rollback_id'].'.' : '';
-        $this->session->set_flashdata('success', 'Deployed '.$result['job_count'].' Jenkins job(s) from '.$input['source_environment']->Environment.' to '.$input['target_environment']->Environment.'. Root target '.$input['target_job'].' '.$action.'. Command updates: '.$result['command_updates'].', parameter updates: '.$result['parameter_updates'].', artifact folders copied: '.count($result['artifacts']['copied']).'.'.$contextSummary.$rollbackSummary);
+        $this->session->set_flashdata('success', 'Deployed '.$result['job_count'].' Jenkins job(s) from '.$input['source_environment']->Environment.' to '.$input['target_environment']->Environment.'. Root target '.$input['target_job'].' '.$action.'.'.(! empty($result['git_job_count']) ? ' Git branch: '.$result['target_git_branch'].'.' : '').' Command updates: '.$result['command_updates'].', parameter updates: '.$result['parameter_updates'].', artifact folders copied: '.count($result['artifacts']['copied']).'.'.$contextSummary.$rollbackSummary);
         if (!empty($result['rollback_id'])) {
           $this->session->set_flashdata('rollback_id', $result['rollback_id']);
         }
@@ -456,8 +727,39 @@ private function readJobPromotionInput($targetRequired) {
     return array('ok' => FALSE, 'message' => 'Deployment failed. Environment was not found.');
   }
 
+  $sourceProject = $this->detectPromotionProjectBinding($sourceJobClean['name']);
+  $projectDefault = ! empty($sourceProject)
+    ? $this->projectGitSettings()->settingForEnvironment((int) $sourceProject['id'], $targetEnvironment->Environment)
+    : array('branch' => '', 'credentialKey' => '');
+  // NULL means this is not a project-bound job and its explicit credential
+  // must remain untouched. An empty string is meaningful for a bound project:
+  // the target environment is configured as a public build.
+  $targetGitCredential = ! empty($sourceProject)
+    ? (isset($projectDefault['credentialKey']) ? (string) $projectDefault['credentialKey'] : '')
+    : NULL;
+  $targetGitBranchMode = strtolower(trim((string) $this->input->post('targetGitBranchMode')));
+  $targetGitBranch = trim((string) $this->input->post('targetGitBranch'));
+  if ($targetGitBranchMode === '') {
+    // Backward compatibility for API callers created before the UI sent an
+    // explicit/default mode: a supplied branch was always an override.
+    $targetGitBranchMode = $targetGitBranch === '' ? 'default' : 'explicit';
+  }
+  if ($targetGitBranchMode !== 'explicit') {
+    $targetGitBranch = ! empty($projectDefault['branch'])
+      ? $projectDefault['branch']
+      : $this->gitBranchPolicy()->forEnvironment($targetEnvironment->Environment);
+  } else {
+    $targetGitBranch = $this->gitBranchPolicy()->cleanBranch($targetGitBranch);
+    if ($targetGitBranch === FALSE) {
+      return array('ok' => FALSE, 'message' => 'Deployment failed. Target Git branch is not a valid branch or tag name.');
+    }
+  }
+
   $contextProject = NULL;
   if ($promoteContexts) {
+    if ($contextProjectId <= 0 && ! empty($sourceProject)) {
+      $contextProjectId = (int) $sourceProject['id'];
+    }
     if ($contextProjectId <= 0) {
       return array('ok' => FALSE, 'message' => 'Deployment failed. Select a context project when context deployment is enabled.');
     }
@@ -495,8 +797,36 @@ private function readJobPromotionInput($targetRequired) {
     'context_project' => $contextProject,
     'overwrite_contexts' => $overwriteContexts,
     'create_rollback' => $createRollback,
+    'target_git_branch' => $targetGitBranch,
+    'target_git_branch_mode' => $targetGitBranchMode,
+    'target_git_credential' => $targetGitCredential,
+    'git_project' => $sourceProject,
     'user' => isset($this->global['name']) ? $this->global['name'] : ''
   );
+}
+
+/** Read the durable Project Details binding embedded in a Git job command. */
+private function detectPromotionProjectBinding($sourceJob)
+{
+  $response = $this->requestJenkins('GET', $this->jenkinsJobPath($sourceJob).'/config.xml');
+  if ((int) $response['status'] !== 200) {
+    return NULL;
+  }
+  $dom = new DOMDocument();
+  $previousErrors = libxml_use_internal_errors(TRUE);
+  $loaded = $dom->loadXML($response['body']);
+  libxml_clear_errors();
+  libxml_use_internal_errors($previousErrors);
+  if (! $loaded) {
+    return NULL;
+  }
+  foreach ($dom->getElementsByTagName('command') as $commandNode) {
+    if (preg_match('/^\s*(?:export\s+)?JOBSEEKER_PROJECT_ID\s*=\s*["\']?(\d+)["\']?\s*$/m', $commandNode->nodeValue, $matches)) {
+      $project = $this->projectGitSettings()->project((int) $matches[1], FALSE);
+      return $project === FALSE ? NULL : $project;
+    }
+  }
+  return NULL;
 }
 
 private function buildJobPromotionResult($input, $previewOnly) {
@@ -506,7 +836,7 @@ private function buildJobPromotionResult($input, $previewOnly) {
   }
 
   $preparedJobs = array();
-  $totals = array('command_updates' => 0, 'parameter_updates' => 0, 'artifact_path_updates' => 0, 'downstream_updates' => 0);
+  $totals = array('command_updates' => 0, 'parameter_updates' => 0, 'artifact_path_updates' => 0, 'downstream_updates' => 0, 'branch_updates' => 0, 'git_credential_updates' => 0, 'git_jobs' => 0);
   $allArtifacts = array('planned' => array(), 'copied' => array(), 'skipped' => array(), 'errors' => array());
   $commandPreviews = array();
 
@@ -521,6 +851,9 @@ private function buildJobPromotionResult($input, $previewOnly) {
     $totals['parameter_updates'] += $prepared['parameter_updates'];
     $totals['artifact_path_updates'] += $prepared['artifact_path_updates'];
     $totals['downstream_updates'] += $prepared['downstream_updates'];
+    $totals['branch_updates'] += $prepared['branch_updates'];
+    $totals['git_credential_updates'] += $prepared['git_credential_updates'];
+    $totals['git_jobs'] += $prepared['git_source'] ? 1 : 0;
     $allArtifacts['planned'] = array_merge($allArtifacts['planned'], $prepared['artifacts']['planned']);
     $allArtifacts['skipped'] = array_merge($allArtifacts['skipped'], $prepared['artifacts']['skipped']);
 
@@ -600,7 +933,7 @@ private function prepareSingleJobPromotion($input, $requireEnvironmentBinding) {
   }
 
   $jobNameMap = isset($input['job_name_map']) ? $input['job_name_map'] : array();
-  $transform = $this->transformPromotedJenkinsConfig($sourceResponse['body'], $input['source_environment']->Environment, $input['target_environment']->Environment, $input['source_job'], $input['target_job'], $jobNameMap);
+  $transform = $this->transformPromotedJenkinsConfig($sourceResponse['body'], $input['source_environment']->Environment, $input['target_environment']->Environment, $input['source_job'], $input['target_job'], $jobNameMap, $input['target_git_branch'], $input['target_git_credential'], isset($input['target_git_branch_mode']) ? $input['target_git_branch_mode'] : 'default');
   if (! $transform['ok']) {
     return $transform;
   }
@@ -637,6 +970,9 @@ private function prepareSingleJobPromotion($input, $requireEnvironmentBinding) {
     'parameter_updates' => $transform['parameter_updates'],
     'artifact_path_updates' => $transform['artifact_path_updates'],
     'downstream_updates' => $transform['downstream_updates'],
+    'branch_updates' => $transform['branch_updates'],
+    'git_credential_updates' => $transform['git_credential_updates'],
+    'git_source' => $transform['git_source'],
     'command_previews' => $transform['command_previews'],
     'artifacts' => $artifacts
   );
@@ -787,6 +1123,8 @@ private function promotionResultPayload($ok, $message, $input, $preparedJobs, $t
       'parameter_updates' => $prepared['parameter_updates'],
       'artifact_path_updates' => $prepared['artifact_path_updates'],
       'downstream_updates' => $prepared['downstream_updates'],
+      'branch_updates' => $prepared['branch_updates'],
+      'git_credential_updates' => $prepared['git_credential_updates'],
       'artifact_count' => count($prepared['artifacts']['planned'])
     );
   }
@@ -798,6 +1136,11 @@ private function promotionResultPayload($ok, $message, $input, $preparedJobs, $t
     'target_job' => $input['target_job'],
     'source_environment' => $input['source_environment']->Environment,
     'target_environment' => $input['target_environment']->Environment,
+    // A branch means nothing to a job that does not clone a repository.
+    'git_job_count' => $totals['git_jobs'],
+    'target_git_branch' => $totals['git_jobs'] > 0 ? $input['target_git_branch'] : NULL,
+    'target_git_credential' => $totals['git_jobs'] > 0 ? $input['target_git_credential'] : NULL,
+    'git_project' => ! empty($input['git_project']) ? array('id' => (int) $input['git_project']['id'], 'name' => $input['git_project']['name']) : NULL,
     'job_count' => count($preparedJobs),
     'dependency_count' => max(0, count($preparedJobs) - 1),
     'jobs' => $jobs,
@@ -805,6 +1148,8 @@ private function promotionResultPayload($ok, $message, $input, $preparedJobs, $t
     'parameter_updates' => $totals['parameter_updates'],
     'artifact_path_updates' => $totals['artifact_path_updates'],
     'downstream_updates' => $totals['downstream_updates'],
+    'branch_updates' => $totals['branch_updates'],
+    'git_credential_updates' => $totals['git_credential_updates'],
     'command_previews' => $commandPreviews,
     'artifacts' => $artifacts,
     'context_promotion' => array(
@@ -1019,7 +1364,9 @@ private function recordPromotionHistory($input, $result) {
       'promote_contexts' => !empty($input['promote_contexts']),
       'context_project' => !empty($input['context_project']) && isset($input['context_project']->ProjectName) ? $input['context_project']->ProjectName : '',
       'overwrite_contexts' => !empty($input['overwrite_contexts']),
-      'create_rollback' => !empty($input['create_rollback'])
+      'create_rollback' => !empty($input['create_rollback']),
+      'target_git_branch' => ! empty($result['target_git_branch']) ? $result['target_git_branch'] : '',
+      'target_git_credential' => isset($result['target_git_credential']) ? $result['target_git_credential'] : NULL
     ),
     'metrics' => array(
       'job_count' => isset($result['job_count']) ? (int) $result['job_count'] : 0,
@@ -1027,7 +1374,9 @@ private function recordPromotionHistory($input, $result) {
       'command_updates' => isset($result['command_updates']) ? (int) $result['command_updates'] : 0,
       'parameter_updates' => isset($result['parameter_updates']) ? (int) $result['parameter_updates'] : 0,
       'artifact_path_updates' => isset($result['artifact_path_updates']) ? (int) $result['artifact_path_updates'] : 0,
-      'downstream_updates' => isset($result['downstream_updates']) ? (int) $result['downstream_updates'] : 0
+      'downstream_updates' => isset($result['downstream_updates']) ? (int) $result['downstream_updates'] : 0,
+      'branch_updates' => isset($result['branch_updates']) ? (int) $result['branch_updates'] : 0,
+      'git_credential_updates' => isset($result['git_credential_updates']) ? (int) $result['git_credential_updates'] : 0
     ),
     'jobs' => isset($result['jobs']) && is_array($result['jobs']) ? $result['jobs'] : array(),
     'artifacts' => $this->promotionHistoryArtifactSummary(isset($result['artifacts']) ? $result['artifacts'] : array()),
@@ -1181,7 +1530,7 @@ private function promotionArtifactAbsolutePath($relativePath) {
   return $this->pathWithinBase($path, $repositoryRoot) ? $path : FALSE;
 }
 
-private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targetEnvironment, $sourceJobName, $targetJobName, $jobNameMap = array()) {
+private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targetEnvironment, $sourceJobName, $targetJobName, $jobNameMap = array(), $targetGitBranch = '', $targetGitCredential = NULL, $targetGitBranchMode = 'default') {
   $dom = new DOMDocument();
   $dom->preserveWhiteSpace = FALSE;
   $dom->formatOutput = TRUE;
@@ -1198,11 +1547,15 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
   $commandNodes = $xpath->query('//hudson.tasks.Shell/command | //hudson.tasks.BatchFile/command');
   $commandUpdates = 0;
   $artifactPathUpdates = 0;
+  $branchUpdates = 0;
+  $gitCredentialUpdates = 0;
+  $gitSource = FALSE;
   $commandPreviews = array();
 
   foreach ($commandNodes as $commandNode) {
     $before = $commandNode->nodeValue;
-    $rewrite = $this->rewritePromotionCommand($before, $sourceEnvironment, $targetEnvironment, $sourceJobName, $targetJobName);
+    $gitSource = $gitSource || preg_match('/^\s*(?:export\s+)?JOBSEEKER_GIT_REPOSITORY_URL\s*=\s*["\']?[^"\'\s]/m', $before) === 1;
+    $rewrite = $this->rewritePromotionCommand($before, $sourceEnvironment, $targetEnvironment, $sourceJobName, $targetJobName, $targetGitBranch, $targetGitCredential, $targetGitBranchMode);
 
     if ($rewrite['text'] !== $before) {
       while ($commandNode->firstChild) {
@@ -1212,6 +1565,8 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
       $commandNode->appendChild($dom->createTextNode($rewrite['text']));
       $commandUpdates += $rewrite['environment_updates'];
       $artifactPathUpdates += $rewrite['artifact_path_updates'];
+      $branchUpdates += $rewrite['branch_updates'];
+      $gitCredentialUpdates += $rewrite['git_credential_updates'];
 
       if (count($commandPreviews) < 3) {
         $commandPreviews[] = array(
@@ -1234,6 +1589,9 @@ private function transformPromotedJenkinsConfig($xml, $sourceEnvironment, $targe
     'parameter_updates' => $parameterUpdates,
     'artifact_path_updates' => $artifactPathUpdates,
     'downstream_updates' => $downstreamUpdates,
+    'branch_updates' => $branchUpdates,
+    'git_credential_updates' => $gitCredentialUpdates,
+    'git_source' => $gitSource,
     'agent_assignment_updates' => $agentAssignmentUpdates,
     'command_previews' => $commandPreviews
   );
@@ -1366,18 +1724,73 @@ private function promotionEnvironmentsEquivalent($left, $right) {
   return $this->normalizePromotionEnvironmentName($left) === $this->normalizePromotionEnvironmentName($right);
 }
 
-private function rewritePromotionCommand($commandText, $sourceEnvironment, $targetEnvironment, $sourceJobName, $targetJobName) {
+private function rewritePromotionCommand($commandText, $sourceEnvironment, $targetEnvironment, $sourceJobName, $targetJobName, $targetGitBranch = '', $targetGitCredential = NULL, $targetGitBranchMode = 'default') {
   $updated = (string) $commandText;
   $environmentUpdates = 0;
   $artifactPathUpdates = 0;
+  $branchUpdates = 0;
+  $gitCredentialUpdates = 0;
 
   $updated = $this->rewriteContextArguments($updated, $sourceEnvironment, $targetEnvironment, $environmentUpdates);
   $updated = $this->rewriteEnvironmentAssignments($updated, $sourceEnvironment, $targetEnvironment, $environmentUpdates);
   $updated = $this->rewritePythonEnvironmentArguments($updated, $sourceEnvironment, $targetEnvironment, $environmentUpdates);
   $updated = $this->rewritePromotedArtifactPaths($updated, $sourceJobName, $targetJobName, $artifactPathUpdates);
+  if (preg_match('/^\s*(?:export\s+)?JOBSEEKER_GIT_FOLLOW_PROJECT\s*=\s*["\']?1["\']?\s*$/m', $updated)) {
+    // The job reads its project's repository, branch and credential when it
+    // builds, so it only carries a pin: none by default, or the explicit
+    // branch or tag the operator chose for this deployment.
+    $updated = $this->rewritePromotionGitPin($updated, $targetGitBranchMode === 'explicit' ? $targetGitBranch : '', $branchUpdates);
+  } else {
+    $updated = $this->rewritePromotionGitBranch($updated, $targetGitBranch, $branchUpdates);
+    $updated = $this->rewritePromotionGitCredential($updated, $targetGitCredential, $gitCredentialUpdates);
+  }
   $updated = $this->normalizePromotedInlinePythonDockerCommand($updated);
 
-  return array('text' => $updated, 'environment_updates' => $environmentUpdates, 'artifact_path_updates' => $artifactPathUpdates);
+  return array('text' => $updated, 'environment_updates' => $environmentUpdates, 'artifact_path_updates' => $artifactPathUpdates, 'branch_updates' => $branchUpdates, 'git_credential_updates' => $gitCredentialUpdates);
+}
+
+/** Sets a project-following job's branch pin; '' follows the project. */
+private function rewritePromotionGitPin($text, $pin, &$updateCount) {
+  $pattern = '/^(\s*(?:export\s+)?JOBSEEKER_GIT_REPOSITORY_BRANCH\s*=\s*)(["\']?)((?:[A-Za-z0-9][A-Za-z0-9._\/-]{0,199})?)\2(\s*)$/m';
+  return preg_replace_callback($pattern, function($matches) use ($pin, &$updateCount) {
+    if ($matches[3] === $pin) {
+      return $matches[0];
+    }
+    $updateCount++;
+    return $matches[1]."'".$pin."'".$matches[4];
+  }, $text);
+}
+
+private function rewritePromotionGitBranch($text, $targetGitBranch, &$updateCount) {
+  if ($targetGitBranch === '') {
+    return $text;
+  }
+
+  $pattern = '/^(\s*(?:export\s+)?JOBSEEKER_GIT_REPOSITORY_BRANCH\s*=\s*)(["\']?)([A-Za-z0-9][A-Za-z0-9._\/-]{0,199})\2(\s*)$/m';
+  return preg_replace_callback($pattern, function($matches) use ($targetGitBranch, &$updateCount) {
+    if ($matches[3] === $targetGitBranch) {
+      return $matches[0];
+    }
+    $updateCount++;
+    return $matches[1].$matches[2].$targetGitBranch.$matches[2].$matches[4];
+  }, $text);
+}
+
+private function rewritePromotionGitCredential($text, $targetGitCredential, &$updateCount) {
+  if ($targetGitCredential === NULL) {
+    return $text;
+  }
+
+  $pattern = '/^(\s*(?:export\s+)?JOBSEEKER_GIT_CREDENTIAL_KEY\s*=\s*)(["\']?)([a-z0-9-]*)\2(\s*)$/mi';
+  return preg_replace_callback($pattern, function($matches) use ($targetGitCredential, &$updateCount) {
+    if ($matches[3] === $targetGitCredential) {
+      return $matches[0];
+    }
+    $updateCount++;
+    // Generated job commands use shell-safe single quotes. Connector keys are
+    // already restricted to lowercase letters, digits, and hyphens.
+    return $matches[1]."'".$targetGitCredential."'".$matches[4];
+  }, $text);
 }
 
 private function normalizePromotedInlinePythonDockerCommand($commandText) {
@@ -2145,9 +2558,9 @@ public function addProject() {
 
     $this->load->library('form_validation');
 
-    $this->form_validation->set_rules('name','Project Name','trim|required|max_length[1000]');
+    $this->form_validation->set_rules('name','Project Name','trim|required|max_length[255]');
     $this->form_validation->set_rules('active','Active Project','required|max_length[1]');
-    $this->form_validation->set_rules('gitpath','Git Path','trim|max_length[2000]');
+    $this->form_validation->set_rules('gitpath','Repository URL','trim|max_length[1000]');
 
     if($this->form_validation->run() == FALSE)
     {
@@ -2158,7 +2571,14 @@ public function addProject() {
 
       $name = $this->security->xss_clean($this->input->post('name'));
       $active = $this->security->xss_clean($this->input->post('active'));
-      $gitpath = $this->security->xss_clean($this->input->post('gitpath'));
+      $gitSettings = $this->readProjectGitSettingsInput();
+
+      if (! $gitSettings['ok']) {
+        $this->session->set_flashdata('error', 'Project creation failed. '.$gitSettings['message']);
+        redirect('Context/projectDetails');
+        return;
+      }
+      $gitpath = $gitSettings['repositoryUrl'];
 
       if ($name == null || $active == null) {
        $this->session->set_flashdata('error', 'Project Setup failed ! You must type a project name');
@@ -2184,7 +2604,11 @@ public function addProject() {
 
       if($result > 0)
       {
-        $this->session->set_flashdata('success', 'New Project has successfully created and now is available to be used.');
+        if (! $this->projectGitSettings()->save($result, $gitSettings['credentialKey'], $gitSettings['branches'])) {
+          $this->session->set_flashdata('error', 'The project was created, but its Git defaults could not be saved. Edit the project to try again.');
+        } else {
+          $this->session->set_flashdata('success', $gitpath !== '' ? 'The project and its Git repository were created.' : 'The project was created.');
+        }
       }
       else
       {
@@ -2481,6 +2905,8 @@ public function addContext() {
           redirect('Context/projectDetails');
         }
 
+        $this->addProjectGitViewData($data, (int) $data['project']->Id);
+
         $this->global['pageTitle'] = 'Job Seeker : Edit Data';
 
         $this->loadViews("projectDetailsEdit", $this->global, $data, NULL);
@@ -2578,10 +3004,10 @@ public function addContext() {
 
         $Id = (int) $this->security->xss_clean($this->input->post('Id'));
 
-        $this->form_validation->set_rules('name','Project Name','trim|required|max_length[1000]');
+        $this->form_validation->set_rules('name','Project Name','trim|required|max_length[255]');
         $this->form_validation->set_rules('Id','Project Id','required|integer');
         $this->form_validation->set_rules('active','Active Project','required|max_length[1]');
-        $this->form_validation->set_rules('gitpath','Git Path','trim|max_length[2000]');
+        $this->form_validation->set_rules('gitpath','Repository URL','trim|max_length[1000]');
 
         if($this->form_validation->run() == FALSE)
         {
@@ -2596,7 +3022,14 @@ public function addContext() {
         {
           $name = $this->security->xss_clean($this->input->post('name'));
           $active = $this->security->xss_clean($this->input->post('active'));
-          $gitpath = $this->security->xss_clean($this->input->post('gitpath'));
+          $gitSettings = $this->readProjectGitSettingsInput();
+
+          if (! $gitSettings['ok']) {
+            $this->session->set_flashdata('error', 'Project update failed. '.$gitSettings['message']);
+            redirect('Context/editProject/'.$Id);
+            return;
+          }
+          $gitpath = $gitSettings['repositoryUrl'];
 
           if ($name == null || $active == null) {
            $this->session->set_flashdata('error', 'Project Setup failed ! You must type a project name');
@@ -2619,7 +3052,11 @@ public function addContext() {
 
          if($result == True)
          {
-          $this->session->set_flashdata('success', 'The project was updated successfully.');
+          if (! $this->projectGitSettings()->save($Id, $gitSettings['credentialKey'], $gitSettings['branches'])) {
+            $this->session->set_flashdata('error', 'The project was updated, but its Git defaults could not be saved.');
+          } else {
+            $this->session->set_flashdata('success', $gitpath !== '' ? 'The project and its Git repository were updated.' : 'The project was updated.');
+          }
         }
         else
         {
