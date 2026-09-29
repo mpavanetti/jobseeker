@@ -46,6 +46,7 @@ FORM_STATE = (
     "({runtime: $('#pythonRuntimeMode').val(),"
     " dockerfile: $('#pythonUseDockerfile').is(':checked'),"
     " dockerfileText: ($.trim($('#pythonDockerfileText').val() || '') !== ''),"
+    " hasReadme: (($('#pythonInlineFilesJson').val() || '').toLowerCase().indexOf('readme.md') !== -1),"
     " code: ($.trim($('#pythonInlineCode').val() || '') !== '')})"
 )
 
@@ -103,9 +104,27 @@ def main():
                                     % (start, sample_id, state["runtime"], expected, description))
                 if not state["code"]:
                     failures.append("%s + %s: the sample code did not load" % (start, sample_id))
+                if not state["hasReadme"]:
+                    failures.append("%s + %s: the sample workspace has no README.md" % (start, sample_id))
                 if state["runtime"] == "docker" and state["dockerfile"] and not state["dockerfileText"]:
                     failures.append("%s + %s: the Dockerfile build is enabled but the Dockerfile is empty"
                                     % (start, sample_id))
+
+                # Programmatic sample loading must refresh the live dependency
+                # scan. This is the regression that previously made the Test
+                # connections button report no connector for this sample.
+                if sample_id == "python-db-connector-inspect":
+                    try:
+                        page.wait_for_selector("#jobDependencyTest:not([disabled])", timeout=10000)
+                        dependency_text = page.locator("#jobDependencyList").inner_text()
+                        if "jobseeker-mariadb" not in dependency_text:
+                            failures.append("%s: jobseeker-mariadb is absent from the dependency map" % sample_id)
+                        else:
+                            page.click("#jobDependencyTest")
+                            page.wait_for_selector("#jobDependencyList .jd-tested", timeout=15000)
+                    except Exception as error:
+                        failures.append("%s: Test connections did not receive the sample connector (%s)"
+                                        % (sample_id, error))
         finally:
             browser.close()
 
