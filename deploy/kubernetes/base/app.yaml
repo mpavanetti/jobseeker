@@ -102,6 +102,16 @@ spec:
                 secretKeyRef:
                   name: jobseeker-secrets
                   key: openvscode-token
+            - name: JOBSEEKER_GITHUB_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: github-oauth-client-id
+            - name: JOBSEEKER_GITHUB_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: github-oauth-client-secret
           resources:
             requests:
               cpu: 150m

@@ -35,6 +35,7 @@ together in `config.yaml`:
 
 ```yaml
 JOBSEEKER_STANDALONE_ENVIRONMENT: PROD
+JOBSEEKER_OPENVSCODE_CONNECTOR_ENVIRONMENT: PROD
 JOBSEEKER_JENKINS_ENVIRONMENT_SLOTS: PROD=10
 JOBSEEKER_JENKINS_ENVIRONMENT_AGENT_LABELS: PROD=jobseeker-env-standalone
 JOBSEEKER_KUBERNETES_CONTAINER_CAP: "10"
@@ -45,6 +46,29 @@ The standalone JCasC file exposes only one generic pod template. JobSeeker
 fixes every application and worker request to the configured environment and
 disables in-process cross-environment promotion. Use your release pipeline to
 apply the same image/artifact version to DEV, QA, UAT, and PROD clusters.
+
+## Git branches and authentication
+
+`JOBSEEKER_GIT_ENVIRONMENT_BRANCHES` defines the deployment-wide fallback
+(the base uses `DEV=develop,DEFAULT=main`). A project in **Context > Project
+Details** can own one Git repository, its build credential and a branch per
+environment. Git Python jobs bound to it resolve all three through the
+connector runtime API (`JOBSEEKER_CONNECTOR_API_URL`) when each build starts,
+so workers need that API for Git jobs as they already do for connectors, and
+promotion does not rewrite them. An operator can still pin a branch or tag
+during promotion.
+
+Profile Git accounts are personal and are used only for interactive
+OpenVSCode clone, pull, and push operations. Jenkins jobs use Git repository
+connectors or project defaults instead. The base limits editor connector access
+to `JOBSEEKER_OPENVSCODE_CONNECTOR_ENVIRONMENT=DEV`; set this to the local
+environment in a standalone overlay, or to an empty value to disable it.
+
+To enable **Continue with GitHub**, create a GitHub OAuth App whose callback is
+`https://YOUR-JOBSEEKER/github/callback`, then put its client ID and secret in
+the matching keys of `jobseeker-secrets`. The default `repo` scope permits
+private repositories. Keep both keys empty if browser authorization is not
+used; manual fine-grained tokens and SSH keys remain available in the profile.
 
 ## Build and publish images
 
