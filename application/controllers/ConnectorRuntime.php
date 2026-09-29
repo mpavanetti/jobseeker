@@ -21,15 +21,16 @@ class ConnectorRuntime extends BaseController
             ->set_output(json_encode($payload, JSON_UNESCAPED_SLASHES));
     }
 
-    private function authorized()
+    private function bearerToken()
+    {
+        $authorization = trim((string) $this->input->get_request_header('Authorization', TRUE));
+        return strncmp($authorization, 'Bearer ', 7) === 0 ? substr($authorization, 7) : '';
+    }
+
+    private function isWorkerToken($token)
     {
         $expected = trim((string) getenv('JOBSEEKER_CONNECTOR_API_TOKEN'));
-        $authorization = trim((string) $this->input->get_request_header('Authorization', TRUE));
-        $prefix = 'Bearer ';
-        if ($expected === '' || strncmp($authorization, $prefix, strlen($prefix)) !== 0) {
-            return FALSE;
-        }
-        return hash_equals($expected, substr($authorization, strlen($prefix)));
+        return $expected !== '' && hash_equals($expected, $token);
     }
 
     private function normalizedEnvironment($value)
@@ -99,8 +100,20 @@ class ConnectorRuntime extends BaseController
             $this->jsonResponse(array('error' => 'Method not allowed.'), 405);
             return;
         }
-        if (! $this->authorized()) {
+        $token = $this->bearerToken();
+        $this->load->library('ConnectorIdeSession');
+        $ide = ! $this->isWorkerToken($token);
+        if ($ide && ! $this->connectoridesession->isSessionToken($token)) {
             $this->jsonResponse(array('error' => 'Unauthorized.'), 401);
+            return;
+        }
+
+        if ($this->input->post('git_project') !== NULL) {
+            if ($ide) {
+                $this->jsonResponse(array('error' => 'Only Jenkins workers resolve project Git sources.'), 403);
+                return;
+            }
+            $this->gitSource();
             return;
         }
 
@@ -108,6 +121,10 @@ class ConnectorRuntime extends BaseController
         $jobName = $this->normalizedJobName($this->input->post('job_name'));
         if ($environment === FALSE || $jobName === FALSE) {
             $this->jsonResponse(array('error' => 'A valid environment and job_name are required.'), 422);
+            return;
+        }
+        if ($ide && ! $this->connectoridesession->verify($token, $environment, $jobName)) {
+            $this->jsonResponse(array('error' => 'The OpenVSCode connector session is invalid. Reopen the workspace from JobSeeker.'), 401);
             return;
         }
 		if (! $this->jobSeekerEnvironmentIsAllowed($environment)) {
@@ -121,6 +138,12 @@ class ConnectorRuntime extends BaseController
             $unavailable = array();
             $this->connectors->pruneRuntimeAccessLogs();
             foreach ($this->connectors->runtimeSettings($environment, $jobName) as $row) {
+                // Cloud and worker-variable secrets resolve with the worker's own
+                // credentials, which the editor does not have.
+                if ($ide && ! in_array(isset($row['secret_backend']) ? $row['secret_backend'] : 'local', array('local', 'deployment'), TRUE)) {
+                    $unavailable[] = (string) $row['connector_key'];
+                    continue;
+                }
                 // Isolate a per-connector resolution failure (for example an
                 // undecryptable local secret or a missing cloud reference) so a
                 // single broken or wildcard-scoped connector cannot take down
@@ -130,9 +153,9 @@ class ConnectorRuntime extends BaseController
                 // from its own step instead of a blanket HTTP 500 here.
                 try {
                     $connectors[] = $this->connectorPayload($row);
-                    $this->connectors->logRuntimeAccess($row, $environment, $jobName, 'granted');
+                    $this->connectors->logRuntimeAccess($row, $environment, $jobName, $ide ? 'granted-ide' : 'granted');
                 } catch (Exception $exception) {
-                    $this->connectors->logRuntimeAccess($row, $environment, $jobName, 'failed');
+                    $this->connectors->logRuntimeAccess($row, $environment, $jobName, $ide ? 'failed-ide' : 'failed');
                     $unavailable[] = (string) $row['connector_key'];
                     log_message('error', 'Connector runtime skipped "'.$row['connector_key'].'" for job "'.$jobName.'" ('.$environment.'): '.$exception->getMessage());
                 }
@@ -153,6 +176,32 @@ class ConnectorRuntime extends BaseController
             $this->jsonResponse(array('error' => 'The connector catalog could not be built.'), 500);
         }
     }
-}
 
-?>
+    /**
+     * The repository, branch and build credential a project-bound Git job
+     * clones in its environment. Jobs ask at build time, so a project's
+     * branch map and credential are never copied into job configurations.
+     */
+    private function gitSource()
+    {
+        $projectId = (int) $this->input->post('git_project');
+        $environment = $this->normalizedEnvironment($this->input->post('environment'));
+        if ($projectId <= 0 || $environment === FALSE) {
+            $this->jsonResponse(array('error' => 'A valid git_project and environment are required.'), 422);
+            return;
+        }
+        if (! $this->jobSeekerEnvironmentIsAllowed($environment)) {
+            $this->jsonResponse(array('error' => 'This standalone deployment only exposes '.$this->jobSeekerStandaloneEnvironment().'.'), 409);
+            return;
+        }
+        $environment = $this->jobSeekerEffectiveEnvironment($environment);
+        $this->load->model('ProjectGitSettings_model', 'projectGitSettings');
+        $source = $this->projectGitSettings->gitSource($projectId, $environment);
+        if ($source === FALSE) {
+            $this->jsonResponse(array('error' => 'Project '.$projectId.' does not exist or has no Git repository.'), 404);
+            return;
+        }
+        $source['environment'] = $environment;
+        $this->jsonResponse(array('schema_version' => 1, 'git_source' => $source));
+    }
+}
