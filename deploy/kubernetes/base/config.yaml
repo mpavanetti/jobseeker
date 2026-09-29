@@ -24,6 +24,12 @@ data:
   JOBSEEKER_OPENVSCODE_PUBLIC_URL: https://vscode.jobseeker.example/
   JOBSEEKER_OPENVSCODE_WORKSPACE: /home/workspace
   JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES: "0"
+  # Interactive editor sessions are intentionally limited to the development
+  # connector catalog. Leave empty to disable connector access in OpenVSCode.
+  JOBSEEKER_OPENVSCODE_CONNECTOR_ENVIRONMENT: DEV
+  # Project Details can override either value for a particular repository.
+  JOBSEEKER_GIT_ENVIRONMENT_BRANCHES: DEV=develop,DEFAULT=main
+  JOBSEEKER_GITHUB_OAUTH_SCOPES: repo
   JOBSEEKER_TMF_RESULT_LIMIT: "1000"
   JOBSEEKER_KUBERNETES_AGENT_NAMESPACE: jobseeker
   JOBSEEKER_KUBERNETES_SERVER_URL: https://kubernetes.default.svc

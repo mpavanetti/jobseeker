@@ -44,6 +44,10 @@ spec:
                   key: openvscode-token
             - name: JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES
               value: "0"
+            - name: JOBSEEKER_CONNECTOR_API_URL
+              value: http://nginx:8080/connector-runtime
+            - name: JOBSEEKER_GIT_CREDENTIAL_URL
+              value: http://nginx:8080/git-credential
             - name: UV_PYTHON_INSTALL_DIR
               value: /tmp/jobseeker-python
           resources:
