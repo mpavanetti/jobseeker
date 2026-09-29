@@ -19,6 +19,7 @@ services:
       context: .
       dockerfile: docker/jenkins_agent_image
     image: jobseeker-jenkins-agent:local
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
     depends_on:
       docker-runtime:
         condition: service_healthy

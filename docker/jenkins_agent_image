@@ -20,4 +20,10 @@ COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
 RUN chmod +x /usr/local/bin/jobseeker-agent-entrypoint
 
 USER jenkins
-ENTRYPOINT ["/usr/local/bin/jobseeker-agent-entrypoint"]
+
+# Compose starts this as root; the script drops to the checkout owner's uid.
+COPY --chmod=0755 docker/jobseeker-host-user.sh /usr/local/bin/jobseeker-host-user
+ENV JOBSEEKER_RUNTIME_USER=jenkins \
+	JOBSEEKER_OWNER_REFERENCE=/php/repository \
+	JOBSEEKER_OWNED_PATHS=/home/jenkins
+ENTRYPOINT ["/usr/local/bin/jobseeker-host-user", "/usr/local/bin/jobseeker-agent-entrypoint"]
