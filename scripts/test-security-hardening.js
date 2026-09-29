@@ -53,10 +53,10 @@ ok('config.php checks for placeholder / short application secrets',
   config.includes('is still set to a shipped placeholder value') &&
   config.includes('JOBSEEKER_CONNECTOR_API_TOKEN'));
 
-// 5. CSRF stays enabled; only the two self-authenticating routes are excluded.
+// 5. CSRF stays enabled; only self-authenticating machine routes are excluded.
 ok('csrf_protection is enabled', /\$config\['csrf_protection'\]\s*=\s*TRUE/.test(config));
-ok('csrf_exclude_uris is limited to jenkins/proxy and connector-runtime',
-  /csrf_exclude_uris'\]\s*=\s*array\('jenkins\/proxy',\s*'connector-runtime'\)/.test(config));
+ok('csrf_exclude_uris is limited to Jenkins and signed connector/Git helpers',
+  /csrf_exclude_uris'\]\s*=\s*array\('jenkins\/proxy',\s*'connector-runtime',\s*'git-credential'\)/.test(config));
 
 // 6. Every escapeHtml()-style helper must escape quotes, not just angle brackets.
 //    jQuery's .text()/.html() round-trip leaves " and ' untouched, so a helper
