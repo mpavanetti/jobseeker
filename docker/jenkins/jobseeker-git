@@ -5,16 +5,20 @@
 set -eu
 
 usage() {
-  echo "Usage: jobseeker-git {clone|ls-remote} --connector-dir DIR [--branch REF] -- URL [TARGET]" >&2
+  echo "Usage: jobseeker-git {clone|ls-remote|heads} --connector-dir DIR [--branch REF] [--full] -- URL [TARGET]" >&2
+  echo "       jobseeker-git push --connector-dir DIR -- URL WORKTREE REFSPEC..." >&2
   exit 2
 }
 
 command_name=${1:-}
-[ "$command_name" = "clone" ] || [ "$command_name" = "ls-remote" ] || usage
+case "$command_name" in clone|ls-remote|heads|push) ;; *) usage ;; esac
 shift
 
 connector_dir=
 branch=
+# A shallow single-branch clone is enough for a build; an OpenVSCode working
+# copy needs every branch and its history.
+clone_depth="--depth 1"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --connector-dir)
@@ -26,6 +30,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || usage
       branch=$2
       shift 2
+      ;;
+    --full)
+      clone_depth=
+      shift
       ;;
     --)
       shift
@@ -44,6 +52,12 @@ shift
 if [ "$command_name" = "clone" ]; then
   [ "$#" -eq 1 ] || usage
   target=$1
+elif [ "$command_name" = "push" ]; then
+  # A worktree and at least one refspec; refspecs never carry credentials.
+  [ "$#" -ge 2 ] || usage
+  worktree=$1
+  shift
+  [ -d "$worktree/.git" ] || { echo "The push worktree is not a Git working copy." >&2; exit 2; }
 else
   [ "$#" -eq 0 ] || usage
 fi
@@ -102,18 +116,19 @@ case "$auth_type" in
     }
     username_file="$connector_dir/username"
     password_file="$connector_dir/password"
-    if [ "$auth_type" = "token" ]; then
-      [ -f "$connector_dir/token" ] && password_file="$connector_dir/token"
+    # A token without a username signs in with the provider's token user:
+    # Bitbucket repository/workspace access tokens need x-token-auth (a
+    # personal API token needs the account's username set on the connector).
+    case "$url_host" in
+      bitbucket.org) token_username=x-token-auth ;;
+      gitlab.com) token_username=oauth2 ;;
+      *) token_username=x-access-token ;;
+    esac
+    if [ "$auth_type" = "token" ] || [ "$auth_type" = "api_key" ]; then
+      [ -f "$connector_dir/$auth_type" ] && password_file="$connector_dir/$auth_type"
       [ -f "$connector_dir/username" ] || {
         username_file="$temporary_dir/username"
-        printf '%s' 'x-access-token' > "$username_file"
-        chmod 600 "$username_file"
-      }
-    elif [ "$auth_type" = "api_key" ]; then
-      [ -f "$connector_dir/api_key" ] && password_file="$connector_dir/api_key"
-      [ -f "$connector_dir/username" ] || {
-        username_file="$temporary_dir/username"
-        printf '%s' 'x-access-token' > "$username_file"
+        printf '%s' "$token_username" > "$username_file"
         chmod 600 "$username_file"
       }
     fi
@@ -135,10 +150,12 @@ EOF
     export GIT_ASKPASS=$askpass
     ;;
   ssh_key)
-    [ "$transport" = "ssh" ] || {
-      echo "SSH-key Git connectors require an SSH repository URL." >&2
-      exit 78
-    }
+    # A deploy key reaches an https://host/owner/repo URL as git@host:owner/repo.
+    if [ "$transport" = "http" ]; then
+      repository_path=${repository_url#*://}
+      repository_url="git@$url_host:${repository_path#*/}"
+      transport=ssh
+    fi
     key_file="$connector_dir/private_key"
     [ -f "$key_file" ] || key_file="$connector_dir/ssh_key"
     [ -f "$key_file" ] || { echo "The selected Git connector has no SSH private key." >&2; exit 78; }
@@ -157,14 +174,23 @@ esac
 
 if [ "$command_name" = "clone" ]; then
   if [ -n "$branch" ]; then
-    git -c credential.helper= clone --depth 1 --branch "$branch" -- "$repository_url" "$target"
+    git -c credential.helper= clone $clone_depth --branch "$branch" -- "$repository_url" "$target"
   else
-    git -c credential.helper= clone --depth 1 -- "$repository_url" "$target"
+    git -c credential.helper= clone $clone_depth -- "$repository_url" "$target"
   fi
+elif [ "$command_name" = "heads" ]; then
+  # Branch names only (an empty repository prints nothing), for callers that
+  # must tell an empty remote from one that already has history.
+  git -c credential.helper= ls-remote --heads "$repository_url" | sed -n 's#^[0-9a-f]*[[:space:]]*refs/heads/##p'
+elif [ "$command_name" = "push" ]; then
+  git -C "$worktree" -c credential.helper= push "$repository_url" "$@"
 else
   if [ -n "$branch" ]; then
     git -c credential.helper= ls-remote --exit-code --refs "$repository_url" "$branch" >/dev/null
   else
-    git -c credential.helper= ls-remote --exit-code --refs "$repository_url" HEAD >/dev/null
+    # HEAD is a pseudo-ref and is intentionally omitted by `--refs`. Keep the
+    # explicit HEAD pattern, but allow pseudo-refs so a repository connection
+    # test works without requiring the caller to know its default branch.
+    git -c credential.helper= ls-remote --exit-code "$repository_url" HEAD >/dev/null
   fi
 fi

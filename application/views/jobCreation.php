@@ -21,6 +21,66 @@
   .schedule-validation .sv-warn { color: #b9770e; }
   .schedule-validation .sv-error { color: #c0392b; }
 
+  .python-source-mode-hidden { display: none !important; }
+  /* Git Source: three stacked cards that fit the narrow execution panel. */
+  .python-git-panel { display:flex; flex-direction:column; gap:12px; margin:0 0 15px; }
+  .python-git-section { background:#fff; border:1px solid #dde5ee; border-radius:8px; container-type:inline-size; padding:14px 16px 4px; }
+  .python-git-section-head { align-items:flex-start; display:flex; gap:10px; margin-bottom:12px; }
+  .python-git-section-head strong { color:#1f2d3d; display:block; font-size:14px; }
+  .python-git-section-head span:not(.python-git-step) { color:#6b7a89; display:block; font-size:12px; }
+  .python-git-step { align-items:center; background:#eef4fa; border-radius:50%; color:#3c6e9c; display:inline-flex; flex:0 0 22px; font-size:12px; font-weight:700; height:22px; justify-content:center; }
+  /* Project | Repository URL, then Branch | Entry file: one column grid, so labels line up. */
+  .python-git-grid { display:grid; gap:0 14px; grid-template-columns:minmax(0, 1fr) minmax(0, 2fr); }
+  .python-git-grid .python-git-wide { grid-column:1 / -1; }
+  .python-git-grid > * { min-width:0; }
+  .python-git-project-credential { align-items:center; background:#f7f9fb; display:flex; gap:6px; overflow:hidden; white-space:nowrap; }
+  .python-git-project-credential code { background:none; color:#1f2d3d; font-weight:600; padding:0; }
+  .python-git-project-credential a { margin-left:auto; }
+  #pythonRepositoryUrl[readonly] { background:#f7f9fb; color:#4a5a6a; }
+  .python-git-credential-status { font-size:12px; margin:-6px 0 10px; }
+  .python-git-credential-status code { background:none; color:inherit; font-weight:600; padding:0; }
+  .python-git-credential-status.is-ok { color:#1e6b33; }
+  .python-git-credential-status.is-warning { color:#9a6700; }
+  .python-git-credential-status.is-error { color:#9f2f28; }
+  .python-git-credential-status.is-muted { color:#6b7a89; }
+  @container (max-width: 520px) { .python-git-grid { grid-template-columns:minmax(0, 1fr); } }
+  .python-git-inline { display:flex; gap:8px; }
+  .python-git-inline .form-control { flex:1 1 auto; min-width:0; }
+  .python-git-inline .btn { flex:0 0 auto; }
+  .python-git-result { border-radius:6px; display:none; font-size:12px; margin:0 0 12px; padding:8px 10px; white-space:pre-line; }
+  .python-git-result.is-ok { background:#edf8f0; color:#1e6b33; display:block; }
+  .python-git-result.is-error { background:#fdf0ef; color:#9f2f28; display:block; }
+  .python-git-result.is-running { background:#f3f6f9; color:#4a5a6a; display:block; }
+  .python-git-develop { background:linear-gradient(135deg,#0e3a5c 0%,#0b5d95 60%,#0f7ac2 100%); border-radius:10px; color:#e8f3fb; padding:16px; }
+  .python-git-develop-head { align-items:center; display:flex; gap:12px; margin-bottom:12px; }
+  .python-git-develop-head strong { color:#fff; display:block; font-size:15px; }
+  .python-git-develop-head span:not(.vscode-logo) { color:#cfe4f4; display:block; font-size:12px; }
+  .python-git-develop-head code { background:rgba(255,255,255,.14); color:#fff; }
+  .vscode-logo { align-items:center; background:#fff; border-radius:9px; box-shadow:0 2px 6px rgba(0,0,0,.18); color:#0f7ac2; display:inline-flex; flex:0 0 40px; height:40px; justify-content:center; }
+  .vscode-logo svg { height:24px; width:24px; }
+  .python-git-account { align-items:center; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); border-radius:6px; display:flex; flex-wrap:wrap; font-size:12px; gap:6px 8px; margin-bottom:12px; padding:8px 10px; }
+  .python-git-account .fa { margin-right:2px; }
+  .python-git-account code { background:rgba(255,255,255,.14); color:#fff; }
+  .python-git-account a { color:#fff; font-weight:700; text-decoration:underline; }
+  .python-git-account .is-ready { color:#9ff0b5; font-weight:700; }
+  .python-git-account .is-missing { color:#ffd98a; font-weight:700; }
+  .python-git-develop-actions { align-items:center; display:flex; flex-wrap:wrap; gap:8px; }
+  .python-git-develop-actions .btn-default { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.35); color:#fff; }
+  .python-git-develop-actions .btn-default:hover, .python-git-develop-actions .btn-default:focus { background:rgba(255,255,255,.22); color:#fff; }
+  .python-git-develop-actions .btn-link { color:#dcecf8; }
+  .python-vscode-button { align-items:center; background:#fff; border:0; color:#0b5d95; display:inline-flex; font-weight:700; gap:9px; padding:8px 14px 8px 9px; }
+  .python-vscode-button:hover, .python-vscode-button:focus { background:#eaf5fd; color:#084a78; }
+  .python-vscode-button-solid { background:#0f7ac2; color:#fff; }
+  .python-vscode-button-solid:hover, .python-vscode-button-solid:focus { background:#0b5d95; color:#fff; }
+  .python-vscode-button-solid .vscode-action-icon { background:#fff; color:#0f7ac2; }
+  .vscode-action-icon { align-items:center; background:#0f7ac2; border-radius:5px; color:#fff; display:inline-flex; height:24px; justify-content:center; width:24px; }
+  .vscode-action-icon svg { display:block; height:15px; width:15px; }
+  .python-workspace-heading { align-items:center; display:flex; gap:10px; justify-content:space-between; margin-bottom:5px; }
+  .python-workspace-heading label { margin:0; }
+  .python-move-git-steps { color:#4a5a6a; margin:4px 0 14px; padding-left:18px; }
+  .python-move-git-steps li { margin-bottom:4px; }
+  @media(max-width:767px) { .python-git-develop-actions .btn { justify-content:center; width:100%; } }
+
   .checkbox input {
 
     transform: scale(1.5);
@@ -394,11 +454,20 @@
     grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
   }
 
+  /* Four Python sources: two by two, or one row when the panel is wide. */
+  .linux-python-options { container-type: inline-size; }
+  .linux-python-options .linux-execution-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @container (min-width: 760px) { .linux-python-options .linux-execution-choice-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
   .linux-execution-choice {
+    align-items: flex-start;
     background: #fff;
     border: 1px solid #d2d6de;
     border-radius: 4px;
     color: #3c4b55;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
     min-height: 54px;
     padding: 9px 10px;
     text-align: left;
@@ -588,6 +657,28 @@
   .linux-code-editor-actions .btn:focus {
     background: #37373d;
     color: #fff;
+  }
+
+  .linux-code-editor-actions .python-open-vscode-pill {
+    align-items: center;
+    background: #0e639c;
+    border-radius: 3px;
+    color: #fff;
+    display: inline-flex;
+    font-weight: 600;
+    gap: 5px;
+    padding: 2px 8px;
+  }
+
+  .linux-code-editor-actions .python-open-vscode-pill:hover,
+  .linux-code-editor-actions .python-open-vscode-pill:focus {
+    background: #1177bb;
+    color: #fff;
+  }
+
+  .python-open-vscode-pill svg {
+    height: 12px;
+    width: 12px;
   }
 
   .python-inline-workspace {
@@ -2112,6 +2203,57 @@
   </div>
 </div>
 
+<div class="modal fade" id="pythonMoveToGitModal" tabindex="-1" role="dialog" aria-labelledby="pythonMoveToGitTitle">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="pythonMoveToGitTitle"><i class="fa fa-code-fork"></i> Move this job to Git</h4>
+      </div>
+      <div class="modal-body">
+        <ol class="python-move-git-steps">
+          <li>The workspace (code, <code>pyproject.toml</code>, locks, Dockerfile, tests) is committed as you and pushed with your personal Git account.</li>
+          <li>An empty repository also gets <code id="pythonMoveGitReleaseBranch">main</code>, so promotions have a release branch.</li>
+          <li>The form switches to <strong>Git Source</strong>. <strong>Save the job</strong> to run it from the repository.</li>
+        </ol>
+        <div class="form-group">
+          <label for="pythonMoveGitUrl">Repository URL</label>
+          <input type="text" class="form-control" id="pythonMoveGitUrl" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="https://github.com/org/new-repository.git">
+          <p class="help-block">Create an empty repository first, or use one you can push to.</p>
+        </div>
+        <div class="python-git-grid">
+          <div class="form-group">
+            <label for="pythonMoveGitProject">Project <small class="text-muted">optional</small></label>
+            <select class="form-control" id="pythonMoveGitProject">
+              <option value="">No project</option>
+              <?php foreach ((array) (isset($git_projects) ? $git_projects : array()) as $gitProject) { ?>
+                <option value="<?php echo (int) $gitProject['id']; ?>"><?php echo html_escape($gitProject['name']); ?></option>
+              <?php } ?>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pythonMoveGitBranch">Branch the job runs</label>
+            <input type="text" class="form-control" id="pythonMoveGitBranch" maxlength="200" autocomplete="off" spellcheck="false" placeholder="develop">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="pythonMoveGitMessage">Commit message</label>
+          <input type="text" class="form-control" id="pythonMoveGitMessage" maxlength="2000" autocomplete="off">
+        </div>
+        <div class="python-git-result" id="pythonMoveGitAccount" role="status"></div>
+        <div class="checkbox" id="pythonMoveGitOverwriteGroup" style="display:none;">
+          <label><input type="checkbox" id="pythonMoveGitOverwrite"> Replace existing files in the repository (the previous versions stay in Git history)</label>
+        </div>
+        <div class="python-git-result" id="pythonMoveGitResult" role="status" aria-live="polite"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmPythonMoveToGit"><i class="fa fa-cloud-upload"></i> Commit and push</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="jobSampleModal" tabindex="-1" role="dialog" aria-labelledby="jobSampleModalTitle">
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
@@ -2167,6 +2309,7 @@
         <span class="job-sample-selection" id="jobSampleSelection">Select a sample to continue.</span>
         <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" id="loadSelectedJobSample" disabled><i class="fa fa-download"></i> Load Selected Sample</button>
+        <button type="button" class="btn python-vscode-button python-vscode-button-solid" id="addSelectedSampleToGit" style="display:none;" disabled title="Adds the sample's files to this job's Git working copy and opens it in VS Code"><span class="vscode-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg></span> Add to Repository in VS Code</button>
       </div>
     </div>
   </div>
@@ -2613,7 +2756,7 @@
                     </div>
                     <?php } ?>
                     <div class="row pythonSourceForm" style="display: none;">
-                      <div class="col-md-4 pythonSourceModeColumn">
+                      <div class="col-md-4 pythonSourceModeColumn python-source-mode-hidden" aria-hidden="true">
                         <div class="form-group">
                           <label for="pythonSourceMode">Python Source</label>
                           <select class="form-control" id="pythonSourceMode" name="pythonSourceMode">
@@ -2623,10 +2766,11 @@
                           </select>
                         </div>
                       </div>
-                      <div class="col-md-8 pythonEntryPointColumn">
-                        <div class="form-group">
-                          <label for="pythonEntryPoint">Entry Python File or Nested Path</label>
+                      <div class="col-md-12 pythonEntryPointColumn">
+                        <div class="form-group" id="pythonEntryPointGroup">
+                          <label for="pythonEntryPoint" id="pythonEntryPointLabel">Entry Python File or Nested Path</label>
                           <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" placeholder="main.py or pyjob/main.py">
+                          <p class="help-block" id="pythonEntryPointHelp" style="display: none;">Path from the repository root, such as <code>main.py</code> or <code>jobs/etl/main.py</code>.</p>
                         </div>
                       </div>
                     </div>
@@ -2638,36 +2782,67 @@
                         </div>
                       </div>
                     </div>
-                    <div class="row pythonGitSourceForm" style="display: none;">
-                      <div class="col-md-6">
-                        <div class="form-group">
-                          <label for="pythonRepositoryUrl">Git Repository URL</label>
-                          <input type="text" class="form-control" id="pythonRepositoryUrl" name="pythonRepositoryUrl" maxlength="1000" autocomplete="off" placeholder="https://github.com/org/project.git">
+                    <div class="pythonGitSourceForm python-git-panel" style="display: none;">
+                      <section class="python-git-section">
+                        <header class="python-git-section-head"><span class="python-git-step">1</span><div><strong>Repository</strong><span>Where the job's code lives and the branch it runs.</span></div></header>
+                        <div class="python-git-grid">
+                          <div class="form-group">
+                            <label for="pythonProjectId">Project <small class="text-muted">optional</small></label>
+                            <select class="form-control" id="pythonProjectId" name="pythonProjectId">
+                              <option value="">No project</option>
+                              <?php foreach ((array) (isset($git_projects) ? $git_projects : array()) as $gitProject) { ?>
+                                <option value="<?php echo (int) $gitProject['id']; ?>"><?php echo html_escape($gitProject['name']); ?></option>
+                              <?php } ?>
+                            </select>
+                            <p class="help-block">Use a Git project's repository, branches and credential.</p>
+                          </div>
+                          <div class="form-group">
+                            <label for="pythonRepositoryUrl">Repository URL</label>
+                            <input type="text" class="form-control" id="pythonRepositoryUrl" name="pythonRepositoryUrl" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="https://github.com/org/project.git">
+                            <p class="help-block" id="pythonRepositoryUrlHelp">HTTPS or SSH remote. Choose a project to use its repository.</p>
+                          </div>
+                          <div class="form-group">
+                            <label for="pythonRepositoryBranch">Branch or tag</label>
+                            <input type="text" class="form-control" id="pythonRepositoryBranch" name="pythonRepositoryBranch" maxlength="200" autocomplete="off" spellcheck="false" placeholder="develop">
+                            <p class="help-block" id="pythonRepositoryBranchHelp">Defaults by environment; override it to run a tag or release branch.</p>
+                          </div>
+                          <div id="pythonGitEntrySlot"></div>
                         </div>
-                      </div>
-                      <div class="col-md-3">
-                        <div class="form-group">
-                          <label for="pythonRepositoryBranch">Branch or Tag</label>
-                          <input type="text" class="form-control" id="pythonRepositoryBranch" name="pythonRepositoryBranch" maxlength="200" autocomplete="off" placeholder="main">
-                        </div>
-                      </div>
-                      <div class="col-md-3">
-                        <div class="form-group">
-                          <label for="pythonGitCredentialKey">Git Credential</label>
+                      </section>
+                      <section class="python-git-section">
+                        <header class="python-git-section-head"><span class="python-git-step">2</span><div><strong>Build access</strong><span>How Jenkins clones the repository when the job runs.</span></div></header>
+                        <label for="pythonGitCredentialKey">Build credential</label>
+                        <div class="python-git-inline">
+                          <div class="form-control python-git-project-credential" id="pythonGitProjectCredential" style="display: none;"></div>
                           <select class="form-control" id="pythonGitCredentialKey" name="pythonGitCredentialKey">
-                            <option value="">Public repository</option>
+                            <option value="">Public repository (no credential)</option>
                             <?php foreach ((array) (isset($git_credentials) ? $git_credentials : array()) as $gitCredential) {
                               $credentialKey = isset($gitCredential->connector_key) ? (string) $gitCredential->connector_key : '';
                               $credentialScope = isset($gitCredential->environment) ? (string) $gitCredential->environment : 'ALL';
                               $credentialHost = isset($gitCredential->address) ? (string) $gitCredential->address : '';
                               if ($credentialKey === '') { continue; }
                             ?>
-                              <option value="<?php echo html_escape($credentialKey); ?>"><?php echo html_escape($credentialKey.' · '.$credentialHost.' · '.$credentialScope); ?></option>
+                              <option value="<?php echo html_escape($credentialKey); ?>" data-environment="<?php echo html_escape(strtoupper($credentialScope)); ?>" data-job="<?php echo html_escape(isset($gitCredential->job_name) ? (string) $gitCredential->job_name : '*'); ?>" data-host="<?php echo html_escape(strtolower($credentialHost)); ?>" data-auth="<?php echo html_escape(isset($gitCredential->auth_type) ? (string) $gitCredential->auth_type : ''); ?>"><?php echo html_escape($credentialKey.' · '.$credentialHost.' · '.$credentialScope); ?></option>
                             <?php } ?>
                           </select>
-                          <p class="help-block">Create scoped credentials under Connectors; secrets never enter the clone URL or log.</p>
+                          <button type="button" class="btn btn-default" id="testPythonGitBuildAccess" title="Check that builds can read this repository and branch"><i class="fa fa-plug"></i> Test</button>
                         </div>
-                      </div>
+                        <p class="help-block" id="pythonGitCredentialHelp">A Git connector (deploy key or token). Builds never use a person's account. <a href="<?php echo base_url('dbSettings'); ?>" target="_blank" rel="noopener">Manage connectors</a></p>
+                        <div class="python-git-credential-status" id="pythonGitCredentialStatus" aria-live="polite"></div>
+                        <div class="python-git-result" id="pythonGitBuildAccessResult" role="status" aria-live="polite"></div>
+                      </section>
+                      <section class="python-git-develop" id="pythonGitWorkspaceActions" style="display: none;">
+                        <div class="python-git-develop-head">
+                          <span class="vscode-logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg></span>
+                          <div><strong>Develop in VS Code</strong><span id="pythonGitWorkspaceHelp">Clones the repository into OpenVSCode with your personal Git account. Commit, pull and push from the editor.</span></div>
+                        </div>
+                        <div class="python-git-account" id="pythonPersonalGitStatus" role="status">Enter a repository URL to match one of your Git accounts.</div>
+                        <div class="python-git-develop-actions">
+                          <button type="button" class="btn python-vscode-button" id="openPythonGitInVscode"><span class="vscode-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg></span> Open Repository in VS Code</button>
+                          <button type="button" class="btn btn-default" id="addPythonGitSample"><i class="fa fa-flask"></i> Add a sample</button>
+                          <button type="button" class="btn btn-link" id="testPythonPersonalGit" style="display:none;"><i class="fa fa-plug"></i> Test my access</button>
+                        </div>
+                      </section>
                     </div>
                     <div class="row pythonRuntimeForm" style="display: none;">
                       <div class="col-md-6">
@@ -2741,7 +2916,10 @@
                     <div class="row pythonInlineSourceForm" style="display: none;">
                       <div class="col-md-12">
                         <div class="form-group">
-                          <label id="pythonWorkspaceLabel" for="pythonInlineCode">Python Workspace</label>
+                          <div class="python-workspace-heading">
+                            <label id="pythonWorkspaceLabel" for="pythonInlineCode">Python Workspace</label>
+                            <button type="button" class="btn btn-default btn-xs" id="movePythonInlineToGit" title="Push this workspace to a Git repository and run the job from Git"><i class="fa fa-code-fork"></i> Move to Git&hellip;</button>
+                          </div>
                           <input type="hidden" id="pythonInlineFilesJson" name="pythonInlineFilesJson" value="{&quot;files&quot;:[],&quot;directories&quot;:[]}">
                           <input type="hidden" id="pythonWorkspaceSignature" name="pythonWorkspaceSignature" value="">
                           <div class="python-inline-workspace">
@@ -2770,7 +2948,7 @@
                                   <span class="linux-code-editor-tab"><i class="fa fa-code"></i> <span id="pythonInlineEditorActiveFile">main.py</span></span>
                                   <span class="linux-code-editor-actions">
                                     <button type="button" class="btn btn-xs" id="runPythonInlinePreview" title="Run with Jenkins Python"><i class="fa fa-play"></i></button>
-                                    <button type="button" class="btn btn-xs" id="openPythonInlineInVscodeWeb" title="Open in VS Code Web"><i class="fa fa-code"></i></button>
+                                    <button type="button" class="btn btn-xs python-open-vscode-pill" id="openPythonInlineInVscodeWeb" title="Open this workspace in VS Code (OpenVSCode)"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg> VS Code</button>
                                     <button type="button" class="btn btn-xs" id="expandPythonInlineEditor" title="Expand editor"><i class="fa fa-expand"></i></button>
                                     <button type="button" class="btn btn-xs" id="applyPythonInlineTemplate" title="Insert JobSeeker template"><i class="fa fa-magic"></i></button>
                                     <span class="linux-code-editor-meta">python</span>
@@ -3584,6 +3762,7 @@
           $('#pythonWorkspaceSignature').val('');
           stopPythonExternalSync(true);
         }
+        syncGitBuildCredentialOptions();
       });
 
       $('#applyPythonInlineTemplate').on('click', function() {
@@ -3596,6 +3775,10 @@
 
       $('#openPythonInlineInVscodeWeb').on('click', function() {
         openPythonInlineInVscode();
+      });
+
+      $('#openPythonGitInVscode').on('click', function() {
+        runGitWorkspaceAction($(this), 'jobCreation/gitPythonExternalOpen', {}, 'Cloning...');
       });
 
       $('#expandPythonInlineEditor').on('click', function() {
@@ -3739,6 +3922,338 @@
       var pythonDockerfileUserEdited = false;
       var defaultDockerPythonVersion = '3.13';
       var pythonInlineOpenVscodeEnabled = <?php $openvscodeFlag = getenv('JOBSEEKER_OPENVSCODE_ENABLED'); echo json_encode($openvscodeFlag === FALSE || trim((string) $openvscodeFlag) === '' || ! in_array(strtolower(trim((string) $openvscodeFlag)), array('0', 'false', 'no', 'off'), TRUE)); ?>;
+      var gitBranchDefaults = <?php echo json_encode(isset($git_branch_defaults) ? $git_branch_defaults : array('DEV' => 'develop', 'DEFAULT' => 'main')); ?>;
+      var gitProjects = <?php echo json_encode(isset($git_projects) ? $git_projects : array()); ?>;
+      var personalGitAccounts = <?php echo json_encode(isset($personal_git_accounts) ? $personal_git_accounts : array()); ?>;
+      var githubOAuthEnabled = <?php echo json_encode(! empty($github_oauth_enabled)); ?>;
+      var gitProfileUrl = <?php echo json_encode(base_url('profile/git')); ?>;
+      var projectDetailsUrl = <?php echo json_encode(base_url('Context/projectDetails')); ?>;
+      var connectorsUrl = <?php echo json_encode(base_url('dbSettings')); ?>;
+      var githubConnectUrl = <?php echo json_encode(base_url('github/connect?return=JobCreation')); ?>;
+      var gitProjectsById = {};
+      $.each(gitProjects, function(index, project) { gitProjectsById[String(project.id)] = project; });
+      $('#pythonGitWorkspaceActions').toggle(pythonInlineOpenVscodeEnabled);
+
+      // The form holds '0' until an environment is chosen in the top bar.
+      function gitPanelEnvironment() {
+        var environment = String($('#environment').val() || '').toUpperCase();
+        return environment === '0' ? '' : environment;
+      }
+
+      function pythonGitModeActive() {
+        return $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python' && $('#pythonSourceMode').val() == 'git';
+      }
+
+      function selectedGitProject() {
+        return gitProjectsById[String($('#pythonProjectId').val() || '')] || null;
+      }
+
+      // Mirrors ProjectGitSettings_model::settingForEnvironment(): the
+      // environment's branch, else the project fallback; one build credential.
+      function gitProjectDefault(project, environment) {
+        if (!project) {
+          return {branch: '', credentialKey: ''};
+        }
+        var defaults = project.defaults || {};
+        var branch = (defaults[environment] || defaults.DEFAULT || {}).branch || '';
+        return {branch: branch, credentialKey: project.credentialKey || ''};
+      }
+
+      function selectedGitProjectDefault() {
+        return gitProjectDefault(selectedGitProject(), gitPanelEnvironment());
+      }
+
+      function gitRepositoryLocation(value) {
+        value = $.trim(String(value || ''));
+        var scp = value.match(/^[^@\s\/]+@([^:\s\/]+):(.+)$/);
+        if (scp) {
+          return {host: scp[1].toLowerCase(), path: scp[2].replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '').toLowerCase(), transport:'ssh'};
+        }
+        try {
+          var parsed = new URL(value);
+          return {host: parsed.hostname.toLowerCase() + (parsed.port ? ':' + parsed.port : ''), path: parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '').toLowerCase(), transport:parsed.protocol === 'ssh:' ? 'ssh' : 'http'};
+        } catch (error) {
+          return {host:'', path:'', transport:''};
+        }
+      }
+
+      // Mirrors UserGitAccount_model::credential(): same host, longest
+      // matching owner/repository scope, and a secret for the URL's transport.
+      function matchingPersonalGitAccount(repositoryUrl) {
+        var location = gitRepositoryLocation(repositoryUrl);
+        var matches = $.grep(personalGitAccounts, function(account) {
+          var prefix = String(account.path_prefix || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+          return String(account.host || '').toLowerCase() === location.host
+            && (prefix === '' || location.path === prefix || location.path.indexOf(prefix + '/') === 0)
+            && (location.transport !== 'ssh' || account.auth_type === 'ssh_key')
+            && (location.transport !== 'http' || account.auth_type !== 'ssh_key');
+        });
+        matches.sort(function(left, right) { return String(right.path_prefix || '').length - String(left.path_prefix || '').length; });
+        return matches.length ? matches[0] : null;
+      }
+
+      function personalGitAccountLabel(account) {
+        return account.label || (String(account.provider || 'Git').replace('_', ' ') + (account.username ? ' · ' + account.username : ''));
+      }
+
+      function connectGitAccountLink(host) {
+        return host === 'github.com' && githubOAuthEnabled
+          ? '<a href="' + escapeAttribute(githubConnectUrl) + '"><i class="fa fa-github"></i> Connect GitHub</a>'
+          : '<a href="' + escapeAttribute(gitProfileUrl) + '" target="_blank" rel="noopener"><i class="fa fa-key"></i> Add a ' + escapeHtml(host) + ' account</a>';
+      }
+
+      // Renders the personal-account match into a status element (Git panel
+      // and Move to Git dialog share it).
+      function renderGitAccountStatus(target, repositoryUrl, purpose) {
+        var location = gitRepositoryLocation(repositoryUrl);
+        var account = matchingPersonalGitAccount(repositoryUrl);
+        if (!location.host) {
+          target.html('<i class="fa fa-user-circle"></i> Enter a repository URL to match one of your Git accounts.');
+        } else if (account) {
+          target.html('<span class="is-ready"><i class="fa fa-check-circle"></i> ' + escapeHtml(personalGitAccountLabel(account)) + '</span> will ' + purpose + ' <code>' + escapeHtml(location.host + '/' + location.path) + '</code>. <a href="' + escapeAttribute(gitProfileUrl) + '" target="_blank" rel="noopener">Manage</a>');
+        } else {
+          target.html('<span class="is-missing"><i class="fa fa-exclamation-triangle"></i> No ' + escapeHtml(location.host) + ' account on your profile.</span> ' + (purpose === 'push to' ? 'Pushing needs one.' : 'Only public repositories will open.') + ' ' + connectGitAccountLink(location.host));
+        }
+        return account;
+      }
+
+      function renderPersonalGitAccess() {
+        var account = renderGitAccountStatus($('#pythonPersonalGitStatus'), $('#pythonRepositoryUrl').val(), 'open');
+        $('#testPythonPersonalGit').toggle(!!account).data('account-id', account ? account.id : '');
+      }
+
+      function defaultGitBranchForEnvironment() {
+        var projectDefault = selectedGitProjectDefault();
+        if ($.trim(projectDefault.branch || '') !== '') {
+          return projectDefault.branch;
+        }
+        return gitBranchDefaults[gitPanelEnvironment()] || gitBranchDefaults.DEFAULT || 'main';
+      }
+
+      function syncGitBuildCredentialOptions() {
+        var select = $('#pythonGitCredentialKey');
+        var environment = gitPanelEnvironment();
+        var jobName = $.trim($('#job_name').val() || '');
+        var selected = select.val();
+        select.find('option[data-environment]').each(function() {
+          var option = $(this);
+          var connectorEnvironment = String(option.data('environment') || '').toUpperCase();
+          var connectorJob = String(option.data('job') || '*');
+          var available = (connectorEnvironment === 'ALL' || connectorEnvironment === environment)
+            && (connectorJob === '*' || connectorJob === jobName);
+          option.prop('disabled', !available);
+        });
+        if (selected !== null && selected !== '') {
+          var availableSelected = select.find('option').filter(function() {
+            return this.value === selected && !this.disabled;
+          }).first();
+          if (availableSelected.length) {
+            select.find('option').prop('selected', false);
+            availableSelected.prop('selected', true);
+            return;
+          }
+        }
+        if (!select.find('option:selected').length || select.find('option:selected').prop('disabled')) {
+          select.val('');
+        }
+        renderGitCredentialStatus();
+      }
+
+      // Which connector row the build credential resolves to in the selected
+      // environment (an environment scope wins over ALL, as at build time),
+      // and whether jobseeker-git will accept it for this repository URL.
+      function renderGitCredentialStatus() {
+        var status = $('#pythonGitCredentialStatus');
+        var project = selectedGitProject();
+        var key = project ? (project.credentialKey || '') : ($('#pythonGitCredentialKey').val() || '');
+        var location = gitRepositoryLocation($('#pythonRepositoryUrl').val());
+        var environment = gitPanelEnvironment();
+        var jobName = $.trim($('#job_name').val() || '');
+        var show = function(level, html) { status.attr('class', 'python-git-credential-status is-' + level).html(html); };
+        if (key === '') {
+          if (location.transport === 'ssh') {
+            show('error', '<i class="fa fa-times-circle"></i> SSH URLs need a connector with an SSH deploy key.');
+          } else {
+            show('muted', '<i class="fa fa-globe"></i> Builds clone without a credential, so the repository must be public.');
+          }
+          return;
+        }
+        if (environment === '') {
+          show('muted', '<i class="fa fa-info-circle"></i> <code>' + escapeHtml(key) + '</code> resolves when an environment is selected in the top bar.');
+          return;
+        }
+        var best = null;
+        $('#pythonGitCredentialKey option[data-environment]').each(function() {
+          var option = $(this);
+          var scope = String(option.data('environment') || '').toUpperCase();
+          var job = String(option.data('job') || '*');
+          if (this.value !== key || (scope !== 'ALL' && scope !== environment) || (job !== '*' && job !== jobName)) {
+            return;
+          }
+          var score = (scope === environment ? 20 : 10) + (job === jobName ? 2 : 1);
+          if (!best || score > best.score) {
+            best = {score: score, scope: scope, host: String(option.data('host') || ''), auth: String(option.data('auth') || '')};
+          }
+        });
+        if (!best) {
+          show('error', '<i class="fa fa-times-circle"></i> No <code>' + escapeHtml(key) + '</code> connector exists for ' + escapeHtml(environment) + '; builds there cannot clone.');
+          return;
+        }
+        var scopeLabel = best.scope === 'ALL' ? 'all-environments' : best.scope;
+        var problem = '';
+        if (location.host && best.host && best.host !== location.host.replace(/:\d+$/, '')) {
+          problem = 'it is scoped to ' + best.host + ', not ' + location.host;
+        } else if (location.transport === 'ssh' && best.auth !== 'ssh_key') {
+          problem = 'SSH URLs need an SSH key connector';
+        } else if (location.transport === 'http' && best.auth === 'ssh_key') {
+          problem = 'an SSH key needs an SSH repository URL';
+        }
+        show(problem ? 'warning' : 'ok', '<i class="fa ' + (problem ? 'fa-exclamation-triangle' : 'fa-lock') + '"></i> In ' + escapeHtml(environment) + ', builds use <code>' + escapeHtml(key) + '</code> from the ' + escapeHtml(scopeLabel) + ' connector' + (best.host ? ' (' + escapeHtml(best.host) + ')' : '') + (problem ? ', but ' + escapeHtml(problem) + '.' : '.'));
+      }
+
+      function syncGitProjectDefaults(projectChanged) {
+        // A bound job clones its project's repository with the project's
+        // credential; both are managed in Project Details, not per job.
+        var project = selectedGitProject();
+        var urlField = $('#pythonRepositoryUrl');
+        if (project) {
+          if (!urlField.prop('readonly')) {
+            urlField.data('jobseeker-own-url', urlField.val() || '');
+          }
+          urlField.val(project.repositoryUrl || '').prop('readonly', true);
+          $('#pythonRepositoryUrlHelp').html('From project <strong>' + escapeHtml(project.name) + '</strong>. <a href="' + escapeAttribute(projectDetailsUrl) + '" target="_blank" rel="noopener">Change it in Project Details</a>');
+          $('#pythonGitProjectCredential').html('<i class="fa ' + (project.credentialKey ? 'fa-lock' : 'fa-globe') + '"></i> '
+            + (project.credentialKey ? 'Project credential <code>' + escapeHtml(project.credentialKey) + '</code>' : 'Public repository, no credential'));
+          $('#pythonGitCredentialHelp').html('Set on project <strong>' + escapeHtml(project.name) + '</strong> for every environment. Builds never use a person\'s account.');
+        } else {
+          if (urlField.prop('readonly')) {
+            urlField.val(urlField.data('jobseeker-own-url') || '').prop('readonly', false);
+          }
+          $('#pythonRepositoryUrlHelp').text('HTTPS or SSH remote. Choose a project to use its repository.');
+          $('#pythonGitCredentialHelp').html('A Git connector (deploy key or token). Builds never use a person\'s account. <a href="' + escapeAttribute(connectorsUrl) + '" target="_blank" rel="noopener">Manage connectors</a>');
+        }
+        $('#pythonGitProjectCredential').toggle(!!project);
+        $('#pythonGitCredentialKey').toggle(!project);
+        syncGitBuildCredentialOptions();
+        syncGitBranchDefault();
+        renderPersonalGitAccess();
+      }
+
+      // "DEV runs develop, the others run main" from a project's branch rows.
+      function projectBranchSummary(project) {
+        var defaults = project.defaults || {};
+        var parts = [];
+        $.each(defaults, function(environment, setting) {
+          if (environment !== 'DEFAULT' && setting && setting.branch) {
+            parts.push('<strong>' + escapeHtml(environment) + '</strong> runs <code>' + escapeHtml(setting.branch) + '</code>');
+          }
+        });
+        var fallback = defaults.DEFAULT && defaults.DEFAULT.branch;
+        if (fallback) {
+          parts.push((parts.length ? 'the others run' : 'every environment runs') + ' <code>' + escapeHtml(fallback) + '</code>');
+        } else {
+          parts.push((parts.length ? 'the others follow' : 'environments follow') + ' the global policy ('
+            + $.map(gitBranchDefaults, function(branch, name) { return escapeHtml((name === 'DEFAULT' ? 'others' : name) + ' ' + branch); }).join(', ') + ')');
+        }
+        return parts.join(', ');
+      }
+
+      // Unbound jobs store the environment default; a bound job leaves the
+      // field empty to follow its project's branch for the environment it
+      // builds in (read at build time), or pins a branch or tag.
+      function syncGitBranchDefault() {
+        var field = $('#pythonRepositoryBranch');
+        var previousDefault = field.data('jobseeker-default-branch') || '';
+        var current = $.trim(field.val() || '');
+        var nextDefault = defaultGitBranchForEnvironment();
+        var project = selectedGitProject();
+        var environment = gitPanelEnvironment();
+        var where = environment ? '<strong>' + escapeHtml(environment) + '</strong>' : 'each environment';
+        if (project) {
+          if (current !== '' && current === previousDefault) {
+            field.val('');
+          }
+          // Without an environment the job may build anywhere: show the map.
+          var follows = environment ? where + ' runs <code>' + escapeHtml(nextDefault) + '</code>' : projectBranchSummary(project);
+          field.data('jobseeker-default-branch', '').attr('placeholder', environment ? nextDefault + '  ·  follows the project' : 'follows the project');
+          $('#pythonRepositoryBranchHelp').html($.trim(field.val() || '') === ''
+            ? 'Follows the project: ' + follows + '. Type a branch or tag to pin this job.'
+            : 'Pinned. Clear it to follow the project (' + follows + ').');
+        } else {
+          if (current === '' || current === previousDefault) {
+            field.val(nextDefault);
+          }
+          field.data('jobseeker-default-branch', nextDefault).attr('placeholder', nextDefault);
+          $('#pythonRepositoryBranchHelp').html('Default for ' + (environment ? where : 'all environments') + ': <code>' + escapeHtml(nextDefault) + '</code>. Override it to run a tag or release branch.');
+        }
+        syncGitWorkspaceHelp();
+      }
+
+      function syncGitWorkspaceHelp() {
+        var workspaceBranch = defaultGitBranchForEnvironment();
+        var jobBranch = $.trim($('#pythonRepositoryBranch').val() || '') || workspaceBranch;
+        $('#pythonGitWorkspaceHelp').html('Clones into OpenVSCode on <code>' + escapeHtml(workspaceBranch) + '</code> with your personal Git account; commit, pull and push from the editor.'
+          + (jobBranch !== workspaceBranch ? ' The job runs <code>' + escapeHtml(jobBranch) + '</code>.' : ''));
+      }
+
+      function gitWorkspaceRequestData(extra) {
+        return $.extend({
+          job_name: currentPythonInlineJobName(),
+          environment: gitPanelEnvironment(),
+          pythonRepositoryUrl: $('#pythonRepositoryUrl').val() || '',
+          pythonRepositoryBranch: $('#pythonRepositoryBranch').val() || '',
+          pythonProjectId: $('#pythonProjectId').val() || '',
+          pythonGitCredentialKey: $('#pythonGitCredentialKey').val() || '',
+          pythonEntryPoint: $('#pythonEntryPoint').val() || '',
+          pythonVersion: $('#pythonVersion').val() || '',
+          pythonDockerImage: $('#pythonDockerImage').val() || ''
+        }, extra || {});
+      }
+
+      // Prepares the Git working copy (cloning it on first use) and opens it.
+      // A tab is opened synchronously so popup blockers allow it.
+      function runGitWorkspaceAction(button, path, extraData, busyLabel, onSuccess) {
+        if (currentPythonInlineJobName() === '' || ($.trim($('#pythonRepositoryUrl').val() || '') === '' && !selectedGitProject())) {
+          toastr.warning('Enter a job name and a repository URL first.', 'Git repository');
+          return $.Deferred().reject().promise();
+        }
+        var originalHtml = button.html();
+        var webWindow = window.open('about:blank', '_blank');
+        showPythonExternalWaitingWindow(webWindow);
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> ' + busyLabel);
+        return $.ajax({
+          type: 'POST',
+          url: '<?php echo base_url(); ?>' + path,
+          dataType: 'json',
+          data: gitWorkspaceRequestData(extraData)
+        }).done(function(response) {
+          if (onSuccess) {
+            onSuccess(response);
+          }
+          if (response.openVsCodeReady === false) {
+            waitForPythonExternalReady(response, webWindow, false, 0);
+          } else {
+            launchPythonExternalWindow(response, webWindow, false);
+          }
+        }).fail(function(xhr) {
+          if (webWindow) {
+            webWindow.close();
+          }
+          toastr.error(pythonInlinePreviewError(xhr, 'Unable to open the Git repository in VS Code.'), 'Git repository', {timeOut: 12000});
+        }).always(function() {
+          button.prop('disabled', false).html(originalHtml);
+        });
+      }
+
+      function showGitResult(target, state, message) {
+        target.removeClass('is-ok is-error is-running').addClass(state ? 'is-' + state : '').text(message || '');
+        if (!state) {
+          target.hide();
+        } else {
+          target.show();
+        }
+      }
+
       // Fetched the first time the sample library is opened rather than inlined
       // here: the catalog is the same static document for everyone, so serving
       // it separately lets the browser cache it and keeps roughly 40KB of JSON
@@ -3769,7 +4284,7 @@
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -3899,6 +4414,7 @@
 
         var selected = jobSampleById(selectedJobSampleId);
         $('#loadSelectedJobSample').prop('disabled', ! selected);
+        $('#addSelectedSampleToGit').prop('disabled', ! selected || selected.family !== 'python');
         $('#jobSampleSelection').text(selected ? selected.name + ' — ' + selected.complexity : 'Select a sample to continue.');
       }
 
@@ -3971,6 +4487,11 @@
         refreshJobOptionPanels();
         updateJobCreationReview();
         scheduleJobDraftCacheSave(0);
+        // Programmatic .val() calls do not emit input events. Notify the live
+        // dependency map explicitly so connector-backed samples (notably the
+        // jobseeker-mariadb examples) are available to Test connections as soon
+        // as they are loaded.
+        $('#pythonInlineCode').trigger('jobseeker:sample-loaded');
         $('#jobSampleModal').modal('hide');
         toastr.success(sample.name + ' loaded. Review names, context keys, assets, and connectors before saving.', 'Job Sample Loaded');
       }
@@ -3994,6 +4515,11 @@
         selectedJobSampleId = '';
         var currentFamily = $('#linuxCommand').is(':checked') ? currentExecutionFamily() : 'all';
         $('#jobSampleFamily').val(currentFamily === 'python' || currentFamily === 'shell' ? currentFamily : 'all');
+        // A Git job adds the sample to its repository instead of replacing the form.
+        var gitTarget = $('#linuxCommand').is(':checked') && pythonGitModeActive() && pythonInlineOpenVscodeEnabled;
+        $('#addSelectedSampleToGit').toggle(gitTarget);
+        $('#loadSelectedJobSample').toggleClass('btn-primary', ! gitTarget).toggleClass('btn-default', gitTarget)
+          .html(gitTarget ? '<i class="fa fa-download"></i> Load as Inline Job' : '<i class="fa fa-download"></i> Load Selected Sample');
         $('#jobSampleComplexity').val('all');
         $('#jobSampleIntegration').val('all');
         $('#jobSampleSearch').val('');
@@ -5253,7 +5779,15 @@
           '    && groupadd --system jobseeker \\',
           '    && useradd --system --gid jobseeker --create-home jobseeker',
           'COPY . .',
-          'RUN if [ -s pyproject.toml ]; then poetry install --no-root --no-interaction --no-ansi; fi \\',
+          // Mirrors JobCreation::inlinePythonDockerfileInstallLines(): a
+          // stale poetry.lock (for example after uv add) is refreshed first.
+          'RUN if [ -s pyproject.toml ]; then \\',
+          '      if [ -f poetry.lock ] && ! poetry check --lock --no-interaction >/dev/null 2>&1; then \\',
+          '        echo "poetry.lock does not match pyproject.toml (for example after uv add); refreshing it for this image."; \\',
+          '        poetry lock --no-interaction --no-ansi; \\',
+          '      fi; \\',
+          '      poetry install --no-root --no-interaction --no-ansi; \\',
+          '    fi \\',
           '    && chown -R jobseeker:jobseeker /app',
           'USER jobseeker',
           ''
@@ -5576,7 +6110,7 @@
         var webWindow = window.open('about:blank', '_blank');
         showPythonExternalWaitingWindow(webWindow);
         payload.editor_mode = 'web';
-        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Opening');
         setPythonExternalSyncStatus('Preparing inline Python workspace...', '');
 
         $.ajax({
@@ -6376,6 +6910,7 @@
           pythonSourceMode: 'upload',
           pythonEntryPoint: '',
           pythonSourcePath: '',
+          pythonProjectId: '',
           pythonRepositoryUrl: '',
           pythonRepositoryBranch: '',
           pythonGitCredentialKey: '',
@@ -6988,7 +7523,7 @@
 
         var meaningfulTextFields = [
           'job_name', 'description', 'windowsCommandLine', 'linuxCommandLine',
-          'pythonEntryPoint', 'pythonSourcePath', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey',
+          'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey',
           'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText',
           'recipients'
         ];
@@ -7480,11 +8015,17 @@
         var isPythonScript = isScriptExecution && scriptType == 'python';
 
         updateHopSourceControls();
-        $('.pythonSourceForm').toggle(isPythonScript || isInlinePythonExecution);
-        $('.pythonSourceModeColumn').toggle(isPythonScript);
-        $('.pythonEntryPointColumn')
-          .toggleClass('col-md-8', isPythonScript)
-          .toggleClass('col-md-12', isInlinePythonExecution);
+        // A Git job's entry file is a path inside its repository, so it moves
+        // into the Repository card beside the branch; the input stays the same.
+        var isGitSource = isPythonScript && sourceMode == 'git';
+        var entryGroup = $('#pythonEntryPointGroup');
+        entryGroup.appendTo(isGitSource ? '#pythonGitEntrySlot' : '.pythonEntryPointColumn');
+        $('#pythonEntryPointLabel').text(isGitSource ? 'Entry file' : 'Entry Python File or Nested Path');
+        $('#pythonEntryPoint').attr('placeholder', isGitSource ? 'main.py' : 'main.py or pyjob/main.py');
+        $('#pythonEntryPointHelp').toggle(isGitSource);
+        $('.pythonSourceForm').toggle((isPythonScript || isInlinePythonExecution) && !isGitSource);
+        $('.pythonSourceModeColumn').hide();
+        $('.pythonEntryPointColumn').removeClass('col-md-8').addClass('col-md-12');
         $('.pythonPathSourceForm').toggle(isPythonScript && sourceMode == 'path');
         $('.pythonGitSourceForm').toggle(isPythonScript && sourceMode == 'git');
         $('.pythonInlineSourceForm').toggle(isInlinePythonExecution);
@@ -7851,10 +8392,182 @@
 
       $('#pythonSourceMode').change(function() {
         updatePythonSourceControls();
+        if ($('#pythonSourceMode').val() == 'git') {
+          syncGitBranchDefault();
+        }
         if ($('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python' && $('#pythonSourceMode').val() == 'upload') {
           syncLinuxScriptUpload();
         }
         syncLinuxExecutionChoiceControls();
+      });
+
+      $('#pythonRepositoryBranch').on('input', syncGitBranchDefault);
+
+      $('#pythonRepositoryUrl').on('input change', function() {
+        renderPersonalGitAccess();
+        renderGitCredentialStatus();
+        showGitResult($('#pythonGitBuildAccessResult'), '', '');
+      });
+
+      $('#pythonGitCredentialKey').on('change', function() {
+        renderGitCredentialStatus();
+        showGitResult($('#pythonGitBuildAccessResult'), '', '');
+      });
+
+      // Can *I* read this repository? (Clone/pull/push in VS Code use this account.)
+      $('#testPythonPersonalGit').on('click', function() {
+        var button = $(this);
+        var originalHtml = button.html();
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Testing...');
+        $.ajax({url: <?php echo json_encode(base_url('gitAccountTest')); ?>, type:'POST', dataType:'json', data: {
+          account_id: button.data('account-id'),
+          repository_url: $('#pythonRepositoryUrl').val() || '',
+          branch: ''
+        }})
+          .done(function(response) { toastr.success(response.message + (response.latencyMs != null ? ' (' + response.latencyMs + ' ms)' : ''), 'Your Git access'); })
+          .fail(function(xhr) { toastr.error((xhr.responseJSON && xhr.responseJSON.message) || 'Your Git access test failed.', 'Your Git access'); })
+          .always(function() { button.prop('disabled', false).html(originalHtml); });
+      });
+
+      // Can *builds* read this repository and branch with the selected credential?
+      $('#testPythonGitBuildAccess').on('click', function() {
+        var button = $(this);
+        var result = $('#pythonGitBuildAccessResult');
+        if ($.trim($('#pythonRepositoryUrl').val() || '') === '' && !selectedGitProject()) {
+          showGitResult(result, 'error', 'Enter a repository URL first.');
+          return;
+        }
+        var credential = selectedGitProject() ? (selectedGitProject().credentialKey || '') : ($('#pythonGitCredentialKey').val() || '');
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+        showGitResult(result, 'running', credential === '' ? 'Checking public read access...' : 'Running the check on a Jenkins worker with the build credential, as a build would...');
+        // A job that follows its project is checked on the branch it would run.
+        $.ajax({url: '<?php echo base_url(); ?>jobCreation/testGitBuildAccess', type: 'POST', dataType: 'json', data: gitWorkspaceRequestData({
+          pythonRepositoryBranch: $.trim($('#pythonRepositoryBranch').val() || '') || defaultGitBranchForEnvironment()
+        })})
+          .done(function(response) {
+            showGitResult(result, 'ok', response.message + (response.latencyMs != null ? ' (' + response.latencyMs + ' ms)' : ''));
+          })
+          .fail(function(xhr) {
+            var response = xhr.responseJSON || {};
+            showGitResult(result, 'error', (response.message || 'The build access test failed.') + (response.detail ? '\n' + response.detail : ''));
+          })
+          .always(function() { button.prop('disabled', false).html('<i class="fa fa-plug"></i> Test'); });
+      });
+
+      $('#pythonProjectId').on('change', function() {
+        syncGitProjectDefaults(true);
+        updateJobCreationReview();
+        scheduleJobDraftCacheSave(0);
+      });
+
+      // Samples for a Git job go into its repository working copy.
+      $('#addPythonGitSample').on('click', function() {
+        $('.open-job-sample-library').first().trigger('click');
+      });
+
+      function addSampleToGitRepository(sample) {
+        $('#jobSampleModal').modal('hide');
+        runGitWorkspaceAction($('#openPythonGitInVscode'), 'jobCreation/gitPythonLoadSample', {sample_id: sample.id}, 'Adding sample...', function(response) {
+          var entry = $.trim($('#pythonEntryPoint').val() || '');
+          if (response.entryPoint && (entry === '' || entry === 'main.py' || response.sampleFolder)) {
+            $('#pythonEntryPoint').val(response.entryPoint).trigger('input');
+          }
+          if (response.useDockerfile) {
+            setSelectValue('#pythonRuntimeMode', 'docker');
+            updatePythonRuntimeControls();
+          }
+          $('#pythonRunTests').prop('checked', !! response.runTests);
+          updateJobCreationReview();
+          scheduleJobDraftCacheSave(0);
+          toastr.success(response.message + (response.sampleFolder ? ' The entry file is now ' + response.entryPoint + '.' : ''), sample.name, {timeOut: 10000});
+        });
+      }
+
+      $('#addSelectedSampleToGit').on('click', function() {
+        var sample = jobSampleById(selectedJobSampleId);
+        if (sample && sample.family === 'python') {
+          addSampleToGitRepository(sample);
+        }
+      });
+
+      // Move an inline job into a Git repository.
+      function syncMoveToGitDialog() {
+        var project = gitProjectsById[String($('#pythonMoveGitProject').val() || '')] || null;
+        var urlField = $('#pythonMoveGitUrl');
+        if (project && ($.trim(urlField.val() || '') === '' || urlField.val() === urlField.data('project-url'))) {
+          urlField.val(project.repositoryUrl || '');
+        }
+        urlField.data('project-url', project ? project.repositoryUrl || '' : '');
+        var branchField = $('#pythonMoveGitBranch');
+        var projectBranch = gitProjectDefault(project, gitPanelEnvironment()).branch;
+        var nextBranch = projectBranch || gitBranchDefaults[gitPanelEnvironment()] || gitBranchDefaults.DEFAULT || 'main';
+        if ($.trim(branchField.val() || '') === '' || branchField.val() === branchField.data('default-branch')) {
+          branchField.val(nextBranch);
+        }
+        branchField.data('default-branch', nextBranch);
+        $('#pythonMoveGitReleaseBranch').text(gitProjectDefault(project, 'DEFAULT').branch || gitBranchDefaults.DEFAULT || 'main');
+        var account = renderGitAccountStatus($('#pythonMoveGitAccount'), urlField.val(), 'push to');
+        $('#pythonMoveGitAccount').removeClass('is-ok is-error is-running').addClass(account ? 'is-ok' : 'is-error').toggle($.trim(urlField.val() || '') !== '');
+        $('#confirmPythonMoveToGit').prop('disabled', !account);
+      }
+
+      $('#movePythonInlineToGit').on('click', function() {
+        if (currentPythonInlineJobName() === '') {
+          toastr.warning('Enter a job name before moving the workspace to Git.', 'Move to Git');
+          return;
+        }
+        $('#pythonMoveGitMessage').val('Move JobSeeker job ' + currentPythonInlineJobName() + ' to Git');
+        $('#pythonMoveGitOverwrite').prop('checked', false);
+        $('#pythonMoveGitOverwriteGroup').hide();
+        showGitResult($('#pythonMoveGitResult'), '', '');
+        syncMoveToGitDialog();
+        $('#pythonMoveToGitModal').modal('show');
+      });
+
+      $('#pythonMoveGitUrl').on('input', syncMoveToGitDialog);
+      $('#pythonMoveGitProject').on('change', syncMoveToGitDialog);
+
+      $('#confirmPythonMoveToGit').on('click', function() {
+        var button = $(this);
+        var originalHtml = button.html();
+        ensurePythonPyprojectText();
+        var payload = $.extend(currentPythonExternalPayload(), {
+          environment: gitPanelEnvironment(),
+          pythonRepositoryUrl: $('#pythonMoveGitUrl').val() || '',
+          pythonRepositoryBranch: $('#pythonMoveGitBranch').val() || '',
+          pythonProjectId: $('#pythonMoveGitProject').val() || '',
+          commit_message: $('#pythonMoveGitMessage').val() || '',
+          overwrite: $('#pythonMoveGitOverwrite').is(':checked') ? '1' : '0'
+        });
+        button.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Pushing...');
+        showGitResult($('#pythonMoveGitResult'), 'running', 'Committing the workspace and pushing it with your Git account...');
+        $.ajax({url: '<?php echo base_url(); ?>jobCreation/inlinePythonConvertToGit', type: 'POST', dataType: 'json', data: payload})
+          .done(function(response) {
+            stopPythonExternalSync(true);
+            applyLinuxPythonChoice('git');
+            setSelectValue('#pythonProjectId', response.projectId ? String(response.projectId) : '');
+            syncGitProjectDefaults(false);
+            $('#pythonRepositoryUrl').val(response.repositoryUrl);
+            $('#pythonRepositoryBranch').val(response.branch);
+            $('#pythonEntryPoint').val(response.entryPoint || 'main.py');
+            if (!response.projectId || !$('#pythonGitCredentialKey').val()) {
+              $('#pythonGitCredentialKey').val('');
+            }
+            renderPersonalGitAccess();
+            syncGitWorkspaceHelp();
+            updateJobCreationReview();
+            scheduleJobDraftCacheSave(0);
+            $('#pythonMoveToGitModal').modal('hide');
+            toastr.success(response.message + ' Choose a build credential if the repository is private.', 'Moved to Git (' + response.commit + ')', {timeOut: 15000});
+          })
+          .fail(function(xhr) {
+            var response = xhr.responseJSON || {};
+            if (response.conflicts && response.conflicts.length) {
+              $('#pythonMoveGitOverwriteGroup').show();
+            }
+            showGitResult($('#pythonMoveGitResult'), 'error', pythonInlinePreviewError(xhr, 'The job could not be moved to Git.'));
+          })
+          .always(function() { button.prop('disabled', false).html(originalHtml); });
       });
 
       $('#linuxExecutionStrategy').change(function() {
@@ -8561,9 +9274,18 @@
       if (gitRepositoryUrl !== '') {
         setSelectValue('#linuxScriptType', 'python');
         setSelectValue('#pythonSourceMode', 'git');
+        setSelectValue('#pythonProjectId', shellExportValue(command, 'JOBSEEKER_PROJECT_ID'));
         $('#pythonRepositoryUrl').val(gitRepositoryUrl);
         $('#pythonRepositoryBranch').val(shellExportValue(command, 'JOBSEEKER_GIT_REPOSITORY_BRANCH'));
         setSelectValue('#pythonGitCredentialKey', shellExportValue(command, 'JOBSEEKER_GIT_CREDENTIAL_KEY'));
+        // Jobs bound before projects were followed at build time stored the
+        // project's branch; re-saving one on that branch makes it follow.
+        var savedGitProject = selectedGitProject();
+        if (savedGitProject && shellExportValue(command, 'JOBSEEKER_GIT_FOLLOW_PROJECT') !== '1'
+          && $('#pythonRepositoryBranch').val() === defaultGitBranchForEnvironment()) {
+          $('#pythonRepositoryBranch').val('');
+        }
+        syncGitBranchDefault();
         $('#pythonEntryPoint').val(shellExportValue(command, 'JOBSEEKER_ENTRYPOINT'));
         $('.pythonGitSourceForm').show();
         $('.pythonPathSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
@@ -9473,6 +10195,7 @@ if (requestedHopProject && $('#hopSourceMode').length) {
   detectHopEntryFiles();
 }
 syncEnvironmentFromGlobal(true);
+syncGitProjectDefaults(false);
 draftCacheReady = true;
 refreshJobOptionPanels();
 updateJobCreationReview();
@@ -9492,6 +10215,8 @@ $(window).on('beforeunload', function() {
 
 $(document).on('jobseeker:environment-change', function() {
   syncEnvironmentFromGlobal(true);
+  syncGitBuildCredentialOptions();
+  syncGitBranchDefault();
   availableJobCache = [];
   ensureAvailableJobsLoaded(true);
   updateJobFlowSelectOptions();
@@ -9537,7 +10262,8 @@ $(document).on('click', '.inspectJenkinsJob', function() {
     if (!value && window.JobSeekerGlobalEnvironment && window.JobSeekerGlobalEnvironment.selected) {
       value = window.JobSeekerGlobalEnvironment.selected();
     }
-    if (!value || String(value).toUpperCase() === '__UNKNOWN__') { value = ''; }
+    // '0' is the form's "no environment chosen" placeholder, not an environment.
+    if (!value || value === '0' || String(value).toUpperCase() === '__UNKNOWN__') { value = ''; }
     return value;
   }
 
@@ -9602,6 +10328,7 @@ $(document).on('click', '.inspectJenkinsJob', function() {
   // a file that references js.connector(...) or js.asset(...) silently stopped
   // refreshing the dependency panel.
   $(document).on('jobseeker:inline-files-changed', '#pythonInlineFilesJson', schedule);
+  $(document).on('jobseeker:sample-loaded', '#pythonInlineCode', schedule);
 
   $(document).on('click', '#jobDependencyTest', function() {
     var button = $(this).prop('disabled', true);

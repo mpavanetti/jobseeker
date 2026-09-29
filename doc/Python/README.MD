@@ -221,6 +221,47 @@ In Job Creation, choose **Git Repository URL** and select the connector in **Git
 
 Public Git repositories remain credential-free. Existing jobs that use public `git clone` commands continue to load in the editor.
 
+For interactive development, add personal credentials under **Profile > Git Accounts**. GitHub, GitLab, Bitbucket, Azure DevOps, and self-hosted providers are supported with repository-scoped access tokens, username/app passwords, or SSH keys with pinned `known_hosts` entries. For SSH, JobSeeker can create the key pair for you (**New SSH key**): the private key stays encrypted on the server and the account shows the public key to add to your provider. **Fetch from host** reads the provider's current host keys and shows their fingerprints; compare them with the ones your provider publishes before saving. A host-wide account can coexist with more specific owner/repository accounts; the longest matching scope wins. When the deployment configures a GitHub OAuth client, **Continue with GitHub** authorizes private repository access in the browser; otherwise, use a personal access token. Prefer a fine-grained token limited to the required repositories and grant Contents write permission only when the workspace must push. Use **Test** on an account with an actual private repository URL to verify both its scope and authentication. These personal accounts are separate from job connectors: builds use the selected project/job connector, while OpenVSCode pulls and pushes as the user who opened the workspace.
+
+### Git projects: one repository, a branch per environment
+
+A project in **Context Settings > Project Details** is a scope for context variables; Git is optional. Turn on **Source code in Git** to give the project one repository:
+
+- **Repository URL**, HTTPS or SSH, without credentials in it.
+- **Build access**: how builds clone it, the same in every environment. Leave it public, pick a shared Git connector, or create one on the spot: **New access token** (paste a read-only token) or **New deploy key** (JobSeeker generates the key pair, keeps the private key encrypted, and shows the public key to add as a read-only deploy key; a deploy key works with an HTTPS URL too). Either is saved as an ordinary Git connector for all environments and jobs, so **Connectors** can rotate or remove it later. To use a different secret in one environment, add a connector with the same key scoped to that environment.
+- **Branches**: a branch per environment (for example `develop` in DEV, `main` elsewhere), or **one branch everywhere** for trunk-based work. Empty fields inherit from **Other environments**, then from the deployment-wide policy (`JOBSEEKER_GIT_ENVIRONMENT_BRANCHES`, by default `develop` in DEV and `main` elsewhere).
+- **Check access** lists the repository's branches once, as a build would (on a Jenkins worker when a credential is used), and marks every environment's branch that does not exist.
+
+A Git job bound to the project stores only the project, its entry file and, optionally, a pinned branch or tag. It does not copy the repository, branch or credential: when a build starts, it asks JobSeeker which repository, branch and credential the project uses in the build's environment. Changing the QA branch in the project therefore reaches every QA job on its next build, and promotion has nothing Git-related to rewrite; the promotion screen only offers to pin a branch or tag for that deployment. Job Creation lists only projects with Git, and shows a bound job's repository and credential read-only.
+
+### Developing a Git job in OpenVSCode
+
+A Git job runs the branch in **Branch or Tag**, cloned fresh for every build, so a merge into that branch reaches the next run without redeploying. **Open in VS Code** beside the Git settings gives you a working copy to develop in:
+
+- JobSeeker clones the repository once into `repository/python/git/<job>` and checks out the development branch configured for that environment (DEV defaults to `develop`; unmatched environments default to `main`). If that remote branch does not exist yet, it is created locally from the repository's default branch, and your first push creates it on the remote. Opening the workspace again never re-clones or overwrites your work.
+- Commit, pull, and push from the Source Control view or terminal. Commits use the profile identity of the JobSeeker user who most recently opened the workspace. The credential helper requests the matching personal Git account only for each Git operation; it does not save the secret in the repository or Git configuration.
+- The job continues to run **Branch or Tag**, independently of the workspace branch. This is typically `develop` in DEV and `main` elsewhere, but both the job form and deployment flow allow an explicit release branch or tag.
+- The editor's own files (`.vscode/`, `.venv/`, `.env.jobseeker`, …) are listed in `.git/info/exclude`, so they never appear as changes in your repository.
+
+**Add a sample** (or **Samples** while Git Source is selected) adds a Python sample from the library to the working copy and opens it in VS Code, where you review, commit and push it. Nothing is overwritten: if any sample file already exists in the repository, the whole sample goes into `samples/<sample-id>/` and the job's entry file is pointed there.
+
+The Git panel has two separate checks. **Test my access** (in the VS Code card) checks that your personal account can read the repository. **Test** next to **Build credential** checks what builds will use: a Git connector is tested on a Jenkins worker, materialized exactly as a build materializes it, against the job's repository and branch; a public build is tested without credentials.
+
+Configure branch policy with `JOBSEEKER_GIT_ENVIRONMENT_BRANCHES`, for example `DEV=develop,QA=release/qa,DEFAULT=main`. **Environment Deployment** preselects the target environment's branch, shows it in the deployment preview, and lets the operator override it for that promotion. Git-backed Jenkins commands are rewritten to the selected target branch; non-Git jobs are unchanged. This supports a normal `develop` → `main` flow without preventing release branches or environment-specific policies.
+
+### Moving an inline job to Git
+
+An inline job can become a Git job without copying files by hand: choose **Move to Git…** above the inline workspace, enter the repository URL (create an empty repository first, or use one you can push to), and optionally a project and the branch the job runs (the environment default, for example `develop` in DEV). JobSeeker saves the editor's current files, commits them as you, and pushes them with your personal Git account:
+
+- The code, extra files, `pyproject.toml`, lock files, Dockerfile and tests are committed. Virtual environments, caches, editor settings and the workspace connector session (`.env.jobseeker`) are not.
+- An empty repository also gets the default release branch (`main`) from the same commit, so promotions to other environments have a branch to deploy.
+- If the repository already has different versions of some files, nothing is pushed until you choose **Replace existing files**; the previous versions stay in Git history.
+- The working copy becomes the job's VS Code workspace, and the form switches to **Git Source** with the repository and branch filled in. **Save the job** to run it from Git, and choose a build credential if the repository is private.
+
+### Changing dependencies
+
+Add libraries however you prefer: edit `pyproject.toml` in Job Creation, run `poetry add`, or run `uv add pandas` in the OpenVSCode terminal. `uv add` updates `pyproject.toml` and `uv.lock` but not `poetry.lock`, which `poetry install` refuses as out of date. The generated Dockerfile, the image-only Docker runtime and the VS Code setup task therefore run `poetry check --lock` first and, when the lock no longer matches, refresh it with `poetry lock` (keeping already locked versions where they still fit) before installing. The build log says when this happens. Generated Dockerfiles from earlier releases are upgraded the next time the job is saved or opened in VS Code; a Dockerfile you have edited yourself is left alone.
+
 ### OpenVSCode, local repositories, and local AI
 
 The bundled OpenVSCode Server can edit JobSeeker inline workspaces and any additional host project mounted into the container. For example, create a local override without changing the tracked Compose file:

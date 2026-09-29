@@ -15,7 +15,10 @@
     "test:query-efficiency": "node scripts/test-query-efficiency.js",
     "test:job-metadata": "node scripts/test-job-metadata.js",
     "test:console-groups": "node scripts/test-job-console-groups.js",
-    "test:python-git": "node scripts/test-python-git-integration.js",
+    "test:python-git": "node scripts/test-python-git-integration.js && node scripts/test-git-workspace-features.js && php scripts/test-git-workspace.php",
+    "test:python-git:e2e": "python3 scripts/test-python-git-workspace-e2e.py",
+    "test:python-git:accounts:e2e": "python3 scripts/test-git-account-e2e.py",
+    "test:python-git:move:e2e": "python3 scripts/test-git-move-and-samples-e2e.py",
     "test:draft-cache": "node scripts/test-job-draft-cache.js",
     "test:platform-isolation": "node scripts/test-platform-isolation.js",
     "test:job-list-hydration": "node scripts/test-job-list-hydration.js",
@@ -32,7 +35,7 @@
     "test:connectors:e2e": "python3 scripts/test-job-connectors-e2e.py",
     "test:connection-framework:e2e": "python3 scripts/test-connection-framework-e2e.py",
     "test:viz-migration:e2e": "python3 scripts/test-visualization-connection-migration.py",
-    "test:job-deps": "node scripts/test-job-dependencies.js",
+    "test:job-deps": "node scripts/test-job-dependencies.js && php scripts/test-dependency-scanner.php",
     "test:job-deps:e2e": "python3 scripts/test-job-dependencies-e2e.py",
     "test:job-runs:e2e": "python3 scripts/test-job-run-comparison-e2e.py",
     "test:pipelines": "node scripts/test-pipeline-builder.js",
@@ -51,6 +54,7 @@
     "test:task-dag:e2e": "python3 scripts/test-task-dag-e2e.py",
     "test:context-env": "node scripts/test-context-environment.js",
     "test:context-env:lib": "php scripts/test-environment-context.php",
+    "test:connectors:ide-session:lib": "php scripts/test-connector-ide-session.php",
     "test:connectors:env:lib": "php scripts/test-environment-connector.php"
   },
   "engines": {
