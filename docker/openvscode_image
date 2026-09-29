@@ -46,6 +46,11 @@ RUN set -eux; \
 # layer so Git-auth hardening changes do not invalidate the full IDE build.
 COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
 
+# The editor runs as the checkout owner but keeps this image's group, so its
+# home only needs group write.
+RUN chmod g+w /home/workspace /home/workspace/.openvscode-server \
+	&& chmod -R g+rwX /home/workspace/.cache /home/workspace/.local
+
 USER openvscode-server
 
 # Declare the optional extension switch after the expensive base-tool layer so
@@ -83,4 +88,15 @@ RUN set -eux; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \
-		--uninstall-extension ms-python.vscode-python-envs
+		--uninstall-extension ms-python.vscode-python-envs; \
+	chmod -R g+rwX /home/workspace/.openvscode-server/extensions
+
+# Git in workspaces JobSeeker opens asks this for the opener's personal account.
+COPY --chmod=0755 docker/openvscode/jobseeker-git-credential /usr/local/bin/jobseeker-git-credential
+COPY --chmod=0755 docker/openvscode/jobseeker-git-ssh /usr/local/bin/jobseeker-git-ssh
+
+# Compose starts this as root; the script drops to the checkout owner's uid.
+COPY --chmod=0755 docker/jobseeker-host-user.sh /usr/local/bin/jobseeker-host-user
+ENV JOBSEEKER_RUNTIME_USER=openvscode-server \
+	JOBSEEKER_OWNER_REFERENCE=/home/workspace/repository \
+	JOBSEEKER_OWNED_PATHS="/home/workspace/.openvscode-server/data /home/workspace/.openvscode-server/python /home/workspace/.continue"

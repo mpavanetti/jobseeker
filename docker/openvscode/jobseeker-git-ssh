@@ -1,0 +1,50 @@
+#!/bin/sh
+# GIT_SSH_COMMAND for JobSeeker OpenVSCode workspaces. It fetches the owner's
+# repository-scoped key for each operation, uses it from a protected temporary
+# directory, and retains strict host-key checking.
+set -eu
+
+host=
+path=
+port=
+previous_argument=
+for argument in "$@"; do
+  if [ "$previous_argument" = "-p" ]; then
+    port=$argument
+  fi
+  case "$argument" in
+    *@*) candidate=${argument##*@}; candidate=${candidate%%:*}; host=$(printf '%s' "$candidate" | tr -d '[]') ;;
+    -p[0-9]*) port=${argument#-p} ;;
+    -oPort=*) port=${argument#-oPort=} ;;
+    git-*-pack\ *|git-*-pack\'*) path=${argument#* }; path=$(printf '%s' "$path" | tr -d "'\""); path=${path#/} ;;
+  esac
+  previous_argument=$argument
+done
+
+session="$(git rev-parse --git-dir 2>/dev/null)/jobseeker-git-session"
+[ -n "$host" ] && [ -r "$session" ] || { echo "JobSeeker: no workspace SSH session is available." >&2; exit 78; }
+
+account_host=$host
+[ -z "$port" ] || account_host="$host:$port"
+response=$(curl -fsS -X POST -H "Authorization: Bearer $(cat "$session")" \
+  --data-urlencode "host=$account_host" --data-urlencode "path=$path" --data-urlencode "protocol=ssh" \
+  "${JOBSEEKER_GIT_CREDENTIAL_URL:-http://nginx:8080/git-credential}") \
+  || { echo "JobSeeker: add a matching SSH account for $host on your profile." >&2; exit 78; }
+private_key=$(printf '%s\n' "$response" | sed -n 's/^private_key=//p')
+known_hosts=$(printf '%s\n' "$response" | sed -n 's/^known_hosts=//p')
+[ -n "$private_key" ] && [ -n "$known_hosts" ] || { echo "JobSeeker: the matching SSH account is incomplete." >&2; exit 78; }
+
+temporary_dir=$(mktemp -d /tmp/jobseeker-workspace-ssh.XXXXXX)
+chmod 700 "$temporary_dir"
+cleanup() { rm -rf "$temporary_dir"; }
+trap cleanup EXIT HUP INT TERM
+printf '%s' "$private_key" | base64 -d > "$temporary_dir/private_key"
+printf '%s' "$known_hosts" | base64 -d > "$temporary_dir/known_hosts"
+chmod 600 "$temporary_dir/private_key" "$temporary_dir/known_hosts"
+
+set +e
+ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+  -o "UserKnownHostsFile=$temporary_dir/known_hosts" -i "$temporary_dir/private_key" "$@"
+status=$?
+set -e
+exit "$status"
