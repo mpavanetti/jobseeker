@@ -3,6 +3,7 @@ x-jobseeker-jenkins-agent-base: &jobseeker-jenkins-agent-base
     context: .
     dockerfile: docker/jenkins_agent_image
   image: jobseeker-jenkins-agent:local
+  user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
   profiles:
     - jenkins-agents
   depends_on:
@@ -30,13 +31,15 @@ services:
   repository-data-init:
     image: alpine:3.20
     network_mode: none
+    # The bundled SDK is never re-owned, so it tells who owns the checkout. A
+    # root-owned one gets 1000, so the services never run as root.
     command: >-
       sh -lc "set -eu;
       mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash/jobs /repository/batch/jobs /repository/talend/jobs /repository/hop/projects/jobseeker /repository/hop/runs /repository/hop/server/metadata /repository/hop/server/config /repository/hop/server/published /repository/hop/server/exports /repository/hop/server/jdbc;
       if [ ! -f /repository/hop/projects/jobseeker/project-config.json ]; then cp -R /bundled-hop-project/. /repository/hop/projects/jobseeker/; sed -i 's/\"project\": \"platform-hello\"/\"project\": \"jobseeker\"/' /repository/hop/projects/jobseeker/.jobseeker-hop.json; fi;
       tar -C /bundled-sdk --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' -cf - . | tar -C /repository/python/lib/jobseeker-sdk -xf -;
-      chown "$${JOBSEEKER_HOST_UID}:$${JOBSEEKER_HOST_GID}" /repository /repository/python /repository/python/lib;
-      chown -R "$${JOBSEEKER_HOST_UID}:$${JOBSEEKER_HOST_GID}" /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend /repository/hop;
+      owner=$$(stat -c %u:%g /bundled-sdk); case $$owner in 0:*) owner=1000:1000;; esac;
+      chown -R "$$owner" /repository;
       chmod 0775 /repository /repository/python /repository/python/lib;
       chmod -R u+rwX,g+rwX,o-w /repository/data-assets /repository/python/inline /repository/python/jobs /repository/python/lib/jobseeker-sdk /repository/bash /repository/batch /repository/talend /repository/hop;
       find /repository/hop -type d -exec chmod 2775 {} +"
@@ -44,17 +47,16 @@ services:
       - ./repository:/repository
       - ./application/third_party/python/jobseeker_sdk:/bundled-sdk:ro
       - ./application/third_party/hop/samples/platform-hello:/bundled-hop-project:ro
-    environment:
-      - JOBSEEKER_HOST_UID=${JOBSEEKER_HOST_UID:-1000}
-      - JOBSEEKER_HOST_GID=${JOBSEEKER_HOST_GID:-1000}
 
   assets:
     image: node:20-alpine
-    user: "${JOBSEEKER_HOST_UID:-1000}:${JOBSEEKER_HOST_GID:-1000}"
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
     working_dir: /workspace
-    command: sh -lc "npm ci --no-audit --no-fund"
+    command: ["sh", "/workspace/docker/jobseeker-host-user.sh", "npm", "ci", "--no-audit", "--no-fund"]
     environment:
       - NPM_CONFIG_CACHE=/tmp/.npm
+      - JOBSEEKER_RUNTIME_USER=node
+      - JOBSEEKER_OWNER_REFERENCE=/workspace
     volumes:
       - .:/workspace
     networks:
@@ -91,6 +93,7 @@ services:
     build:
       context: .
       dockerfile: docker/php_image
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
     depends_on:
       mariadb:
         condition: service_healthy
@@ -203,7 +206,7 @@ services:
 
   openvscode-data-init:
     image: alpine:3.20
-    command: sh -lc "mkdir -p /openvscode/data /openvscode/python /openvscode/continue && if [ ! -f /openvscode/continue/config.yaml ]; then cp /defaults/continue-config.yaml /openvscode/continue/config.yaml; fi && chown -R 1000:1000 /openvscode/data /openvscode/python /openvscode/continue"
+    command: sh -lc "mkdir -p /openvscode/data /openvscode/python /openvscode/continue && if [ ! -f /openvscode/continue/config.yaml ]; then cp /defaults/continue-config.yaml /openvscode/continue/config.yaml; fi"
     volumes:
       - openvscode-server-data:/openvscode
       - ./docker/openvscode/continue-config.yaml:/defaults/continue-config.yaml:ro
@@ -218,6 +221,7 @@ services:
       args:
         JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED: ${JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED:-false}
     image: jobseeker-openvscode:local
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
     init: true
     depends_on:
       openvscode-data-init:
@@ -225,6 +229,7 @@ services:
       repository-data-init:
         condition: service_completed_successfully
     entrypoint:
+      - /usr/local/bin/jobseeker-host-user
       - /usr/local/bin/jobseeker-openvscode
     command:
       - /home/workspace/repository
@@ -232,6 +237,10 @@ services:
       - JOBSEEKER_OPENVSCODE_TOKEN=${JOBSEEKER_OPENVSCODE_TOKEN:-jobseeker-local-vscode}
       - JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES=${JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES:-30}
       - UV_PYTHON_INSTALL_DIR=/home/workspace/.openvscode-server/python
+      # Only the address: runs authenticate with the session JobSeeker writes into
+      # each workspace it opens (application/libraries/ConnectorIdeSession.php).
+      - JOBSEEKER_CONNECTOR_API_URL=http://nginx:8080/connector-runtime
+      - JOBSEEKER_GIT_CREDENTIAL_URL=http://nginx:8080/git-credential
     ports:
       - "${JOBSEEKER_OPENVSCODE_HOST:-127.0.0.1}:${JOBSEEKER_OPENVSCODE_PORT:-3000}:3000"
     volumes:
@@ -294,9 +303,8 @@ services:
       args:
         HOP_VERSION: ${JOBSEEKER_HOP_VERSION:-2.19.0}
         HOP_DRIVERS: ${JOBSEEKER_HOP_DRIVERS:-mysql,mariadb}
-        HOP_RUNTIME_UID: ${JOBSEEKER_HOST_UID:-1000}
-        HOP_RUNTIME_GID: ${JOBSEEKER_HOST_GID:-1000}
     image: jobseeker-hop:local
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
     profiles:
       - hop
     depends_on:
@@ -309,6 +317,7 @@ services:
     networks:
       - internal
     environment:
+      - JOBSEEKER_OWNER_REFERENCE=/php/repository
       - HOP_SERVER_PORT=8080
       - HOP_SERVER_HOSTNAME=0.0.0.0
       - HOP_SERVER_AUTH=true
@@ -383,23 +392,14 @@ services:
       retries: 5
       start_period: 30s
 
-  jenkins-home-init:
-    image: alpine:3.20
-    command: sh -lc "mkdir -p /var/jenkins_home && chown -R ${JOBSEEKER_JENKINS_UID:-1000}:${JOBSEEKER_JENKINS_GID:-1000} /var/jenkins_home"
-    volumes:
-      - ./jenkins:/var/jenkins_home
-    networks:
-      - internal
-
   jenkins:
     build:
       context: .
       dockerfile: docker/jenkins_image
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
     depends_on:
       docker-runtime:
         condition: service_healthy
-      jenkins-home-init:
-        condition: service_completed_successfully
       repository-data-init:
         condition: service_completed_successfully
     ports:

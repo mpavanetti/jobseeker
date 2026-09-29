@@ -32,4 +32,11 @@ COPY docker/jenkins/casc-kubernetes.yaml /var/jenkins_files/
 COPY docker/jenkins/casc-kubernetes-standalone.yaml /var/jenkins_files/
 ENV CASC_JENKINS_CONFIG=/var/jenkins_files/casc.yaml
 
+# Compose starts this as root; the script drops to the checkout owner's uid.
+COPY --chmod=0755 docker/jobseeker-host-user.sh /usr/local/bin/jobseeker-host-user
+ENV JOBSEEKER_RUNTIME_USER=jenkins \
+	JOBSEEKER_OWNER_REFERENCE=/php/repository \
+	JOBSEEKER_OWNED_PATHS=/var/jenkins_home
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/jobseeker-host-user", "/usr/local/bin/jenkins.sh"]
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 CMD curl -fsS http://127.0.0.1:8080/login >/dev/null || exit 1

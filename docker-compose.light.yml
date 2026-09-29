@@ -15,8 +15,6 @@ services:
 
   jenkins:
     depends_on: !override
-      jenkins-home-init:
-        condition: service_completed_successfully
       repository-data-init:
         condition: service_completed_successfully
     environment:

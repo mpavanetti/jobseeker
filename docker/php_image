@@ -1,7 +1,7 @@
 FROM php:8.3-fpm-alpine
 
 RUN set -eux; \
-	apk add --no-cache libzip libpq; \
+	apk add --no-cache libzip libpq git openssh-client-default openssh-keygen; \
 	apk add --no-cache --virtual .build-deps $PHPIZE_DEPS libzip-dev postgresql-dev; \
 	docker-php-ext-configure zip; \
 	docker-php-ext-install mysqli pdo_mysql pdo_pgsql zip; \
@@ -30,5 +30,16 @@ COPY --chown=myuser:mygroup .project /var/www/html/.project
 COPY --chown=myuser:mygroup index.php /var/www/html/index.php
 
 USER myuser
+
+# Personal Git accounts clone OpenVSCode workspaces through the same helper as
+# the workers, which keeps secrets out of URLs, arguments and logs.
+COPY --chmod=0755 docker/jenkins/jobseeker-git /usr/local/bin/jobseeker-git
+
+# Compose starts this as root; the script drops to the checkout owner's uid.
+COPY --chmod=0755 docker/jobseeker-host-user.sh /usr/local/bin/jobseeker-host-user
+ENV JOBSEEKER_RUNTIME_USER=myuser \
+	JOBSEEKER_OWNER_REFERENCE=/php/repository
+ENTRYPOINT ["/usr/local/bin/jobseeker-host-user", "docker-php-entrypoint"]
+CMD ["php-fpm"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD php-fpm -t || exit 1
