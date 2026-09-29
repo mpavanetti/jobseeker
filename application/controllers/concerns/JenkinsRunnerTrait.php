@@ -274,7 +274,7 @@ trait JenkinsRunnerTrait
             );
         }
 
-        return array(
+        $normalized = array(
             'ok' => (bool) $result['ok'],
             'status' => (string) $result['status'],
             'latencyMs' => isset($result['latency_ms']) ? $result['latency_ms'] : NULL,
@@ -286,5 +286,13 @@ trait JenkinsRunnerTrait
             'buildResult' => $buildStatus,
             'httpStatus' => $result['ok'] ? 200 : 422,
         );
+        // A failed protocol check otherwise collapses useful, secret-safe
+        // helper diagnostics into a generic message. The command only refers
+        // to materialized files; connector secret values are never arguments
+        // or console output.
+        if (! $normalized['ok']) {
+            $normalized['consoleTail'] = trim(substr((string) $console, -1200));
+        }
+        return $normalized;
     }
 }
