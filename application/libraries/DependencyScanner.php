@@ -11,8 +11,14 @@ class DependencyScanner
     /** Connector key references: js.connector("x"), get_connector('x'), self.connector("x"). */
     const CONNECTOR_CALL = '/(?<![A-Za-z0-9_])(?:get_)?connector\s*\(\s*(["\'])([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
 
+    /** The same Python calls with a simple variable instead of a literal. */
+    const CONNECTOR_VARIABLE_CALL = '/(?<![A-Za-z0-9_])(?:get_)?connector\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\b/';
+
     /** jobseeker-connector get|exec|test KEY  and  "$JOBSEEKER_CONNECTOR_HELPER" exec KEY. */
     const CONNECTOR_CLI = '/(?:jobseeker-connector|JOBSEEKER_CONNECTOR_HELPER"?)\s+(?:get|exec|test)\s+(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
+
+    /** The same shell calls with "$variable" or "${variable}" instead of a literal. */
+    const CONNECTOR_CLI_VARIABLE = '/(?:jobseeker-connector|JOBSEEKER_CONNECTOR_HELPER"?)\s+(?:get|exec|test)\s+"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"?/';
 
     /** Explicit JOBSEEKER_CONNECTOR_KEY=KEY assignment in a shell step. */
     const CONNECTOR_ENV = '/(?<![A-Za-z0-9_])JOBSEEKER_CONNECTOR_KEY\s*=\s*(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
@@ -23,8 +29,14 @@ class DependencyScanner
     /** Data asset references: js.asset("x"), js.dataset('x'), get_asset("x"). */
     const ASSET_CALL = '/(?<![A-Za-z0-9_])(?:get_)?(?:asset|dataset)\s*\(\s*(["\'])([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/';
 
+    /** The same Python calls with a simple variable instead of a literal. */
+    const ASSET_VARIABLE_CALL = '/(?<![A-Za-z0-9_])(?:get_)?(?:asset|dataset)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\b/';
+
     /** jobseeker-asset ASSET_KEY references used by shell jobs. */
     const ASSET_CLI = '/(?:^|[;&|(`]|\b(?:if|then|do)\s+)[ \t]*(?:jobseeker-asset|JOBSEEKER_ASSET_HELPER"?)\s+(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1/m';
+
+    /** The same shell calls with "$variable" or "${variable}" instead of a literal. */
+    const ASSET_CLI_VARIABLE = '/(?:^|[;&|(`]|\b(?:if|then|do)\s+)[ \t]*(?:jobseeker-asset|JOBSEEKER_ASSET_HELPER"?)\s+"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"?/m';
 
     /** jobseeker://<environment>/<asset-key>[/...] runtime URIs. */
     const ASSET_URI = '#jobseeker://[A-Za-z0-9._-]+/([A-Za-z0-9][A-Za-z0-9._-]{0,127})#';
@@ -48,8 +60,12 @@ class DependencyScanner
             foreach (array(self::CONNECTOR_CALL, self::CONNECTOR_CLI, self::CONNECTOR_ENV, self::GIT_CONNECTOR_ENV) as $pattern) {
                 $this->collect($pattern, $text, $from, $connectors, TRUE);
             }
+            $this->collectPythonVariableDefaults(self::CONNECTOR_VARIABLE_CALL, $text, $from, $connectors);
+            $this->collectShellVariableDefaults(self::CONNECTOR_CLI_VARIABLE, $text, $from, $connectors);
             $this->collect(self::ASSET_CALL, $text, $from, $datasets, TRUE);
+            $this->collectPythonVariableDefaults(self::ASSET_VARIABLE_CALL, $text, $from, $datasets);
             $this->collect(self::ASSET_CLI, $text, $from, $datasets, TRUE);
+            $this->collectShellVariableDefaults(self::ASSET_CLI_VARIABLE, $text, $from, $datasets);
             $this->collect(self::ASSET_URI, $text, $from, $datasets, FALSE);
         }
 
@@ -86,6 +102,84 @@ class DependencyScanner
             $raw = $hasQuoteGroup ? (isset($match[2]) ? $match[2] : '') : (isset($match[1]) ? $match[1] : '');
             $key = $this->normalizeKey($raw);
             if ($key === '' || strlen($key) > 128) {
+                continue;
+            }
+            if (! isset($bucket[$key])) {
+                $bucket[$key] = array('from' => array());
+            }
+            if (! in_array($from, $bucket[$key]['from'], TRUE)) {
+                $bucket[$key]['from'][] = $from;
+            }
+        }
+    }
+
+    /**
+     * Resolve the intentionally small, static subset used by configurable
+     * Python jobs, for example:
+     *   CONNECTOR_KEY = os.getenv("JOBSEEKER_DB_CONNECTOR", "jobseeker-mariadb")
+     *   js.connector(CONNECTOR_KEY)
+     *
+     * No Python is executed and arbitrary expressions are ignored. A variable
+     * is accepted only when it is passed to the matching API and assigned a
+     * literal value or an os.getenv/os.environ.get literal default.
+     */
+    private function collectPythonVariableDefaults($callPattern, $text, $from, &$bucket)
+    {
+        if (! preg_match_all($callPattern, $text, $calls, PREG_SET_ORDER)) {
+            return;
+        }
+
+        foreach ($calls as $call) {
+            $variable = isset($call[1]) ? (string) $call[1] : '';
+            if ($variable === '') {
+                continue;
+            }
+            $name = preg_quote($variable, '/');
+            $annotation = '(?:\s*:[^=\r\n]+)?';
+            $literal = '/^\s*'.$name.$annotation.'\s*=\s*(["\'])([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1\s*(?:#.*)?$/m';
+            $environmentDefault = '/^\s*'.$name.$annotation.'\s*=\s*os\.(?:getenv|environ\.get)\s*\(\s*(["\'])[^"\'\r\n]+\1\s*,\s*(["\'])([A-Za-z0-9][A-Za-z0-9._-]{0,127})\2\s*\)\s*(?:#.*)?$/m';
+            $raw = '';
+            if (preg_match($literal, $text, $assignment)) {
+                $raw = isset($assignment[2]) ? $assignment[2] : '';
+            } else if (preg_match($environmentDefault, $text, $assignment)) {
+                $raw = isset($assignment[3]) ? $assignment[3] : '';
+            }
+            $key = $this->normalizeKey($raw);
+            if ($key === '') {
+                continue;
+            }
+            if (! isset($bucket[$key])) {
+                $bucket[$key] = array('from' => array());
+            }
+            if (! in_array($from, $bucket[$key]['from'], TRUE)) {
+                $bucket[$key]['from'][] = $from;
+            }
+        }
+    }
+
+    /**
+     * The shell counterpart, for the samples' configurable form:
+     *   connector_key="${JOBSEEKER_DB_CONNECTOR:-jobseeker-mariadb}"
+     *   jobseeker-connector test "$connector_key"
+     * Only a literal assignment or a ${NAME:-literal} default is accepted.
+     */
+    private function collectShellVariableDefaults($callPattern, $text, $from, &$bucket)
+    {
+        if (! preg_match_all($callPattern, $text, $calls, PREG_SET_ORDER)) {
+            return;
+        }
+
+        foreach ($calls as $call) {
+            $name = preg_quote((string) $call[1], '/');
+            $prefix = '/^\s*(?:export\s+|local\s+|readonly\s+)?'.$name.'=';
+            $withDefault = $prefix.'(["\']?)\$\{[A-Za-z_][A-Za-z0-9_]*:?-([A-Za-z0-9][A-Za-z0-9._-]{0,127})\}\1\s*(?:#.*)?$/m';
+            $literal = $prefix.'(["\']?)([A-Za-z0-9][A-Za-z0-9._-]{0,127})\1\s*(?:#.*)?$/m';
+            $raw = '';
+            if (preg_match($withDefault, $text, $assignment) || preg_match($literal, $text, $assignment)) {
+                $raw = $assignment[2];
+            }
+            $key = $this->normalizeKey($raw);
+            if ($key === '') {
                 continue;
             }
             if (! isset($bucket[$key])) {
