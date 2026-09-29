@@ -1035,6 +1035,35 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
     display: none !important;
   }
 
+  /* Collapsed sidebar: the hover flyout is one panel as wide as the open
+     sidebar, so the longest labels fit, and it drops the collapse chevron.
+     The :not() matches AdminLTE's selectors, whose specificity it adds to. */
+  @media (min-width: 768px) {
+    .sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > a > span:not(.pull-right),
+    .sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > .treeview-menu {
+      width: 230px;
+    }
+
+    .sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > a > .pull-right-container .fa-angle-left {
+      display: none;
+    }
+
+    .sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > a > span:not(.pull-right) {
+      box-shadow: 8px 2px 16px rgba(0, 0, 0, .16);
+    }
+
+    .sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > .treeview-menu {
+      border-bottom-right-radius: 6px;
+      box-shadow: 8px 10px 18px rgba(0, 0, 0, .22);
+    }
+
+    .sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > .treeview-menu > li > a {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   .monitor-environment-filter,
   .execution-environment-filter,
   .job-view-environment-filter,
