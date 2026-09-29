@@ -145,6 +145,10 @@ with JobSeeker(environment="PROD", job="load-orders") as js:
 
 `jobseeker.get_connector("warehouse")` is available when a full `JobSeeker` client is not needed. Use `connector.value("sas_token", required=True)` or another mapped field for non-password authentication. `connector.as_dict()` excludes secrets unless `include_secrets=True` is explicitly requested. The helper fails with the connector keys available to the current job when a required key is absent.
 
+### Running in OpenVSCode
+
+A job run inside OpenVSCode receives connectors only through the workspace JobSeeker opened. **Open in VS Code** writes `.env.jobseeker` into the workspace: a token signed with a key derived from `JOBSEEKER_CONNECTOR_API_TOKEN`, bound to that one job and to the environment set by `JOBSEEKER_OPENVSCODE_CONNECTOR_ENVIRONMENT` (`DEV` by default, empty disables). It has no arbitrary time limit, so a long development session is not interrupted. The connector API checks the signature, job, and environment on every request, so the worker token never reaches the editor; rotating it revokes every workspace session. The SDK fetches the catalog into a private temporary directory on first use and deletes it when the process exits. Only locally stored and `.env` secrets are served this way; cloud and worker-variable secrets need a worker's credentials and are reported unavailable. `.env.*` files never enter git, Docker builds, or the job form. Outside a build and without a valid session, the catalog is empty, so optional connectors resolve to `None`.
+
 ## Shell and Talend
 
 Use `exec` so values are added only to the child ETL process environment and are not printed by the helper:

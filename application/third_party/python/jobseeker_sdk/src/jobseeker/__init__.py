@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+import atexit
 import base64
 import functools
 import getpass
@@ -15,6 +16,7 @@ import signal
 import shutil
 import socket
 import sys
+import tempfile
 import traceback
 import urllib.error
 import urllib.parse
@@ -552,10 +554,22 @@ class ConnectorCatalog:
             with open(self.manifest_path, "r", encoding="utf-8") as stream:
                 payload = json.load(stream)
         except FileNotFoundError as error:
-            raise JobSeekerError(
-                "Connector catalog was not materialized at %s. Check the job runtime connector configuration."
-                % self.manifest_path
-            ) from error
+            # A JobSeeker build sets JOBSEEKER_CONNECTORS_DIR and materializes the
+            # catalog before user code runs, so a missing one there is a fault.
+            # Elsewhere, a workspace opened from JobSeeker in OpenVSCode fetches
+            # its own; any other run has no connectors.
+            if _env("JOBSEEKER_CONNECTORS_DIR"):
+                raise JobSeekerError(
+                    "Connector catalog was not materialized at %s. Check the job runtime connector configuration."
+                    % self.manifest_path
+                ) from error
+            session = _ide_connector_session()
+            if session is None:
+                self._connectors = {}
+                return self._connectors
+            self.directory = _materialize_ide_connectors(session)
+            self.manifest_path = os.path.join(self.directory, "connectors.json")
+            return self._load()
         except (OSError, ValueError) as error:
             raise JobSeekerError("Connector catalog is unreadable: %s" % error) from error
 
@@ -593,6 +607,10 @@ class ConnectorCatalog:
     def resolve(self, key: str, required: bool = True) -> Optional[Connector]:
         connector = self._load().get(key)
         if connector is None and required:
+            if not os.path.exists(self.manifest_path):
+                raise JobSeekerError(
+                    "Connector %s is not available outside a JobSeeker build; run the job from JobSeeker to use connectors." % key
+                )
             available = ", ".join(sorted(self._load())) or "none"
             raise JobSeekerError("Connector %s is not available to this job. Available connector key(s): %s." % (key, available))
         return connector
@@ -944,6 +962,44 @@ def materialize_connectors(
         _remove_connector_path(staging_directory)
 
     return os.path.join(target_directory, "connectors.json")
+
+
+IDE_SESSION_FILE = ".env.jobseeker"
+
+
+def _ide_connector_session() -> Optional[Dict[str, str]]:
+    """The session JobSeeker writes into a workspace it opens in OpenVSCode."""
+    directory = os.getcwd()
+    while True:
+        path = os.path.join(directory, IDE_SESSION_FILE)
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as stream:
+                return dict(line.strip().partition("=")[::2] for line in stream if "=" in line)
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            return None
+        directory = parent
+
+
+def _materialize_ide_connectors(session: Dict[str, str]) -> str:
+    """Fetch the session's catalog into a private directory removed at exit."""
+    directory = tempfile.mkdtemp(prefix="jobseeker-connectors-")
+    atexit.register(shutil.rmtree, directory, True)
+    catalog = os.path.join(directory, "catalog")
+    try:
+        materialize_connectors(
+            directory=catalog,
+            environment=session.get("JOBSEEKER_CONNECTOR_ENVIRONMENT"),
+            job=session.get("JOBSEEKER_CONNECTOR_JOB"),
+            api_token=session.get("JOBSEEKER_CONNECTOR_SESSION"),
+        )
+    except JobSeekerError as error:
+        if "unauthorized" in str(error):
+            raise JobSeekerError(
+                "The OpenVSCode connector session is invalid. Reopen the workspace from JobSeeker to renew it."
+            ) from error
+        raise
+    return catalog
 
 
 @dataclass(frozen=True)
@@ -1929,6 +1985,52 @@ def asset_cli() -> None:
         parser.exit(2, "jobseeker-asset: %s\n" % error)
 
 
+def git_source(
+    project: str,
+    environment: Optional[str] = None,
+    api_url: Optional[str] = None,
+    api_token: Optional[str] = None,
+) -> Dict[str, str]:
+    """The repository, branch and build credential key a project-bound Git job
+    clones in this environment, resolved by JobSeeker when the build starts."""
+
+    endpoint = api_url or _env("JOBSEEKER_CONNECTOR_API_URL")
+    token = api_token or _env("JOBSEEKER_CONNECTOR_API_TOKEN")
+    target_environment = (environment or _env("JOBSEEKER_ENVIRONMENT", "LOCAL")).upper()
+    if not endpoint or not token:
+        raise JobSeekerError("Git source resolution requires JOBSEEKER_CONNECTOR_API_URL and JOBSEEKER_CONNECTOR_API_TOKEN.")
+    if not str(project).isdigit():
+        raise JobSeekerError("A numeric project id is required.")
+
+    request = urllib.request.Request(
+        endpoint,
+        data=urllib.parse.urlencode({"git_project": str(project), "environment": target_environment}).encode("utf-8"),
+        headers={"Authorization": "Bearer " + token, "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = ""
+        try:
+            detail = json.loads(error.read().decode("utf-8")).get("error", "")
+        except (ValueError, AttributeError):
+            pass
+        raise JobSeekerError("Git source request failed: HTTP %s %s" % (error.code, detail)) from error
+    except (urllib.error.URLError, ValueError) as error:
+        raise JobSeekerError("Git source request failed: %s" % error) from error
+
+    source = payload.get("git_source") if isinstance(payload, dict) else None
+    if not isinstance(source, dict):
+        raise JobSeekerError("Git source response is invalid.")
+    result = {name: str(source.get(name) or "") for name in ("repositoryUrl", "branch", "credentialKey", "projectName")}
+    # Printed one per line for the build shell, so no value may span lines.
+    if not result["repositoryUrl"] or any("\n" in value or "\r" in value for value in result.values()):
+        raise JobSeekerError("Git source response is invalid.")
+    return result
+
+
 def connector_cli() -> None:
     """Materialize or consume build-scoped connectors without logging secrets."""
 
@@ -1954,6 +2056,10 @@ def connector_cli() -> None:
     exec_parser.add_argument("--directory", default=None)
     exec_parser.add_argument("program", nargs=argparse.REMAINDER)
 
+    git_source_parser = commands.add_parser("git-source", help="Print the Git repository, branch and credential key of a project for this build")
+    git_source_parser.add_argument("--project", required=True)
+    git_source_parser.add_argument("--environment", default=None)
+
     test_parser = commands.add_parser("test", help="Run a live connection test for one connector")
     test_parser.add_argument("key")
     test_parser.add_argument("--directory", default=None)
@@ -1964,6 +2070,10 @@ def connector_cli() -> None:
     try:
         if arguments.command == "materialize":
             print(materialize_connectors(directory=arguments.directory, environment=arguments.environment, job=arguments.job))
+            return
+        if arguments.command == "git-source":
+            source = git_source(arguments.project, environment=arguments.environment)
+            print("\n".join((source["repositoryUrl"], source["branch"], source["credentialKey"])))
             return
 
         catalog = ConnectorCatalog(directory=arguments.directory)
@@ -2063,6 +2173,7 @@ __all__ = [
     "get_asset",
     "get_connector",
     "get_context",
+    "git_source",
     "jobSeeker",
     "materialize_connectors",
     "task",

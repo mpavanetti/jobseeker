@@ -111,6 +111,61 @@ def mode(path):
     return stat.S_IMODE(os.stat(path).st_mode)
 
 
+def test_catalog_outside_a_build():
+    """OpenVSCode and local runs have no catalog; builds always materialize one."""
+    previous = os.environ.pop("JOBSEEKER_CONNECTORS_DIR", None)
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = ConnectorCatalog(os.path.join(directory, ".jobseeker-connectors"))
+            assert catalog.list() == []
+            assert catalog.resolve("warehouse", required=False) is None
+            try:
+                catalog.resolve("warehouse")
+                raise AssertionError("a required connector outside a build should fail")
+            except JobSeekerError as error:
+                assert "outside a JobSeeker build" in str(error)
+
+            os.environ["JOBSEEKER_CONNECTORS_DIR"] = os.path.join(directory, ".jobseeker-connectors")
+            try:
+                ConnectorCatalog().resolve("warehouse", required=False)
+                raise AssertionError("a build without its catalog should fail")
+            except JobSeekerError as error:
+                assert "was not materialized" in str(error)
+    finally:
+        os.environ.pop("JOBSEEKER_CONNECTORS_DIR", None)
+        if previous is not None:
+            os.environ["JOBSEEKER_CONNECTORS_DIR"] = previous
+
+
+def test_openvscode_session(endpoint):
+    """A workspace opened from JobSeeker fetches its catalog with its session and
+    deletes it at exit; a rejected session says how to renew it."""
+    probe = (
+        "import jobseeker\n"
+        "catalog = jobseeker.ConnectorCatalog()\n"
+        "print(catalog.resolve('warehouse').password, catalog.directory)\n"
+    )
+    environment = dict(os.environ, JOBSEEKER_CONNECTOR_API_URL=endpoint, PYTHONDONTWRITEBYTECODE="1",
+                       PYTHONPATH=str(module_path.parents[1]))
+    environment.pop("JOBSEEKER_CONNECTORS_DIR", None)
+    with tempfile.TemporaryDirectory() as workspace:
+        os.makedirs(os.path.join(workspace, "etl"))
+        for token, accepted in (("test-token", True), ("jsdev1.forged.signature", False)):
+            with open(os.path.join(workspace, ".env.jobseeker"), "w", encoding="utf-8") as stream:
+                stream.write("JOBSEEKER_CONNECTOR_SESSION=%s\nJOBSEEKER_CONNECTOR_ENVIRONMENT=DEV\n"
+                             "JOBSEEKER_CONNECTOR_JOB=load-orders\n" % token)
+            result = subprocess.run([sys.executable, "-c", probe], cwd=os.path.join(workspace, "etl"),
+                                    env=environment, capture_output=True, text=True)
+            if accepted:
+                assert result.returncode == 0, result.stderr
+                password, directory = result.stdout.split()
+                assert password == "local-secret"
+                assert not os.path.exists(directory), "the IDE catalog must be deleted at exit"
+            else:
+                assert result.returncode != 0
+                assert "Reopen the workspace from JobSeeker" in result.stderr, result.stderr
+
+
 def test_azure_key_vault_backend():
     calls = {"secrets": []}
 
@@ -653,6 +708,7 @@ class _OkHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    test_catalog_outside_a_build()
     test_azure_key_vault_backend()
     test_aws_secrets_manager_backend()
     test_connection_tester()
@@ -671,6 +727,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="jobseeker-connectors-") as workspace:
             directory = os.path.join(workspace, "runtime")
             endpoint = "http://127.0.0.1:%d/connector-runtime" % server.server_port
+            test_openvscode_session(endpoint)
             manifest_path = materialize_connectors(
                 directory=directory,
                 environment="DEV",
