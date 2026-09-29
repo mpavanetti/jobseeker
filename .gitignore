@@ -32,3 +32,6 @@ graphify-out/
 
 # Local agent worktrees; never part of the repository.
 .claude/worktrees/
+
+# Playwright MCP snapshots and screenshots
+.playwright-mcp/
