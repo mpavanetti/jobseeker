@@ -449,7 +449,6 @@ foreach($promotionJobs as $workload) {
               <div class="form-group">
                 <label>Deploy To</label>
                 <select id="targetEnvironment" class="form-control" name="targetEnvironment" required>
-                  <option value="">Target environment</option>
                   <?php foreach($environmentOptions as $env) { ?>
                   <option value="<?php echo (int) $env['id']; ?>" data-name="<?php echo html_escape($env['name']); ?>"><?php echo html_escape($env['name']); ?><?php echo $env['active'] == 1 ? '' : ' (inactive)'; ?></option>
                   <?php } ?>
@@ -460,6 +459,13 @@ foreach($promotionJobs as $workload) {
             <div class="form-group" id="targetJobGroup">
               <label>Target Jenkins Job</label>
               <input type="text" id="targetJobName" name="targetJobName" class="form-control" maxlength="255" placeholder="Target job name" autocomplete="off">
+            </div>
+
+            <div class="form-group" id="targetGitBranchGroup">
+              <label for="targetGitBranch">Target Git Branch or Tag</label>
+              <input type="text" id="targetGitBranch" name="targetGitBranch" class="form-control" maxlength="200" autocomplete="off" placeholder="main">
+              <input type="hidden" id="targetGitBranchMode" name="targetGitBranchMode" value="default">
+              <p class="help-block" id="targetGitBranchHelp">Git-backed jobs use the target environment default. Jobs bound to a project keep following it; type a branch or tag to pin this deployment.</p>
             </div>
 
             <div class="promotion-option-panel" id="jobDeploymentOptions">
@@ -586,6 +592,8 @@ foreach($promotionJobs as $workload) {
                   <td class="promotion-history-detail">
                     <div>Dependencies: <b><?php echo !empty($historyParameters['include_dependencies']) ? 'Yes' : 'No'; ?></b>; overwrite: <b><?php echo !empty($historyParameters['overwrite_existing']) ? 'Yes' : 'No'; ?></b></div>
                     <div>Contexts: <b><?php echo !empty($historyParameters['promote_contexts']) ? 'Yes' : 'No'; ?></b><?php echo !empty($historyParameters['context_project']) ? ' ('.html_escape($historyParameters['context_project']).')' : ''; ?>; artifacts: <b><?php echo (int) $artifactCount; ?></b></div>
+                    <?php if(!empty($historyParameters['target_git_branch'])) { ?><div>Git branch: <code><?php echo html_escape($historyParameters['target_git_branch']); ?></code></div><?php } ?>
+                    <?php if(array_key_exists('target_git_credential', $historyParameters) && $historyParameters['target_git_credential'] !== NULL) { ?><div>Build authentication: <code><?php echo html_escape($historyParameters['target_git_credential'] !== '' ? $historyParameters['target_git_credential'] : 'public'); ?></code></div><?php } ?>
                     <?php if($artifactCount > 0) { ?><details><summary>Artifact paths</summary><?php $artifactRows = !empty($historyArtifacts['copied']) ? $historyArtifacts['copied'] : $historyArtifacts['planned']; foreach($artifactRows as $artifact) { ?><div><?php echo html_escape(is_array($artifact) ? ((isset($artifact['label']) ? $artifact['label'].': ' : '').(isset($artifact['source']) ? $artifact['source'].' -> ' : '').(isset($artifact['target']) ? $artifact['target'] : '')) : $artifact); ?></div><?php } ?></details><?php } ?>
                   </td>
                   <td><span class="label label-<?php echo $historyStatusClass; ?>"><?php echo html_escape(ucwords(str_replace('_', ' ', $historyStatus))); ?></span><?php if(!empty($history['message'])) { ?><div class="promotion-history-detail" style="margin-top: 5px;"><?php echo html_escape($history['message']); ?></div><?php } ?></td>
@@ -615,6 +623,27 @@ foreach($promotionJobs as $workload) {
 
 <script type="text/javascript">
   $(document).ready(function() {
+    var gitBranchDefaults = <?php echo json_encode(isset($gitBranchDefaults) ? $gitBranchDefaults : array('DEV' => 'develop', 'DEFAULT' => 'main')); ?>;
+    var gitProjects = <?php echo json_encode(isset($gitProjects) ? $gitProjects : array()); ?>;
+    var gitProjectsById = {};
+    $.each(gitProjects, function(index, project) { gitProjectsById[String(project.id)] = project; });
+    var detectedSourceProject = null;
+    // Only jobs that clone a repository have a branch to choose.
+    var sourceIsGitJob = false;
+    // Project-bound Git jobs read their branch from the project at build time.
+    var sourceFollowsProject = false;
+
+    // Jenkins writes shell quotes in config.xml as &apos;/&quot;, so read the
+    // decoded build steps rather than matching the raw XML.
+    function jenkinsCommandText(xmlText) {
+      try {
+        return $($.parseXML(String(xmlText || ''))).find('command').map(function() {
+          return $(this).text();
+        }).get().join('\n');
+      } catch (error) {
+        return '';
+      }
+    }
     var previewTimer = null;
     var targetWasEdited = false;
     var pendingPreview = null;
@@ -690,9 +719,63 @@ foreach($promotionJobs as $workload) {
       return $('<div>').text(value == null ? '' : value).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // A placeholder option has no environment; its label must never leak into
+    // a suggested job name (it once produced "job-Target-environment").
     function selectedEnvironmentName(selector) {
       var $option = $(selector).find('option:selected');
+      if (!$option.length || $option.val() === '') {
+        return '';
+      }
       return $option.data('name') || $.trim($option.text().replace(/\s+\(inactive\)$/i, ''));
+    }
+
+    // Until someone picks a target, follow the source: the next environment
+    // in the configured order (DEV to the one after it), never the source.
+    var targetEnvironmentChosen = false;
+    function syncDefaultTargetEnvironment() {
+      var $target = $('#targetEnvironment');
+      var sourceValue = $('#sourceEnvironment').val() || '';
+      if (targetEnvironmentChosen && $target.val() !== sourceValue) {
+        return;
+      }
+      var values = $target.find('option').map(function() { return this.value; }).get();
+      var sourceIndex = $.inArray(sourceValue, values);
+      var next = sourceIndex >= 0 && sourceIndex + 1 < values.length ? values[sourceIndex + 1] : '';
+      if (!next) {
+        next = $.grep(values, function(value) { return value !== sourceValue; })[0] || values[0] || '';
+      }
+      if (next !== '' && next !== $target.val()) {
+        $target.val(next).trigger('change.select2');
+      }
+    }
+
+    function defaultTargetGitBranch() {
+      var environment = environmentHelper.normalize(selectedEnvironmentName('#targetEnvironment'));
+      if (detectedSourceProject && detectedSourceProject.defaults) {
+        var projectDefault = detectedSourceProject.defaults[environment] || detectedSourceProject.defaults.DEFAULT || {};
+        if ($.trim(projectDefault.branch || '') !== '') {
+          return projectDefault.branch;
+        }
+      }
+      return gitBranchDefaults[environment] || gitBranchDefaults.DEFAULT || 'main';
+    }
+
+    function syncTargetGitBranchDefault() {
+      var $field = $('#targetGitBranch');
+      var previousDefault = $field.data('jobseeker-default-branch') || '';
+      var current = $.trim($field.val() || '');
+      var nextDefault = defaultTargetGitBranch();
+      if (current === '' || current === previousDefault) {
+        $field.val(nextDefault);
+      }
+      $field.data('jobseeker-default-branch', nextDefault);
+      var targetName = htmlEscape(selectedEnvironmentName('#targetEnvironment') || 'the target environment');
+      if (sourceFollowsProject) {
+        $('#targetGitBranchHelp').html('Follows project <strong>' + htmlEscape(detectedSourceProject.name) + '</strong>: <strong>' + targetName + '</strong> builds run <code>' + htmlEscape(nextDefault) + '</code>, read from the project when they start. Type another branch or tag to pin this deployment instead.');
+        return;
+      }
+      var source = detectedSourceProject ? 'Project <strong>' + htmlEscape(detectedSourceProject.name) + '</strong> default' : 'Global default';
+      $('#targetGitBranchHelp').html(source + ' for <strong>' + targetName + '</strong>: <code>' + htmlEscape(nextDefault) + '</code>. Git-backed jobs will be rewritten to this branch; type another branch to override it.');
     }
 
     function jenkinsBaseUrl() {
@@ -924,6 +1007,16 @@ foreach($promotionJobs as $workload) {
         method: 'GET',
         dataType: 'text'
       }).done(function(xmlText) {
+        var commandText = jenkinsCommandText(xmlText);
+        var projectMatch = commandText.match(/^\s*(?:export\s+)?JOBSEEKER_PROJECT_ID\s*=\s*["']?(\d+)["']?\s*$/m);
+        detectedSourceProject = projectMatch ? (gitProjectsById[String(projectMatch[1])] || null) : null;
+        sourceIsGitJob = /^\s*(?:export\s+)?JOBSEEKER_GIT_REPOSITORY_URL\s*=\s*["']?[^"'\s]/m.test(commandText);
+        sourceFollowsProject = !!detectedSourceProject && /^\s*(?:export\s+)?JOBSEEKER_GIT_FOLLOW_PROJECT\s*=\s*["']?1["']?\s*$/m.test(commandText);
+        if (detectedSourceProject && !$('#promotionProject').val()) {
+          $('#promotionProject').val(String(detectedSourceProject.id)).trigger('change.select2');
+        }
+        syncWorkloadControls();
+        syncTargetGitBranchDefault();
         setDetectedSourceEnvironment(environmentHelper.detectFromConfig(xmlText || '', sourceJob), true);
       }).fail(function(xhr, status) {
         if (status !== 'abort') {
@@ -1087,6 +1180,7 @@ foreach($promotionJobs as $workload) {
     function syncWorkloadControls() {
       var pipeline = selectedWorkload().type === 'pipeline';
       $('#targetJobGroup, #jobDeploymentOptions').toggle(!pipeline);
+      $('#targetGitBranchGroup').toggle(!pipeline && sourceIsGitJob);
       $('#overwriteExistingLabel').text(pipeline ? 'Overwrite existing target pipeline' : 'Overwrite existing target job and artifacts');
       $submitButton.html('<i class="fa fa-level-up"></i> ' + (pipeline ? 'Deploy Pipeline' : 'Deploy Job'));
     }
@@ -1116,8 +1210,10 @@ foreach($promotionJobs as $workload) {
       $kpis.html(
         kpi('Jobs', response.job_count || 0) +
         kpi('Dependencies', response.dependency_count || 0) +
+        (response.git_job_count ? kpi('Git Branch', response.target_git_branch || 'unchanged') +
+          kpi('Build Auth', response.target_git_credential === null || typeof response.target_git_credential === 'undefined' ? 'unchanged' : (response.target_git_credential || 'public')) : '') +
         kpi('Context Keys', context.enabled ? (context.total || 0) : 0) +
-        kpi('Config Updates', (response.command_updates || 0) + (response.parameter_updates || 0) + (response.downstream_updates || 0) + (response.artifact_path_updates || 0)) +
+        kpi('Config Updates', (response.command_updates || 0) + (response.parameter_updates || 0) + (response.downstream_updates || 0) + (response.artifact_path_updates || 0) + (response.branch_updates || 0) + (response.git_credential_updates || 0)) +
         kpi('Artifact Folders', artifactCount)
       ).show();
 
@@ -1132,7 +1228,7 @@ foreach($promotionJobs as $workload) {
             '<td><span class="label label-' + (job.target_exists ? 'warning' : 'success') + '">' + (job.target_exists ? 'Update' : 'Create') + '</span></td>' +
             '<td>' + renderEnvironmentInfo(detected.environment ? detected : {environment: 'Unknown', source: detected.source || 'Not detected', unknown: true}) + '</td>' +
             '<td>' + htmlEscape(response.source_environment || '') + ' to ' + htmlEscape(response.target_environment || '') + '</td>' +
-            '<td>' + htmlEscape((job.command_updates || 0) + (job.parameter_updates || 0) + (job.downstream_updates || 0) + (job.artifact_path_updates || 0)) + '</td>' +
+            '<td>' + htmlEscape((job.command_updates || 0) + (job.parameter_updates || 0) + (job.downstream_updates || 0) + (job.artifact_path_updates || 0) + (job.branch_updates || 0) + (job.git_credential_updates || 0)) + '</td>' +
             '<td>' + htmlEscape(job.artifact_count || 0) + '</td>' +
           '</tr>';
         });
@@ -1248,6 +1344,8 @@ foreach($promotionJobs as $workload) {
           sourceEnvironment: sourceEnvironment,
           targetEnvironment: targetEnvironment,
           targetJobName: targetJobName,
+          targetGitBranch: $.trim($('#targetGitBranch').val() || ''),
+          targetGitBranchMode: $('#targetGitBranchMode').val() || 'default',
           overwriteExisting: $('#overwriteExisting').is(':checked') ? '1' : '0',
           includeDependencies: $('#includeDependencies').is(':checked') ? '1' : '0',
           promoteContexts: promoteContexts ? '1' : '0',
@@ -1270,13 +1368,20 @@ foreach($promotionJobs as $workload) {
     }
 
     function schedulePreview() {
+      syncDefaultTargetEnvironment();
       syncTargetSuggestion();
+      syncTargetGitBranchDefault();
       clearTimeout(previewTimer);
       previewTimer = setTimeout(requestPreview, 250);
     }
 
     $('#targetJobName').on('input', function() {
       targetWasEdited = true;
+      schedulePreview();
+    });
+
+    $('#targetGitBranch').on('input', function() {
+      $('#targetGitBranchMode').val('explicit');
       schedulePreview();
     });
 
@@ -1288,6 +1393,10 @@ foreach($promotionJobs as $workload) {
 
     $('#sourceJob').on('change', function() {
       targetWasEdited = false;
+      detectedSourceProject = null;
+      sourceIsGitJob = false;
+      sourceFollowsProject = false;
+      $('#targetGitBranchMode').val('default');
       syncContextControls();
       syncWorkloadControls();
       detectSourceJobEnvironment();
@@ -1297,6 +1406,10 @@ foreach($promotionJobs as $workload) {
       syncContextControls();
       if (this.id === 'sourceEnvironment') {
         loadSourceJobs();
+      }
+      if (this.id === 'targetEnvironment') {
+        targetEnvironmentChosen = true;
+        syncTargetGitBranchDefault();
       }
       schedulePreview();
     });
