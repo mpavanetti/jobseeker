@@ -44,10 +44,21 @@ process.stdout.write(JSON.stringify(parsed.sections.map(section => ({
 PHP_RENDERER = r'''
 define('BASEPATH', '/workspace/system/');
 require '/workspace/application/controllers/concerns/JobCreationExecutionTrait.php';
+require '/workspace/application/libraries/EnvironmentContext.php';
 
 class SampleMatrixCommandRenderer
 {
     use JobCreationExecutionTrait;
+
+    // The trait reads Context values through CodeIgniter's loader.
+    public $load;
+    public $environmentcontext;
+
+    public function __construct()
+    {
+        $this->environmentcontext = new EnvironmentContext();
+        $this->load = new class { public function library($name) {} };
+    }
 
     private function defaultPythonDockerImage()
     {
@@ -366,8 +377,8 @@ def render_cases(run_id: str) -> list[dict[str, Any]]:
         text=True,
     )
     cases = json.loads(result.stdout)
-    if len(cases) != 28:
-        raise RuntimeError(f"Expected 28 sample/runtime cases, received {len(cases)}.")
+    if len(cases) != 38:
+        raise RuntimeError(f"Expected 38 sample/runtime cases, received {len(cases)}.")
     return cases
 
 

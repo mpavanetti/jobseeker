@@ -39,6 +39,8 @@ assert(jobView.includes('jobSampleFamily') && jobView.includes('jobSampleComplex
 assert(jobView.includes('jobSampleIntegrationLabels') && jobView.includes('sample.integrations || []'), 'Sample cards must make their platform integrations visible.');
 assert(jobView.includes("database: 'Database'") && jobView.includes('<option value="database">'), 'The sample library must expose the database-connector integration filter.');
 assert(jobView.includes("loadPythonInlineFilesPayload({files: sample.files || []"), 'Python samples must be able to load full workspaces.');
+assert(samples.includes("$sample['files'] = $files") && samples.includes("'path' => 'README.md'") && samples.includes('## What it demonstrates'), 'Every Python sample workspace must receive a useful README.md.');
+assert(jobView.includes("trigger('jobseeker:sample-loaded')") && jobView.includes("on('jobseeker:sample-loaded'"), 'Loading a sample must refresh its connector and dataset map for Test connections.');
 assert(jobView.includes("if (sample.docker_image)"), 'Samples must be able to select a Docker image that provides their declared runtime tools.');
 
 // Loading a sample must not discard the runtime the operator already picked.

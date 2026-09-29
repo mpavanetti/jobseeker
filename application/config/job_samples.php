@@ -19,7 +19,7 @@
  *     every deployment seeds (ALL environments, shared `*` job scope), so they
  *     exercise the real connector runtime end to end.
  */
-return array(
+$samples = array(
     array(
         'id' => 'shell-hello-runtime',
         'name' => 'Runtime hello and diagnostics',
@@ -1563,3 +1563,87 @@ PYTHON
         )
     )
 );
+
+/*
+ * Every Python starter is a real workspace, not just an editor snippet. Give
+ * it a README that travels into the inline workspace and OpenVSCode so the
+ * next person understands what was loaded, how JobSeeker runs it, and which
+ * platform contracts need attention. This is generated from the reviewed
+ * catalog metadata, which keeps it accurate when a sample is renamed or its
+ * integration list changes.
+ */
+foreach ($samples as &$sample) {
+    if (! isset($sample['family']) || $sample['family'] !== 'python') {
+        continue;
+    }
+
+    $files = isset($sample['files']) && is_array($sample['files']) ? $sample['files'] : array();
+    $hasReadme = FALSE;
+    foreach ($files as $file) {
+        if (isset($file['path']) && strtolower((string) $file['path']) === 'readme.md') {
+            $hasReadme = TRUE;
+            break;
+        }
+    }
+    if ($hasReadme) {
+        continue;
+    }
+
+    $integrations = isset($sample['integrations']) ? array_values((array) $sample['integrations']) : array();
+    $integrationLabels = array(
+        'tmf' => 'Transaction Monitoring and per-task progress',
+        'contexts' => 'environment-aware Context Settings',
+        'data_assets' => 'governed Data Assets',
+        'connectors' => 'scoped runtime connectors',
+        'database' => 'database connectivity',
+        'email_metrics' => 'structured email/run metrics',
+        'pipelines' => 'pipeline-ready execution',
+        'task_dag' => 'the JobSeeker task DAG runtime',
+        'docker' => 'a reproducible Docker runtime',
+        'tests' => 'automated tests',
+        'jenkins' => 'Jenkins build metadata',
+        'environments' => 'DEV/QA/UAT/PROD environment selection'
+    );
+    $demonstrates = array();
+    foreach ($integrations as $integration) {
+        $demonstrates[] = '- '.(isset($integrationLabels[$integration]) ? $integrationLabels[$integration] : str_replace('_', ' ', $integration));
+    }
+
+    $notes = array();
+    if (in_array('connectors', $integrations, TRUE)) {
+        $notes[] = '- The sample defaults to the built-in `jobseeker-mariadb` connector. Confirm it is in scope for this job and environment with **Test connections** before the first run.';
+    }
+    if (in_array('data_assets', $integrations, TRUE)) {
+        $notes[] = '- Data Asset keys are examples. Register matching assets under **ETL > Data Assets**, or keep the sample fallback while developing.';
+    }
+    if (in_array('contexts', $integrations, TRUE)) {
+        $notes[] = '- Context keys resolve for the selected JobSeeker environment; defaults in the code make the starter runnable before configuration.';
+    }
+    if (! empty($sample['run_tests'])) {
+        $notes[] = '- Tests run automatically when this job is built. In OpenVSCode, use the **Test** task or run `pytest` in the workspace terminal.';
+    }
+    if (empty($notes)) {
+        $notes[] = '- Review the selected environment and job name before saving. The sample does not save or run until you submit the Job Creation form.';
+    }
+
+    $runtime = ! empty($sample['use_dockerfile']) || (isset($sample['runtime']) && $sample['runtime'] === 'docker')
+        ? 'Docker (the included workspace settings build the sample runtime)'
+        : 'Jenkins Agent or Docker, according to the runtime selected in Job Creation';
+    $readme = '# '.$sample['name']."\n\n"
+        .$sample['description']."\n\n"
+        .'This workspace was loaded from the JobSeeker sample `'.$sample['id'].'`. Customize it as application code: the sample library will not overwrite it after loading.'."\n\n"
+        ."## What it demonstrates\n\n".implode("\n", $demonstrates)."\n\n"
+        ."## Run it\n\n"
+        .'- Entry point: `'.(isset($sample['entry_point']) ? $sample['entry_point'] : 'main.py').'`'."\n"
+        .'- Runtime: '.$runtime."\n"
+        ."- In JobSeeker, choose the environment, review **Connectors & datasets used by this job**, then save or preview the job.\n"
+        ."- In OpenVSCode, run **JobSeeker: setup Python environment** once, then use the run, debug, and pytest tasks.\n\n"
+        ."## Before production\n\n".implode("\n", $notes)."\n\n"
+        ."Keep credentials out of this repository. JobSeeker injects connector values only at runtime and resolves Context Settings and Data Assets for the selected environment.\n";
+
+    $files[] = array('path' => 'README.md', 'content' => $readme);
+    $sample['files'] = $files;
+}
+unset($sample);
+
+return $samples;
