@@ -7,9 +7,10 @@ foreach ($projectRows as $projectRecord) {
   }
 }
 $projectGitDefaultsByProject = isset($projectGitDefaultsByProject) && is_array($projectGitDefaultsByProject) ? $projectGitDefaultsByProject : array();
+$projectTypeLabels = array('python' => 'Python', 'shell' => 'Shell', 'hop' => 'Apache Hop');
 ?>
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=5">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=6">
 
 <div class="content-wrapper context-page settings-page">
   <section class="content-header">
@@ -77,6 +78,14 @@ $projectGitDefaultsByProject = isset($projectGitDefaultsByProject) && is_array($
                 <input id="name" type="text" name="name" class="form-control" placeholder="e.g. Customer Analytics" maxlength="255" autocomplete="off" required>
                 <span class="context-help">This name identifies the project in context selectors.</span>
               </div>
+              <div class="context-field project-field-type">
+                <label for="projectType">Type</label>
+                <select id="projectType" class="form-control" name="projectType">
+                  <option value="python">Python</option>
+                  <option value="shell">Shell</option>
+                  <option value="hop">Apache Hop</option>
+                </select>
+              </div>
               <div class="context-field project-field-status">
                 <label for="active">Status</label>
                 <select id="active" class="form-control" name="active">
@@ -85,6 +94,7 @@ $projectGitDefaultsByProject = isset($projectGitDefaultsByProject) && is_array($
                 </select>
               </div>
             </div>
+            <p class="context-help project-layout-help"><i class="fa fa-folder-open-o"></i> Each job of a project is a folder under <code>jobs/</code> in its repository, with code the jobs share in <code>shared/</code>. Open the project in VS Code from the sidebar to develop them.</p>
             <?php $this->load->view('includes/projectGitFields', array('repositoryUrl' => '', 'credentialKey' => '', 'branchDefaults' => array())); ?>
           </div>
           <div class="box-footer context-form-footer">
@@ -132,7 +142,7 @@ $projectGitDefaultsByProject = isset($projectGitDefaultsByProject) && is_array($
                 $updatedOn = $modifiedOn !== '' ? $modifiedOn : $createdOn;
               ?>
                 <tr>
-                  <td><span class="settings-name"><?php echo html_escape($record->ProjectName); ?></span><span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span></td>
+                  <td><span class="settings-name"><?php echo html_escape($record->ProjectName); ?></span><?php $rowType = isset($record->ProjectType) && isset($projectTypeLabels[$record->ProjectType]) ? $record->ProjectType : 'python'; ?> <span class="project-type-chip is-<?php echo html_escape($rowType); ?>"><?php echo html_escape($projectTypeLabels[$rowType]); ?></span><span class="context-row-meta">#<?php echo (int) $record->Id; ?> &middot; Created <?php echo js_time($record->CreatedOn, array('format' => 'Y-m-d H:i', 'empty' => '')); ?></span></td>
                   <td><?php if (trim((string) $record->GitPath) !== '') { ?><code class="settings-path" title="<?php echo html_escape($record->GitPath); ?>"><?php echo html_escape($record->GitPath); ?></code><?php } else { ?><span class="settings-empty-value">No Git repository</span><?php } ?>
                     <?php
                       $rowCredential = isset($record->GitCredentialKey) ? trim((string) $record->GitCredentialKey) : '';
@@ -159,4 +169,4 @@ $projectGitDefaultsByProject = isset($projectGitDefaultsByProject) && is_array($
 </div>
 
 <script>window.settingsDetailsConfig = {type: 'project', deleteUrl: <?php echo json_encode(base_url().'Context/deleteProject'); ?>};</script>
-<script src="<?php echo base_url(); ?>assets/js/settings-details.js?v=1"></script>
+<script src="<?php echo base_url(); ?>assets/js/settings-details.js?v=2"></script>

@@ -314,6 +314,12 @@
   margin-top: 5px;
 }
 
+/* A table-display input group shrinks to its content once the Show button is
+   hidden (plain values), leaving a 200px field; keep it full width. */
+.context-value-group {
+  width: 100%;
+}
+
 .context-value-group .form-control {
   font-family: Consolas, "Liberation Mono", Menlo, monospace;
 }

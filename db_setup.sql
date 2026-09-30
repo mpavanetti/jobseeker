@@ -431,6 +431,7 @@ CREATE TABLE IF NOT EXISTS `hop_server_executions` (
 CREATE TABLE IF NOT EXISTS `projectdetails` (
   `Id` int(11) NOT NULL AUTO_INCREMENT,
   `ProjectName` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `ProjectType` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'python',
   `GitPath` varchar(1000) COLLATE utf8_unicode_ci DEFAULT NULL,
   `GitCredentialKey` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
   `IsActive` tinyint(1) NOT NULL,

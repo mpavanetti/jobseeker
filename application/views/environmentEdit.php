@@ -1,4 +1,4 @@
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=8">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=1">
 
 <div class="content-wrapper context-page settings-page">

@@ -1111,6 +1111,31 @@ private function savePreparedPromotionJob($prepared) {
   return array('ok' => $this->isSuccessfulJenkinsStatus($saveResponse['status']), 'status' => $saveResponse['status']);
 }
 
+/**
+ * A Git job clones with a build credential connector, which is scoped by
+ * environment and job; a deployment that passes every other check still fails
+ * at the first build when that connector is not available in the target.
+ */
+private function promotionCredentialWarnings($input, $preparedJobs) {
+  $warnings = array();
+  $environment = $input['target_environment']->Environment;
+  $this->load->model('DbSettings_model', 'promotionConnectors');
+  foreach ($preparedJobs as $prepared) {
+    if (empty($prepared['git_source'])) {
+      continue;
+    }
+    $command = html_entity_decode((string) $prepared['xml'], ENT_QUOTES | ENT_XML1, 'UTF-8');
+    $credential = preg_match("/^\\s*export JOBSEEKER_GIT_CREDENTIAL_KEY='([^']*)'/m", $command, $match) ? $match[1] : '';
+    if (strpos($command, 'JOBSEEKER_GIT_FOLLOW_PROJECT=1') !== FALSE && $input['target_git_credential'] !== NULL) {
+      $credential = (string) $input['target_git_credential'];
+    }
+    if ($credential !== '' && $this->promotionConnectors->runtimeSetting($credential, $environment, $prepared['target_job']) === NULL) {
+      $warnings[] = $prepared['target_job'].' clones with the '.$credential.' connector, which is not available to it in '.$environment.'. Add '.$credential.' for '.$environment.' under Connectors, or builds will fail.';
+    }
+  }
+  return $warnings;
+}
+
 private function promotionResultPayload($ok, $message, $input, $preparedJobs, $totals, $artifacts, $commandPreviews, $contextPlan, $rollbackId) {
   $jobs = array();
   foreach ($preparedJobs as $prepared) {
@@ -1150,6 +1175,7 @@ private function promotionResultPayload($ok, $message, $input, $preparedJobs, $t
     'downstream_updates' => $totals['downstream_updates'],
     'branch_updates' => $totals['branch_updates'],
     'git_credential_updates' => $totals['git_credential_updates'],
+    'warnings' => $this->promotionCredentialWarnings($input, $preparedJobs),
     'command_previews' => $commandPreviews,
     'artifacts' => $artifacts,
     'context_promotion' => array(
@@ -2604,6 +2630,7 @@ public function addProject() {
 
       if($result > 0)
       {
+        $this->projectGitSettings()->saveType($result, $this->input->post('projectType'));
         if (! $this->projectGitSettings()->save($result, $gitSettings['credentialKey'], $gitSettings['branches'])) {
           $this->session->set_flashdata('error', 'The project was created, but its Git defaults could not be saved. Edit the project to try again.');
         } else {
@@ -2654,7 +2681,8 @@ public function addEnvironment() {
     else
     {
 
-      $name = $this->security->xss_clean($this->input->post('name'));
+      // Environment names are upper case everywhere they are used (ENVIRONMENT=DEV).
+      $name = strtoupper(trim((string) $this->security->xss_clean($this->input->post('name'))));
       $active = $this->security->xss_clean($this->input->post('active'));
       $description = $this->security->xss_clean($this->input->post('description'));
 
@@ -2682,7 +2710,7 @@ public function addEnvironment() {
 
       if($result > 0)
       {
-        $this->session->set_flashdata('success', 'New Environment has successfully created and now is available to be used.');
+        $this->session->set_flashdata('success', 'The environment was created and is now available.');
       }
       else
       {
@@ -2779,7 +2807,7 @@ public function addContext() {
 
       if($result > 0)
       {
-        $this->session->set_flashdata('success', 'New Context has successfully created and now is available to be used.');
+        $this->session->set_flashdata('success', 'The context variable was created and is now available to jobs.');
       }
       else
       {
@@ -2812,11 +2840,47 @@ public function addContext() {
 
       $id = $this->input->post('userId');
 
+      // A Git job that follows this project resolves its repository through
+      // it at every build; deleting the project breaks those builds, so ask.
+      if ($this->input->post('force') !== '1') {
+        $followers = $this->jobsFollowingProject((int) $id);
+        if (! empty($followers)) {
+          echo(json_encode(array('status' => 'in_use', 'id' => $id, 'jobs' => $followers)));
+          return;
+        }
+      }
+
       $result = $this->model->deleteProject($id);
 
       if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
       else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
     }
+  }
+
+  /** Jenkins jobs whose builds take their Git source from this project. */
+  private function jobsFollowingProject($projectId) {
+    if ($projectId <= 0) {
+      return array();
+    }
+    $list = $this->requestJenkins('GET', 'api/json?tree=jobs[name]');
+    $decoded = (int) $list['status'] === 200 ? json_decode((string) $list['body'], TRUE) : NULL;
+    $followers = array();
+    foreach (array_slice(isset($decoded['jobs']) && is_array($decoded['jobs']) ? $decoded['jobs'] : array(), 0, 1000) as $job) {
+      $name = isset($job['name']) ? (string) $job['name'] : '';
+      if ($name === '' || strpos($name, '__jobseeker_') === 0) {
+        continue;
+      }
+      $config = $this->requestJenkins('GET', $this->jenkinsJobPath($name).'/config.xml');
+      if ((int) $config['status'] !== 200) {
+        continue;
+      }
+      $command = html_entity_decode((string) $config['body'], ENT_QUOTES | ENT_XML1, 'UTF-8');
+      if (strpos($command, 'JOBSEEKER_GIT_FOLLOW_PROJECT=1') !== FALSE
+          && preg_match('/^\s*(?:export\s+)?JOBSEEKER_PROJECT_ID\s*=\s*["\']?'.$projectId.'["\']?\s*$/m', $command)) {
+        $followers[] = $name;
+      }
+    }
+    return $followers;
   }
 
   public function deleteEnvironment() {
@@ -3052,6 +3116,7 @@ public function addContext() {
 
          if($result == True)
          {
+          $this->projectGitSettings()->saveType($Id, $this->input->post('projectType'));
           if (! $this->projectGitSettings()->save($Id, $gitSettings['credentialKey'], $gitSettings['branches'])) {
             $this->session->set_flashdata('error', 'The project was updated, but its Git defaults could not be saved.');
           } else {
@@ -3106,7 +3171,8 @@ public function addContext() {
     }
     else
     {
-      $name = $this->security->xss_clean($this->input->post('name'));
+      // Environment names are upper case everywhere they are used (ENVIRONMENT=DEV).
+      $name = strtoupper(trim((string) $this->security->xss_clean($this->input->post('name'))));
       $active = $this->security->xss_clean($this->input->post('active'));
       $description = $this->security->xss_clean($this->input->post('description'));
 

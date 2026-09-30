@@ -530,6 +530,11 @@ foreach($promotionJobs as $workload) {
               <?php
                 $color = isset($job['color']) ? $job['color'] : '';
                 $statusClass = strpos($color, 'blue') === 0 || strpos($color, 'green') === 0 ? 'success' : (strpos($color, 'red') === 0 ? 'danger' : 'default');
+                // Jenkins reports a ball colour; show what it means (an _anime suffix = building).
+                $colorLabels = array('blue' => 'Success', 'green' => 'Success', 'red' => 'Failed', 'yellow' => 'Unstable', 'aborted' => 'Aborted', 'notbuilt' => 'Never built', 'disabled' => 'Disabled', 'grey' => 'Pending');
+                $baseColor = preg_replace('/_anime$/', '', $color);
+                $statusLabel = substr($color, -6) === '_anime' ? 'Running' : (isset($colorLabels[$baseColor]) ? $colorLabels[$baseColor] : ($color !== '' ? $color : 'Unknown'));
+                if ($baseColor === 'yellow') { $statusClass = 'warning'; }
                 $lastBuild = 'Never';
                 $lastBuildAtSeconds = 0;
                 if (!empty($job['lastBuild']) && isset($job['lastBuild']->number)) {
@@ -546,7 +551,7 @@ foreach($promotionJobs as $workload) {
                 <td><b><?php echo html_escape($job['displayName']); ?></b><?php if($job['workloadType'] === 'pipeline') { ?><small class="text-muted" style="display:block;"><?php echo html_escape($job['fullName']); ?></small><?php } ?></td>
                 <td><span class="label label-<?php echo $job['workloadType'] === 'pipeline' ? 'info' : 'default'; ?>"><?php echo $job['workloadType'] === 'pipeline' ? 'Pipeline' : 'Job'; ?></span></td>
                 <td><span class="promotion-inventory-environment"><span class="label label-default">Detecting</span></span></td>
-                <td><span class="label label-<?php echo $statusClass; ?>"><?php echo html_escape($color !== '' ? $color : 'unknown'); ?></span></td>
+                <td data-order="<?php echo html_escape($statusLabel); ?>"><span class="label label-<?php echo $statusClass; ?>"><?php echo html_escape($statusLabel); ?></span></td>
                 <td><?php echo $job['buildable'] ? '<span class="label label-success">Yes</span>' : '<span class="label label-default">No</span>'; ?></td>
                 <td><?php echo html_escape($lastBuild); ?><?php if ($lastBuildAtSeconds > 0) { echo ' at '.js_time($lastBuildAtSeconds, array('format' => 'Y-m-d H:i')); } ?></td>
               </tr>
@@ -1205,7 +1210,9 @@ foreach($promotionJobs as $workload) {
       var commandPreview = [];
       var jobTable = '';
 
-      $preview.html('<span class="label label-success">Ready</span> <strong>' + htmlEscape(response.target_job) + '</strong> passed deployment checks. ' + htmlEscape(targetState) + '. Rollback is ' + (response.rollback_enabled ? 'enabled' : 'disabled') + '.');
+      var warnings = response.warnings || [];
+      $preview.html((warnings.length ? '<span class="label label-warning">Check</span> ' : '<span class="label label-success">Ready</span> ') + '<strong>' + htmlEscape(response.target_job) + '</strong> passed deployment checks. ' + htmlEscape(targetState) + '. Rollback is ' + (response.rollback_enabled ? 'enabled' : 'disabled') + '.'
+        + $.map(warnings, function(warning) { return '<div class="text-warning" style="margin-top:6px"><i class="fa fa-exclamation-triangle"></i> ' + htmlEscape(warning) + '</div>'; }).join(''));
 
       $kpis.html(
         kpi('Jobs', response.job_count || 0) +

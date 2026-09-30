@@ -62,7 +62,7 @@ foreach ((array) $comparisonEnvironments as $comparisonEnvironment) {
   }
 }
 ?>
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=7">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=8">
 
 <div class="content-wrapper context-page">
   <section class="content-header">

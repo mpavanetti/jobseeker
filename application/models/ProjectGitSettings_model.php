@@ -46,6 +46,10 @@ class ProjectGitSettings_model extends CI_Model
         if (! isset($columns['GitCredentialKey'])) {
             $this->db->query("ALTER TABLE `projectdetails` ADD `GitCredentialKey` varchar(128) COLLATE utf8_unicode_ci NOT NULL DEFAULT '' AFTER `GitPath`");
         }
+        // What the project's jobs are written in (see ProjectWorkspace::types()).
+        if (! isset($columns['ProjectType'])) {
+            $this->db->query("ALTER TABLE `projectdetails` ADD `ProjectType` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'python' AFTER `ProjectName`");
+        }
         $this->migrateEnvironmentCredentials();
     }
 
@@ -171,6 +175,16 @@ class ProjectGitSettings_model extends CI_Model
         return $this->db->trans_status();
     }
 
+    /** python, shell or hop; anything unknown is stored as python. */
+    public function saveType($projectId, $type)
+    {
+        $type = strtolower(trim((string) $type));
+        if (! in_array($type, array('python', 'shell', 'hop'), TRUE)) {
+            $type = 'python';
+        }
+        return $this->db->where('Id', (int) $projectId)->update('projectdetails', array('ProjectType' => $type));
+    }
+
     /** Projects for Git pickers pass $gitOnly: only those with a repository. */
     public function projects($activeOnly = TRUE, $gitOnly = FALSE)
     {
@@ -199,6 +213,7 @@ class ProjectGitSettings_model extends CI_Model
         return array(
             'id' => (int) $row->Id,
             'name' => (string) $row->ProjectName,
+            'type' => isset($row->ProjectType) && in_array($row->ProjectType, array('python', 'shell', 'hop'), TRUE) ? (string) $row->ProjectType : 'python',
             'repositoryUrl' => trim((string) $row->GitPath),
             'credentialKey' => isset($row->GitCredentialKey) ? (string) $row->GitCredentialKey : '',
             'active' => (int) $row->IsActive === 1,
