@@ -26,7 +26,8 @@ ok('stored rows are considered before deployment rows', model.indexOf("->result_
 ok('dependency resolution uses the complete connector catalog', dependencies.includes('catalogSettingsForKeys($keys)'));
 ok('job creation tests can resolve deployment connectors', creation.includes('connectorCatalog->catalogSetting'));
 ok('the authenticated endpoint turns deployment values into an ephemeral local payload',
-  /\$backend === 'deployment'[\s\S]{0,500}\$secret\['backend'\] = 'local'/.test(runtime));
+  runtime.includes('$this->connectors->runtimePayload($row)')
+    && /\$backend === 'deployment'[\s\S]{0,500}\$secret\['backend'\] = 'local'/.test(model));
 ok('the controller supplies a display-only backend label', controller.includes("$secretBackendLabels['deployment']"));
 ok('deployment connectors have no edit or delete controls', view.includes('$isEnvironmentConnector') && view.includes('Read only'));
 ok('secret values are visibly masked', view.includes('&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'));

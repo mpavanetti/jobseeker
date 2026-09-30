@@ -35,7 +35,10 @@ assert(!jobCreation.includes('jobseeker-local-connector-token'));
 assert(controller.includes("hash_equals($expected"));
 assert(controller.includes("set_header('Cache-Control: no-store"));
 assert(controller.includes("method(TRUE) !== 'POST'"));
-assert(controller.includes("(object) array_map"));
+// The runtime payload is built by the model, shared with Data Asset previews.
+const connectorModel = fs.readFileSync('application/models/DbSettings_model.php', 'utf8');
+assert(controller.includes('$this->connectors->runtimePayload($row)'));
+assert(connectorModel.includes("(object) array_map"));
 assert(settingsController.includes("'password' => ''"));
 assert(settingsController.includes('selectedGlobalEnvironment'));
 assert(settingsController.includes('$existing ? (string) $existing->environment : $this->selectedGlobalEnvironment()'));
