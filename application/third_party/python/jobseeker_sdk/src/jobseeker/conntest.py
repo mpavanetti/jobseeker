@@ -506,30 +506,18 @@ def _test_sftp(connector: "Connector", result: ConnectionTestResult, timeout: fl
 
 def _test_s3(connector: "Connector", result: ConnectionTestResult, timeout: float) -> ConnectionTestResult:
     try:
-        import boto3  # type: ignore
-        from botocore.config import Config  # type: ignore
+        import boto3  # type: ignore  # noqa: F401 - the driver check
         from botocore.exceptions import BotoCoreError, ClientError  # type: ignore
     except ImportError:
         return _driver_missing(connector, result, timeout, "boto3")
-    bucket = connector.database or _first_host(connector.host)
-    params = _params(connector)
-    region = params.get("region") or None
-    endpoint = connector.value("endpoint_url", "") or (connector.host if "://" in str(connector.host) else "")
+    # Data Assets read the same bucket with the same client (jobseeker.sources).
+    from .sources import _s3_client, storage_container
+
+    host = str(connector.host or "")
+    bucket = storage_container(connector) or ("" if "://" in host else _first_host(host))
     started = time.monotonic()
     try:
-        session_kwargs: Dict[str, Any] = {}
-        if connector.value("access_key_id", ""):
-            session_kwargs["aws_access_key_id"] = str(connector.value("access_key_id", ""))
-            session_kwargs["aws_secret_access_key"] = str(connector.value("secret_access_key", ""))
-            if connector.value("session_token", ""):
-                session_kwargs["aws_session_token"] = str(connector.value("session_token", ""))
-        client = boto3.client(
-            "s3",
-            region_name=region,
-            endpoint_url=endpoint or None,
-            config=Config(connect_timeout=timeout, read_timeout=timeout, retries={"max_attempts": 1}),
-            **session_kwargs,
-        )
+        client = _s3_client(connector, timeout)
         if bucket:
             client.head_bucket(Bucket=bucket)
             result.add("head_bucket", True, "bucket %s is reachable" % bucket)
@@ -613,24 +601,13 @@ def _test_gcs(connector: "Connector", result: ConnectionTestResult, timeout: flo
         from google.api_core.exceptions import GoogleAPICallError, Forbidden, NotFound  # type: ignore
     except ImportError:
         return _driver_missing(connector, result, timeout, "google-cloud-storage")
-    bucket = connector.database or _first_host(connector.host)
+    from .sources import _gcs_client, storage_container
+
+    host = str(connector.host or "")
+    bucket = storage_container(connector) or ("" if "://" in host else _first_host(host))
     started = time.monotonic()
     try:
-        client_kwargs: Dict[str, Any] = {}
-        service_account_json = str(
-            connector.value("service_account_json", "")
-            or connector.value("credentials_json", "")
-            or ""
-        )
-        if service_account_json:
-            from google.oauth2 import service_account  # type: ignore
-
-            service_account_info = json.loads(service_account_json)
-            client_kwargs["credentials"] = service_account.Credentials.from_service_account_info(service_account_info)
-            client_kwargs["project"] = service_account_info.get("project_id")
-        elif _params(connector).get("project"):
-            client_kwargs["project"] = _params(connector)["project"]
-        client = storage.Client(**client_kwargs)
+        client = _gcs_client(connector)
         if bucket:
             client.get_bucket(bucket, timeout=timeout)
             result.add("get_bucket", True, "bucket %s is reachable" % bucket)

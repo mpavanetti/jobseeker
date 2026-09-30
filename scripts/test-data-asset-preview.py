@@ -87,6 +87,7 @@ def test_sql_references():
 def test_storage_locations():
     assert sources.storage_location(connector("aws_s3", database="landing"), "/2026/a.csv") == ("landing", "2026/a.csv")
     assert sources.storage_location(connector("gcs"), "bucket/x/y.parquet") == ("bucket", "x/y.parquet")
+    assert sources.storage_location(connector("aws_s3", additional_parameters="bucket=raw;region=us-east-1"), "a.csv") == ("raw", "a.csv")
     assert sources.storage_location(connector("sftp", database="/upload"), "in/a.csv") == ("", "/upload/in/a.csv")
     assert sources.storage_location(connector("sftp", database="/upload"), "/data/a.csv") == ("", "/data/a.csv")
     for path in ("../etc/passwd", "a/../../b", "", "a\nb"):
@@ -162,6 +163,26 @@ def test_public_only_guard():
         rejects(sources.http_get, server.url, {}, 1024, True)
         body, truncated, _ = sources.http_get(server.url, {}, 1024, False)
         assert json.loads(body) == [{"id": 1}] and truncated is False
+        # A Connection's own host is trusted; a redirect elsewhere must be public.
+        class Redirect(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", server.url.replace("127.0.0.1", "localhost"))
+                self.end_headers()
+
+            def log_message(self, *arguments):
+                pass
+
+        origin = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+        threading.Thread(target=origin.serve_forever, daemon=True).start()
+        try:
+            start = "http://127.0.0.1:%d/start" % origin.server_port
+            rejects(lambda: sources.http_get(start, {"Authorization": "Bearer t"}, 1024, True, trust_origin=True))
+            body, _, _ = sources.http_get(start, {"Authorization": "Bearer t"}, 1024, False, trust_origin=True)
+            assert json.loads(body) == [{"id": 1}]
+        finally:
+            origin.shutdown()
+            origin.server_close()
     rejects(sources.http_get, "http://user:secret@example.com/data.json")
     rejects(sources.http_get, "file:///etc/passwd")
 
