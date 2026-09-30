@@ -65,3 +65,24 @@ spec:
       ports:
         - protocol: TCP
           port: 50000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-preview-ingress
+  labels:
+    app.kubernetes.io/name: jobseeker
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: data-preview
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: php
+      ports:
+        - protocol: TCP
+          port: 8000

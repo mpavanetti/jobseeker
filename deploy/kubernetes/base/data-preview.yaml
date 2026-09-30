@@ -1,0 +1,93 @@
+# Previews Data Assets for the web UI with the SDK code and drivers jobs use.
+# PHP authorizes each request and sends the one Connection an asset needs; the
+# service reads uploads from the shared repository without writing to it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-preview
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: data-preview
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jobseeker
+      app.kubernetes.io/component: data-preview
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jobseeker
+        app.kubernetes.io/component: data-preview
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: data-preview
+          image: jobseeker-data-preview:local
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: JOBSEEKER_REPOSITORY_ROOT
+              value: /php/repository
+            - name: JOBSEEKER_CONNECTOR_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jobseeker-secrets
+                  key: connector-api-token
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: repository
+              mountPath: /php/repository
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: repository
+          persistentVolumeClaim:
+            claimName: jobseeker-repository
+            readOnly: true
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-preview
+  labels:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: data-preview
+spec:
+  selector:
+    app.kubernetes.io/name: jobseeker
+    app.kubernetes.io/component: data-preview
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

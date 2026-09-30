@@ -84,6 +84,7 @@ docker build -f docker/jenkins_image -t "$REGISTRY/jenkins:$TAG" .
 docker build -f docker/jenkins_kubernetes_agent_image -t "$REGISTRY/jenkins-agent:$TAG" .
 docker build -f docker/mariadb_image -t "$REGISTRY/mariadb:$TAG" .
 docker build -f docker/openvscode_image -t "$REGISTRY/openvscode:$TAG" .
+docker build -f docker/data_preview_image -t "$REGISTRY/data-preview:$TAG" .
 
 docker push "$REGISTRY/php:$TAG"
 docker push "$REGISTRY/nginx:$TAG"
@@ -91,6 +92,7 @@ docker push "$REGISTRY/jenkins:$TAG"
 docker push "$REGISTRY/jenkins-agent:$TAG"
 docker push "$REGISTRY/mariadb:$TAG"
 docker push "$REGISTRY/openvscode:$TAG"
+docker push "$REGISTRY/data-preview:$TAG"
 ```
 
 Create an overlay rather than editing the base. At minimum, replace every
@@ -125,6 +127,9 @@ images:
     newTag: 0.2.0
   - name: jobseeker-openvscode
     newName: registry.example.com/jobseeker/openvscode
+    newTag: 0.2.0
+  - name: jobseeker-data-preview
+    newName: registry.example.com/jobseeker/data-preview
     newTag: 0.2.0
 ```
 
