@@ -245,8 +245,8 @@
             <div class="row">
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
-                  <label>Status</label>
-                      <select class="form-control select2" name="status[]" multiple="multiple">
+                  <label for="tmfStatusFilter">Status</label>
+                      <select class="form-control select2" id="tmfStatusFilter" name="status[]" multiple="multiple" aria-label="Status">
                         <option value="*" selected>All</option>
                         <?php
                           if(!empty($listStatus))
@@ -267,8 +267,8 @@
 
                <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
-                  <label>Available Job Name</label>
-                      <select class="form-control select2" name="job_name[]" multiple="multiple">
+                  <label for="tmfJobFilter">Available Job Name</label>
+                      <select class="form-control select2" id="tmfJobFilter" name="job_name[]" multiple="multiple" aria-label="Available job name">
                         <option value="*" selected>All</option>
                            <?php
                           if(!empty($listJobName))
@@ -287,8 +287,8 @@
 
               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group tmf-builder-environment-filter">
                 <div class="input-group" style="width: 100%;">
-                  <label>Environment</label>
-                      <select class="form-control select2" name="environment[]" multiple="multiple">
+                  <label for="tmfEnvironmentFilter">Environment</label>
+                      <select class="form-control select2" id="tmfEnvironmentFilter" name="environment[]" multiple="multiple" aria-label="Environment">
                         <option value="*" selected>All</option>
                         <option value="__UNKNOWN__">Unknown / not recorded</option>
                            <?php
@@ -312,8 +312,8 @@
 
                <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
-                  <label>Dimension (DW / DM)</label>
-                      <select class="form-control select2" name="dimension[]" multiple="multiple">
+                  <label for="tmfDimensionFilter">Dimension (DW / DM)</label>
+                      <select class="form-control select2" id="tmfDimensionFilter" name="dimension[]" multiple="multiple" aria-label="Dimension">
                         <option value="*" selected>All</option>
                            <?php
                           if(!empty($listDimension))
@@ -366,8 +366,8 @@
             <div class="row animated fadeIn" style="margin-top: 25px;">
               <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
                 <div class="input-group" style="width: 100%;">
-                  <label>Reprocess</label>
-                      <select class="form-control" name="reprocess">
+                  <label for="tmfReprocessFilter">Reprocess</label>
+                      <select class="form-control" id="tmfReprocessFilter" name="reprocess">
                         <option value="*">All</option>
                         <option value="0">Disabled</option>
                         <option value="1">Enabled</option>
@@ -402,6 +402,10 @@
     $('.select2').select2({
        placeholder: "Select filters",
        allowClear: true
+    });
+    $('.select2').each(function() {
+      var label = $('label[for="' + this.id + '"]').text().trim() || 'Filter';
+      $(this).next('.select2-container').find('.select2-selection, .select2-search__field').attr('aria-label', label);
     });
 
       function formatDateTimeLocal(value) {
@@ -438,6 +442,5 @@
         "timeOut": "10000",
         "progressBar": true}
         
-      toastr.info("Ready to Fetch data from server, Please select the filters in which fit to your needed", "Ready to Fetch")
 });
 </script>

@@ -616,7 +616,7 @@ def main() -> None:
         with js.task("Aggregate run history", "DW_TMF", records_total=len(rows)) as aggregate:
             summary = summarize_runs(rows)
             aggregate.progress(total=len(rows), processed=len(rows), msg=f"{len(summary)} groups")
-            aggregate.finish(total=len(rows), processed=len(summary), msg="Aggregation complete")
+            aggregate.finish(total=len(rows), processed=len(rows), msg=f"Aggregated into {len(summary)} groups")
 
         with js.task("Publish run summary", "DM_TMF", records_total=len(summary)) as publish:
             target = publish.asset(SUMMARY_ASSET, mode="output", required=False)
