@@ -111,6 +111,7 @@ class JenkinsProxy extends BaseController
      */
     public function queueDepth()
     {
+      $this->releaseSessionLock();
         $response = $this->requestJenkins(
             'GET',
             'queue/api/json?tree=items[id,why,inQueueSince,cancelled,params,task[name,fullName],actions[parameters[name,value]]]'
@@ -191,6 +192,7 @@ class JenkinsProxy extends BaseController
 
     public function dashboardMetrics()
     {
+      $this->releaseSessionLock();
         $requestedEnvironment = $this->normalizeJobSeekerEnvironment($this->requestedEnvironment());
         $status = $this->jenkinsExecutorMonitorStatus($requestedEnvironment);
         $this->includeConfiguredContextEnvironments($status, $requestedEnvironment);
@@ -259,6 +261,7 @@ class JenkinsProxy extends BaseController
 
     public function runningBuilds()
     {
+      $this->releaseSessionLock();
         $limit = $this->runningBuildLimit($this->input->get('limit'));
         $requestedEnvironment = $this->requestedEnvironment();
         $status = $this->jenkinsRunningBuildsStatus($requestedEnvironment, $limit);

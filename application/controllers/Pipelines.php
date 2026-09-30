@@ -989,7 +989,7 @@ class Pipelines extends BaseController
         $jobInfo = (int) $jobInfoResponse['status'] === 200 ? json_decode($jobInfoResponse['body'], TRUE) : array();
         $expectedBuildNumber = isset($jobInfo['nextBuildNumber']) ? (int) $jobInfo['nextBuildNumber'] : NULL;
         $body = http_build_query(array('ENVIRONMENT' => $pipeline->environment), '', '&', PHP_QUERY_RFC3986);
-        $response = $this->requestJenkins('POST', $jobPath.'/buildWithParameters', $body, 'application/x-www-form-urlencoded');
+        $response = $this->requestJenkins('POST', $jobPath.'/buildWithParameters?delay=0sec', $body, 'application/x-www-form-urlencoded');
         if (! $this->successfulJenkinsStatus($response['status'])) {
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Jenkins could not queue the pipeline (HTTP '.$response['status'].').'), 502);
             return;

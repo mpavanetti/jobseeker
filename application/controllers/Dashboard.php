@@ -50,6 +50,7 @@ class Dashboard extends BaseController
 
     public function overview()
     {
+      $this->releaseSessionLock();
         $environment = $this->selectedEnvironmentFilter();
         $fresh = in_array((string) $this->input->get('fresh'), array('1', 'true', 'yes'), TRUE);
 

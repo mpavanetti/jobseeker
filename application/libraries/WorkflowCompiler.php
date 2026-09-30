@@ -190,7 +190,7 @@ class WorkflowCompiler
             '      def nodeId = selectedId',
             '      branches[nodeId] = {',
             '        stage(workflowNodes[nodeId].label) {',
-            '          def downstream = build job: workflowNodes[nodeId].job, parameters: [string(name: "ENVIRONMENT", value: params.ENVIRONMENT)], waitForStart: true, propagate: false',
+            '          def downstream = build job: workflowNodes[nodeId].job, parameters: [string(name: "ENVIRONMENT", value: params.ENVIRONMENT)], quietPeriod: 0, waitForStart: true, propagate: false',
             '          echo "JOBSEEKER_PIPELINE_NODE|${nodeId}|${workflowNodes[nodeId].job}|RUNNING|${downstream.number}"',
             '          def completed = waitForBuild runId: downstream.externalizableId, propagate: false, propagateAbort: true',
             '          def result = completed.result ?: "SUCCESS"',
