@@ -15,6 +15,10 @@ const tmfController = fs.readFileSync(path.join(root, 'application', 'controller
 const tmfView = fs.readFileSync(path.join(root, 'application', 'views', 'tmf.php'), 'utf8');
 const schema = fs.readFileSync(path.join(root, 'db_setup.sql'), 'utf8');
 
+// The TMF diagnostics viewer is part of the operational dashboard surface.
+// Requiring its focused parser checks here keeps it in the default test suite.
+require('./test-tmf-error-viewer.js');
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }

@@ -162,6 +162,7 @@ if ($tmfSelectedEnvironment === '' || $tmfSelectedEnvironment === '*' || strtolo
 }
 $showDeleteDevBulkAction = $canManageTmf && $tmfSelectedEnvironment === 'DEV';
 ?>
+<link href="<?php echo base_url(); ?>assets/dist/css/tmf-error-viewer.css?v=1" rel="stylesheet" type="text/css" />
  <script>
   $(document).ready(function(){
     $('body').addClass('sidebar-collapse')
@@ -628,13 +629,13 @@ pre {
                       <td class="text-center" data-order="<?php echo $rowReprocess ? 1 : 0; ?>"><?php echo ($record->reprocess == 1) ? '<span class="spin"><h3><i class="fa fa-refresh fa-spin "></i></h3></span><a href="#" class="btn btn-success reprocess" style="display: none;">Enable</a><span class="label label-danger reprocess-erro" style="display: none;">Error</span>' : '<span class="text-muted">-</span>' ?></td><?php } else { echo '<td>Not Allowed</td>'; } } else { echo '<td>Not Available</td>';}?>
                       <td><?php echo html_escape($record->event_text); ?></td>
                       <td data-order="<?php echo html_escape($rowEnvironment); ?>"><?php echo $rowEnvironment === 'Unknown' ? '<span class="label label-default">Unknown</span>' : html_escape($rowEnvironment); ?></td>
-                      <td><?php if ($record->msg == null) { echo ''; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" data-tmf-id="'.(int) $record->id.'" data-job-name="'.html_escape($record->job_name).'" title="Check Message">Check Message</a>'; } ?></td>
+                      <td><?php if ($record->msg == null) { echo '<span class="text-muted">-</span>'; } else { echo '<a class="btn btn-sm btn-info msgSelect" href="#" data-tmf-id="'.(int) $record->id.'" data-instance-id="'.html_escape($record->instance_id).'" data-job-name="'.html_escape($rowJenkinsJobName).'" title="Inspect the recorded run message"><i class="fa fa-terminal"></i> Inspect Log</a>'; } ?></td>
                       <td data-order="<?php echo $rowTotal; ?>"><?php echo number_format($rowTotal); ?></td>
                       <td data-order="<?php echo $rowProgress; ?>"><span class="tmf-progress-label"><?php echo number_format($rowProcessed); ?> / <?php echo number_format($rowTotal); ?> <span class="text-muted"><?php echo $rowProgress; ?>%</span></span><?php if($rowTotal > 0) { ?><div class="progress progress-xs" style="margin:4px 0 0;"><div class="progress-bar progress-bar-<?php echo $rowIncomplete ? 'warning' : 'success'; ?>" style="width: <?php echo $rowProgress; ?>%;"></div></div><?php } ?></td>
                       <td data-order="<?php echo $rowStartTimestamp !== false ? (int) $rowStartTimestamp : 0; ?>"><?php echo formatTmfDateValue($record->start_time); ?></td>
                       <td data-order="<?php echo $rowLastTimestamp !== false ? (int) $rowLastTimestamp : 0; ?>"><?php echo formatTmfDateValue($record->last_activity); ?><span class="tmf-age"><?php echo html_escape(formatTmfAge($rowLastTimestamp)); ?></span></td>
                        <td data-order="<?php echo (int) $rowDurationSeconds; ?>"><?php echo html_escape(formatTmfDuration($rowDurationSeconds)); ?></td>
-                       <td data-order="<?php echo $rowHasErrors ? 1 : 0; ?>"><?php echo ($record->distict_errors == 1) ? '<a type="button" href="#" class="btn btn-danger btnSelect" data-tmf-id="'.(int) $record->id.'" data-instance-id="'.html_escape($record->instance_id).'" data-job-name="'.html_escape($record->job_name).'">View Errors</a>' : '<span class="text-muted">-</span>' ?></td>
+                       <td data-order="<?php echo $rowHasErrors ? 1 : 0; ?>"><?php echo ($record->distict_errors == 1) ? '<a href="#" class="btn btn-danger btnSelect" data-tmf-id="'.(int) $record->id.'" data-instance-id="'.html_escape($record->instance_id).'" data-job-name="'.html_escape($rowJenkinsJobName).'"><i class="fa fa-bug"></i> Diagnostics</a>' : '<span class="text-muted">-</span>' ?></td>
                        <td data-order="<?php echo $rowHasWarnings ? 1 : 0; ?>"><?php echo ($record->warnings == 1) ? '<span class="label label-warning">Warning</span>' : '<span class="text-muted">-</span>' ?></td>
                          <td><?php echo html_escape($record->hostname); ?></td>
                          <td><?php echo html_escape($record->username); ?></td>
@@ -686,23 +687,24 @@ pre {
     <!-- /.content -->
 </div> 
 
-<div class="modal modal-danger fade" id="modal-danger" style="display: none;">
+<div class="modal fade tmf-error-modal" id="tmf-error-modal" style="display: none;" role="dialog" aria-labelledby="tmfErrorModalTitle" aria-describedby="tmfErrorModalContext">
           <div class="modal-dialog modal-lg">
             <div class="modal-content">
               <div class="modal-header">
+                <span class="tmf-error-modal-icon"><i class="fa fa-bug" aria-hidden="true"></i></span>
+                <h4 class="modal-title" id="tmfErrorModalTitle">Error diagnostics <small id="tmfErrorModalContext">Python traceback and runtime details</small></h4>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                   <span aria-hidden="true">×</span></button>
-                <h4 class="modal-title">Error Description</h4>
               </div>
               <div class="modal-body">
 
-              <div id="modal-main">
+              <div id="modal-main" aria-live="polite">
                 
               </div>
 
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn btn-outline pull-left" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-default pull-left" data-dismiss="modal">Close diagnostics</button>
               </div>
             </div>
             <!-- /.modal-content -->
@@ -710,23 +712,24 @@ pre {
       <!-- /.modal-dialog -->
 </div>
 
-<div class="modal modal-primary fade" id="modal-msg" style="display: none;">
+<div class="modal fade tmf-log-modal" id="tmf-log-modal" style="display: none;" role="dialog" aria-labelledby="tmfLogModalTitle" aria-describedby="tmfLogModalContext">
           <div class="modal-dialog modal-lg">
             <div class="modal-content">
               <div class="modal-header">
+                <span class="tmf-log-modal-icon"><i class="fa fa-terminal" aria-hidden="true"></i></span>
+                <h4 class="modal-title" id="tmfLogModalTitle">Run log inspector <small id="tmfLogModalContext">Transaction message and execution context</small></h4>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                   <span aria-hidden="true">×</span></button>
-                <h4 class="modal-title">Message Description</h4>
               </div>
               <div class="modal-body">
 
-              <div id="modal-main-msg">
+              <div id="modal-main-msg" aria-live="polite">
                 
               </div>
 
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn btn-outline pull-left" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-default pull-left" data-dismiss="modal">Close inspector</button>
               </div>
             </div>
             <!-- /.modal-content -->
@@ -734,6 +737,7 @@ pre {
       <!-- /.modal-dialog -->
 </div>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/bower_components/moment/moment.min.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/tmf-error-viewer.js?v=1"></script>
 <script type="text/javascript">
 var activeTmfFilter = 'all';
 var activeTmfSelectionOnly = false;
@@ -770,24 +774,14 @@ function scheduleTmfColumnAlignment(delay) {
         
     //  toastr.info("The total of " + amount + " Rows were fetch from database.", "Data Fetch with success");
 
-      if (ready != 0 ) {
-        toastr.success("The total of " + ready + " jobs were executed successfully", "Success");
-      }
-
+      // The status chips above the table already count every state; only
+      // failures (and an empty result) are worth interrupting for.
       if (error != 0 ) {
-        toastr.error("The total of " + error + " jobs were failed", "Error");
-      }
-
-      if (warning != 0 ) {
-        toastr.warning("The total of " + warning + " jobs has warnings", "Warning");
-      }
-
-      if (running != 0 ) {
-        toastr.info("The total of " + running + " jobs are still running", "Running");
+        toastr.error(error + (error == 1 ? " run failed" : " runs failed") + ". Use the Errors filter to review.", "Transaction Monitoring");
       }
 
       if (ready == 0 && error == 0 && warning == 0 && running == 0){
-        toastr.info("No data has been found on database.", "No Data Available");
+        toastr.info("No transaction runs match these filters.", "Transaction Monitoring");
       }
 
       if ($.fn.dataTable && $.fn.dataTable.ext) {
@@ -1051,6 +1045,44 @@ function escapeHtml(value) {
   return $('<div>').text(value == null ? '' : value).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function renderTmfDiagnosticState(containerId, kind, title, message) {
+  var container = document.getElementById(containerId);
+  if (! container) {
+    return;
+  }
+  var state = document.createElement('div');
+  var icon = document.createElement('i');
+  var heading = document.createElement('h4');
+  var detail = document.createElement('p');
+
+  container.textContent = '';
+  state.className = 'tmf-error-state tmf-error-state-' + kind;
+  icon.className = 'fa ' + (kind === 'loading' ? 'fa-refresh fa-spin' : (kind === 'empty' ? 'fa-info-circle' : 'fa-exclamation-triangle'));
+  icon.setAttribute('aria-hidden', 'true');
+  heading.textContent = title;
+  detail.textContent = message;
+  state.appendChild(icon);
+  state.appendChild(heading);
+  state.appendChild(detail);
+  container.appendChild(state);
+}
+
+function renderTmfErrorState(kind, title, message) {
+  renderTmfDiagnosticState('modal-main', kind, title, message);
+}
+
+function renderTmfLogState(kind, title, message) {
+  renderTmfDiagnosticState('modal-main-msg', kind, title, message);
+}
+
+function formatTmfMoment(value) {
+  if (window.JobSeekerTime) {
+    return window.JobSeekerTime.format(value, {second: '2-digit'});
+  }
+  var timestamp = moment(value);
+  return timestamp.isValid() ? timestamp.format('dddd, MMMM Do YYYY, h:mm:ss A') : String(value || 'Not recorded');
+}
+
 function tmfRowValue(trigger, attrName, cellSelector, fallbackCellIndex) {
   var $trigger = $(trigger);
   var value = $trigger.attr(attrName);
@@ -1077,44 +1109,6 @@ function tmfRowValue(trigger, attrName, cellSelector, fallbackCellIndex) {
   }
 
   return '';
-}
-
-function renderJobMessage(value) {
-  var raw = value == null ? '' : String(value);
-  if (raw.indexOf('<') === -1) {
-    return '<pre>' + escapeHtml(raw) + '</pre>';
-  }
-
-  var allowedTags = {
-    TABLE: true, THEAD: true, TBODY: true, TFOOT: true, TR: true, TH: true, TD: true,
-    BR: true, P: true, DIV: true, SPAN: true, B: true, STRONG: true, I: true, EM: true,
-    U: true, UL: true, OL: true, LI: true, PRE: true, CODE: true
-  };
-  var removedTags = { SCRIPT: true, STYLE: true, IFRAME: true, OBJECT: true, EMBED: true };
-  var allowedAttrs = { class: true, colspan: true, rowspan: true };
-  var $container = $('<div>').html(raw);
-
-  $container.find('*').each(function() {
-    if (removedTags[this.tagName]) {
-      $(this).remove();
-      return;
-    }
-
-    if (! allowedTags[this.tagName]) {
-      $(this).replaceWith(escapeHtml($(this).text()));
-      return;
-    }
-
-    var node = this;
-    $.each($.makeArray(node.attributes), function(index, attr) {
-      var attrName = attr.name.toLowerCase();
-      if (! allowedAttrs[attrName]) {
-        node.removeAttribute(attr.name);
-      }
-    });
-  });
-
-  return $container.html();
 }
 
 function jenkinsJobPath(jobName) {
@@ -1397,6 +1391,8 @@ $(document).on('click', '#table6 .msgSelect', function(event){
    event.stopPropagation();
 
    var id = tmfRowValue(this, 'data-tmf-id', null, 0);
+   var jobName = tmfRowValue(this, 'data-job-name', null, 2);
+   var instanceId = tmfRowValue(this, 'data-instance-id', '.tmf-instance-id', 17);
    if (! id) {
      toastr.error('This TMF row is missing its message id.', 'Query Data Error');
      return;
@@ -1407,17 +1403,25 @@ $(document).on('click', '#table6 .msgSelect', function(event){
             url:  '<?php echo base_url(); ?>Tmf/listId/' + encodeURIComponent(id) + '?environment=' + encodeURIComponent(currentTmfEnvironment()),
             dataType: "json", 
             beforeSend: function() {
-             //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
-             $(".destroy-msg").remove();
+              $('#tmfLogModalContext').text((jobName || 'Unknown job') + (instanceId ? ' / ' + instanceId : ''));
+              renderTmfLogState('loading', 'Loading run message', 'Fetching the transaction message and execution context.');
+              $('#tmf-log-modal').modal('show');
             }
          }).done(function(listId){
-            $.each((listId && listId.data) || [], function(index, value){
-                // $("#result").append(index + ": " + value.id + '<br>');
-                  $("#modal-main-msg").append('<div class="destroy-msg"><h4>Job Name: <b>' + escapeHtml(value.job_name) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.instance_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name) +'</td></tr><tr><td>Message</td><td><div class="job-message-content">'+ renderJobMessage(value.msg) +'</div></td></tr></tbody></table><br></div>');
-                });
-
-            $('#modal-msg').modal('show');
+            var records = (listId && listId.data) || [];
+            if (! records.length) {
+              renderTmfLogState('empty', 'Run message is no longer available', 'The selected transaction could not be found in the current environment.');
+              return;
+            }
+            var record = records[0];
+            $('#tmfLogModalContext').text((record.job_name || jobName || 'Unknown job') + ' / ' + (record.instance_id || instanceId || ('row ' + id)));
+            window.JobSeekerTmfErrors.renderMessage(document.getElementById('modal-main-msg'), record, {
+              jobName: jobName,
+              instanceId: instanceId,
+              formatMoment: formatTmfMoment
+            });
          }).fail(function(){
+            renderTmfLogState('failed', 'Run message could not be loaded', 'The TMF request failed. Close the inspector and try again.');
             toastr.error("Error During query message data <br>Id: " + escapeHtml(id), "Query Data Error");
          });
 
@@ -1443,17 +1447,20 @@ $(document).on('click', '#table6 .btnSelect', function(event){
             url:  '<?php echo base_url(); ?>Tmf/getError/' + encodeURIComponent(instanceId) + '?environment=' + encodeURIComponent(currentTmfEnvironment()),
             dataType: "json", 
             beforeSend: function() {
-             //  toastr.info("Loading Error List For " + jobName + " \n Id: " + id, "Query Data");
-             $(".destroy").remove();
+              $('#tmfErrorModalContext').text((jobName || 'Unknown job') + ' / ' + instanceId);
+              renderTmfErrorState('loading', 'Loading diagnostics', 'Fetching the recorded traceback and runtime context.');
+              $('#tmf-error-modal').modal('show');
             }
          }).done(function(ErrorList){
-            $.each((ErrorList && ErrorList.data) || [], function(index, value){
-                // $("#result").append(index + ": " + value.id + '<br>');
-                  $("#modal-main").append('<div class="destroy"><h4>Error Id: <b>' + escapeHtml(value.id) + '</b></h4><br><table class="table table-bordered"><tbody><tr><th>Header</th><th>Job Message</th></tr><tr><td>Instance ID</td><td>'+ escapeHtml(value.tmf_id) +'</td></tr><tr><td>Job Name</td><td>'+ escapeHtml(value.job_name || jobName) +'</td></tr><tr><td>Moment</td><td>'+ escapeHtml(moment(value.moment).format('dddd, MMMM Do YYYY, h:mm:ss')) +'</td></tr><tr><td>Type</td><td>'+ escapeHtml(value.type) +'</td></tr><tr><td>Origin</td><td>'+ escapeHtml(value.origin) +'</td></tr><tr><td>Message</td><td>'+ escapeHtml(value.message) +'</td></tr></tbody></table><br></div>');
-                });
-
-            $('#modal-danger').modal('show');
+            var records = (ErrorList && ErrorList.data) || [];
+            $('#tmfErrorModalContext').text((jobName || 'Unknown job') + ' / ' + instanceId + ' / ' + records.length + (records.length === 1 ? ' error event' : ' error events'));
+            window.JobSeekerTmfErrors.render(document.getElementById('modal-main'), records, {
+              jobName: jobName,
+              instanceId: instanceId,
+              formatMoment: formatTmfMoment
+            });
          }).fail(function(){
+            renderTmfErrorState('failed', 'Diagnostics could not be loaded', 'The TMF error request failed. Retry the request or inspect the Jenkins console log.');
             toastr.error("Error During query error list data <br>Id: " + escapeHtml(id), "Query Data Error");
          });
 

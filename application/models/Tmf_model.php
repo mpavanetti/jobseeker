@@ -505,6 +505,11 @@ class Tmf_model extends CI_Model
         $this->db->join('tmf', 'tmf_error.tmf_id = tmf.instance_id');
         $this->hideInternalJobs();
         $this->applyEnvironmentFilter($environment);
+        // A transaction can record more than one failure (for example a task
+        // error followed by cleanup). The diagnostics viewer numbers them, so
+        // keep that sequence deterministic and read it in occurrence order.
+        $this->db->order_by('tmf_error.moment', 'ASC');
+        $this->db->order_by('tmf_error.id', 'ASC');
         $query = $this->db->get();
         return $query->result();
     }
