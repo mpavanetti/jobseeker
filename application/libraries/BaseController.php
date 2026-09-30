@@ -711,6 +711,13 @@ class BaseController extends CI_Controller {
 			);
 		}
 
+		// Someone asked for this build now; Jenkins' quiet period only exists
+		// to merge SCM triggers and would add five idle seconds to every run,
+		// preview and connection test. Schedules keep their own timing.
+		if (! preg_match('/[?&]delay=/', $path)) {
+			$path .= (strpos($path, '?') === FALSE ? '?' : '&').'delay=0sec';
+		}
+
 		return $this->requestJenkins('POST', $path, $body, $contentType);
 	}
 
@@ -2355,6 +2362,19 @@ class BaseController extends CI_Controller {
 		}
 	}
 	
+	/**
+	 * Sessions live in the database, and PHP holds the session lock for the
+	 * whole request, so one slow request (a connection test run on Jenkins, a
+	 * Git clone) stalled every other request from the same browser: sidebar
+	 * polling, page loads, even Save. Endpoints that only read the session
+	 * call this once they are authorized; later session writes are dropped.
+	 */
+	protected function releaseSessionLock() {
+		if (session_status() === PHP_SESSION_ACTIVE) {
+			session_write_close();
+		}
+	}
+
 	/**
 	 * This function is used to load the set of views
 	 */
