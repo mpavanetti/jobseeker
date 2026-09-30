@@ -183,7 +183,7 @@ foreach ($executions as $execution) {
               <span id="hopServerMessage"><?php echo html_escape($server['message']); ?></span>
               <?php if (! empty($server['version'])) { ?> Version <?php echo html_escape($server['version']); ?>.<?php } ?>
             </span>
-            <span class="label <?php echo ! empty($server['reachable']) ? 'label-success' : 'label-warning'; ?>" id="hopServerBadge"><?php echo ! empty($server['reachable']) ? 'Reachable' : 'Not running'; ?></span>
+            <span class="label <?php echo ! empty($server['checking']) ? 'label-default' : (! empty($server['reachable']) ? 'label-success' : 'label-warning'); ?>" id="hopServerBadge"><?php echo ! empty($server['checking']) ? 'Checking…' : (! empty($server['reachable']) ? 'Reachable' : 'Not running'); ?></span>
           </div>
         </div>
         <p class="help-block" style="margin-bottom:0">
@@ -684,7 +684,7 @@ foreach ($executions as $execution) {
     if (!server) { return; }
     $('#hopServerBadge')
       .text(server.reachable ? 'Reachable' : 'Not running')
-      .removeClass('label-success label-warning')
+      .removeClass('label-default label-success label-warning')
       .addClass(server.reachable ? 'label-success' : 'label-warning');
     $('#hopServerMessage').text(server.message || '');
   }
@@ -909,6 +909,8 @@ foreach ($executions as $execution) {
   setInterval(function() {
     if (!document.hidden) { refresh(false); }
   }, 20000);
+  // The page renders without contacting the Hop Server; check it now.
+  $(function() { refresh(false); });
 
   // DataTables is loaded by the shared footer after this view. Deferring setup
   // until DOM ready ensures both growing lists actually receive pagination.

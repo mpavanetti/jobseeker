@@ -26,6 +26,13 @@ class HopServer
     const CLAIM_MAX_AGE_SECONDS = 604800; // 7 days
     /** Longest log kept per execution, so one runaway run cannot fill the table. */
     const MAX_STORED_LOG_BYTES = 200000;
+    /**
+     * How long an unreachable server is remembered. The server is an optional
+     * Compose profile; while it is stopped its host name does not resolve, and
+     * that DNS failure alone takes about five seconds that no HTTP timeout
+     * covers. Every Apache Hop page load and poll would pay it.
+     */
+    const UNREACHABLE_TTL_SECONDS = 20;
 
     private $claimCache = NULL;
 
@@ -100,8 +107,13 @@ class HopServer
         return array('ok' => $body !== FALSE && $status === 200, 'status' => $status, 'body' => $body === FALSE ? '' : (string) $body);
     }
 
-    /** Health for the Apache Hop screen and the Job Creation engine picker. */
-    public function status($timeoutSeconds = 3)
+    /**
+     * Health for the Apache Hop screen and the Job Creation engine picker.
+     * Without $probe it answers from what the last probe remembered and
+     * never touches the network, so a page can render at once and let its
+     * background poll probe.
+     */
+    public function status($timeoutSeconds = 3, $probe = TRUE)
     {
         if (! $this->enabled()) {
             return array(
@@ -114,7 +126,28 @@ class HopServer
             );
         }
 
-        $response = $this->request('/hop/status/', array('xml' => 'Y'), $timeoutSeconds);
+        $downMarker = rtrim(sys_get_temp_dir(), '/\\').DIRECTORY_SEPARATOR.'jobseeker-hop-server-down-'.md5($this->baseUrl());
+        $downAge = is_file($downMarker) ? time() - (int) @filemtime($downMarker) : PHP_INT_MAX;
+        if (! $probe) {
+            $recentlyDown = $downAge < 300;
+            return array(
+                'url' => $this->baseUrl(),
+                'reachable' => FALSE,
+                'checking' => ! $recentlyDown,
+                'status' => 0,
+                'version' => '',
+                'environment' => $this->environment(),
+                'message' => $recentlyDown ? 'The Hop Server is not reachable. Start it with: docker compose --profile hop up -d hop-server' : 'Checking the Hop Server...'
+            );
+        }
+        $knownDown = $downAge < self::UNREACHABLE_TTL_SECONDS;
+        $response = $knownDown ? array('ok' => FALSE, 'status' => 0, 'body' => '')
+            : $this->request('/hop/status/', array('xml' => 'Y'), $timeoutSeconds);
+        if (! $knownDown && $response['status'] === 0) {
+            @touch($downMarker);
+        } else if ($response['status'] !== 0 && is_file($downMarker)) {
+            @unlink($downMarker);
+        }
 
         $version = '';
         if (preg_match('#<hopVersion>(.*?)</hopVersion>#s', $response['body'], $matches)) {

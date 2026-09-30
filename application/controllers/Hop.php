@@ -360,11 +360,9 @@ class Hop extends BaseController
     {
         $this->global['pageTitle'] = 'Job Seeker : Apache Hop';
         $environment = $this->selectedEnvironment();
-        $server = $this->serverStatus();
-        if (! empty($server['reachable'])) {
-            $this->hopserver->ensureCatalogMirrored($this->repositoryRootPath());
-            $this->syncServerExecutions();
-        }
+        // The page's poll (executions) probes and reconciles the server right
+        // after load; rendering never waits on a Hop Server that may be down.
+        $server = $this->hopserver->status(3, FALSE);
 
         $data = array(
             'hop_enabled' => $this->hopEnabled(),
@@ -423,6 +421,7 @@ class Hop extends BaseController
      */
     public function executions()
     {
+      $this->releaseSessionLock();
         $environment = $this->selectedEnvironment();
         $server = $this->serverStatus();
         $synced = 0;
