@@ -1,11 +1,12 @@
 <?php
-$stats = isset($statistics) && $statistics ? $statistics : (object) array('total' => 0, 'active' => 0, 'inputs' => 0, 'outputs' => 0, 'uploaded' => 0);
+$stats = isset($statistics) && $statistics ? $statistics : (object) array('total' => 0, 'active' => 0, 'inputs' => 0, 'outputs' => 0, 'uploaded' => 0, 'connected' => 0, 'available' => 0);
 $error = $this->session->flashdata('error');
 $success = $this->session->flashdata('success');
 $assetPayload = array();
 
 foreach ((array) $assets as $asset) {
     $options = json_decode($asset->options_json, TRUE);
+    $source = json_decode($asset->source_config_json, TRUE);
     $assetPayload[] = array(
         'id' => (int) $asset->id,
         'key' => $asset->asset_key,
@@ -14,6 +15,9 @@ foreach ((array) $assets as $asset) {
         'format' => $asset->format,
         'environment' => $asset->environment,
         'job' => $asset->job_name,
+        'source_type' => ! empty($asset->source_type) ? $asset->source_type : 'upload',
+        'connector_key' => $asset->connector_key,
+        'source' => is_array($source) ? $source : array(),
         'file_name' => $asset->file_name,
         'description' => $asset->description,
         'required' => (int) $asset->is_required,
@@ -39,9 +43,27 @@ function data_asset_uri($asset) {
     $scope = $asset->job_name === '*' ? 'shared' : rawurlencode(str_replace('/', '~', $asset->job_name));
     return 'jobseeker://'.strtolower($asset->environment).'/'.$scope.'/'.$asset->asset_key;
 }
+
+function data_asset_source_label($sourceTypes, $type) {
+    return isset($sourceTypes[$type]) ? $sourceTypes[$type]['short'] : 'File';
+}
+
+function data_asset_source_summary($asset, $source) {
+    $type = ! empty($asset->source_type) ? $asset->source_type : 'upload';
+    if ($type === 'database_table') {
+        return (! empty($source['schema']) ? $source['schema'].'.' : '').(isset($source['table']) ? $source['table'] : '');
+    }
+    if ($type === 'google_sheet') {
+        return ! empty($source['spreadsheet_id']) ? $source['spreadsheet_id'].(! empty($source['range']) ? ' · '.$source['range'] : '') : (isset($source['url']) ? $source['url'] : '');
+    }
+    if ($type === 'url') return isset($source['url']) ? $source['url'] : '';
+    if ($type === 'object_storage') return isset($source['path']) ? $source['path'] : '';
+    if ($type === 'document_collection') return isset($source['collection']) ? $source['collection'] : '';
+    return $asset->storage_path;
+}
 ?>
 
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/data-assets.css?v=2">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/data-assets.css?v=3">
 
 <div class="content-wrapper data-assets-page">
   <section class="content-header">
@@ -89,8 +111,8 @@ function data_asset_uri($asset) {
         </div>
         <div class="col-lg-3 col-sm-6">
           <div class="info-box">
-            <span class="info-box-icon bg-red"><i class="fa fa-cloud-upload"></i></span>
-            <div class="info-box-content"><span class="info-box-text">Versioned Files</span><span class="info-box-number"><?php echo (int) $stats->uploaded; ?></span><small>Checksum-tracked revisions</small></div>
+            <span class="info-box-icon bg-red"><i class="fa fa-database"></i></span>
+            <div class="info-box-content"><span class="info-box-text">Available Sources</span><span class="info-box-number"><?php echo isset($stats->available) ? (int) $stats->available : (int) $stats->uploaded; ?></span><small><?php echo isset($stats->connected) ? (int) $stats->connected : 0; ?> connection or web backed</small></div>
           </div>
         </div>
       </div>
@@ -99,7 +121,7 @@ function data_asset_uri($asset) {
         <div class="data-assets-intro-icon"><i class="fa fa-exchange"></i></div>
         <div>
           <h4>One contract, every runtime</h4>
-          <p>Register a named asset once, optionally seed it with a file, then resolve the same URI from Python, shell, Talend, or Docker. Environment and job scopes let a shared key point at the correct runtime file without hardcoded paths.</p>
+          <p>Register a named asset once from an upload, public URL, API, Google Sheet, or database table, then resolve the same URI from Python, shell, Hop, or Docker. Authenticated sources reference credentials stored securely under Connections.</p>
         </div>
         <button id="showAssetForm" type="button" class="btn btn-primary"><i class="fa fa-plus"></i> Register Data Asset</button>
       </div>
@@ -146,17 +168,56 @@ function data_asset_uri($asset) {
                   </div>
                 </div>
 
-                <div class="data-assets-section-title"><span>3</span><div><strong>File contract</strong><small>Format options become metadata in the runtime catalog.</small></div></div>
+                <div class="data-assets-section-title"><span>3</span><div><strong>Data source</strong><small>Where the data lives. The source decides which formats and Connections make sense; secrets stay in Connections.</small></div></div>
                 <div class="row">
                   <div class="col-md-4">
-                    <div class="form-group"><label for="assetFormat">Format</label><select id="assetFormat" name="format" class="form-control"><?php foreach ($formats as $key => $format) { ?><option value="<?php echo html_escape($key); ?>"><?php echo html_escape($format['label']); ?></option><?php } ?></select></div>
+                    <div class="form-group"><label for="assetSourceType">Source</label><select id="assetSourceType" name="source_type" class="form-control"><?php foreach ($sourceTypes as $key => $source) { ?><option value="<?php echo html_escape($key); ?>"><?php echo html_escape($source['label']); ?></option><?php } ?></select></div>
                   </div>
                   <div class="col-md-4">
-                    <div class="form-group"><label for="assetFileName">Runtime file name</label><input id="assetFileName" name="file_name" class="form-control" maxlength="255" placeholder="customers.csv"><p class="help-block">Optional when selecting a seed file.</p></div>
+                    <div class="form-group"><label for="assetFormat">Format</label><select id="assetFormat" name="format" class="form-control"><?php foreach ($sourceTypes['upload']['formats'] as $key => $label) { ?><option value="<?php echo html_escape($key); ?>"><?php echo html_escape($label); ?></option><?php } ?></select><p class="help-block" id="assetFormatHelp">The file format jobs read.</p></div>
                   </div>
                   <div class="col-md-4">
-                    <div class="form-group"><label for="assetFile">Seed / replacement file</label><input id="assetFile" name="asset_file" type="file" class="form-control"><p class="help-block">Maximum 100 MB. Replacements create a new version.</p></div>
+                    <div class="form-group"><label for="assetFileName">Runtime file name</label><input id="assetFileName" name="file_name" class="form-control" maxlength="255" placeholder="customers.csv"><p class="help-block">The file jobs and ETL engines receive. Optional for connected sources.</p></div>
                   </div>
+                </div>
+
+                <div id="uploadSourceOptions" class="well well-sm data-source-options">
+                  <div class="form-group"><label for="assetFile">Seed / replacement file</label><input id="assetFile" name="asset_file" type="file" class="form-control"><p class="help-block">Maximum 100 MB. Replacements create a new version. Output contracts can start empty.</p></div>
+                </div>
+
+                <div id="connectionSourceOptions" class="well well-sm data-source-options" style="display:none">
+                  <div class="form-group"><label for="assetConnector">Connection</label><select id="assetConnector" name="connector_key" class="form-control"><option value="">No Connection — public source</option><?php foreach ((array) $connections as $connection) { ?><option value="<?php echo html_escape($connection->connector_key); ?>" data-type="<?php echo html_escape($connection->db_type); ?>"><?php echo html_escape($connection->connector_key); ?> · <?php echo html_escape($connection->db_type); ?> · <?php echo html_escape($connection->environment); ?><?php echo $connection->job_name === '*' ? '' : ' · '.html_escape($connection->job_name); ?></option><?php } ?></select><p class="help-block"><span id="assetConnectionHint"></span> Create or update credentials in <a href="<?php echo base_url(); ?>dbSettings" target="_blank" rel="noopener">Connections <i class="fa fa-external-link"></i></a>. Only the key is stored here.</p></div>
+                </div>
+
+                <div id="urlSourceOptions" class="well well-sm data-source-options" style="display:none">
+                  <div class="row">
+                    <div class="col-md-8"><div class="form-group"><label for="assetSourceUrl">Web / API URL or Connection path</label><input id="assetSourceUrl" name="source_url" type="text" class="form-control" maxlength="2000" placeholder="https://data.example.org/customers.json or /v1/customers"><p class="help-block">Public URLs are fetched directly. A path beginning with <code>/</code> uses the selected HTTP Connection host and authentication.</p></div></div>
+                    <div class="col-md-4" id="assetResponsePathGroup"><div class="form-group"><label for="assetResponsePath">JSON response path</label><input id="assetResponsePath" name="response_path" class="form-control" maxlength="500" placeholder="data.items"><p class="help-block">Optional dotted path to the record list.</p></div></div>
+                  </div>
+                </div>
+
+                <div id="googleSheetSourceOptions" class="well well-sm data-source-options" style="display:none">
+                  <div class="row">
+                    <div class="col-md-5"><div class="form-group"><label for="assetSpreadsheetId">Spreadsheet ID</label><input id="assetSpreadsheetId" name="spreadsheet_id" class="form-control" maxlength="200" placeholder="1AbC…"><p class="help-block">Required for authenticated Sheets API access.</p></div></div>
+                    <div class="col-md-3"><div class="form-group"><label for="assetSheetRange">Range</label><input id="assetSheetRange" name="sheet_range" class="form-control" maxlength="300" placeholder="Sheet1!A:Z"></div></div>
+                    <div class="col-md-4"><div class="form-group"><label for="assetGooglePublicUrl">Public / published URL</label><input id="assetGooglePublicUrl" name="google_public_url" class="form-control" maxlength="2000" placeholder="https://docs.google.com/…"><p class="help-block">Optional when using a Google Connection.</p></div></div>
+                  </div>
+                </div>
+
+                <div id="databaseSourceOptions" class="well well-sm data-source-options" style="display:none">
+                  <div class="row">
+                    <div class="col-md-5"><div class="form-group"><label for="assetTableSchema">Schema</label><input id="assetTableSchema" name="table_schema" class="form-control" maxlength="257" placeholder="public, dbo, or catalog.schema"><p class="help-block">Optional. The Connection's default schema when empty.</p></div></div>
+                    <div class="col-md-7"><div class="form-group"><label for="assetTableName">Table or view</label><input id="assetTableName" name="table_name" class="form-control" maxlength="128" placeholder="customers"></div></div>
+                  </div>
+                  <p class="help-block"><i class="fa fa-lock"></i> Jobs receive the rows as a CSV file. A preview reads the first 20 rows with a bounded <code>SELECT *</code>; no other SQL is stored or run.</p>
+                </div>
+
+                <div id="objectStorageSourceOptions" class="well well-sm data-source-options" style="display:none">
+                  <div class="form-group"><label for="assetObjectPath">Object path</label><input id="assetObjectPath" name="object_path" class="form-control" maxlength="1024" placeholder="landing/2026/customers.parquet"><p class="help-block">Inside the bucket or container named in the Connection's resource field; without one, start the path with it. SFTP paths are relative to the Connection's resource directory unless they start with <code>/</code>.</p></div>
+                </div>
+
+                <div id="documentSourceOptions" class="well well-sm data-source-options" style="display:none">
+                  <div class="form-group"><label for="assetCollectionName">Collection or index</label><input id="assetCollectionName" name="collection_name" class="form-control" maxlength="255" placeholder="customers or logs-*"><p class="help-block">MongoDB reads the database named in the Connection's resource field. Jobs receive the documents as JSON Lines.</p></div>
                 </div>
 
                 <div id="delimitedOptions" class="well well-sm data-format-options">
@@ -218,19 +279,23 @@ rows = asset.read()</pre>
         </div>
         <div class="table-responsive">
           <table id="dataAssetsTable" class="table table-hover data-assets-table">
-            <thead><tr><th>Asset</th><th>Role & format</th><th>Scope</th><th>Runtime file</th><th>Revision</th><th class="text-right">Actions</th></tr></thead>
+            <thead><tr><th>Asset</th><th>Role & format</th><th>Scope</th><th>Source</th><th>Revision</th><th class="text-right">Actions</th></tr></thead>
             <tbody>
             <?php foreach ($assets as $asset) {
                 $options = json_decode($asset->options_json, TRUE);
-                $isAvailable = (int) $asset->version > 0 || ((string) $asset->direction === 'output');
+                $source = json_decode($asset->source_config_json, TRUE);
+                $source = is_array($source) ? $source : array();
+                $sourceType = ! empty($asset->source_type) ? $asset->source_type : 'upload';
+                $sourceSummary = data_asset_source_summary($asset, $source);
+                $isAvailable = $sourceType !== 'upload' || (int) $asset->version > 0 || ((string) $asset->direction === 'output');
             ?>
-              <tr class="data-asset-row<?php echo (int) $asset->is_active ? '' : ' is-inactive'; ?>" data-id="<?php echo (int) $asset->id; ?>" data-environment="<?php echo html_escape($asset->environment); ?>" data-direction="<?php echo html_escape($asset->direction); ?>" data-format="<?php echo html_escape($asset->format); ?>" data-search="<?php echo html_escape(strtolower($asset->asset_key.' '.$asset->name.' '.$asset->job_name.' '.$asset->storage_path.' '.$asset->description)); ?>">
+              <tr class="data-asset-row<?php echo (int) $asset->is_active ? '' : ' is-inactive'; ?>" data-id="<?php echo (int) $asset->id; ?>" data-environment="<?php echo html_escape($asset->environment); ?>" data-direction="<?php echo html_escape($asset->direction); ?>" data-format="<?php echo html_escape($asset->format); ?>" data-search="<?php echo html_escape(strtolower($asset->asset_key.' '.$asset->name.' '.$asset->job_name.' '.$sourceSummary.' '.$asset->connector_key.' '.$asset->description)); ?>">
                 <td><div class="data-asset-identity"><span class="data-asset-icon"><i class="fa <?php echo $asset->direction === 'output' ? 'fa-sign-out' : ($asset->direction === 'input_output' ? 'fa-exchange' : 'fa-sign-in'); ?>"></i></span><div><strong><?php echo html_escape($asset->name); ?></strong><code><?php echo html_escape($asset->asset_key); ?></code><small title="<?php echo html_escape(data_asset_uri($asset)); ?>"><?php echo html_escape(data_asset_uri($asset)); ?></small></div></div></td>
                 <td><span class="label data-role-label data-role-<?php echo html_escape($asset->direction); ?>"><?php echo html_escape(data_asset_role_label($asset->direction)); ?></span><span class="label label-default data-format-label"><?php echo html_escape(strtoupper($asset->format)); ?></span><?php if (!empty($options['delimiter']) && $asset->format === 'csv') { ?><small class="data-meta-line">Delimiter <?php echo $options['delimiter'] === "\t" ? 'TAB' : html_escape($options['delimiter']); ?> · <?php echo !empty($options['header']) ? 'header' : 'no header'; ?></small><?php } ?></td>
                 <td><strong><?php echo html_escape($asset->environment); ?></strong><small><?php echo $asset->job_name === '*' ? '<i class="fa fa-share-alt"></i> Shared by all jobs' : '<i class="fa fa-cube"></i> '.html_escape($asset->job_name); ?></small><?php if (!(int) $asset->is_active) { ?><span class="label label-default">Inactive</span><?php } ?></td>
-                <td><code title="<?php echo html_escape($asset->storage_path); ?>"><?php echo html_escape($asset->file_name); ?></code><small><?php echo html_escape($asset->storage_path); ?></small></td>
-                <td><strong>v<?php echo (int) $asset->version; ?></strong><small><?php echo html_escape(data_asset_size($asset->file_size)); ?></small><?php if ($asset->checksum) { ?><small title="SHA-256 <?php echo html_escape($asset->checksum); ?>"><i class="fa fa-shield"></i> <?php echo html_escape(substr($asset->checksum, 0, 10)); ?>&hellip;</small><?php } else { ?><small class="text-muted"><?php echo $isAvailable ? 'Write target ready' : 'Awaiting file'; ?></small><?php } ?></td>
-                <td class="text-right data-asset-actions"><button type="button" class="btn btn-default btn-sm edit-data-asset" data-id="<?php echo (int) $asset->id; ?>" title="Edit or replace file"><i class="fa fa-pencil"></i></button><?php if ((int) $asset->version > 0) { ?><button type="button" class="btn btn-default btn-sm preview-data-asset" data-url="<?php echo base_url().'data-assets/preview/'.(int) $asset->id.'?environment='.rawurlencode($initialEnvironment); ?>" data-name="<?php echo html_escape($asset->name); ?>" title="Preview current file"><i class="fa fa-eye"></i></button><a class="btn btn-default btn-sm" href="<?php echo base_url().'data-assets/download/'.(int) $asset->id.'?environment='.rawurlencode($initialEnvironment); ?>" title="Download current file"><i class="fa fa-download"></i></a><?php } ?><button type="button" class="btn btn-danger btn-sm delete-data-asset" data-id="<?php echo (int) $asset->id; ?>" data-name="<?php echo html_escape($asset->name); ?>" data-managed="<?php echo empty($asset->legacy_source) ? '1' : '0'; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
+                <td><span class="label label-info data-source-label"><?php echo html_escape(data_asset_source_label($sourceTypes, $sourceType)); ?></span><?php if (! empty($asset->connector_key)) { ?><small><i class="fa fa-plug"></i> <?php echo html_escape($asset->connector_key); ?></small><?php } ?><code title="<?php echo html_escape($sourceSummary); ?>"><?php echo html_escape($sourceType === 'upload' ? $asset->file_name : $sourceSummary); ?></code><small><?php echo html_escape($sourceType === 'upload' ? $asset->storage_path : $asset->file_name); ?></small></td>
+                <td><strong>v<?php echo (int) $asset->version; ?></strong><small><?php echo $sourceType === 'upload' ? html_escape(data_asset_size($asset->file_size)) : html_escape('Live '.data_asset_source_label($sourceTypes, $sourceType)); ?></small><?php if ($asset->checksum) { ?><small title="SHA-256 <?php echo html_escape($asset->checksum); ?>"><i class="fa fa-shield"></i> <?php echo html_escape(substr($asset->checksum, 0, 10)); ?>&hellip;</small><?php } else { ?><small class="text-muted"><?php echo $isAvailable ? ($sourceType === 'upload' ? 'Write target ready' : 'Fetched when used') : 'Awaiting file'; ?></small><?php } ?></td>
+                <td class="text-right data-asset-actions"><button type="button" class="btn btn-default btn-sm edit-data-asset" data-id="<?php echo (int) $asset->id; ?>" title="Edit Data Asset"><i class="fa fa-pencil"></i></button><?php if ($isAvailable) { ?><button type="button" class="btn btn-default btn-sm preview-data-asset" data-url="<?php echo base_url().'data-assets/preview/'.(int) $asset->id.'?environment='.rawurlencode($initialEnvironment); ?>" data-name="<?php echo html_escape($asset->name); ?>" title="Preview source"><i class="fa fa-eye"></i></button><?php } ?><?php if ($sourceType === 'upload' && (int) $asset->version > 0) { ?><a class="btn btn-default btn-sm" href="<?php echo base_url().'data-assets/download/'.(int) $asset->id.'?environment='.rawurlencode($initialEnvironment); ?>" title="Download current file"><i class="fa fa-download"></i></a><?php } ?><button type="button" class="btn btn-danger btn-sm delete-data-asset" data-id="<?php echo (int) $asset->id; ?>" data-name="<?php echo html_escape($asset->name); ?>" data-managed="<?php echo empty($asset->legacy_source) ? '1' : '0'; ?>" title="Delete"><i class="fa fa-trash"></i></button></td>
               </tr>
             <?php } ?>
             </tbody>
@@ -269,5 +334,5 @@ rows = asset.read()</pre>
 </div>
 
 <script id="dataAssetsPayload" type="application/json"><?php echo json_encode($assetPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?></script>
-<script>window.JobSeekerDataAssets = { initialDirection: <?php echo json_encode($initialDirection); ?>, initialEnvironment: <?php echo json_encode($initialEnvironment); ?>, baseUrl: <?php echo json_encode(base_url().'data-assets'); ?> };</script>
-<script src="<?php echo base_url(); ?>assets/js/data-assets.js?v=3"></script>
+<script>window.JobSeekerDataAssets = { initialDirection: <?php echo json_encode($initialDirection); ?>, initialEnvironment: <?php echo json_encode($initialEnvironment); ?>, baseUrl: <?php echo json_encode(base_url().'data-assets'); ?>, sources: <?php echo json_encode($sourceTypes, JSON_HEX_TAG | JSON_HEX_AMP); ?> };</script>
+<script src="<?php echo base_url(); ?>assets/js/data-assets.js?v=6"></script>

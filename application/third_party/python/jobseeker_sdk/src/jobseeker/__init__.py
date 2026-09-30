@@ -94,6 +94,24 @@ def _data_asset_mode_allowed(direction: str, mode: str) -> bool:
     return direction in ("input", "output", "input_output")
 
 
+class _CredentialScopedRedirect(urllib.request.HTTPRedirectHandler):
+    """Follow redirects, but send connector credentials only to their own host."""
+
+    def __init__(self, credential_headers: Iterable[str]):
+        super().__init__()
+        self.credential_headers = {str(name).lower() for name in credential_headers}
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None and (
+            urllib.parse.urlsplit(newurl).netloc.lower() != urllib.parse.urlsplit(req.full_url).netloc.lower()
+        ):
+            for name in list(redirected.headers):
+                if name.lower() in self.credential_headers:
+                    del redirected.headers[name]
+        return redirected
+
+
 @dataclass
 class DataAsset:
     """A resolved, environment-aware file contract from the Data Assets catalog."""
@@ -115,6 +133,9 @@ class DataAsset:
     options: Optional[Dict[str, Any]] = None
     description: str = ""
     repository_root: str = ""
+    source_type: str = "upload"
+    connector_key: Optional[str] = None
+    source: Optional[Dict[str, Any]] = None
 
     @property
     def metadata(self) -> Dict[str, Any]:
@@ -135,10 +156,14 @@ class DataAsset:
             "uploaded_at": self.uploaded_at,
             "options": dict(self.options or {}),
             "description": self.description,
+            "source_type": self.source_type,
+            "connector_key": self.connector_key,
+            "source": dict(self.source or {}),
         }
 
-    @property
-    def path(self) -> str:
+    def _local_path(self) -> str:
+        """Return the guarded materialization path without causing a fetch."""
+
         root = os.path.realpath(os.path.abspath(self.repository_root))
         candidate = os.path.realpath(os.path.abspath(os.path.join(root, self.relative_path)))
         try:
@@ -147,6 +172,14 @@ class DataAsset:
             within_root = False
         if not within_root:
             raise JobSeekerError("Data asset path escapes the configured repository: %s" % self.key)
+        return candidate
+
+    @property
+    def path(self) -> str:
+        candidate = self._local_path()
+        if self.source_type != "upload" and not getattr(self, "_source_materialized", False):
+            self.materialize(force=True)
+            setattr(self, "_source_materialized", True)
         return candidate
 
     def __fspath__(self) -> str:
@@ -160,6 +193,32 @@ class DataAsset:
     @property
     def exists(self) -> bool:
         return os.path.isfile(self.path)
+
+    def _connector(self) -> Optional["Connector"]:
+        if not self.connector_key:
+            return None
+        return ConnectorCatalog().resolve(self.connector_key, required=True)
+
+    def materialize(self, force: bool = False) -> str:
+        """Fetch a connected source into the ordinary runtime asset path."""
+
+        target = self._local_path()
+        if self.source_type == "upload":
+            return target
+        if os.path.isfile(target) and not force:
+            return target
+        if not _data_asset_mode_allowed(self.direction, "input"):
+            raise JobSeekerError("External Data Asset sources are read-only inputs: %s" % self.key)
+        from . import sources
+
+        return sources.materialize(self, self._connector(), target)
+
+    def preview(self) -> Dict[str, Any]:
+        """A bounded, read-only sample of this asset's source, as the web UI shows it."""
+
+        from . import sources
+
+        return sources.preview(self, self._connector(), public_only=False)
 
     def require(self) -> "DataAsset":
         if not self.exists:
@@ -190,7 +249,7 @@ class DataAsset:
 
         metadata = dict(self.options or {})
         options = dict(kwargs)
-        if self.format == "csv":
+        if self.format in ("csv", "table"):
             delimiter = options.pop("delimiter", metadata.get("delimiter", ","))
             has_header = bool(options.pop("header", metadata.get("header", True)))
             with self.open("r", newline="") as stream:
@@ -198,11 +257,17 @@ class DataAsset:
                 return list(reader)
         if self.format == "json":
             with self.open("r") as stream:
-                return json.load(stream, **options)
+                value = json.load(stream, **options)
+            response_path = str((self.source or {}).get("response_path") or "")
+            if response_path:
+                from . import sources
+
+                value = sources.json_path(value, response_path)
+            return value
         if self.format == "jsonl":
             with self.open("r") as stream:
                 return [json.loads(line) for line in stream if line.strip()]
-        if self.format in ("txt", "xml"):
+        if self.format in ("txt", "xml", "html"):
             with self.open("r") as stream:
                 return stream.read()
         if self.format == "binary":
@@ -238,7 +303,7 @@ class DataAsset:
             with self.open("w") as stream:
                 for row in data:
                     stream.write(json.dumps(row, **options) + "\n")
-        elif self.format in ("txt", "xml"):
+        elif self.format in ("txt", "xml", "html"):
             with self.open("w") as stream:
                 stream.write(str(data))
         elif self.format == "binary":
@@ -262,7 +327,7 @@ class DataAsset:
         metadata = dict(self.options or {})
         if self.required:
             self.require()
-        if self.format == "csv":
+        if self.format in ("csv", "table"):
             options.setdefault("sep", metadata.get("delimiter", ","))
             options.setdefault("encoding", metadata.get("encoding", "UTF-8"))
             options.setdefault("header", 0 if metadata.get("header", True) else None)
@@ -432,25 +497,34 @@ class DataAssetCatalog:
         return asset
 
     def _from_item(self, item: Mapping[str, Any]) -> DataAsset:
-        return DataAsset(
-            key=str(item.get("key", "")),
-            name=str(item.get("name", item.get("key", ""))),
-            uri=str(item.get("uri", "")),
-            direction=str(item.get("direction", "input")),
-            format=str(item.get("format", "binary")),
-            environment=str(item.get("environment", "ALL")),
-            job=str(item.get("job", "*")),
-            relative_path=str(item.get("relative_path", "")),
-            file_name=str(item.get("file_name", "")),
-            required=bool(item.get("required", True)),
-            version=_coerce_int(item.get("version"), 0),
-            size=None if item.get("size") is None else _coerce_int(item.get("size"), 0),
-            checksum=item.get("checksum"),
-            uploaded_at=item.get("uploaded_at"),
-            options=dict(item.get("options") or {}),
-            description=str(item.get("description") or ""),
-            repository_root=self.repository_root,
-        )
+        return data_asset_from_item(item, self.repository_root)
+
+
+def data_asset_from_item(item: Mapping[str, Any], repository_root: str) -> DataAsset:
+    """Build a DataAsset from one entry of the published catalog manifest."""
+
+    return DataAsset(
+        key=str(item.get("key", "")),
+        name=str(item.get("name", item.get("key", ""))),
+        uri=str(item.get("uri", "")),
+        direction=str(item.get("direction", "input")),
+        format=str(item.get("format", "binary")),
+        environment=str(item.get("environment", "ALL")),
+        job=str(item.get("job", "*")),
+        relative_path=str(item.get("relative_path", "")),
+        file_name=str(item.get("file_name", "")),
+        required=bool(item.get("required", True)),
+        version=_coerce_int(item.get("version"), 0),
+        size=None if item.get("size") is None else _coerce_int(item.get("size"), 0),
+        checksum=item.get("checksum"),
+        uploaded_at=item.get("uploaded_at"),
+        options=dict(item.get("options") or {}),
+        description=str(item.get("description") or ""),
+        repository_root=repository_root,
+        source_type=str(item.get("source_type") or "upload"),
+        connector_key=str(item.get("connector_key")) if item.get("connector_key") else None,
+        source=dict(item.get("source") or {}),
+    )
 
 
 @dataclass(frozen=True)
@@ -725,6 +799,26 @@ def _connector_secret_values(item: Mapping[str, Any]) -> Dict[str, str]:
             if callable(close_client):
                 close_client()
     raise JobSeekerError("Connector %s uses unsupported secret backend %s." % (item.get("key"), backend))
+
+
+def connector_from_payload(item: Mapping[str, Any]) -> Connector:
+    """Build a Connector from one connector-runtime entry, resolving its secret here.
+
+    Local and deployment secrets arrive as values; cloud and environment
+    references resolve with this process's own identity, as on a Jenkins worker.
+    """
+
+    if not isinstance(item, Mapping) or not item.get("key"):
+        raise JobSeekerError("The connector payload has no key.")
+    return Connector(
+        key=str(item["key"]),
+        type=str(item.get("type", "generic")),
+        environment=str(item.get("environment", "ALL")),
+        job=str(item.get("job", "*")),
+        config=dict(item.get("config") or {}),
+        secrets=_connector_secret_values(item),
+        description=str(item.get("description") or ""),
+    )
 
 
 def _remove_connector_path(path: str) -> None:
@@ -1970,6 +2064,7 @@ def asset_cli() -> None:
     parser.add_argument("--environment", default=None)
     parser.add_argument("--job", default=None)
     parser.add_argument("--metadata", action="store_true", help="Print the resolved contract as JSON")
+    parser.add_argument("--preview", action="store_true", help="Print a bounded sample of the source as JSON")
     arguments = parser.parse_args()
     try:
         asset = get_asset(
@@ -1980,7 +2075,10 @@ def asset_cli() -> None:
         )
         if asset is None:
             raise JobSeekerError("Data asset was not found: %s" % arguments.key)
-        print(json.dumps(asset.metadata, indent=2, sort_keys=True) if arguments.metadata else asset.path)
+        if arguments.preview:
+            print(json.dumps(asset.preview(), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(asset.metadata, indent=2, sort_keys=True) if arguments.metadata else asset.path)
     except JobSeekerError as error:
         parser.exit(2, "jobseeker-asset: %s\n" % error)
 

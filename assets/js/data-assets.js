@@ -8,6 +8,15 @@
     assets = [];
   }
 
+  // Per source: the formats it can deliver, the Connection types that reach
+  // it, and whether a Connection is required (see DataAssets::sourceCatalog).
+  var sources = (window.JobSeekerDataAssets && window.JobSeekerDataAssets.sources) || {};
+  var defaultFormats = { upload: 'csv', url: 'json', object_storage: 'csv' };
+  var fileNameHints = {
+    upload: 'customers.csv', url: 'From the URL when empty', google_sheet: 'asset-key.csv when empty',
+    database_table: 'table.csv when empty', object_storage: 'From the object path when empty', document_collection: 'collection.jsonl when empty'
+  };
+
   function assetById(id) {
     id = Number(id);
     for (var index = 0; index < assets.length; index += 1) {
@@ -45,10 +54,12 @@
     $('#assetEditorTitle').text('Register data asset');
     $('#saveAssetLabel').text('Publish Data Asset');
     $('#assetJobName').val('*');
+    $('#assetSourceType').val('upload');
+    $('#assetConnector, #assetSourceUrl, #assetResponsePath, #assetSpreadsheetId, #assetSheetRange, #assetGooglePublicUrl, #assetTableSchema, #assetTableName, #assetObjectPath, #assetCollectionName').val('');
     checked('direction', 'input');
     setCheckbox('is_required', true);
     setCheckbox('is_active', true);
-    updateFormatOptions();
+    updateSourceOptions();
     updatePreview();
   }
 
@@ -60,13 +71,26 @@
     $('#assetKey').val(asset.key).data('edited', true);
     $('#assetEnvironment').val(asset.environment);
     $('#assetJobName').val(asset.job);
-    $('#assetFormat').val(asset.format);
+    $('#assetSourceType').val(asset.source_type || 'upload');
+    updateSourceOptions(asset.format);
+    $('#assetConnector').val(asset.connector_key || '');
     $('#assetFileName').val(asset.file_name);
     $('#assetDescription').val(asset.description || '');
     checked('direction', asset.direction);
     setCheckbox('is_required', Number(asset.required) === 1);
     setCheckbox('is_active', Number(asset.active) === 1);
     var options = asset.options || {};
+    var source = asset.source || {};
+    $('#assetSourceUrl').val(source.url || '');
+    $('#assetResponsePath').val(source.response_path || '');
+    $('#assetSpreadsheetId').val(source.spreadsheet_id || '');
+    $('#assetSheetRange').val(source.range || '');
+    $('#assetGooglePublicUrl').val((asset.source_type === 'google_sheet' && source.url) || '');
+    if (asset.source_type === 'google_sheet') $('#assetSourceUrl').val('');
+    $('#assetTableSchema').val(source.schema || '');
+    $('#assetTableName').val(source.table || '');
+    $('#assetObjectPath').val(source.path || '');
+    $('#assetCollectionName').val(source.collection || '');
     $('#assetDelimiter').val(options.delimiter === '\t' ? '\t' : (options.delimiter || ','));
     $('#assetEncoding').val(options.encoding || 'UTF-8');
     $('#assetHeader').val(options.header === false ? '0' : '1');
@@ -79,14 +103,63 @@
   }
 
   function updateFormatOptions() {
+    var sourceType = $('#assetSourceType').val() || 'upload';
     var format = $('#assetFormat').val();
-    $('#delimitedOptions').toggle(format === 'csv');
-    $('#excelOptions').toggle(format === 'xlsx');
+    // Delimiter, encoding, and sheet describe files; a sheet or table has its own shape.
+    var fileSource = ['upload', 'url', 'object_storage'].indexOf(sourceType) !== -1;
+    $('#delimitedOptions').toggle(fileSource && format === 'csv');
+    $('#excelOptions').toggle(fileSource && format === 'xlsx');
+    $('#assetResponsePathGroup').toggle(format === 'json');
     var accept = {
       csv: '.csv', json: '.json', jsonl: '.jsonl,.ndjson', xlsx: '.xlsx,.xls',
-      parquet: '.parquet', xml: '.xml', txt: '.txt,.log,.dat', binary: ''
+      parquet: '.parquet', xml: '.xml', html: '.html,.htm', txt: '.txt,.log,.dat', binary: ''
     };
     $('#assetFile').attr('accept', accept[format] || '');
+  }
+
+  function updateSourceOptions(preferredFormat) {
+    var sourceType = $('#assetSourceType').val() || 'upload';
+    var source = sources[sourceType] || { formats: {}, connectors: [], connection: 'none', hint: '' };
+    $('#uploadSourceOptions').toggle(sourceType === 'upload');
+    $('#connectionSourceOptions').toggle(source.connection !== 'none');
+    $('#urlSourceOptions').toggle(sourceType === 'url');
+    $('#googleSheetSourceOptions').toggle(sourceType === 'google_sheet');
+    $('#databaseSourceOptions').toggle(sourceType === 'database_table');
+    $('#objectStorageSourceOptions').toggle(sourceType === 'object_storage');
+    $('#documentSourceOptions').toggle(sourceType === 'document_collection');
+
+    // Only uploaded files can be written by jobs; every other source is read-only.
+    if (sourceType !== 'upload') {
+      checked('direction', 'input');
+      $('input[name="direction"][value!="input"]').prop('disabled', true);
+    } else {
+      $('input[name="direction"]').prop('disabled', false);
+    }
+
+    // A file source chooses its format; a table, sheet, or collection has one shape.
+    var $format = $('#assetFormat');
+    var wanted = preferredFormat || $format.val();
+    var keys = Object.keys(source.formats || {});
+    $format.empty();
+    keys.forEach(function (key) { $format.append($('<option>').val(key).text(source.formats[key])); });
+    $format.val(keys.indexOf(wanted) !== -1 ? wanted : (keys.indexOf(defaultFormats[sourceType]) !== -1 ? defaultFormats[sourceType] : keys[0]));
+    $format.prop('disabled', keys.length < 2);
+    $('#assetFormatHelp').text(keys.length < 2 ? 'Set by the source.' : 'The file format jobs read.');
+    $('#assetFileName').attr('placeholder', fileNameHints[sourceType] || '');
+
+    var allowed = source.connectors || [];
+    var matching = 0;
+    $('#assetConnector option').each(function () {
+      var type = String($(this).data('type') || '');
+      var usable = !type || allowed.indexOf(type) !== -1;
+      if (type && usable) matching += 1;
+      $(this).prop('disabled', !usable).toggle(usable);
+    });
+    if ($('#assetConnector option:selected').prop('disabled')) $('#assetConnector').val('');
+    $('#assetConnector option[value=""]').text(source.connection === 'required' ? 'Select a Connection' : 'No Connection — public source');
+    $('#assetConnectionHint').text((source.hint || '') + (source.connection === 'required' && !matching ? ' None is active in this environment yet.' : ''));
+    updateFormatOptions();
+    updatePreview();
   }
 
   function updatePreview() {
@@ -134,7 +207,9 @@
   function renderAssetPreview(payload) {
     var $body = $('#assetPreviewBody').empty();
     var meta = String(payload.file_name || '') + '  ·  ' + String(payload.format || '').toUpperCase() +
-      '  ·  v' + Number(payload.version || 0) + '  ·  ' + humanFileSize(payload.size);
+      '  ·  v' + Number(payload.version || 0) + '  ·  ' +
+      (payload.source_label && !Number(payload.size) ? 'live source' : humanFileSize(payload.size));
+    if (payload.source_label) meta += '  ·  ' + payload.source_label;
     if (payload.truncated) meta += '  ·  first sample shown';
     $('#assetPreviewMeta').text(meta);
 
@@ -197,6 +272,7 @@
     $('#showAssetForm, .show-asset-form').on('click', function () { resetForm(); openEditor(); });
     $('#closeAssetEditor').on('click', closeEditor);
     $('#resetAssetForm').on('click', resetForm);
+    $('#assetSourceType').on('change', function () { updateSourceOptions(); });
     $('#assetFormat').on('change', function () { updateFormatOptions(); updatePreview(); });
     $('input[name="direction"]').on('change', syncRoleDefaults);
     $('#assetKey, #assetEnvironment, #assetJobName').on('input change', updatePreview);

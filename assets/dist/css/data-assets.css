@@ -26,6 +26,9 @@
 .data-role-picker input:checked + span { border-color: #3c8dbc; background: #f4faff; box-shadow: inset 0 0 0 1px #3c8dbc; }
 .data-format-options { margin-bottom: 15px; background: #f8fafb; border-color: #dce4e8; }
 .data-format-options .form-group { margin-bottom: 0; }
+.data-source-options { margin-bottom: 15px; background: #f8fafb; border-color: #dce4e8; }
+.data-source-options .form-group { margin-bottom: 5px; }
+.data-source-options .help-block { margin-bottom: 0; }
 .data-runtime-preview { margin-top: 4px; border: 1px solid #d2d6de; }
 .data-runtime-preview .box-header { background: #f7f7f7; }
 .data-runtime-preview code { display: block; padding: 9px; color: #2f4050; background: #eef3f6; word-break: break-all; }
@@ -55,6 +58,7 @@
 .data-role-output { background: #f39c12; }
 .data-role-input_output { background: #3c8dbc; }
 .data-format-label { color: #555; }
+.data-source-label { display: inline-block; margin-bottom: 4px; }
 .data-meta-line { margin-top: 6px; color: #777; }
 .data-assets-table td > code { display: block; width: fit-content; max-width: 240px; overflow: hidden; color: #444; background: #f4f4f4; text-overflow: ellipsis; white-space: nowrap; }
 .data-assets-table td > small { max-width: 285px; margin-top: 4px; overflow: hidden; color: #777; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,0 +1,7 @@
+# The Data Preview service (jobseeker.preview_server). Connection drivers come
+# from docker/jenkins/requirements.txt, so a preview reads every source a job
+# can; these add the web server and the Excel and Parquet readers.
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+pyarrow>=18,<25
+openpyxl>=3.1,<4

@@ -524,6 +524,61 @@ class DbSettings_model extends CI_Model
         ));
     }
 
+    /**
+     * The runtime contract for one connector row: its non-secret settings and
+     * its secret values (local and `.env` secrets) or cloud reference. Jenkins
+     * workers receive it from ConnectorRuntime; Data Asset previews send the
+     * one Connection an asset uses to the Data Preview service.
+     */
+    public function runtimePayload($row)
+    {
+        $backend = isset($row['secret_backend']) ? (string) $row['secret_backend'] : 'local';
+        $reference = json_decode(isset($row['secret_reference']) ? (string) $row['secret_reference'] : '', TRUE);
+        if (! is_array($reference)) {
+            $reference = array();
+        }
+
+        $secret = array('backend' => $backend);
+        if ($backend === 'deployment') {
+            // `.env` connector secrets are already in this PHP process. Send
+            // them through the same authenticated, run-scoped value contract
+            // as an encrypted local connector; the worker never needs the
+            // application's whole environment and the UI never receives them.
+            $values = isset($row['_secret_values']) && is_array($row['_secret_values'])
+                ? $row['_secret_values'] : array();
+            $secret['backend'] = 'local';
+            $secret['values'] = (object) array_map(function($value) { return (string) $value; }, $values);
+        } else if ($backend === 'local') {
+            $values = $this->decryptLocalSecret(isset($row['secret_encrypted']) ? $row['secret_encrypted'] : '');
+            if ($values === FALSE) {
+                throw new RuntimeException('Connector '.$row['connector_key'].' has an unreadable local secret.');
+            }
+            // Keep the runtime schema stable: an empty secret is an object, not
+            // a JSON list, just like a populated field-to-value mapping.
+            $secret['values'] = (object) array_map(function($value) { return (string) $value; }, $values);
+        } else {
+            $secret['reference'] = $reference;
+        }
+
+        return array(
+            'key' => (string) $row['connector_key'],
+            'type' => (string) $row['db_type'],
+            'environment' => (string) $row['environment'],
+            'job' => (string) $row['job_name'],
+            'description' => (string) $row['description'],
+            'config' => array(
+                'auth_type' => isset($row['auth_type']) ? (string) $row['auth_type'] : 'username_password',
+                'host' => (string) $row['address'],
+                'port' => (int) $row['port'],
+                'database' => (string) $row['schema'],
+                'additional_parameters' => (string) $row['additional_parameters'],
+                'oracle_service_name' => (string) $row['oracle_ServiceName'],
+                'oracle_sid' => (string) $row['oracle_sid']
+            ),
+            'secret' => $secret
+        );
+    }
+
     public function pruneRuntimeAccessLogs()
     {
         $this->db->where('accessed_at <', date('Y-m-d H:i:s', time() - 7776000))->delete('connector_access_log');

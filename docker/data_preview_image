@@ -1,0 +1,25 @@
+FROM python:3.13-slim
+
+# Every Connection driver the Jenkins workers have, plus the service's own
+# packages, so a preview reads each source exactly as a job does.
+COPY docker/jenkins/requirements.txt /opt/jobseeker/requirements-drivers.txt
+COPY docker/data_preview/requirements.txt /opt/jobseeker/requirements-preview.txt
+RUN pip install --no-cache-dir -r /opt/jobseeker/requirements-drivers.txt -r /opt/jobseeker/requirements-preview.txt
+
+COPY application/third_party/python/jobseeker_sdk /opt/jobseeker/sdk
+RUN pip install --no-cache-dir /opt/jobseeker/sdk \
+	&& useradd --system --create-home --uid 10001 jobseeker
+
+# Compose starts this as root; the script drops to the checkout owner's uid so
+# uploaded files (mode 0600) stay readable. Kubernetes runs it as jobseeker.
+COPY --chmod=0755 docker/jobseeker-host-user.sh /usr/local/bin/jobseeker-host-user
+ENV PYTHONUNBUFFERED=1 \
+	JOBSEEKER_RUNTIME_USER=jobseeker \
+	JOBSEEKER_OWNER_REFERENCE=/php/repository \
+	JOBSEEKER_REPOSITORY_ROOT=/php/repository
+USER jobseeker
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/jobseeker-host-user"]
+CMD ["uvicorn", "jobseeker.preview_server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--no-server-header"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"

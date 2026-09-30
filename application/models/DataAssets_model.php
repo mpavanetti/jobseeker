@@ -51,6 +51,32 @@ class DataAssets_model extends CI_Model
             KEY `data_assets_direction` (`direction`),
             KEY `data_assets_active` (`is_active`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci");
+
+        // Data Assets started as file contracts. Keep the original storage
+        // columns for backwards compatibility while adding a source descriptor
+        // that can point at a public resource or a securely stored connector.
+        // Secrets deliberately remain in database_settings and are never copied
+        // into source_config_json or the runtime manifest.
+        $columns = array();
+        foreach ($this->db->query(
+            'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',
+            array('data_assets')
+        )->result_array() as $column) {
+            $columns[$column['COLUMN_NAME']] = TRUE;
+        }
+        if (! isset($columns['source_type'])) {
+            $this->db->query("ALTER TABLE `data_assets` ADD `source_type` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'upload' AFTER `job_name`");
+        }
+        if (! isset($columns['connector_key'])) {
+            $this->db->query("ALTER TABLE `data_assets` ADD `connector_key` varchar(128) COLLATE utf8_unicode_ci DEFAULT NULL AFTER `source_type`");
+        }
+        if (! isset($columns['source_config_json'])) {
+            $this->db->query("ALTER TABLE `data_assets` ADD `source_config_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL AFTER `connector_key`");
+        }
+        $sourceIndex = $this->db->query("SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='data_assets' AND INDEX_NAME='data_assets_connector' LIMIT 1")->row();
+        if (! $sourceIndex) {
+            $this->db->query('ALTER TABLE `data_assets` ADD KEY `data_assets_connector` (`connector_key`)');
+        }
         $this->db->query("CREATE TABLE IF NOT EXISTS `data_asset_migrations` (
             `migration_key` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
             `applied_at` datetime NOT NULL,
@@ -239,7 +265,7 @@ class DataAssets_model extends CI_Model
 
     public function statistics($environment = 'ALL')
     {
-        $this->db->select("COUNT(*) AS total, SUM(is_active = 1) AS active, SUM(direction IN ('input','input_output')) AS inputs, SUM(direction IN ('output','input_output')) AS outputs, SUM(version > 0) AS uploaded", FALSE);
+        $this->db->select("COUNT(*) AS total, SUM(is_active = 1) AS active, SUM(direction IN ('input','input_output')) AS inputs, SUM(direction IN ('output','input_output')) AS outputs, SUM(version > 0) AS uploaded, SUM(source_type != 'upload') AS connected, SUM(source_type != 'upload' OR version > 0) AS available", FALSE);
         $this->db->from('data_assets');
         $environment = strtoupper(trim((string) $environment));
         if ($environment !== '' && $environment !== '*' && $environment !== 'ALL') {
@@ -247,6 +273,6 @@ class DataAssets_model extends CI_Model
         }
         $row = $this->db->get()->row();
 
-        return $row ?: (object) array('total' => 0, 'active' => 0, 'inputs' => 0, 'outputs' => 0, 'uploaded' => 0);
+        return $row ?: (object) array('total' => 0, 'active' => 0, 'inputs' => 0, 'outputs' => 0, 'uploaded' => 0, 'connected' => 0, 'available' => 0);
     }
 }
