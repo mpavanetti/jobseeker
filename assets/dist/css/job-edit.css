@@ -1,0 +1,179 @@
+.job-edit-context {
+  align-items: center;
+  background: linear-gradient(135deg, #f4faff 0%, #fff 70%);
+  border: 1px solid #b9d8eb;
+  border-left: 5px solid #3c8dbc;
+  border-radius: 6px;
+  box-shadow: 0 5px 18px rgba(36, 59, 83, .08);
+  display: flex;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  position: sticky;
+  top: 56px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+  z-index: 1010;
+}
+
+.job-edit-context.is-dirty {
+  border-color: #e3bd72;
+  border-left-color: #f39c12;
+  box-shadow: 0 5px 18px rgba(243, 156, 18, .12);
+}
+
+.job-edit-context.is-loading {
+  border-left-color: #00c0ef;
+}
+
+.job-edit-context.is-error {
+  background: #fff7f6;
+  border-color: #e8b7b1;
+  border-left-color: #dd4b39;
+}
+
+.job-edit-context-icon {
+  align-items: center;
+  background: #3c8dbc;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  flex: 0 0 38px;
+  font-size: 16px;
+  height: 38px;
+  justify-content: center;
+}
+
+.job-edit-context.is-dirty .job-edit-context-icon {
+  background: #f39c12;
+}
+
+.job-edit-context.is-error .job-edit-context-icon {
+  background: #dd4b39;
+}
+
+.job-edit-context-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.job-edit-eyebrow {
+  color: #647584;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.job-edit-context-copy strong {
+  color: #243b53;
+  font-size: 17px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-edit-message {
+  color: #60717f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.job-edit-context-state {
+  flex: 0 0 auto;
+}
+
+.job-edit-state {
+  background: #e8f5ee;
+  border-radius: 14px;
+  color: #26734d;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.job-edit-context.is-dirty .job-edit-state {
+  background: #fff2d8;
+  color: #98670b;
+}
+
+.job-edit-context.is-loading .job-edit-state {
+  background: #e5f7fc;
+  color: #16718a;
+}
+
+.job-edit-context.is-error .job-edit-state {
+  background: #fbe5e2;
+  color: #a53629;
+}
+
+.job-edit-context-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.job-edit-mode .job-bulk-drafts {
+  display: none;
+}
+
+.job-edit-mode .job-form-card {
+  border-color: #9cc9e3;
+}
+
+.job-name-input-group .job-name-lock {
+  background: #edf4f8;
+  border-color: #b7cdd9;
+  color: #3c6f8a;
+}
+
+.job-edit-mode #job_name[readonly] {
+  background: #f5f8fa;
+  color: #314957;
+  cursor: not-allowed;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .job-edit-context {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    top: 52px;
+  }
+
+  .job-edit-context-copy {
+    flex-basis: calc(100% - 52px);
+  }
+
+  .job-edit-context-state {
+    margin-left: 50px;
+  }
+
+  .job-edit-context-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 600px) {
+  .job-edit-context {
+    position: static;
+  }
+
+  .job-edit-context-state {
+    margin-left: 0;
+  }
+
+  .job-edit-context-actions {
+    flex-basis: 100%;
+  }
+
+  .job-edit-context-actions .btn {
+    flex: 1 1 auto;
+  }
+}

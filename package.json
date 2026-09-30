@@ -4,7 +4,7 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
-    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:context-env && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
+    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:job-edit && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:context-env && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
     "test:samples": "node scripts/test-job-samples-dataset-generator.js && python3 scripts/test-job-sample-syntax.py",
     "test:samples:runtime:e2e": "python3 scripts/test-job-sample-runtime-e2e.py",
     "test:samples:jobs:e2e": "python3 scripts/test-job-samples-e2e.py",
@@ -20,6 +20,7 @@
     "test:python-git:accounts:e2e": "python3 scripts/test-git-account-e2e.py",
     "test:python-git:move:e2e": "python3 scripts/test-git-move-and-samples-e2e.py",
     "test:draft-cache": "node scripts/test-job-draft-cache.js",
+    "test:job-edit": "node scripts/test-job-edit.js",
     "test:platform-isolation": "node scripts/test-platform-isolation.js",
     "test:job-list-hydration": "node scripts/test-job-list-hydration.js",
     "test:deployment-modes": "node scripts/test-deployment-modes.js",
