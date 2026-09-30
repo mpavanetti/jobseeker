@@ -457,12 +457,29 @@
         $('#pipelineSave').removeClass('btn-warning').addClass('btn-primary');
         $('#pipelineRun, #pipelineDeploy, #pipelineDelete').prop('disabled', false);
         window.history.replaceState({}, '', pipelineUrl(state.id));
+        syncPipelinePicker(response.pipeline);
         toastr.success(response.message, 'Pipeline');
         if (typeof callback === 'function') callback(response);
       }).fail(function(xhr) {
         var response = xhr.responseJSON || {};
         toastr.error(response.message || 'Pipeline could not be saved.', 'Pipeline');
       }).always(function() { $('#pipelineSave').prop('disabled', false); });
+    }
+
+    // Show the saved pipeline (and its new version) as the picker's choice.
+    function syncPipelinePicker(pipeline) {
+      if (!pipeline || !pipeline.id) return;
+      var picker = $('#pipelinePicker');
+      var label = String(pipeline.name || '') + ' (v' + Number(pipeline.version || 1) + ')';
+      var option = picker.find('option').filter(function() { return this.value === String(pipeline.id); });
+      if (!option.length) {
+        var groupName = String(pipeline.group_name || '').trim() || 'General';
+        var group = picker.find('optgroup').filter(function() { return this.label === groupName; });
+        if (!group.length) group = $('<optgroup>').attr('label', groupName).appendTo(picker);
+        option = $('<option>').val(String(pipeline.id)).appendTo(group);
+      }
+      option.text(label);
+      picker.val(String(pipeline.id));
     }
 
     var scheduleValidationTimer = null;

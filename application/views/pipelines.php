@@ -10,7 +10,7 @@ foreach ($pipelineList as $item) {
     $groups[$group][] = $item;
 }
 ?>
-<link href="<?php echo base_url(); ?>assets/dist/css/pipeline-builder.css?v=14" rel="stylesheet" type="text/css">
+<link href="<?php echo base_url(); ?>assets/dist/css/pipeline-builder.css?v=15" rel="stylesheet" type="text/css">
 <div class="content-wrapper">
   <section class="content-header">
     <h1>Pipelines <small>workflow orchestration</small></h1>
@@ -203,5 +203,5 @@ window.JobSeekerPipelineConfig = <?php echo json_encode(array(
   )
 ), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 </script>
-<script src="<?php echo base_url(); ?>assets/js/pipeline-builder.js?v=11"></script>
+<script src="<?php echo base_url(); ?>assets/js/pipeline-builder.js?v=12"></script>
 <script>jQuery(function() { window.JobSeekerPipelineBuilder.initialize(window.JobSeekerPipelineConfig); });</script>

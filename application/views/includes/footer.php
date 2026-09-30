@@ -36,6 +36,26 @@
             });
         }
 
+        function updateBoxCollapseLabel(box) {
+            var $box = $(box);
+            var $button = $box.find('> .box-header [data-widget="collapse"]').first();
+            if (! $button.length) {
+                return;
+            }
+
+            var heading = $.trim($box.find('> .box-header .box-title').first().text()).replace(/\s+/g, ' ') || 'panel';
+            var expanded = ! $box.hasClass('collapsed-box');
+            var label = (expanded ? 'Collapse ' : 'Expand ') + heading;
+            $button.attr({
+                'aria-label': label,
+                'aria-expanded': expanded ? 'true' : 'false',
+                'title': label
+            });
+        }
+
+        $('.box').each(function() { updateBoxCollapseLabel(this); });
+        $('.box').on('collapsed.boxwidget expanded.boxwidget', function() { updateBoxCollapseLabel(this); });
+
          initializeDataTable('.dataTable', {
             "order": [[ 1, "desc" ]],
             lengthMenu:  [ 10, 20, 50, 100, 200, 500]
@@ -127,6 +147,11 @@
             var activeLink = $();
 
             $('.sidebar-menu a[href]').each(function() {
+                // Menu toggles (href="#") resolve to the current page; skip them.
+                var target = String(this.getAttribute('href') || '');
+                if (target.charAt(0) === '#' || /^javascript:/i.test(target)) {
+                    return;
+                }
                 if (sidebarUrlKey(this.href) === currentKey) {
                     activeLink = $(this);
                     return false;
