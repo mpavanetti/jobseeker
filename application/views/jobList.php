@@ -368,6 +368,7 @@ pre {
       </div>
       <!-- /.box-header -->
       <div class="box-body">
+        <?php if ($canManageJobs) { ?>
         <div class="job-bulk-toolbar">
           <div class="job-bulk-actions">
             <button type="button" class="btn btn-primary btn-sm" id="triggerSelectedJobs" disabled>
@@ -379,6 +380,7 @@ pre {
           </div>
           <span class="job-bulk-hint">Use the first column to select jobs. Selections persist while paging and filtering.</span>
         </div>
+        <?php } ?>
         <div class="table-responsive jobtable-settling">
         <table id="listTable" class="table table-bordered table-striped" style="width: 100%;">
           <thead>
@@ -398,6 +400,7 @@ pre {
               <th>Last Build Number</th>
               <th>Last Worker</th>
               <th>Description</th>
+              <th>Edit Job</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
               <th>Abort Job</th>
@@ -424,6 +427,7 @@ pre {
               <th>Last Build Number</th>
               <th>Last Worker</th>
               <th>Description</th>
+              <th>Edit Job</th>
               <th>Trigger Job</th>
               <th>Last Build Output</th>
               <th>Abort Job</th>
@@ -570,6 +574,7 @@ pre {
   var canManageJobs = <?php echo $canManageJobs ? 'true' : 'false'; ?>;
   var jobEnvironmentFilter = window.jobseekerDashboardEnvironment || 'all';
   var deleteJobsUrl = <?php echo json_encode(base_url() . 'delete-job/jobs'); ?>;
+  var jobEditUrl = <?php echo json_encode(base_url() . 'jobCreation?edit='); ?>;
   var availableJobsUrl = <?php echo json_encode(base_url() . 'jobCreation/availableJobs'); ?>;
   var jobSchedulesUrl = <?php echo json_encode(base_url() . 'jobCreation/jobSchedules'); ?>;
   var jobExecutionUrl = <?php echo json_encode(base_url() . 'jobExecution'); ?>;
@@ -641,7 +646,7 @@ pre {
   }
 
   function isJobTriggerable(row) {
-    return !! row && row.buildable !== false && row.inQueue !== true && ! isJobRunning(row);
+    return canManageJobs && !! row && row.buildable !== false && row.inQueue !== true && ! isJobRunning(row);
   }
 
   function selectedJobItems() {
@@ -1081,7 +1086,7 @@ pre {
     $('#monitor-queued-jobs').text(queued);
     $('#monitor-attention-jobs').text(attention);
     updateMonitorFilterCounts(jobs);
-    $('#monitor-last-refresh').text('Last refreshed ' + moment().format('MMMM Do YYYY, h:mm:ss a'));
+    $('#monitor-last-refresh').text('Last refreshed ' + (window.JobSeekerTime ? JobSeekerTime.format(Date.now()) : moment().format('MMM D, YYYY, h:mm:ss A')));
   }
 
   function monitorPill(label, kind) {
@@ -1232,7 +1237,13 @@ pre {
   }
 
   function cronTokenMatches(value, token, min, max) {
-    token = token.replace(/H/g, '*').replace(/\?/g, '*');
+    // Jenkins picks each H from a hash of the job name, which the browser
+    // cannot reproduce: a bare H is "once per range" (estimated at its
+    // start), H(a-b) a value in a-b, and H/n every n from an offset.
+    if (token === 'H') {
+      return value === min;
+    }
+    token = token.replace(/^H\((\d+)-(\d+)\)/, '$1-$2').replace(/H/g, '*').replace(/\?/g, '*');
 
     if (token === '*') {
       return true;
@@ -1274,31 +1285,38 @@ pre {
   }
 
   function cronDayOfWeekMatches(date, field) {
-    var day = date.getDay();
+    var day = date.getUTCDay();
     return cronFieldMatches(day, field, 0, 7) || (day === 0 && cronFieldMatches(7, field, 0, 7));
   }
 
+  // Jenkins evaluates cron in its own time zone, UTC in JobSeeker.
+  function formatNextRun(date, approximate) {
+    var text = window.JobSeekerTime ? JobSeekerTime.format(date.getTime()) : moment.utc(date).format('MMM D, YYYY, h:mm A [UTC]');
+    return (approximate ? '\u2248 ' : '') + text;
+  }
+
+  // Jenkins spreads the @ aliases with H, so these are the earliest slot.
   function estimateTaggedNextRun(tag) {
     var next = new Date();
-    next.setSeconds(0, 0);
+    next.setUTCSeconds(0, 0);
 
     if (tag === '@hourly') {
-      next.setHours(next.getHours() + 1, 0, 0, 0);
+      next.setUTCHours(next.getUTCHours() + 1, 0, 0, 0);
     } else if (tag === '@daily' || tag === '@midnight') {
-      next.setDate(next.getDate() + 1);
-      next.setHours(0, 0, 0, 0);
+      next.setUTCDate(next.getUTCDate() + 1);
+      next.setUTCHours(0, 0, 0, 0);
     } else if (tag === '@weekly') {
-      next.setDate(next.getDate() + (7 - next.getDay()));
-      next.setHours(0, 0, 0, 0);
+      next.setUTCDate(next.getUTCDate() + (7 - next.getUTCDay()));
+      next.setUTCHours(0, 0, 0, 0);
     } else if (tag === '@monthly') {
-      next = new Date(next.getFullYear(), next.getMonth() + 1, 1, 0, 0, 0, 0);
+      next = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 1));
     } else if (tag === '@yearly' || tag === '@annually') {
-      next = new Date(next.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
+      next = new Date(Date.UTC(next.getUTCFullYear() + 1, 0, 1));
     } else {
       return 'Scheduled by Jenkins';
     }
 
-    return moment(next).format('MMMM Do YYYY, h:mm a');
+    return formatNextRun(next, true);
   }
 
   function estimateNextRun(spec) {
@@ -1316,17 +1334,17 @@ pre {
     }
 
     var candidate = new Date(Date.now() + 60000);
-    candidate.setSeconds(0, 0);
+    candidate.setUTCSeconds(0, 0);
 
     for (var index = 0; index < 60 * 24 * 32; index++) {
       if (
-        cronFieldMatches(candidate.getMinutes(), parts[0], 0, 59) &&
-        cronFieldMatches(candidate.getHours(), parts[1], 0, 23) &&
-        cronFieldMatches(candidate.getDate(), parts[2], 1, 31) &&
-        cronFieldMatches(candidate.getMonth() + 1, parts[3], 1, 12) &&
+        cronFieldMatches(candidate.getUTCMinutes(), parts[0], 0, 59) &&
+        cronFieldMatches(candidate.getUTCHours(), parts[1], 0, 23) &&
+        cronFieldMatches(candidate.getUTCDate(), parts[2], 1, 31) &&
+        cronFieldMatches(candidate.getUTCMonth() + 1, parts[3], 1, 12) &&
         cronDayOfWeekMatches(candidate, parts[4])
       ) {
-        return moment(candidate).format('MMMM Do YYYY, h:mm a');
+        return formatNextRun(candidate, spec.indexOf('H') !== -1);
       }
 
       candidate = new Date(candidate.getTime() + 60000);
@@ -1683,8 +1701,29 @@ pre {
     return moment(ts).format('MMMM Do YYYY, h:mm:ss a');
   }
 
-  function renderDuration(data, emptyText) {
-    return data != null && data !== '' ? moment(parseInt(data, 10)).utc().format('HH [Hours, ] mm [Minutes, ] ss [Seconds, ] SSS [Miliseconds.]') : emptyText;
+  // "79 ms", "4.2 s", "1 min 37 s", "2 h 05 min"; tables sort on the raw value.
+  function renderDuration(data, emptyText, type) {
+    if (data == null || data === '') {
+      return type === 'sort' || type === 'type' ? -1 : emptyText;
+    }
+    var ms = Math.max(0, parseInt(data, 10) || 0);
+    if (type === 'sort' || type === 'type') {
+      return ms;
+    }
+    if (ms < 1000) {
+      return ms + ' ms';
+    }
+    var seconds = ms / 1000;
+    if (seconds < 60) {
+      return (seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)) + ' s';
+    }
+    var totalSeconds = Math.round(seconds);
+    var hours = Math.floor(totalSeconds / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0) {
+      return hours + ' h ' + (minutes < 10 ? '0' : '') + minutes + ' min';
+    }
+    return minutes + ' min ' + (totalSeconds % 60) + ' s';
   }
 
   function dataTableHasPendingAjax(table) {
@@ -2010,10 +2049,18 @@ pre {
             if (type === 'sort' || type === 'type') { return parseInt(ts, 10) || 0; }
             return renderBuildTime(ts, '<b>Never Built</b>');
           }},
-          {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderDuration(lastBuildField(row, 'duration'), '<b>Never Built</b>'); }},
+          {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderDuration(lastBuildField(row, 'duration'), '<b>Never Built</b>', type); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return escapeHtml(lastBuildField(row, 'number')); }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){ return renderWorkerNode(lastBuildField(row, 'builtOn')); }},
           {"data": "description", "defaultContent": "", "render": function(data){ return escapeHtml(data); }},
+          {"data": null, "defaultContent": "", "orderable": false, "searchable": false, "render": function(data, type, row){
+            if (! canManageJobs) {
+              return '';
+            }
+
+            var jobName = row.fullName || row.name || '';
+            return '<a class="btn btn-sm btn-warning" href="' + escapeAttribute(jobEditUrl + encodeURIComponent(jobName)) + '" title="Edit this Jenkins job"><i class="fa fa-pencil"></i> Edit</a>';
+          }},
           {"data": null, "defaultContent": "", "render": function(data, type, row){
             var jobName = row.fullName || row.name || '';
             var buildNumber = lastBuildField(row, 'number');
@@ -2101,8 +2148,8 @@ pre {
             return renderText(data);
           }},{targets:4, render:function(data){
             return renderBuildTime(data, '');
-          }},{targets:5, render:function(data){
-            return renderDuration(data, '');
+          }},{targets:5, render:function(data, type){
+            return renderDuration(data, '', type);
           }},{targets:6, render:function(data){
             return renderText(data);
           }},{targets:7, render:function(data){
@@ -2153,8 +2200,8 @@ pre {
             return renderText(data);
           }},{targets:4, render:function(data){
             return renderBuildTime(data, '');
-          }},{targets:5, render:function(data){
-            return renderDuration(data, '');
+          }},{targets:5, render:function(data, type){
+            return renderDuration(data, '', type);
           }},{targets:6, render:function(data){
             return renderText(data);
           }},{targets:7, render:function(data){
