@@ -318,7 +318,7 @@ class User_model extends CI_Model
      */
     function getUserInfoWithRole($userId)
     {
-        $this->db->select('BaseTbl.userId, BaseTbl.email, BaseTbl.name, BaseTbl.mobile, BaseTbl.roleId, Roles.role, Group.name AS group');
+        $this->db->select('BaseTbl.userId, BaseTbl.email, BaseTbl.name, BaseTbl.mobile, BaseTbl.roleId, BaseTbl.createdDtm, BaseTbl.updatedDtm, Roles.role, Group.name AS group');
         $this->db->from('tbl_users as BaseTbl');
         $this->db->join('tbl_roles as Roles','Roles.roleId = BaseTbl.roleId');
         $this->db->join('tbl_groups as Group', 'Group.id = BaseTbl.groupId','left');
@@ -330,5 +330,3 @@ class User_model extends CI_Model
     }
 
 }
-
-  

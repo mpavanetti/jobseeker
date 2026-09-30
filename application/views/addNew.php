@@ -28,14 +28,14 @@
                                 <div class="col-md-6">                                
                                     <div class="form-group">
                                         <label for="fname">Full Name</label>
-                                        <input type="text" class="form-control required" value="<?php echo set_value('fname'); ?>" id="fname" name="fname" maxlength="128">
+                                        <input type="text" class="form-control required" value="<?php echo html_escape(set_value('fname')); ?>" id="fname" name="fname" maxlength="128" autocomplete="name">
                                     </div>
                                     
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="email">Email address</label>
-                                        <input type="text" class="form-control required email" id="email" value="<?php echo set_value('email'); ?>" name="email" maxlength="128">
+                                        <input type="email" class="form-control required email" id="email" value="<?php echo html_escape(set_value('email')); ?>" name="email" maxlength="128" autocomplete="email">
                                     </div>
                                 </div>
                             </div>
@@ -43,21 +43,22 @@
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="password">Password</label>
-                                        <input type="password" class="form-control required" id="password" name="password" maxlength="20">
+                                        <input type="password" class="form-control required" id="password" name="password" maxlength="20" autocomplete="new-password">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="cpassword">Confirm Password</label>
-                                        <input type="password" class="form-control required equalTo" id="cpassword" name="cpassword" maxlength="20">
+                                        <input type="password" class="form-control required equalTo" id="cpassword" name="cpassword" maxlength="20" autocomplete="new-password">
                                     </div>
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="mobile">Mobile Number</label>
-                                        <input type="text" class="form-control required digits" id="mobile" value="<?php echo set_value('mobile'); ?>" name="mobile" maxlength="12">
+                                        <label for="mobile">Phone Number</label>
+                                        <input type="tel" class="form-control required" id="mobile" value="<?php echo html_escape(set_value('mobile')); ?>" name="mobile" maxlength="30" inputmode="tel" autocomplete="tel" placeholder="+1 415 555 2671">
+                                        <span class="help-block">Include the country calling code for international numbers.</span>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -81,7 +82,7 @@
                                 </div>  
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="role">Groups</label>
+                                        <label for="group">Groups</label>
                                           <select id="group" class="form-control required" name="group">
                                             <?php
                                             if(!empty($groups))
