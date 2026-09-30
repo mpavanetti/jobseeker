@@ -38,6 +38,8 @@ SERVER = f"jobseeker-git-e2e-{RUN}"
 VOLUME = SERVER
 NETWORK = os.environ.get("JOBSEEKER_E2E_NETWORK", "jobseeker_internal")
 URL = f"http://{SERVER}:8000/remote.git"
+# A project's jobs open the opener's own workspace of the project; set once
+# Open in VS Code reports where it is.
 WORKSPACE = ROOT / "repository" / "python" / "git" / JOB
 IDE_WORKSPACE = f"/home/workspace/repository/python/git/{JOB}"
 
@@ -121,6 +123,7 @@ def build_output(browser) -> str:
 
 
 def main() -> None:
+    global WORKSPACE, IDE_WORKSPACE
     browser = matrix.Browser()
     browser.request("/")
     _, page = browser.request("/loginMe", method="POST", csrf=True,
@@ -201,6 +204,10 @@ def main() -> None:
                   "pythonRepositoryBranch": "main", "pythonGitCredentialKey": "", "pythonEntryPoint": "main.py"}
         status, body = browser.request("/jobCreation/gitPythonExternalOpen", method="POST", csrf=True, fields=fields)
         opened = json.loads(body)
+        WORKSPACE = ROOT / opened.get("workspacePath", "missing")
+        IDE_WORKSPACE = "/home/workspace/" + opened.get("workspacePath", "missing")
+        check("a project job opens the opener's own workspace of the project",
+              opened.get("workspacePath", "").startswith("repository/workspaces/u"), body[:400])
         check("Open in VS Code clones the repository", opened.get("ok") is True and IDE_WORKSPACE in opened.get("openVsCodeUrl", "")
               .replace("%2F", "/"), body[:400])
         check("the working copy is on develop", workspace_git("rev-parse", "--abbrev-ref", "HEAD") == "develop")

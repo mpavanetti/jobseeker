@@ -5,17 +5,27 @@
 set -eu
 
 usage() {
-  echo "Usage: jobseeker-git {clone|ls-remote|heads} --connector-dir DIR [--branch REF] [--full] -- URL [TARGET]" >&2
+  echo "Usage: jobseeker-git {clone|ls-remote|heads} --connector-dir DIR [--branch REF] [--full] [--sparse PATH]... -- URL [TARGET]" >&2
   echo "       jobseeker-git push --connector-dir DIR -- URL WORKTREE REFSPEC..." >&2
+  echo "       jobseeker-git features" >&2
   exit 2
 }
 
 command_name=${1:-}
-case "$command_name" in clone|ls-remote|heads|push) ;; *) usage ;; esac
+case "$command_name" in
+  clone|ls-remote|heads|push) ;;
+  # Builds generated for newer helpers ask before using an option, so a
+  # worker image that predates it keeps building with a full clone.
+  features) echo sparse; exit 0 ;;
+  *) usage ;;
+esac
 shift
 
 connector_dir=
 branch=
+# Folders of a sparse clone. A job that lives in one folder of a repository
+# holding many jobs fetches only its own folder (and the shared code).
+sparse_paths=
 # A shallow single-branch clone is enough for a build; an OpenVSCode working
 # copy needs every branch and its history.
 clone_depth="--depth 1"
@@ -34,6 +44,14 @@ while [ "$#" -gt 0 ]; do
     --full)
       clone_depth=
       shift
+      ;;
+    --sparse)
+      [ "$#" -ge 2 ] || usage
+      case "$2" in
+        ''|-*|/*|*..*|*[!A-Za-z0-9._/-]*) echo "Sparse paths are relative folder names." >&2; exit 2 ;;
+      esac
+      sparse_paths="$sparse_paths $2"
+      shift 2
       ;;
     --)
       shift
@@ -173,10 +191,19 @@ EOF
 esac
 
 if [ "$command_name" = "clone" ]; then
+  # A sparse clone skips file contents outside its folders (servers without
+  # partial clone support ignore the filter and send them anyway).
+  sparse_options=
+  [ -z "$sparse_paths" ] || sparse_options="--filter=blob:none --sparse"
   if [ -n "$branch" ]; then
-    git -c credential.helper= clone $clone_depth --branch "$branch" -- "$repository_url" "$target"
+    git -c credential.helper= clone $clone_depth $sparse_options --branch "$branch" -- "$repository_url" "$target"
   else
-    git -c credential.helper= clone $clone_depth -- "$repository_url" "$target"
+    git -c credential.helper= clone $clone_depth $sparse_options -- "$repository_url" "$target"
+  fi
+  if [ -n "$sparse_paths" ]; then
+    # Validated above: plain relative names, safe to split on spaces.
+    # shellcheck disable=SC2086
+    git -C "$target" -c credential.helper= sparse-checkout set --cone -- $sparse_paths
   fi
 elif [ "$command_name" = "heads" ]; then
   # Branch names only (an empty repository prints nothing), for callers that

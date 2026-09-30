@@ -221,13 +221,22 @@ def main() -> None:
         check("the sample brings its README and project file",
               (sample_workspace / "README.md").is_file() and (sample_workspace / "pyproject.toml").is_file()
               and (sample_workspace / "LICENSE").is_file(), str(sorted(p.name for p in sample_workspace.iterdir())))
+        check("the Jenkins Agent runtime gets no Dockerfile",
+              sample.get("runtime") == "local" and sample.get("useDockerfile") is False
+              and not (sample_workspace / "Dockerfile").exists(), json.dumps(sample)[:600])
         check("the sample opens in VS Code on develop",
               "openVsCodeUrl" in sample and run("git", "-C", str(sample_workspace), "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "develop")
-        status, second = post_json(browser, "/jobCreation/gitPythonLoadSample", sample_fields)
+        docker_fields = dict(sample_fields, pythonRuntimeMode="docker", pythonDockerImage="python:3.12-slim")
+        status, second = post_json(browser, "/jobCreation/gitPythonLoadSample", docker_fields)
         check("a second copy goes into its own folder instead of overwriting",
               second.get("ok") is True and second.get("sampleFolder") == f"samples/{SAMPLE_ID}"
               and second.get("entryPoint") == f"samples/{SAMPLE_ID}/main.py"
               and (sample_workspace / "samples" / SAMPLE_ID / "README.md").is_file(), json.dumps(second)[:600])
+        sample_dockerfile = sample_workspace / "samples" / SAMPLE_ID / "Dockerfile"
+        check("the Docker Container runtime gets a Dockerfile from the selected image",
+              second.get("runtime") == "docker" and second.get("useDockerfile") is True and sample_dockerfile.is_file()
+              and "FROM python:3.12-slim" in sample_dockerfile.read_text() and "poetry check --lock" in sample_dockerfile.read_text(),
+              json.dumps(second)[:600])
         status, third = post_json(browser, "/jobCreation/gitPythonLoadSample", sample_fields, expected=(409,))
         check("adding the same sample again is refused", status == 409, json.dumps(third))
 

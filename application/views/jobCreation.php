@@ -1,6 +1,7 @@
 <link rel="stylesheet" type="text/css" href="<?php echo base_url(); ?>assets/bower_components/select2/dist/css/select2.min.css">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/plugins/dropzone/dropzone.css">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-edit.css?v=1">
 <style>
   .dropzone {
     background: white;
@@ -244,6 +245,8 @@
   .job-option-detail {
     color: #777;
     display: block;
+    /* Most cards are <label>s, which Bootstrap makes bold. */
+    font-weight: 400;
     font-size: 12px;
     line-height: 1.35;
     margin-top: 5px;
@@ -458,6 +461,21 @@
   .linux-python-options { container-type: inline-size; }
   .linux-python-options .linux-execution-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   @container (min-width: 760px) { .linux-python-options .linux-execution-choice-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .project-job-picker { background:#f7f9fb; border:1px dashed #c9d6e3; border-radius:8px; margin-top:12px; padding:10px 12px; }
+  .project-job-picker-head { align-items:center; display:flex; flex-wrap:wrap; gap:8px; }
+  .project-job-picker-head > div { display:flex; flex:1 1 260px; flex-direction:column; min-width:0; }
+  .project-job-picker-head > div span { color:#6b7a89; font-size:12px; }
+  .project-job-picker-head select { flex:0 1 240px; width:auto; }
+  .project-job-picker-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .project-job-picker-list:empty { display:none; }
+  .project-job-chip { align-items:flex-start; background:#fff; border:1px solid #dde5ee; border-radius:6px; display:flex; flex-direction:column; gap:2px; max-width:100%; min-width:170px; padding:7px 10px; text-align:left; }
+  .project-job-chip:hover { border-color:#3c8dbc; }
+  .project-job-chip.is-selected { border-color:#3c8dbc; box-shadow:0 0 0 2px rgba(60,141,188,.18); }
+  .project-job-chip small { color:#6b7a89; }
+  .project-job-state { font-size:11px; font-weight:600; }
+  .project-job-state.is-ok { color:#2e7d32; }
+  .project-job-state.is-warning { color:#b26a00; }
+  .project-job-picker-note { color:#4d5b69; flex-basis:100%; font-size:12px; margin:2px 0 0; }
 
   .linux-execution-choice {
     align-items: flex-start;
@@ -2039,19 +2057,20 @@
 <div class="content-wrapper">
   <section class="content-header">
     <h1>
-      Job Creation
-      <small>Run Jobs</small>
+      <span id="jobCreationPageTitle"><?php echo ! empty($requested_edit_job) ? 'Edit Job' : 'Job Creation'; ?></span>
+      <small id="jobCreationPageSubtitle"><?php echo ! empty($requested_edit_job) ? html_escape($requested_edit_job) : 'Build and schedule Jenkins jobs'; ?></small>
     </h1>
     <ol class="breadcrumb">
       <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
       <li><a href="#">Job Management</a></li>
-      <li class="active">Job Creation</li>
+      <li class="active" id="jobCreationBreadcrumbLabel"><?php echo ! empty($requested_edit_job) ? 'Edit Job' : 'Job Creation'; ?></li>
     </ol>
   </section>
   <section class="content">
     <div class="container-fluid job-creation-workspace">
       <div class="row" style="margin-top: 10px; margin-bottom: 10px;">
         <div class="col-xs-12 text-right">
+          <button type="button" class="btn btn-primary" id="newJobFromHeader" style="display: none;"><i class="fa fa-plus"></i> Create New Job</button>
           <a class="btn btn-default" href="<?php echo base_url(); ?>jobList"><i class="fa fa-list"></i> Job Build List</a>
         </div>
       </div>
@@ -2134,7 +2153,7 @@
         <i class="fa fa-exclamation-triangle"></i> <?php echo html_escape($commandGuardWarning); ?>
       </div>
     <?php } ?>
-    <script>window.jobseekerSavedJobs = <?php echo json_encode(array_values($savedJobNames)); ?>;</script>
+    <script>window.jobseekerSavedJobs = <?php echo json_encode(array_values($savedJobNames)); ?>; window.jobseekerSavedJobsTriggered = <?php echo $this->session->flashdata('saved_jobs_triggered') ? 'true' : 'false'; ?>;</script>
 
     <div class="row">
       <div class="col-md-12">
@@ -2237,6 +2256,11 @@
           </div>
         </div>
         <div class="form-group">
+          <label for="pythonMoveGitJobPath">Job folder in the repository</label>
+          <input type="text" class="form-control" id="pythonMoveGitJobPath" maxlength="200" autocomplete="off" spellcheck="false" placeholder="repository root">
+          <p class="help-block">A project repository holds many jobs, one folder each. Leave it empty only for a repository of its own.</p>
+        </div>
+        <div class="form-group">
           <label for="pythonMoveGitMessage">Commit message</label>
           <input type="text" class="form-control" id="pythonMoveGitMessage" maxlength="2000" autocomplete="off">
         </div>
@@ -2319,10 +2343,22 @@
 <form role="form" id="InsertDbSettings" action="<?php echo base_url() ?>jobCreation/send" method="post">
 <input type="checkbox" name="checkEnvironment" id="checkEnvironment" value="1" checked style="display: none;">
 <input type="hidden" name="timestamp" id="timestamp" value="1">
-<div class="alert alert-info editJobBanner" style="display: none;">
-  <i class="fa fa-pencil"></i>
-  Editing <b class="editJobName"></b>. Saving will update this Jenkins job unless you change the job name.
-  <button type="button" id="clearEditJob" class="btn btn-default btn-xs pull-right"><i class="fa fa-plus"></i> New Job</button>
+<input type="hidden" name="original_job_name" id="original_job_name" value="">
+<div class="job-edit-context editJobBanner" style="display: none;" role="status" aria-live="polite">
+  <div class="job-edit-context-icon"><i class="fa fa-pencil"></i></div>
+  <div class="job-edit-context-copy">
+    <span class="job-edit-eyebrow">Editing existing Jenkins job</span>
+    <strong class="editJobName"></strong>
+    <span class="job-edit-message" id="editJobMessage">Changes will update this job in place.</span>
+  </div>
+  <div class="job-edit-context-state">
+    <span class="job-edit-state" id="editJobState"><i class="fa fa-check-circle"></i> Loaded</span>
+  </div>
+  <div class="job-edit-context-actions">
+    <a class="btn btn-default btn-sm" id="openEditedJobInJenkins" href="#" target="_blank" rel="noopener"><i class="fa fa-external-link"></i> Jenkins</a>
+    <button type="button" id="retryEditJob" class="btn btn-default btn-sm" style="display: none;"><i class="fa fa-refresh"></i> Retry</button>
+    <button type="button" id="clearEditJob" class="btn btn-default btn-sm"><i class="fa fa-times"></i> Cancel Editing</button>
+  </div>
 </div>
 <div class="row job-form-row">
   <div class="col-lg-4 col-md-12 col-xs-12 job-input-column">
@@ -2343,8 +2379,11 @@
         <div class="box-body" style="padding-top: 15px;">
           <div class="form-group">
             <label for="job_name">Job Name</label>
-            <input type="text" name ="job_name" class="form-control" id="job_name" maxlength="50" placeholder="Auto-generated if empty" onkeypress="return event.charCode != 32">
-            <p class="help-block">Primary job name. Leave empty to generate one.</p>
+            <div class="input-group job-name-input-group">
+              <input type="text" name ="job_name" class="form-control" id="job_name" maxlength="50" placeholder="Auto-generated if empty" onkeypress="return event.charCode != 32">
+              <span class="input-group-addon job-name-lock" id="editJobNameLock" style="display: none;" title="The Jenkins identity is fixed while editing"><i class="fa fa-lock"></i></span>
+            </div>
+            <p class="help-block" id="jobNameHelp">Primary job name. Leave empty to generate one.</p>
           </div>
           <div class="form-group job-bulk-drafts">
             <div class="job-bulk-drafts-summary">
@@ -2621,6 +2660,20 @@
                         <button type="button" class="linux-execution-choice" data-linux-python-choice="path"><i class="fa fa-folder-open"></i><strong>Repository Path</strong><span>Run Python already in the repository.</span></button>
                         <button type="button" class="linux-execution-choice" data-linux-python-choice="git"><i class="fa fa-code-fork"></i><strong>Git Source</strong><span>Clone and run a branch or tag.</span></button>
                       </div>
+                      <?php $pythonWorkspaceProjects = array_values(array_filter((array) (isset($workspace_projects) ? $workspace_projects : array()), function($project) { return $project['type'] === 'python'; })); ?>
+                      <div class="project-job-picker" id="projectJobPicker"<?php echo empty($pythonWorkspaceProjects) ? ' hidden' : ''; ?>>
+                        <div class="project-job-picker-head">
+                          <div><strong><i class="fa fa-folder-open-o"></i> From a project workspace</strong><span>Pick a job folder you developed in VS Code; the form fills in from it.</span></div>
+                          <select class="form-control input-sm" id="projectJobPickerProject" aria-label="Project">
+                            <option value="">Choose a project</option>
+                            <?php foreach ($pythonWorkspaceProjects as $workspaceProject) { ?>
+                              <option value="<?php echo (int) $workspaceProject['id']; ?>" data-git="<?php echo $workspaceProject['hasGit'] ? '1' : '0'; ?>"><?php echo html_escape($workspaceProject['name']); ?></option>
+                            <?php } ?>
+                          </select>
+                          <button type="button" class="btn btn-default btn-sm" id="projectJobPickerRefresh" title="Look again"><i class="fa fa-refresh"></i></button>
+                        </div>
+                        <div class="project-job-picker-list" id="projectJobPickerList" aria-live="polite"></div>
+                      </div>
                     </div>
                     <div class="linux-execution-section linux-etl-options" style="display: none;">
                       <div class="linux-execution-section-header">
@@ -2770,7 +2823,7 @@
                         <div class="form-group" id="pythonEntryPointGroup">
                           <label for="pythonEntryPoint" id="pythonEntryPointLabel">Entry Python File or Nested Path</label>
                           <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" placeholder="main.py or pyjob/main.py">
-                          <p class="help-block" id="pythonEntryPointHelp" style="display: none;">Path from the repository root, such as <code>main.py</code> or <code>jobs/etl/main.py</code>.</p>
+                          <p class="help-block" id="pythonEntryPointHelp" style="display: none;">Path inside the job folder, such as <code>main.py</code>.</p>
                         </div>
                       </div>
                     </div>
@@ -2806,6 +2859,11 @@
                             <input type="text" class="form-control" id="pythonRepositoryBranch" name="pythonRepositoryBranch" maxlength="200" autocomplete="off" spellcheck="false" placeholder="develop">
                             <p class="help-block" id="pythonRepositoryBranchHelp">Defaults by environment; override it to run a tag or release branch.</p>
                           </div>
+                          <div class="form-group">
+                            <label for="pythonGitJobPath">Job folder</label>
+                            <input type="text" class="form-control" id="pythonGitJobPath" name="pythonGitJobPath" maxlength="200" autocomplete="off" spellcheck="false" placeholder="repository root">
+                            <p class="help-block" id="pythonGitJobPathHelp">Where this job lives in the repository. Builds run from it and fetch only it and <code>shared/</code>.</p>
+                          </div>
                           <div id="pythonGitEntrySlot"></div>
                         </div>
                       </section>
@@ -2838,7 +2896,7 @@
                         </div>
                         <div class="python-git-account" id="pythonPersonalGitStatus" role="status">Enter a repository URL to match one of your Git accounts.</div>
                         <div class="python-git-develop-actions">
-                          <button type="button" class="btn python-vscode-button" id="openPythonGitInVscode"><span class="vscode-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg></span> Open Repository in VS Code</button>
+                          <button type="button" class="btn python-vscode-button" id="openPythonGitInVscode"><span class="vscode-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg></span> <span id="openPythonGitInVscodeLabel">Open Repository in VS Code</span></button>
                           <button type="button" class="btn btn-default" id="addPythonGitSample"><i class="fa fa-flask"></i> Add a sample</button>
                           <button type="button" class="btn btn-link" id="testPythonPersonalGit" style="display:none;"><i class="fa fa-plug"></i> Test my access</button>
                         </div>
@@ -3686,6 +3744,13 @@
       });
 
       $('#InsertDbSettings').on('submit', function(event) {
+        if (editingOriginalJob !== '' && $.trim($('#job_name').val()) !== editingOriginalJob) {
+          $('#job_name').val(editingOriginalJob);
+          event.preventDefault();
+          toastr.error('The Jenkins job name is locked while editing.', 'Edit Job');
+          return false;
+        }
+
         if (! requireConcreteGlobalEnvironment()) {
           event.preventDefault();
           return false;
@@ -3703,6 +3768,9 @@
         persistJobDraftCache();
         if (submitJobDraftsIfNeeded()) {
           event.preventDefault();
+        } else {
+          editSubmitting = true;
+          window.jobseekerDraftCacheSkipBeforeUnload = true;
         }
       });
 
@@ -3763,6 +3831,7 @@
           stopPythonExternalSync(true);
         }
         syncGitBuildCredentialOptions();
+        syncGitJobPathDefault();
       });
 
       $('#applyPythonInlineTemplate').on('click', function() {
@@ -3902,6 +3971,11 @@
       var applyingJobDraft = false;
       var draftCacheReady = false;
       var draftCacheTimer = null;
+      var editingOriginalJob = '';
+      var editBaseline = '';
+      var editLoadRequest = null;
+      var editLoadGeneration = 0;
+      var editSubmitting = false;
       var activeConfigPanel = '';
       var availableJobCache = [];
       var availableJobsLoading = false;
@@ -4030,6 +4104,17 @@
         return gitBranchDefaults[gitPanelEnvironment()] || gitBranchDefaults.DEFAULT || 'main';
       }
 
+      // Host (without port or user) of an HTTPS or SCP-style SSH remote, lower case.
+      function gitRepositoryHost(url) {
+        url = $.trim(String(url || ''));
+        var scp = url.match(/^[^@\/\s]+@([^:\/\s]+):/);
+        if (scp) {
+          return scp[1].toLowerCase();
+        }
+        var match = url.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@\/]*@)?([^:\/?#]+)/i);
+        return match ? match[1].toLowerCase() : '';
+      }
+
       function syncGitBuildCredentialOptions() {
         var select = $('#pythonGitCredentialKey');
         var environment = gitPanelEnvironment();
@@ -4135,9 +4220,53 @@
         $('#pythonGitProjectCredential').toggle(!!project);
         $('#pythonGitCredentialKey').toggle(!project);
         syncGitBuildCredentialOptions();
+        syncGitJobPathDefault();
         syncGitBranchDefault();
         renderPersonalGitAccess();
       }
+
+      // Mirrors ProjectWorkspace::slug(): a job name as a folder name.
+      function gitJobFolderSlug(value) {
+        return String(value || '').toLowerCase().replace(/\//g, '-').replace(/[^a-z0-9._-]+/g, '-')
+          .replace(/-{2,}/g, '-').substring(0, 60).replace(/^[-._]+|[-._]+$/g, '');
+      }
+
+      // A project's repository holds many jobs, one folder each (jobs/<job>);
+      // a repository of its own runs from its root. A folder someone typed,
+      // or a saved job's folder, is never replaced.
+      function syncGitJobPathDefault() {
+        var field = $('#pythonGitJobPath');
+        if (!field.length || applyingJobDraft || field.data('jobseeker-user-set')) {
+          syncGitJobPathHelp();
+          return;
+        }
+        var slug = gitJobFolderSlug(currentPythonInlineJobName());
+        field.val(selectedGitProject() && slug !== '' ? 'jobs/' + slug : '');
+        syncGitJobPathHelp();
+      }
+
+      function syncGitJobPathHelp() {
+        var path = $.trim($('#pythonGitJobPath').val() || '');
+        var project = selectedGitProject();
+        $('#pythonGitJobPath').attr('placeholder', project ? 'jobs/' + (gitJobFolderSlug(currentPythonInlineJobName()) || 'my-job') : 'repository root');
+        $('#pythonGitJobPathHelp').html(path === ''
+          ? (project
+            ? '<span class="text-warning"><i class="fa fa-exclamation-triangle"></i> The repository root:</span> this job would see every file of ' + escapeHtml(project.name) + '. Give it a folder such as <code>jobs/' + escapeHtml(gitJobFolderSlug(currentPythonInlineJobName()) || 'my-job') + '</code>.'
+            : 'The repository root, for a repository of its own. In a repository of many jobs, give each a folder such as <code>jobs/load-orders</code>.')
+          : 'Builds run from <code>' + escapeHtml(path) + '</code> and fetch only it and <code>shared/</code>; the entry file is inside it.');
+        syncGitWorkspaceHelp();
+      }
+
+      $('#pythonGitJobPath').on('input change', function(event) {
+        if (!applyingJobDraft) {
+          $(this).data('jobseeker-user-set', true);
+        }
+        syncGitJobPathHelp();
+        if (event.type === 'change') {
+          updateJobCreationReview();
+          scheduleJobDraftCacheSave(0);
+        }
+      });
 
       // "DEV runs develop, the others run main" from a project's branch rows.
       function projectBranchSummary(project) {
@@ -4192,6 +4321,16 @@
       function syncGitWorkspaceHelp() {
         var workspaceBranch = defaultGitBranchForEnvironment();
         var jobBranch = $.trim($('#pythonRepositoryBranch').val() || '') || workspaceBranch;
+        var project = selectedGitProject();
+        var jobPath = $.trim($('#pythonGitJobPath').val() || '');
+        $('#openPythonGitInVscodeLabel').text(project ? 'Open Project in VS Code' : 'Open Repository in VS Code');
+        if (project) {
+          // Every job of a project shares the opener's own workspace of it.
+          $('#pythonGitWorkspaceHelp').html('Opens <strong>your own</strong> working copy of ' + escapeHtml(project.name) + ', with all its jobs; a first clone starts on <code>' + escapeHtml(workspaceBranch) + '</code>.'
+            + (jobPath !== '' ? ' This job is <code>' + escapeHtml(jobPath) + '</code>; a new folder gets starter files.' : '')
+            + (jobBranch !== workspaceBranch ? ' The job runs <code>' + escapeHtml(jobBranch) + '</code>.' : ''));
+          return;
+        }
         $('#pythonGitWorkspaceHelp').html('Clones into OpenVSCode on <code>' + escapeHtml(workspaceBranch) + '</code> with your personal Git account; commit, pull and push from the editor.'
           + (jobBranch !== workspaceBranch ? ' The job runs <code>' + escapeHtml(jobBranch) + '</code>.' : ''));
       }
@@ -4203,6 +4342,7 @@
           pythonRepositoryUrl: $('#pythonRepositoryUrl').val() || '',
           pythonRepositoryBranch: $('#pythonRepositoryBranch').val() || '',
           pythonProjectId: $('#pythonProjectId').val() || '',
+          pythonGitJobPath: $.trim($('#pythonGitJobPath').val() || ''),
           pythonGitCredentialKey: $('#pythonGitCredentialKey').val() || '',
           pythonEntryPoint: $('#pythonEntryPoint').val() || '',
           pythonVersion: $('#pythonVersion').val() || '',
@@ -4284,7 +4424,7 @@
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
       var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitJobPath', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -4553,7 +4693,9 @@
           return;
         }
         var activeSource = sample.family === 'python' ? $('#pythonInlineCode').val() : $('#linuxCommandLine').val();
-        if ($.trim(activeSource || '') !== '' && ! window.confirm('Replace the active ' + sample.family + ' editor with “' + sample.name + '”?')) {
+        // The untouched starter template is not work anyone would lose.
+        var untouchedStarter = sample.family === 'python' && $.trim(activeSource || '') === $.trim(pythonInlineJobSeekerTemplate());
+        if ($.trim(activeSource || '') !== '' && ! untouchedStarter && ! window.confirm('Replace the active ' + sample.family + ' editor with “' + sample.name + '”?')) {
           return;
         }
         applyJobSample(sample);
@@ -6684,7 +6826,7 @@
       function pythonRuntimeSummary() {
         if ($('#pythonRuntimeMode').val() == 'docker') {
           var image = $.trim($('#pythonDockerImage').val()) || dockerImageForLinuxExecution();
-          var testSummary = $('#pythonRunTests').is(':checked') ? ' + pytest' : '';
+          var testSummary = linuxExecutionUsesPython() && $('#pythonRunTests').is(':checked') ? ' + pytest' : '';
           if (pythonInlineUsesDockerfile()) {
             return 'Dockerfile from ' + image + testSummary + ' / ' + ($('#containerCpuLimit').val() || '1') + ' CPU / ' + ($('#containerMemoryLimitMb').val() || '512') + ' MB';
           }
@@ -7328,6 +7470,7 @@
         $.each(draftArrayFields, function(index, field) {
           $('#' + field).val(normalizeArray(normalizedDraft[field])).trigger('change.select2');
         });
+        $('#pythonGitJobPath').data('jobseeker-user-set', $.trim($('#pythonGitJobPath').val() || '') !== '');
 
         updateLinuxCommandEditor();
         updatePythonInlineEditor();
@@ -7492,7 +7635,10 @@
       }
 
       function persistJobDraftCache() {
-        if (! draftCacheReady || ! window.JobSeekerDraftCache) {
+        // Existing Jenkins jobs have an explicit edit URL and a locked name.
+        // Do not mix them into the create-mode cache, where reopening a named
+        // draft could otherwise look like a new job while updating the old one.
+        if (editingOriginalJob !== '' || ! draftCacheReady || ! window.JobSeekerDraftCache) {
           return;
         }
 
@@ -7523,7 +7669,7 @@
 
         var meaningfulTextFields = [
           'job_name', 'description', 'windowsCommandLine', 'linuxCommandLine',
-          'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitCredentialKey',
+          'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitJobPath', 'pythonGitCredentialKey',
           'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText',
           'recipients'
         ];
@@ -7562,7 +7708,7 @@
       }
 
       function scheduleJobDraftCacheSave(delay) {
-        if (! draftCacheReady || ! window.JobSeekerDraftCache) {
+        if (editingOriginalJob !== '' || ! draftCacheReady || ! window.JobSeekerDraftCache) {
           return;
         }
 
@@ -7960,9 +8106,13 @@
           });
         }
 
-        $('#jobBatchPreview').text(drafts.length + ' job draft(s) will be saved.');
-        $('#send').html('<i class="fa fa-save"></i> ' + (drafts.length > 1 ? 'Save Job Drafts' : 'Save Job'));
-        $('#saveAndTrigger').html('<i class="fa fa-play"></i> ' + (drafts.length > 1 ? 'Save And Trigger Drafts' : 'Save And Trigger'));
+        // Names typed but not yet applied become drafts when the form is saved.
+        var pendingNames = drafts.length <= 1 && $.trim($('#job_names').val()) !== '' ? collectJobNames(false).length : 0;
+        $('#jobBatchPreview').text(pendingNames > 1
+          ? pendingNames + ' jobs will be saved, one per name, each with this configuration.'
+          : drafts.length + ' job draft(s) will be saved.');
+        $('#send').html('<i class="fa fa-save"></i> ' + (editingOriginalJob !== '' ? 'Update Job' : (drafts.length > 1 ? 'Save Job Drafts' : 'Save Job')));
+        $('#saveAndTrigger').html('<i class="fa fa-play"></i> ' + (editingOriginalJob !== '' ? 'Update And Trigger' : (drafts.length > 1 ? 'Save And Trigger Drafts' : 'Save And Trigger')));
         $('#jobCreationReview').html(
           '<dt>Jobs</dt><dd>' + labels.join(' ') + uploadSourceWarning + '</dd>' +
           '<dt>Active Draft</dt><dd>' + escapeHtml(draftName(activeDraft, activeDraftIndex, true)) + '</dd>' +
@@ -7979,6 +8129,7 @@
         renderJobDraftTabs();
         renderJobDraftComparison();
         renderJobPipelineGraph();
+        updateEditJobState();
         scheduleJobDraftCacheSave();
       }
 
@@ -8108,23 +8259,31 @@
           acceptedFiles: acceptedFiles,
           url: '<?php echo base_url(); ?>jobCreation/do_upload/' + encodeURIComponent(scriptType) + '/' + encodeURIComponent(jobName),
           maxFilesize: 100,
-          sending: function() {
-            toastr.info('Uploading File, please wait the file get uploaded', 'File Uploading');
+          sending: function(file) {
+            toastr.info('Uploading ' + file.name + '…', 'Upload');
             $('.buildXmlBtn').prop('disabled', true);
           },
-          success: function() {
-            toastr.success('Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.', 'File Upload Success');
+          success: function(file) {
+            toastr.success(file.name + (/\.zip$/i.test(file.name) ? ' was uploaded and extracted.' : ' was uploaded.') + ' Save the job to run it.', 'Upload complete');
             $('.buildXmlBtn').prop('disabled', false);
             if (scriptType == 'hop') {
               detectHopEntryFiles();
             }
           },
-          error: function() {
-            toastr.error('Erro during uploading file.', 'File Upload Error');
+          error: function(file, message) {
+            toastr.error(window.jobseekerUploadErrorText(message), 'Upload failed', {timeOut: 10000});
             $('.buildXmlBtn').prop('disabled', false);
           }
         });
       }
+
+      // Dropzone passes the server's plain-text reason, or its own message.
+      // Global so the Windows upload handler can use it too.
+      window.jobseekerUploadErrorText = function(message) {
+        var text = message && typeof message === 'object' ? (message.message || message.error || '') : String(message || '');
+        text = $.trim($('<div>').html(text).text()).slice(0, 300);
+        return text !== '' ? text : 'The file could not be uploaded.';
+      };
 
       function syncLinuxExecutionControls(resetScriptType) {
         if (! $('#linuxCommand').is(':checked')) {
@@ -8460,6 +8619,136 @@
         scheduleJobDraftCacheSave(0);
       });
 
+      // Job folders developed in a project workspace (sidebar > VS Code).
+      var projectJobPickerRequest = null;
+      var projectJobPickerResponse = null;
+      var projectJobStates = {
+        pushed: ['is-ok', 'fa-check-circle', 'pushed'],
+        unpushed: ['is-warning', 'fa-cloud-upload', 'not pushed'],
+        changed: ['is-warning', 'fa-pencil', 'uncommitted changes'],
+        untracked: ['is-warning', 'fa-plus-circle', 'not committed'],
+        local: ['is-ok', 'fa-folder-o', 'runs in place']
+      };
+
+      function loadProjectJobPicker(folderToApply) {
+        var projectId = $('#projectJobPickerProject').val() || '';
+        var list = $('#projectJobPickerList');
+        if (projectJobPickerRequest) {
+          projectJobPickerRequest.abort();
+        }
+        projectJobPickerResponse = null;
+        if (!projectId) {
+          list.empty();
+          return;
+        }
+        list.html('<span class="text-muted"><i class="fa fa-spinner fa-spin"></i> Looking for job folders...</span>');
+        projectJobPickerRequest = $.ajax({url: '<?php echo base_url(); ?>jobCreation/projectWorkspaceJobs', type: 'POST', dataType: 'json',
+          data: {project_id: projectId, environment: gitPanelEnvironment()}})
+          .done(function(response) {
+            projectJobPickerResponse = response;
+            renderProjectJobPicker(response);
+            if (folderToApply) {
+              var match = $.grep(response.jobs || [], function(job) { return job.path === folderToApply; })[0];
+              if (match) {
+                applyProjectJob(response, match);
+              } else {
+                toastr.warning(folderToApply + ' is not in your ' + response.project.name + ' workspace. Pull it in VS Code, then look again.', 'Project job', {timeOut: 10000});
+              }
+            }
+          })
+          .fail(function(xhr, status) {
+            if (status !== 'abort') {
+              list.html('<span class="text-danger">' + escapeHtml((xhr.responseJSON && xhr.responseJSON.message) || 'The project workspace could not be read.') + '</span>');
+            }
+          })
+          .always(function() { projectJobPickerRequest = null; });
+      }
+
+      function renderProjectJobPicker(response) {
+        var list = $('#projectJobPickerList');
+        var workspace = response.workspace || {};
+        var open = '<a href="#" class="project-job-picker-open">open it in VS Code</a>';
+        if (!workspace.exists) {
+          list.html('<span class="text-muted">You have no workspace of ' + escapeHtml(response.project.name) + ' yet: ' + open + ', add a folder under <code>jobs/</code>, then look again.</span>');
+          return;
+        }
+        if (!(response.jobs || []).length) {
+          list.html('<span class="text-muted">No job folders under <code>jobs/</code> in <code>' + escapeHtml(workspace.path) + '</code> yet. In VS Code, run the task <strong>JobSeeker: new job</strong> (' + open + ').</span>');
+          return;
+        }
+        var note = '';
+        if (response.project.hasGit && workspace.buildBranch && workspace.branch && workspace.branch !== workspace.buildBranch) {
+          note = '<p class="project-job-picker-note"><i class="fa fa-code-fork"></i> Your workspace is on <code>' + escapeHtml(workspace.branch) + '</code>; ' + escapeHtml(response.environment)
+            + ' builds run <code>' + escapeHtml(workspace.buildBranch) + '</code>. Merge your work there, or pin the branch below.</p>';
+        }
+        list.html($.map(response.jobs, function(job) {
+          var state = projectJobStates[job.state] || projectJobStates.local;
+          return '<button type="button" class="project-job-chip" data-job-path="' + escapeAttribute(job.path) + '">'
+            + '<strong>' + escapeHtml(job.name) + '</strong>'
+            + '<small>' + escapeHtml(job.entryPoint || 'no entry file') + (job.runtime === 'docker' ? ' · Dockerfile' : '') + (job.hasTests ? ' · tests' : '') + '</small>'
+            + '<span class="project-job-state ' + state[0] + '"><i class="fa ' + state[1] + '"></i> ' + state[2] + '</span></button>';
+        }).join('') + note);
+      }
+
+      // Fills the form from a job folder: a Git project's folder runs from
+      // the repository; a shared folder runs in place by repository path.
+      function applyProjectJob(response, job) {
+        if (response.project.hasGit) {
+          applyLinuxPythonChoice('git');
+          setSelectValue('#pythonProjectId', String(response.project.id));
+          syncGitProjectDefaults(true);
+          $('#pythonGitJobPath').val(job.path).data('jobseeker-user-set', true);
+          syncGitJobPathHelp();
+        } else {
+          applyLinuxPythonChoice('path');
+          $('#pythonSourcePath').val(job.sourcePath);
+        }
+        $('#pythonEntryPoint').val(job.entryPoint || 'main.py').trigger('change');
+        if (job.runtime === 'docker' && $('#pythonRuntimeMode').val() !== 'docker') {
+          setSelectValue('#pythonRuntimeMode', 'docker');
+          updatePythonSourceControls();
+        }
+        $('#pythonRunTests').prop('checked', !!job.hasTests);
+        // A folder's name replaces a generated placeholder name, never one typed.
+        var currentName = $.trim($('#job_name').val() || '');
+        var generatedName = new RegExp('^(' + petNamePrefixes.join('|') + ')-(' + petNameSuffixes.join('|') + ')-[a-z0-9]{3,4}$');
+        if ((currentName === '' || generatedName.test(currentName)) && !$('#job_name').prop('readonly')) {
+          $('#job_name').val(job.name).trigger('change');
+        }
+        $('#projectJobPickerList .project-job-chip').removeClass('is-selected').filter(function() {
+          return $(this).attr('data-job-path') === job.path;
+        }).addClass('is-selected');
+        updateJobCreationReview();
+        scheduleJobDraftCacheSave(0);
+        var state = projectJobStates[job.state] || projectJobStates.local;
+        var warning = job.state === 'pushed' || job.state === 'local' ? '' : ' It is ' + state[2] + ' yet: builds run what is pushed.';
+        toastr[warning ? 'warning' : 'success']('The form now runs ' + job.path + ' of ' + response.project.name + '.' + warning, 'Project job', {timeOut: 9000});
+      }
+
+      function openProjectJobFromLink(link) {
+        if (!link || !link.projectId || !$('#projectJobPickerProject option[value="' + Number(link.projectId) + '"]').length) {
+          return;
+        }
+        if (!$('#linuxCommand').is(':checked') || currentExecutionFamily() !== 'python') {
+          applyExecutionFamily('python');
+        }
+        setSelectValue('#projectJobPickerProject', String(Number(link.projectId)));
+        loadProjectJobPicker(link.folder || '');
+      }
+
+      $('#projectJobPickerProject').on('change', function() { loadProjectJobPicker(''); });
+      $('#projectJobPickerRefresh').on('click', function() { loadProjectJobPicker(''); });
+      $('#projectJobPickerList').on('click', '.project-job-chip', function() {
+        var path = $(this).attr('data-job-path');
+        var job = projectJobPickerResponse && $.grep(projectJobPickerResponse.jobs || [], function(item) { return item.path === path; })[0];
+        if (job) {
+          applyProjectJob(projectJobPickerResponse, job);
+        }
+      }).on('click', '.project-job-picker-open', function(event) {
+        event.preventDefault();
+        $('#sidebarOpenVsCode').trigger('click');
+      });
+
       // Samples for a Git job go into its repository working copy.
       $('#addPythonGitSample').on('click', function() {
         $('.open-job-sample-library').first().trigger('click');
@@ -8467,12 +8756,14 @@
 
       function addSampleToGitRepository(sample) {
         $('#jobSampleModal').modal('hide');
-        runGitWorkspaceAction($('#openPythonGitInVscode'), 'jobCreation/gitPythonLoadSample', {sample_id: sample.id}, 'Adding sample...', function(response) {
+        // The sample's files follow the runtime: Docker gets a Dockerfile.
+        var sampleData = {sample_id: sample.id, pythonRuntimeMode: $('#pythonRuntimeMode').val() || 'local'};
+        runGitWorkspaceAction($('#openPythonGitInVscode'), 'jobCreation/gitPythonLoadSample', sampleData, 'Adding sample...', function(response) {
           var entry = $.trim($('#pythonEntryPoint').val() || '');
           if (response.entryPoint && (entry === '' || entry === 'main.py' || response.sampleFolder)) {
             $('#pythonEntryPoint').val(response.entryPoint).trigger('input');
           }
-          if (response.useDockerfile) {
+          if (response.runtime === 'docker' && $('#pythonRuntimeMode').val() !== 'docker') {
             setSelectValue('#pythonRuntimeMode', 'docker');
             updatePythonRuntimeControls();
           }
@@ -8506,6 +8797,12 @@
         }
         branchField.data('default-branch', nextBranch);
         $('#pythonMoveGitReleaseBranch').text(gitProjectDefault(project, 'DEFAULT').branch || gitBranchDefaults.DEFAULT || 'main');
+        var folderField = $('#pythonMoveGitJobPath');
+        var nextFolder = project ? 'jobs/' + (gitJobFolderSlug(currentPythonInlineJobName()) || 'job') : '';
+        if (!folderField.data('user-set') || folderField.val() === folderField.data('default-folder')) {
+          folderField.val(nextFolder).data('user-set', false);
+        }
+        folderField.data('default-folder', nextFolder);
         var account = renderGitAccountStatus($('#pythonMoveGitAccount'), urlField.val(), 'push to');
         $('#pythonMoveGitAccount').removeClass('is-ok is-error is-running').addClass(account ? 'is-ok' : 'is-error').toggle($.trim(urlField.val() || '') !== '');
         $('#confirmPythonMoveToGit').prop('disabled', !account);
@@ -8519,12 +8816,14 @@
         $('#pythonMoveGitMessage').val('Move JobSeeker job ' + currentPythonInlineJobName() + ' to Git');
         $('#pythonMoveGitOverwrite').prop('checked', false);
         $('#pythonMoveGitOverwriteGroup').hide();
+        $('#pythonMoveGitJobPath').data('user-set', false);
         showGitResult($('#pythonMoveGitResult'), '', '');
         syncMoveToGitDialog();
         $('#pythonMoveToGitModal').modal('show');
       });
 
       $('#pythonMoveGitUrl').on('input', syncMoveToGitDialog);
+      $('#pythonMoveGitJobPath').on('input', function() { $(this).data('user-set', true); });
       $('#pythonMoveGitProject').on('change', syncMoveToGitDialog);
 
       $('#confirmPythonMoveToGit').on('click', function() {
@@ -8536,6 +8835,7 @@
           pythonRepositoryUrl: $('#pythonMoveGitUrl').val() || '',
           pythonRepositoryBranch: $('#pythonMoveGitBranch').val() || '',
           pythonProjectId: $('#pythonMoveGitProject').val() || '',
+          pythonGitJobPath: $.trim($('#pythonMoveGitJobPath').val() || ''),
           commit_message: $('#pythonMoveGitMessage').val() || '',
           overwrite: $('#pythonMoveGitOverwrite').is(':checked') ? '1' : '0'
         });
@@ -8549,16 +8849,33 @@
             syncGitProjectDefaults(false);
             $('#pythonRepositoryUrl').val(response.repositoryUrl);
             $('#pythonRepositoryBranch').val(response.branch);
+            $('#pythonGitJobPath').val(response.jobPath || '').data('jobseeker-user-set', true);
+            syncGitJobPathHelp();
             $('#pythonEntryPoint').val(response.entryPoint || 'main.py');
             if (!response.projectId || !$('#pythonGitCredentialKey').val()) {
               $('#pythonGitCredentialKey').val('');
+            }
+            // Builds never use the personal account that just pushed, so a
+            // private repository needs a Git connector. Offer the one for
+            // this host when there is exactly one available.
+            var credentialNote = ' Choose a build credential if the repository is private.';
+            if (!response.projectId) {
+              syncGitBuildCredentialOptions();
+              var repositoryHost = gitRepositoryHost(response.repositoryUrl);
+              var hostMatches = $('#pythonGitCredentialKey option[data-host]').filter(function() {
+                return !this.disabled && repositoryHost !== '' && String($(this).data('host') || '') === repositoryHost;
+              });
+              if (hostMatches.length === 1) {
+                $('#pythonGitCredentialKey').val(hostMatches.val()).trigger('change');
+                credentialNote = ' Builds will use the ' + hostMatches.val() + ' connector for ' + repositoryHost + '; change it under Build access if needed.';
+              }
             }
             renderPersonalGitAccess();
             syncGitWorkspaceHelp();
             updateJobCreationReview();
             scheduleJobDraftCacheSave(0);
             $('#pythonMoveToGitModal').modal('hide');
-            toastr.success(response.message + ' Choose a build credential if the repository is private.', 'Moved to Git (' + response.commit + ')', {timeOut: 15000});
+            toastr.success(response.message + credentialNote, 'Moved to Git (' + response.commit + ')', {timeOut: 15000});
           })
           .fail(function(xhr) {
             var response = xhr.responseJSON || {};
@@ -8616,6 +8933,7 @@
     var jenkins_token = '';
       var availableJobsRefreshTimer = null;
       var availableJobsRefreshIntervalMs = 10000;
+      var requestedEditJob = <?php echo json_encode(isset($requested_edit_job) ? $requested_edit_job : ''); ?>;
       var savedJobName = <?php echo json_encode($savedJobName); ?>;
       var savedJobNames = <?php echo json_encode(array_values($savedJobNames)); ?> || [];
       var savedJobCreatedAt = <?php echo json_encode($savedJobCreatedAt); ?>;
@@ -8899,12 +9217,19 @@
     }
 
     function resetJobCreationForm() {
+      editingOriginalJob = '';
+      editBaseline = '';
+      editSubmitting = false;
       var form = $('#InsertDbSettings')[0];
       if (form) {
         form.reset();
       }
+      $('#pythonGitJobPath').val('').removeData('jobseeker-user-set');
 
       $('#job_name').prop('readonly', false).removeClass('input-loading');
+      $('#original_job_name').val('');
+      $('#editJobNameLock, #newJobFromHeader').hide();
+      $('#jobNameHelp').text('Primary job name. Leave empty to generate one.');
       $('#job_names').val('');
       setBulkDraftsVisible(false);
       $('#trigger_after_save').val('0');
@@ -8912,6 +9237,11 @@
       jobFlowSelectedNode = null;
       $('.editJobBanner').hide();
       $('.editJobName').text('');
+      $('body').removeClass('job-edit-mode');
+      $('#jobCreationPageTitle').text('Job Creation');
+      $('#jobCreationPageSubtitle').text('Build and schedule Jenkins jobs');
+      $('#jobCreationBreadcrumbLabel').text('Job Creation');
+      $('.buildXmlBtn').prop('disabled', false);
       $('.saveJobStatus').hide().text('');
       $('.select2').val(null).trigger('change');
       resetScheduleControls();
@@ -8947,9 +9277,124 @@
       updateJobCreationReview();
     }
 
+    function editJobUrl(jobName) {
+      return '<?php echo base_url(); ?>jobCreation?edit=' + encodeURIComponent(jobName || '');
+    }
+
+    function setEditBrowserLocation(jobName) {
+      if (! window.history || ! window.history.replaceState) {
+        return;
+      }
+
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.delete('draft');
+        if (jobName) {
+          url.searchParams.set('edit', jobName);
+        } else {
+          url.searchParams.delete('edit');
+        }
+        window.history.replaceState({}, '', url.toString());
+      } catch (error) {
+        // Editing still works in older browsers; only the shareable URL is lost.
+      }
+    }
+
+    function editFormFingerprint() {
+      var draft = draftFromForm();
+      // This concurrency token can refresh without a form change.
+      delete draft.pythonWorkspaceSignature;
+      return JSON.stringify(draft);
+    }
+
+    function editHasUnsavedChanges() {
+      return editingOriginalJob !== '' && editBaseline !== '' && editFormFingerprint() !== editBaseline;
+    }
+
+    function renderEditContext(jobName, state, message) {
+      var banner = $('.editJobBanner');
+      var stateHtml = '<i class="fa fa-check-circle"></i> Loaded';
+
+      banner.removeClass('is-loading is-error is-dirty');
+      if (state === 'loading') {
+        banner.addClass('is-loading');
+        stateHtml = '<i class="fa fa-refresh fa-spin"></i> Loading';
+      } else if (state === 'error') {
+        banner.addClass('is-error');
+        stateHtml = '<i class="fa fa-exclamation-circle"></i> Load failed';
+      } else if (state === 'dirty') {
+        banner.addClass('is-dirty');
+        stateHtml = '<i class="fa fa-circle"></i> Unsaved changes';
+      }
+
+      $('.editJobName').text(jobName || 'Jenkins job');
+      $('#editJobMessage').text(message || 'Changes will update this job in place.');
+      $('#editJobState').html(stateHtml);
+      $('#retryEditJob').toggle(state === 'error').data('job', jobName || '');
+      $('#openEditedJobInJenkins')
+        .toggle(state !== 'error')
+        .attr('href', jenkins_url + jenkinsJobPath(jobName || ''));
+      banner.show();
+    }
+
+    function updateEditJobState() {
+      if (editingOriginalJob === '' || $('.editJobBanner').hasClass('is-loading') || $('.editJobBanner').hasClass('is-error')) {
+        return;
+      }
+
+      if (editHasUnsavedChanges()) {
+        renderEditContext(editingOriginalJob, 'dirty', 'Review and save these changes to update the existing Jenkins job.');
+      } else {
+        renderEditContext(editingOriginalJob, 'loaded', 'Changes will update this job in place.');
+      }
+    }
+
     function showEditBanner(jobName) {
-      $('.editJobName').text(jobName);
-      $('.editJobBanner').show();
+      editingOriginalJob = jobName;
+      $('#original_job_name').val(jobName);
+      $('#job_name').val(jobName).prop('readonly', true);
+      $('#editJobNameLock, #newJobFromHeader').show();
+      $('#jobNameHelp').html('<i class="fa fa-lock"></i> Jenkins job names are fixed while editing. Use <strong>Create New Job</strong> for a separate job.');
+      $('body').addClass('job-edit-mode');
+      $('#jobCreationPageTitle').text('Edit Job');
+      $('#jobCreationPageSubtitle').text(jobName);
+      $('#jobCreationBreadcrumbLabel').text('Edit Job');
+      setBulkDraftsVisible(false);
+      renderEditContext(jobName, 'loaded');
+      setEditBrowserLocation(jobName);
+
+      if (draftCacheTimer) {
+        window.clearTimeout(draftCacheTimer);
+        draftCacheTimer = null;
+      }
+      if (window.JobSeekerDraftCache) {
+        window.JobSeekerDraftCache.removeByNames([jobName], false);
+      }
+      updateDraftCacheStatus('', false);
+    }
+
+    function confirmDiscardEditedJob(message) {
+      return ! editHasUnsavedChanges() || window.confirm(message || ('Discard unsaved changes to ' + editingOriginalJob + '?'));
+    }
+
+    function startNewJob() {
+      if (! confirmDiscardEditedJob()) {
+        return;
+      }
+
+      editLoadGeneration += 1;
+      if (editLoadRequest && editLoadRequest.readyState !== 4) {
+        editLoadRequest.abort();
+      }
+      editLoadRequest = null;
+      $('.overlay').fadeOut();
+      resetJobCreationForm();
+      jobDrafts = [createEmptyDraft('')];
+      activeDraftIndex = 0;
+      loadJobDraft(jobDrafts[0]);
+      setEditBrowserLocation('');
+      scheduleJobDraftCacheSave(0);
+      toastr.info('Ready to create a new job.', 'New Job');
     }
 
     function hydrateSchedule(xmlDoc) {
@@ -9286,6 +9731,9 @@
           $('#pythonRepositoryBranch').val('');
         }
         syncGitBranchDefault();
+        // A saved job keeps its folder, including the repository root.
+        $('#pythonGitJobPath').val(shellExportValue(command, 'JOBSEEKER_GIT_JOB_PATH')).data('jobseeker-user-set', true);
+        syncGitJobPathHelp();
         $('#pythonEntryPoint').val(shellExportValue(command, 'JOBSEEKER_ENTRYPOINT'));
         $('.pythonGitSourceForm').show();
         $('.pythonPathSourceForm, .pythonInlineSourceForm, .linuxUploadScript').hide();
@@ -9514,7 +9962,34 @@
       }
     }
 
-    function hydrateJobFormFromXml(jobName, xmlText) {
+    // A job is saved with the global environment. Editing from "All
+    // environments" takes the job's own; editing from another one would move
+    // the job there on save, so say so before it happens.
+    function adoptEditedJobEnvironment(jobName, xmlDoc) {
+      var jobEnvironment = '';
+      $(xmlDoc).find('parameterDefinitions').children().each(function() {
+        if ($.trim($(this).children('name').first().text()) === 'ENVIRONMENT') {
+          jobEnvironment = $.trim($(this).children('defaultValue').first().text());
+          return false;
+        }
+      });
+      if (jobEnvironment === '' || ! isConfiguredGlobalEnvironment(jobEnvironment)) {
+        return;
+      }
+      jobEnvironment = normalizeGlobalEnvironment(jobEnvironment);
+      var selected = currentGlobalEnvironmentValue();
+      if (! isConfiguredGlobalEnvironment(selected)) {
+        if (window.JobSeekerGlobalEnvironment) {
+          window.JobSeekerGlobalEnvironment.set(jobEnvironment);
+        }
+        syncEnvironmentFromGlobal(true);
+        toastr.info('Switched to ' + jobEnvironment + ', the environment ' + jobName + ' runs in.', 'Edit Job');
+      } else if (normalizeGlobalEnvironment(selected) !== jobEnvironment) {
+        toastr.warning(jobName + ' runs in ' + jobEnvironment + '. Saving it now moves it to ' + normalizeGlobalEnvironment(selected) + '.', 'Edit Job', {timeOut: 12000});
+      }
+    }
+
+    function hydrateJobFormFromXml(jobName, xmlText, loadGeneration) {
       var xmlDoc = $.parseXML(xmlText);
 
       applyingJobDraft = true;
@@ -9527,10 +10002,15 @@
       hydrateBuildWrappers(xmlDoc);
 
       function finishHydration() {
+        if (loadGeneration !== editLoadGeneration) {
+          return;
+        }
         applyingJobDraft = false;
         refreshJobOptionPanels();
         showEditBanner(jobName);
+        adoptEditedJobEnvironment(jobName, xmlDoc);
         replaceDraftsWithCurrentForm();
+        editBaseline = editFormFingerprint();
         updateJobCreationReview();
 
         toastr.info('Loaded ' + jobName + ' for editing.', 'Edit Job');
@@ -9541,44 +10021,90 @@
     }
 
     function loadJobForEdit(jobName) {
+      jobName = $.trim(String(jobName || ''));
+      if (jobName === '') {
+        return;
+      }
+
+      if (editingOriginalJob !== '' && editingOriginalJob !== jobName && ! confirmDiscardEditedJob('Discard unsaved changes to ' + editingOriginalJob + ' and edit ' + jobName + '?')) {
+        return;
+      }
+
+      var previousJobName = editingOriginalJob;
+      var loadGeneration = ++editLoadGeneration;
+      if (editLoadRequest && editLoadRequest.readyState !== 4) {
+        editLoadRequest.abort();
+      }
+
+      renderEditContext(jobName, 'loading', 'Reading the current configuration from Jenkins...');
+      $('#retryEditJob').data('job', jobName);
       setSaveJobState(true, 'Loading job...');
       $('.overlay').fadeIn();
 
-      function finishJobLoad() {
+      function finishJobLoad(loaded) {
+        if (loadGeneration !== editLoadGeneration) {
+          return;
+        }
         $('.overlay').fadeOut();
-        setSaveJobState(false, '');
+        editLoadRequest = null;
+        if (loaded || previousJobName !== '') {
+          setSaveJobState(false, '');
+        } else {
+          setSaveJobState(true, 'Fix the load error before saving.');
+        }
       }
 
-      $.ajax({
+      editLoadRequest = $.ajax({
         url: jenkins_url + jenkinsJobPath(jobName) + '/config.xml',
         method: 'GET',
         dataType: 'text',
         headers: {'Authorization': 'Basic ' + btoa(jenkins_username + ':' + jenkins_token)}
       }).done(function(xmlText) {
+        if (loadGeneration !== editLoadGeneration) {
+          return;
+        }
         try {
-          $.when(hydrateJobFormFromXml(jobName, xmlText)).always(finishJobLoad);
+          $.when(hydrateJobFormFromXml(jobName, xmlText, loadGeneration)).always(function() {
+            finishJobLoad(true);
+          });
         } catch (error) {
           applyingJobDraft = false;
           console.error(error);
           toastr.error('Unable to read this job configuration.', 'Edit Job');
-          finishJobLoad();
+          if (previousJobName !== '') {
+            renderEditContext(previousJobName, editHasUnsavedChanges() ? 'dirty' : 'loaded');
+          } else {
+            renderEditContext(jobName, 'error', 'The Jenkins configuration could not be read. Retry or return to the job list.');
+          }
+          finishJobLoad(false);
         }
-      }).fail(function() {
+      }).fail(function(xhr, status) {
+        if (status === 'abort' || loadGeneration !== editLoadGeneration) {
+          return;
+        }
+        applyingJobDraft = false;
         console.error(arguments);
         toastr.error('Unable to load this job from Jenkins.', 'Edit Job');
-        finishJobLoad();
+        if (previousJobName !== '') {
+          renderEditContext(previousJobName, editHasUnsavedChanges() ? 'dirty' : 'loaded');
+        } else {
+          renderEditContext(jobName, 'error', 'The job may have been removed, or Jenkins is currently unavailable.');
+        }
+        finishJobLoad(false);
       });
     }
 
-    $('#clearEditJob').click(function() {
-      resetJobCreationForm();
-      jobDrafts = [createEmptyDraft('')];
-      activeDraftIndex = 0;
-      loadJobDraft(jobDrafts[0]);
-      toastr.info('Ready to create a new job.', 'New Job');
+    $('#clearEditJob, #newJobFromHeader').click(startNewJob);
+
+    $('#retryEditJob').click(function() {
+      loadJobForEdit($(this).data('job'));
     });
 
-    $('#myTable').on('click', '.editJob', function() {
+    $('#myTable').on('click', '.editJob', function(event) {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.which === 2) {
+        return;
+      }
+      event.preventDefault();
       loadJobForEdit($(this).data('job'));
     });
 
@@ -9711,23 +10237,23 @@
                     acceptedFiles: acceptedFiles,
                     url: "<?php echo base_url(); ?>jobCreation/do_upload/" + encodeURIComponent(val) + "/" + encodeURIComponent(job_name),
                     maxFilesize: 100,
-                    sending: function () {
-                      toastr.info("Uploading File, please wait the file get uploaded", "File Uploading")
+                    sending: function (file) {
+                      toastr.info('Uploading ' + file.name + '…', 'Upload')
                       $(".buildXmlBtn").prop('disabled', true);
                     },
                     success: function(file, response) {
-                      toastr.success("Your file has been succesfully uploaded and unziped, now you are able to build the xml in order to set the job to execute your zip file content.", "File Upload Success")
+                      toastr.success(file.name + (/\.zip$/i.test(file.name) ? ' was uploaded and extracted.' : ' was uploaded.') + ' Save the job to run it.', 'Upload complete');
                       $(".buildXmlBtn").prop('disabled', false);
                     },
                     error: function(file, response) {
-                      toastr.error("Erro during uploading file.", "File Upload Error")
+                      toastr.error(window.jobseekerUploadErrorText(response), 'Upload failed', {timeOut: 10000});
                       $(".buildXmlBtn").prop('disabled', false);
                     }
 
 
                   });
                 } else {
-                  toastr.error("Please Select a job name to upload the file", "File Upload Error")
+                  toastr.error('Enter a job name before uploading a file.', 'Upload')
                   $("#scriptType").val(0);
                 }
 
@@ -10154,7 +10680,7 @@ function loadTable () {
             var result = build.result || '';
             var date = formatBuildTime(build.timestamp);
             var disabled = row && row.buildable === false ? ' disabled' : '';
-            return '<div class="btn-group btn-group-xs available-job-actions"><button type="button" class="btn btn-info editJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-pencil"></i> Edit</button><button type="button" class="btn btn-default inspectJenkinsJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-eye"></i> Inspect</button><button type="button" class="btn btn-success triggerAvailableJob" data-job="' + escapeAttribute(jobName) + '"' + disabled + '><i class="fa fa-play"></i> Trigger</button><button type="button" class="btn btn-warning showAvailableJobLog" data-job="' + escapeAttribute(jobName) + '" data-build="' + escapeAttribute(buildNumber) + '" data-result="' + escapeAttribute(result) + '" data-time="' + escapeAttribute(date) + '"><i class="fa fa-terminal"></i> Logs</button></div>';
+            return '<div class="btn-group btn-group-xs available-job-actions"><a class="btn btn-info editJob" href="' + escapeAttribute(editJobUrl(jobName)) + '" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-pencil"></i> Edit</a><button type="button" class="btn btn-default inspectJenkinsJob" data-job="' + escapeAttribute(jobName) + '"><i class="fa fa-eye"></i> Inspect</button><button type="button" class="btn btn-success triggerAvailableJob" data-job="' + escapeAttribute(jobName) + '"' + disabled + '><i class="fa fa-play"></i> Trigger</button><button type="button" class="btn btn-warning showAvailableJobLog" data-job="' + escapeAttribute(jobName) + '" data-build="' + escapeAttribute(buildNumber) + '" data-result="' + escapeAttribute(result) + '" data-time="' + escapeAttribute(date) + '"><i class="fa fa-terminal"></i> Logs</button></div>';
           }}],
           "createdRow": function(row, data) {
             if (isRecentlySavedJob(jobNameFromRow(data))) {
@@ -10175,13 +10701,15 @@ setTimeout(function(){ loadTable() }, 1000);
 if (window.JobSeekerDraftCache && savedJobNames.length) {
   window.JobSeekerDraftCache.removeByNames(savedJobNames, true);
 }
-if (! restoreJobDraftCache()) {
+if (requestedEditJob !== '') {
+  ensureJobDraftsInitialized();
+} else if (! restoreJobDraftCache()) {
   ensureJobDraftsInitialized();
 }
 var requestedHopProject = <?php echo json_encode(isset($hop_selected_project) ? $hop_selected_project : ''); ?>;
 var requestedHopEntry = <?php echo json_encode(isset($hop_selected_entry) ? $hop_selected_entry : ''); ?>;
 var requestedHopEngine = <?php echo json_encode(isset($hop_selected_engine) ? $hop_selected_engine : ''); ?>;
-if (requestedHopProject && $('#hopSourceMode').length) {
+if (! requestedEditJob && requestedHopProject && $('#hopSourceMode').length) {
   applyLinuxEtlChoice('hop');
   setSelectValue('#hopSourceMode', 'path');
   $('#hopProjectPath').val('hop/projects/' + requestedHopProject);
@@ -10196,12 +10724,19 @@ if (requestedHopProject && $('#hopSourceMode').length) {
 }
 syncEnvironmentFromGlobal(true);
 syncGitProjectDefaults(false);
+if (! requestedEditJob) {
+  openProjectJobFromLink(<?php echo json_encode(isset($workspace_link) ? $workspace_link : array('projectId' => 0, 'folder' => '')); ?>);
+}
 draftCacheReady = true;
 refreshJobOptionPanels();
 updateJobCreationReview();
-scheduleJobDraftCacheSave(0);
+if (requestedEditJob !== '') {
+  loadJobForEdit(requestedEditJob);
+} else {
+  scheduleJobDraftCacheSave(0);
+}
 
-$(window).on('beforeunload', function() {
+$(window).on('beforeunload', function(event) {
   if (window.jobseekerDraftCacheSkipBeforeUnload) {
     return;
   }
@@ -10211,6 +10746,14 @@ $(window).on('beforeunload', function() {
     draftCacheTimer = null;
   }
   persistJobDraftCache();
+
+  if (! editSubmitting && editHasUnsavedChanges()) {
+    var warning = 'You have unsaved changes to ' + editingOriginalJob + '.';
+    if (event && event.originalEvent) {
+      event.originalEvent.returnValue = warning;
+    }
+    return warning;
+  }
 });
 
 $(document).on('jobseeker:environment-change', function() {
@@ -10275,7 +10818,15 @@ $(document).on('click', '.inspectJenkinsJob', function() {
       pythonInlineFilesJson: $('#pythonInlineFilesJson').val() || '',
       pythonRequirementsText: $('#pythonRequirementsText').val() || '',
       linuxCommandLine: $('#linuxCommandLine').val() || '',
-      windowsCommandLine: $('#windowsCommandLine').val() || ''
+      windowsCommandLine: $('#windowsCommandLine').val() || '',
+      // The server scans only what this mode runs (see collectDependencySources).
+      linuxExecutionStrategy: $('#linuxCommand').is(':checked') ? ($('#linuxExecutionStrategy').val() || '') : '',
+      linuxScriptType: $('#linuxScriptType').val() || '',
+      pythonSourceMode: $('#pythonSourceMode').val() || '',
+      pythonSourcePath: $('#pythonSourcePath').val() || '',
+      hopSourceMode: $('#hopSourceMode').val() || '',
+      hopProjectPath: $('#hopProjectPath').val() || '',
+      executionStrategy: $('#winCommand').is(':checked') ? ($('#executionStrategy').val() || '') : ''
     };
   }
 
@@ -10285,7 +10836,7 @@ $(document).on('click', '.inspectJenkinsJob', function() {
     var has = data && ((data.connectors || []).length || (data.datasets || []).length);
     $('#jobDependencyPanel').toggle(!!has || (data && (data.warnings || []).length));
     if (!has) {
-      $('#jobDependencyList').html('<p class="text-muted jd-empty">No <code>js.connector(...)</code> or <code>js.asset(...)</code> references detected yet.</p>');
+      $('#jobDependencyList').html('<p class="text-muted jd-empty">No connectors or Data Assets detected yet.</p>');
       $('#jobDependencyTest').prop('disabled', true);
       return;
     }
@@ -10359,7 +10910,9 @@ $(document).on('click', '.inspectJenkinsJob', function() {
   $(function() {
     schedule();
     var saved = window.jobseekerSavedJobs || [];
-    if (saved.length) {
+    // A job that was just triggered tests its connectors in that run; a
+    // separate test would only queue behind it for the same executor.
+    if (saved.length && ! window.jobseekerSavedJobsTriggered) {
       // Auto-run the one-time worker connection test for the freshly created job.
       deps.test({environment: selectedEnvironment(), job_name: saved[0]}).done(function(response) {
         if (window.toastr && response && (response.results || []).length) {
