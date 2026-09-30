@@ -107,6 +107,7 @@ $starter = $layout->jobStarter('python', 'Load Orders', '3.12');
 project_workspace_assert(array_keys($starter) === array('main.py', 'pyproject.toml', 'tests/test_main.py'), 'a Python job starts with code, project file and a test');
 project_workspace_assert(strpos($starter['main.py'], '"load-orders"') !== FALSE && strpos($starter['main.py'], '__JOBSEEKER_JOB__') === FALSE, 'the starter names its job');
 project_workspace_assert(strpos($starter['pyproject.toml'], 'requires-python = ">=3.12,<4.0"') !== FALSE, 'the starter targets the workspace Python');
+project_workspace_assert(strpos($starter['main.py'], '.format(') === FALSE && strpos($starter['main.py'], "    with (\n") !== FALSE, 'the starter passes Ruff (f-strings, one with statement)');
 project_workspace_assert(array_keys($layout->jobStarter('shell', 'x')) === array('run.sh'), 'a Shell job starts with run.sh');
 
 // The VS Code helper creates job folders and prints the Job Creation link.
@@ -118,6 +119,17 @@ if (trim((string) shell_exec('command -v sh')) !== '' && trim((string) shell_exe
     project_workspace_assert(is_file($project.'/jobs/daily-sync/main.py') && is_file($project.'/jobs/daily-sync/tests/test_main.py'), 'the new-job task creates a job folder: '.$output);
     project_workspace_assert(file_get_contents($project.'/jobs/daily-sync/main.py') === $layout->jobStarter('python', 'daily-sync', '3.13')['main.py'], 'the task writes the same starter as JobSeeker');
     project_workspace_assert(strpos($output, 'http://jobseeker.local/JobCreation?project=12&folder=jobs/daily-sync') !== FALSE, 'the task prints the Job Creation link: '.$output);
+    $shared = sys_get_temp_dir().'/jobseeker-project-shared-'.bin2hex(random_bytes(4));
+    mkdir($shared.'/.vscode', 0777, TRUE);
+    file_put_contents($shared.'/.vscode/jobseeker.sh', $layout->helperScript('python', 'http://jobseeker.local/JobCreation', 5, '3.13', FALSE));
+    $sharedOutput = shell_exec('cd '.escapeshellarg($shared).' && sh .vscode/jobseeker.sh new daily 2>&1');
+    project_workspace_assert(strpos($sharedOutput, 'Commit and push') === FALSE && strpos($sharedOutput, 'shared folder') !== FALSE
+        && strpos($sharedOutput, 'project=5&folder=jobs/daily') !== FALSE, 'a project without Git is not told to push: '.$sharedOutput);
+    file_put_contents($shared.'/.vscode/jobseeker.sh', $layout->helperScript('shell', 'http://jobseeker.local/JobCreation', 6, '3.13', FALSE));
+    $shellOutput = shell_exec('cd '.escapeshellarg($shared).' && sh .vscode/jobseeker.sh new cleanup 2>&1');
+    project_workspace_assert(is_file($shared.'/jobs/cleanup/run.sh') && strpos($shellOutput, 'JobCreation') === FALSE,
+        'Shell jobs are not sent to Job Creation, which cannot build them from a folder yet: '.$shellOutput);
+    project_workspace_remove($shared);
     file_put_contents($project.'/jobs/daily-sync/main.py', 'edited');
     shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh new daily-sync 2>&1');
     project_workspace_assert(file_get_contents($project.'/jobs/daily-sync/main.py') === 'edited', 'the task never overwrites a file');

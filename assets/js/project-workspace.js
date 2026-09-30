@@ -102,6 +102,9 @@
           + (workspace.changes ? ', ' + workspace.changes + ' uncommitted change' + (workspace.changes === 1 ? '' : 's') : ', clean')
           + (workspace.ahead ? ', ' + workspace.ahead + ' commit' + (workspace.ahead === 1 ? '' : 's') + ' to push' : '') + '</span>'
           : '<br><span class="text-muted">Cloned the first time you open it. Only you work in it.</span>')
+        + '</dd><dt>Builds</dt><dd>' + (project.credentialKey
+          ? '<span class="project-launcher-ok"><i class="fa fa-lock"></i> clone with <code>' + escapeHtml(project.credentialKey) + '</code></span>'
+          : '<span class="project-launcher-warn"><i class="fa fa-globe"></i> No build credential:</span> builds can only clone a public repository. <a href="' + escapeHtml(config.projectDetailsUrl + project.id) + '">Set one</a>')
         + '</dd><dt>Git account</dt><dd>' + (project.account
           ? '<span class="project-launcher-ok"><i class="fa fa-user-circle"></i> ' + escapeHtml(project.account) + '</span> clones, pulls and pushes for you.'
           : '<span class="project-launcher-warn"><i class="fa fa-exclamation-triangle"></i> No account for this host on your profile.</span> Only a public repository opens, and pushing needs one. <a href="' + escapeHtml(config.gitProfileUrl) + '" target="_blank" rel="noopener">Add an account</a>')
@@ -175,6 +178,7 @@
     $('#projectLauncherDetail').prop('hidden', true);
     $('#projectLauncherCreate').prop('hidden', false);
     $('#projectLauncherOpen').prop('disabled', true);
+    $('#projectLauncherCreateJob, #projectLauncherHop').prop('hidden', true);
     $('#projectLauncherName').val($.trim($('#projectLauncherSearch').val() || '')).trigger('focus');
   }
 

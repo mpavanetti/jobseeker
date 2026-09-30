@@ -70,4 +70,4 @@ $vscodeMark = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><pa
     'gitProfileUrl' => base_url().'profile/git'
   )); ?>;
 </script>
-<script src="<?php echo base_url(); ?>assets/js/project-workspace.js?v=1"></script>
+<script src="<?php echo base_url(); ?>assets/js/project-workspace.js?v=2"></script>

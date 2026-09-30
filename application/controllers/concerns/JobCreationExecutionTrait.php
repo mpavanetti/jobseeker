@@ -333,6 +333,7 @@ trait JobCreationExecutionTrait
         $lines[] = 'if [ -n "$JOBSEEKER_GIT_CREDENTIAL_KEY" ]; then'.$credentialClone.' else'.$publicClone.' fi';
         $lines[] = 'export JOBSEEKER_GIT_ROOT='.$target;
         if ($jobPath !== '') {
+          $lines[] = 'export JOBSEEKER_PROJECT_ROOT="$JOBSEEKER_GIT_ROOT"';
           $lines[] = 'export JOBSEEKER_SOURCE_DIR="$JOBSEEKER_GIT_ROOT/$JOBSEEKER_GIT_JOB_PATH"';
           $lines[] = 'printf "%s\n" "[JobSeeker] Job folder $JOBSEEKER_GIT_JOB_PATH"';
           $lines[] = '[ -d "$JOBSEEKER_SOURCE_DIR" ] || { echo "The job folder $JOBSEEKER_GIT_JOB_PATH is not on ${JOBSEEKER_GIT_REPOSITORY_BRANCH:-the default branch} of $JOBSEEKER_GIT_REPOSITORY_URL. Commit and push it from your project workspace in VS Code, or correct the job folder." >&2; exit 66; }';
@@ -428,6 +429,11 @@ trait JobCreationExecutionTrait
         } else {
           $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
           $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
+          // A job folder of a project without Git runs in place; its
+          // project's shared/ code is importable, as it is in the editor.
+          if (preg_match('#^(.+/workspaces/shared/[a-z0-9._-]+)/jobs/[^/]+/?$#', str_replace('\\', '/', (string) $execution['sourceDirectory']), $projectMatch)) {
+            $lines[] = 'export JOBSEEKER_PROJECT_ROOT='.escapeshellarg($projectMatch[1]);
+          }
         }
 
         $lines[] = 'export JOBSEEKER_PYTHON_LIB='.escapeshellarg($pythonLibraryPath);
@@ -533,7 +539,7 @@ trait JobCreationExecutionTrait
           $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type d \( -name .git -o -name .venv -o -name venv -o -name __pycache__ -o -name .pytest_cache -o -name .mypy_cache -o -name .ruff_cache \) -prune -exec rm -rf {} +';
           // A job folder's project code in shared/ travels with it and is
           // importable in the container as it is on the agent (`shared.x`).
-          $lines[] = 'if [ -n "${JOBSEEKER_GIT_JOB_PATH:-}" ] && [ -d "$JOBSEEKER_GIT_ROOT/shared" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/project" && cp -R "$JOBSEEKER_GIT_ROOT/shared" "$JOBSEEKER_DOCKER_CONTEXT/project/shared" && find "$JOBSEEKER_DOCKER_CONTEXT/project" -type d \\( -name .git -o -name __pycache__ \\) -prune -exec rm -rf {} +; fi';
+          $lines[] = 'if [ -n "${JOBSEEKER_PROJECT_ROOT:-}" ] && [ -d "$JOBSEEKER_PROJECT_ROOT/shared" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/project" && cp -R "$JOBSEEKER_PROJECT_ROOT/shared" "$JOBSEEKER_DOCKER_CONTEXT/project/shared" && find "$JOBSEEKER_DOCKER_CONTEXT/project" -type d \\( -name .git -o -name __pycache__ \\) -prune -exec rm -rf {} +; fi';
           $lines[] = 'cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"';
           $lines[] = 'JOBSEEKER_DOCKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_DOCKER_ENTRYPOINT")"';
           // The copied workspace is authoritative. Embedded values support
@@ -602,7 +608,7 @@ trait JobCreationExecutionTrait
           $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"';
           $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'fi';
-          $lines[] = 'if [ -n "${JOBSEEKER_GIT_JOB_PATH:-}" ]; then export PYTHONPATH="$PYTHONPATH:$JOBSEEKER_GIT_ROOT"; fi';
+          $lines[] = 'if [ -n "${JOBSEEKER_PROJECT_ROOT:-}" ]; then export PYTHONPATH="$PYTHONPATH:$JOBSEEKER_PROJECT_ROOT"; fi';
           $lines[] = 'printf "%s\n" "[JobSeeker] Python execution"';
           $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
         }
