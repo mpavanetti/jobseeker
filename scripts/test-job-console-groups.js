@@ -8,7 +8,7 @@ for (const kind of ['docker-execution', 'python-tests', 'shell', 'hop-execution'
   assert(consoleCss.includes('.job-console-section-' + kind), kind + ' needs an explicit console style');
 }
 assert(header.includes('job-console-groups.css?v=7'));
-assert(header.includes('job-console-groups.js?v=10'));
+assert(header.includes('job-console-groups.js?v=11'));
 
 const dockerLog = [
   'Started by user jobseeker',
@@ -448,5 +448,30 @@ assert.strictEqual(focusedHost.__jobSeekerConsoleState.openById['hop-step-1'], t
   'a focused section must stay open across live console redraws');
 assert.strictEqual(focusedHost.__jobSeekerConsoleState.focusedOwner, 'extract customers',
   'live redraws must retain the focused owner while the focus animation is active');
+
+// A Git job that follows its project: the checkout is one section, and the
+// cleanup trap registered during setup is not the cleanup itself.
+const gitLog = consoleGroups.parse([
+  'Started by user jobseeker',
+  '+ export JOBSEEKER_REPOSITORY_ROOT=/php/repository',
+  '[JobSeeker] Git source from project Warehouse',
+  '+ export JOBSEEKER_PROJECT_ID=28',
+  '[JobSeeker] DEV runs develop (project) from http://git.example/seeded.git with git-build',
+  "Cloning into '/var/jenkins_home/workspace/job/jobseeker-python-source'...",
+  '+ jobseeker_python_cleanup() { rm -rf "$JOBSEEKER_CONNECTORS_DIR"; }',
+  '+ trap jobseeker_python_cleanup EXIT',
+  '+ export JOBSEEKER_PYTHON_RUNTIME=local',
+  '[JobSeeker] Python environment',
+  '[JobSeeker] Python execution',
+  'SEEDED develop',
+  '+ jobseeker_python_cleanup',
+  '+ rm -rf /var/jenkins_home/workspace/job/.jobseeker-connectors',
+  'Finished: SUCCESS'
+].join('\n'));
+const gitKinds = gitLog.sections.map((section) => section.kind);
+assert.deepStrictEqual(gitKinds.filter((kind) => kind === 'source'), ['source'], 'the Git checkout must be one section: ' + gitKinds.join(','));
+assert(gitLog.sections.find((section) => section.kind === 'source').text.includes('DEV runs develop'));
+assert.strictEqual(gitKinds.filter((kind) => kind === 'cleanup').length, 1, 'only the cleanup call starts Cleanup: ' + gitKinds.join(','));
+assert(!gitLog.sections.find((section) => section.kind === 'cleanup').text.includes('JOBSEEKER_PYTHON_RUNTIME'));
 
 console.log('Job console grouping tests passed.');

@@ -83,7 +83,9 @@
   }
 
   function isCleanup(line) {
-    return /jobseeker_python_(?:docker_)?cleanup|rm -rf .*jobseeker-python-docker-context|docker image rm\b|docker run .*jobseeker-email.*jobseeker-email-metrics\.properties|rm -f .*jobseeker-email-metrics\.properties\.tmp|docker run .*jobseeker-assets.*data-assets\/manifest\.json/i.test(line);
+    // The cleanup call, not the `name() {` definition or the `trap` that
+    // registers it early in the build (those are setup).
+    return /^(?:\+\s*)?jobseeker_python_(?:docker_)?cleanup\s*$|rm -rf .*jobseeker-python-docker-context|docker image rm\b|docker run .*jobseeker-email.*jobseeker-email-metrics\.properties|rm -f .*jobseeker-email-metrics\.properties\.tmp|docker run .*jobseeker-assets.*data-assets\/manifest\.json/i.test(line);
   }
 
   function isPythonCommand(line) {
@@ -95,7 +97,7 @@
   }
 
   function explicitSectionKind(line) {
-    if (/^\[JobSeeker\]\s+Git source checkout\s*$/i.test(line)) {
+    if (/^\[JobSeeker\]\s+Git source (?:checkout\s*$|from project\b)/i.test(line)) {
       return 'source';
     }
 
@@ -204,8 +206,9 @@
     }
 
     if (/^\[JobSeeker\]/.test(line)) {
-      if (currentKind === 'hop-execution') {
-        return 'hop-execution';
+      // "DEV runs develop (project) from ..." belongs to the checkout.
+      if (currentKind === 'hop-execution' || currentKind === 'source') {
+        return currentKind;
       }
       return 'jobseeker';
     }
