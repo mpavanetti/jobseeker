@@ -40,8 +40,12 @@ import urllib.request
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
-from . import JobSeekerDependencyError, JobSeekerError, _CredentialScopedRedirect
-from .conntest import _first_host, _params, _sanitize
+from . import JobSeekerDependencyError, JobSeekerError, _CredentialScopedRedirect, _load_conntest
+
+# Connection parsing is shared with the connection tests. The SDK's loader
+# works whether it is installed as a package or vendored by file path.
+_conntest = _load_conntest()
+_first_host, _params, _sanitize = _conntest._first_host, _conntest._params, _conntest._sanitize
 
 if TYPE_CHECKING:  # pragma: no cover
     from . import Connector, DataAsset
@@ -223,14 +227,36 @@ class _PublicHTTPSConnection(http.client.HTTPSConnection):
         )
 
 
-class _PublicHTTPHandler(urllib.request.HTTPHandler):
+def _host(url: str) -> str:
+    return (urllib.parse.urlsplit(url).hostname or "").lower()
+
+
+class _GuardedHTTPHandler(urllib.request.HTTPHandler):
+    """Use the public-address connection for requests marked as guarded."""
+
     def http_open(self, req):  # type: ignore[no-untyped-def]
-        return self.do_open(_PublicHTTPConnection, req)
+        return self.do_open(_PublicHTTPConnection if getattr(req, "jobseeker_guarded", False) else http.client.HTTPConnection, req)
 
 
-class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+class _GuardedHTTPSHandler(urllib.request.HTTPSHandler):
     def https_open(self, req):  # type: ignore[no-untyped-def]
-        return self.do_open(_PublicHTTPSConnection, req, context=self._context)  # type: ignore[attr-defined]
+        connection = _PublicHTTPSConnection if getattr(req, "jobseeker_guarded", False) else http.client.HTTPSConnection
+        return self.do_open(connection, req, context=self._context)  # type: ignore[attr-defined]
+
+
+class _GuardedRedirect(_CredentialScopedRedirect):
+    """Keep credentials on their host, and guard every host but a trusted one."""
+
+    def __init__(self, credential_headers: Any, public_only: bool, trusted_host: str):
+        super().__init__(credential_headers)
+        self.public_only = public_only
+        self.trusted_host = trusted_host
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None:
+            redirected.jobseeker_guarded = self.public_only and _host(newurl) != self.trusted_host
+        return redirected
 
 
 def http_get(
@@ -242,11 +268,13 @@ def http_get(
     method: str = "GET",
     body: Optional[bytes] = None,
     timeout: float = TIMEOUT,
+    trust_origin: bool = False,
 ) -> Tuple[bytes, bool, str]:
     """Return up to ``max_bytes`` of a response, whether it was cut, and its type.
 
-    ``public_only`` refuses private destinations, including after redirects.
-    Connection credentials in ``headers`` are sent only to the original host.
+    ``public_only`` refuses private destinations, including after redirects;
+    ``trust_origin`` exempts the URL's own host, as for a Connection's
+    endpoint. Connection credentials in ``headers`` go only to that host.
     """
 
     parts = urllib.parse.urlsplit(url)
@@ -261,9 +289,10 @@ def http_get(
     if insecure:
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
-    handlers: List[Any] = [_CredentialScopedRedirect(credentials.keys())]
-    handlers += [_PublicHTTPHandler(), _PublicHTTPSHandler(context=context)] if public_only else [urllib.request.HTTPSHandler(context=context)]
+    trusted_host = _host(url) if trust_origin else ""
+    handlers = [_GuardedRedirect(credentials.keys(), public_only, trusted_host), _GuardedHTTPHandler(), _GuardedHTTPSHandler(context=context)]
     request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+    request.jobseeker_guarded = public_only and not trust_origin  # type: ignore[attr-defined]
     try:
         with urllib.request.build_opener(*handlers).open(request, timeout=timeout) as response:
             payload = response.read(max_bytes + 1)
@@ -495,11 +524,19 @@ def table_rows(
 # Object storage ------------------------------------------------------------------
 
 
+def storage_container(connector: "Connector") -> str:
+    """The bucket or container a storage Connection names, if any."""
+
+    params = _params(connector)
+    return str(connector.database or params.get("bucket") or params.get("container") or "").strip().strip("/")
+
+
 def storage_location(connector: "Connector", path: str) -> Tuple[str, str]:
     """(bucket or container, object path) for a path within a Connection.
 
-    The Connection's resource field names the bucket/container. Without one,
-    the path's first segment does.
+    The Connection's resource field, or its ``bucket=``/``container=``
+    parameter, names the bucket or container. Without one, the path's first
+    segment does.
     """
 
     path = str(path or "").strip()
@@ -509,7 +546,7 @@ def storage_location(connector: "Connector", path: str) -> Tuple[str, str]:
         base = str(connector.database or "").strip()
         return "", posixpath.normpath(path if path.startswith("/") or not base else posixpath.join(base, path))
     path = path.lstrip("/")
-    container = str(connector.database or "").strip().strip("/")
+    container = storage_container(connector)
     if not container:
         container, _, path = path.partition("/")
     if not container or not path:
@@ -583,7 +620,7 @@ def _azure_downloader(connector: "Connector", container: str, path: str, offset:
     return service.get_blob_client(container, path).download_blob(offset=offset, length=length)
 
 
-def _gcs_blob(connector: "Connector", container: str, path: str) -> Any:
+def _gcs_client(connector: "Connector") -> Any:
     storage = _driver("google.cloud.storage", "google-cloud-storage")
     kwargs: Dict[str, Any] = {}
     host = str(connector.host or "").strip()
@@ -600,7 +637,11 @@ def _gcs_blob(connector: "Connector", container: str, path: str) -> Any:
         kwargs = {"project": _params(connector)["project"]}
     if "://" in host:
         kwargs["client_options"] = {"api_endpoint": host.rstrip("/")}
-    return storage.Client(**kwargs).bucket(container).blob(path)
+    return storage.Client(**kwargs)
+
+
+def _gcs_blob(connector: "Connector", container: str, path: str) -> Any:
+    return _gcs_client(connector).bucket(container).blob(path)
 
 
 def _sftp_session(connector: "Connector", timeout: float) -> Tuple[Any, Any]:
@@ -960,8 +1001,8 @@ def sample_file(
         total = int(handle.metadata.num_rows)
         columns = [str(name) for name in handle.schema_arrow.names]
         records = batch.to_pylist() if batch is not None else []
-        detail = "%s rows · %d row group(s) · %s" % ("{:,}".format(total), handle.metadata.num_row_groups,
-                                                     ", ".join("%s %s" % (field.name, field.type) for field in handle.schema_arrow)[:300])
+        detail = "%d row group(s) · %s" % (handle.metadata.num_row_groups,
+                                            ", ".join("%s %s" % (field.name, field.type) for field in handle.schema_arrow)[:300])
         return _table(columns, [[record.get(column) for column in columns] for record in records], total > PREVIEW_ROWS,
                       total_rows=total, detail=detail)
     if file_format == "html":
@@ -1008,7 +1049,7 @@ def preview(asset: "DataAsset", connector: Optional["Connector"] = None, public_
         elif source_type == "url":
             data, truncated, content_type = http_get(
                 _source_url(asset, connector), connector_headers(connector), _file_limit(asset.format),
-                public_only and connector is None, _insecure(connector),
+                public_only, _insecure(connector), trust_origin=connector is not None,
             )
             result = sample_file(data, asset.format, options, source, truncated)
             result["size"] = len(data)

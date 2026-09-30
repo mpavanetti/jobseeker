@@ -25,7 +25,6 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from . import connector_from_payload, data_asset_from_item, sources
-from .conntest import _sanitize
 
 LOGGER = logging.getLogger("jobseeker.preview")
 app = FastAPI(title="JobSeeker Data Preview", docs_url=None, redoc_url=None, openapi_url=None)
@@ -62,4 +61,4 @@ def preview(request: PreviewRequest, authorization: str = Header(default="")) ->
         return sources.preview(asset, connector, public_only=True)
     except Exception as error:  # noqa: BLE001 - the UI shows a message, never a stack trace
         LOGGER.exception("Preview of Data Asset %s failed", asset.key)
-        return {"ok": False, "message": "The preview failed: %s" % _sanitize(error)}
+        return {"ok": False, "message": "The preview failed: %s" % sources._sanitize(error)}

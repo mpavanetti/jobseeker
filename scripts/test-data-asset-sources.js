@@ -48,7 +48,8 @@ assert(/data-preview:[\s\S]*?\.\/repository:\/php\/repository:ro/.test(compose),
 // The engine guards what the web tier cannot see.
 assert(engine.includes('.is_global') && engine.includes('class _PublicHTTPSConnection'),
   'public sources must connect only to validated public addresses');
-assert(engine.includes('_CredentialScopedRedirect(credentials.keys())'), 'Connection credentials must stay on their host');
+assert(engine.includes('class _GuardedRedirect(_CredentialScopedRedirect)') && engine.includes('_host(newurl) != self.trusted_host'),
+  'Connection credentials must stay on their host, and redirects elsewhere must be public');
 assert(engine.includes('def table_reference(') && engine.includes('SELECT TOP (%d) * FROM %s') && engine.includes('WHERE ROWNUM <= %d'),
   'table sources run only a validated, dialect-bounded SELECT');
 assert(engine.includes('_display_url(url)'), 'messages must not print URL query strings');
