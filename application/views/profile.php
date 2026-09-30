@@ -1,226 +1,163 @@
 <?php
+$this->load->helper('form');
 $userId = $userInfo->userId;
-$name = $userInfo->name;
-$email = $userInfo->email;
-$mobile = $userInfo->mobile;
-$roleId = $userInfo->roleId;
-$role = $userInfo->role;
-$group = $userInfo->group;
+$name = trim((string) $userInfo->name);
+$email = trim((string) $userInfo->email);
+$mobile = trim((string) $userInfo->mobile);
+$role = trim((string) $userInfo->role);
+$group = trim((string) $userInfo->group);
+$activeTab = in_array($active, array('details', 'changepass', 'git'), TRUE) ? $active : 'details';
+$nameParts = preg_split('/\s+/', $name, -1, PREG_SPLIT_NO_EMPTY);
+$initials = '';
+if (! empty($nameParts)) {
+    $initials = strtoupper(substr($nameParts[0], 0, 1));
+    if (count($nameParts) > 1) {
+        $initials .= strtoupper(substr($nameParts[count($nameParts) - 1], 0, 1));
+    }
+}
+$initials = $initials !== '' ? $initials : 'JS';
+$memberSince = ! empty($userInfo->createdDtm) && strtotime($userInfo->createdDtm)
+    ? date('M Y', strtotime($userInfo->createdDtm))
+    : 'Not available';
+$phoneHref = preg_replace('/[^0-9+]/', '', $mobile);
+$gitAccountCount = count((array) $gitAccounts);
 ?>
 
-<style>
-.git-accounts-lead { color:#5b6b7b; margin:0 0 16px; max-width:760px; }
-.git-provider-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); margin-bottom:10px; }
-.git-provider-card { background:#fff; border:1px solid #dde5ee; border-radius:10px; display:flex; flex-direction:column; gap:8px; padding:14px; }
-.git-provider-card small { color:#6b7a89; line-height:1.35; }
-.git-provider-card .btn-link { align-self:flex-start; padding-left:0; }
-.git-provider-card .btn-block { white-space:normal; }
-.git-provider-card-github { background:linear-gradient(160deg,#24292f,#0d1117); border-color:#0d1117; color:#f0f3f6; grid-column:span 2; }
-.git-provider-card-github small { color:#b8c2cc; }
-.git-provider-card-github small a, .git-provider-card-github .btn-link { color:#9ecbff; }
-.git-provider-head { align-items:center; display:flex; gap:10px; }
-.git-provider-head strong { display:block; font-size:15px; }
-.git-provider-head span:not(.git-provider-icon) { color:#8593a1; display:block; font-size:12px; }
-.git-provider-icon { align-items:center; background:#f1f4f8; border-radius:8px; color:#24292f; display:inline-flex; flex:0 0 34px; font-size:20px; height:34px; justify-content:center; }
-.git-provider-card-github .git-provider-icon { background:#fff; }
-.git-github-button { background:#2da44e; border:0; color:#fff; font-weight:700; }
-.git-github-button:hover, .git-github-button:focus { background:#2c974b; color:#fff; }
-.git-oauth-setup { background:#f8fafc; border:1px dashed #c3cfdb; border-radius:8px; margin:4px 0 10px; padding:12px 14px; }
-.git-oauth-setup ol { margin:8px 0 0; padding-left:20px; }
-.git-section-title { align-items:center; display:flex; font-size:16px; gap:8px; margin:22px 0 10px; }
-.git-empty { background:#f8fafc; border:1px dashed #c9d4df; border-radius:8px; color:#5f6b78; padding:16px; }
-.git-account-card { border:1px solid #dde5ee; border-radius:10px; margin-bottom:10px; padding:12px 14px; transition:box-shadow .3s; }
-.git-account-card.is-highlighted { border-color:#3c8dbc; box-shadow:0 0 0 3px rgba(60,141,188,.18); }
-.git-account-main { align-items:center; display:flex; flex-wrap:wrap; gap:12px; }
-.git-account-copy { flex:1 1 280px; min-width:0; }
-.git-account-copy strong { display:block; font-size:14px; }
-.git-account-meta { align-items:center; color:#51606f; display:flex; flex-wrap:wrap; font-size:12px; gap:4px 10px; margin-top:3px; }
-.git-account-actions { align-items:center; display:flex; flex-wrap:wrap; gap:6px; }
-.git-account-delete { display:inline; margin:0; }
-.git-account-public-key, .git-account-test { border-top:1px solid #edf1f5; margin-top:12px; padding-top:10px; }
-.git-account-public-key label { display:block; font-size:12px; margin-bottom:4px; }
-.git-public-key { font-family:Menlo,Consolas,monospace; font-size:11px; }
-.git-test-result { border-radius:6px; display:none; font-size:12px; margin-top:8px; padding:8px 10px; }
-.git-test-result.is-ok { background:#edf8f0; color:#1e6b33; display:block; }
-.git-test-result.is-error { background:#fdf0ef; color:#9f2f28; display:block; }
-.git-test-result.is-running { background:#f3f6f9; color:#4a5a6a; display:block; }
-.git-add-card { background:#fbfcfd; border:1px solid #dde5ee; border-radius:10px; margin-top:18px; padding:4px 16px 14px; }
-.git-form-grid { display:grid; gap:0 14px; grid-template-columns:repeat(3, minmax(0, 1fr)); }
-.git-form-wide { grid-column:1 / -1; }
-.git-form-span2 { grid-column:span 2; }
-.git-auth-options { display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); }
-.git-auth-option { align-items:flex-start; background:#fff; border:1px solid #dde5ee; border-radius:8px; cursor:pointer; display:flex; font-weight:normal; gap:8px; margin:0; padding:10px; }
-.git-auth-option input { margin-top:3px; }
-.git-auth-option strong { display:block; font-size:13px; }
-.git-auth-option small { color:#6b7a89; display:block; font-size:11px; line-height:1.3; }
-.git-auth-option.is-selected { background:#f0f7fc; border-color:#3c8dbc; }
-.git-token-help { background:#f3f7fb; border-radius:6px; color:#3f5163; font-size:12px; padding:9px 11px; }
-.git-known-hosts-actions { align-items:center; display:flex; flex-wrap:wrap; gap:10px; margin-bottom:6px; }
-.git-known-hosts-actions .text-muted { font-size:12px; }
-.git-fingerprints { font-family:Menlo,Consolas,monospace; font-size:11px; margin-top:6px; white-space:pre-wrap; }
-.git-form-footer { align-items:center; border-top:1px solid #e6ecf2; display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; margin-top:6px; padding-top:12px; }
-.git-form-footer .text-muted { font-size:12px; }
-@media (max-width:991px) { .git-form-grid { grid-template-columns:1fr; } .git-form-span2 { grid-column:auto; } .git-provider-card-github { grid-column:auto; } }
-</style>
+<link href="<?php echo base_url(); ?>assets/dist/css/profile.css?v=1" rel="stylesheet" type="text/css">
 
-<div class="content-wrapper">
-    <!-- Content Header (Page header) -->
-    <section class="content-header">
-      <h1>
-        <i class="fa fa-user-circle"></i> My Profile
-        <small>View or modify information</small>
-      </h1>
+<div class="content-wrapper profile-page">
+    <section class="content-header profile-page-heading">
+        <h1><i class="fa fa-user-circle-o"></i> My Profile <small>Manage your account settings</small></h1>
+        <ol class="breadcrumb">
+            <li><a href="<?php echo base_url('dashboard'); ?>"><i class="fa fa-dashboard"></i> Home</a></li>
+            <li class="active">My Profile</li>
+        </ol>
     </section>
-    
-    <section class="content">
-    
-        <div class="row">
-            <!-- left column -->
-            <div class="col-md-3">
-              <!-- general form elements -->
 
+    <section class="content profile-content">
+        <div class="profile-hero">
+            <div class="profile-avatar" aria-hidden="true"><span data-profile-initials><?php echo html_escape($initials); ?></span></div>
+            <div class="profile-hero-copy">
+                <div class="profile-hero-title-row">
+                    <h2 data-profile-name><?php echo html_escape($name); ?></h2>
+                    <span class="profile-role-badge"><i class="fa fa-shield"></i> <?php echo html_escape($role ?: 'Member'); ?></span>
+                </div>
+                <p><?php echo html_escape($group ?: 'No team assigned'); ?><?php if ($memberSince !== 'Not available') { ?> <span aria-hidden="true">·</span> Member since <?php echo html_escape($memberSince); ?><?php } ?></p>
+                <div class="profile-contact-list">
+                    <a href="mailto:<?php echo html_escape($email); ?>" data-profile-email-link><i class="fa fa-envelope-o"></i> <span data-profile-email><?php echo html_escape($email); ?></span></a>
+                    <?php if ($mobile !== '') { ?><a href="tel:<?php echo html_escape($phoneHref); ?>" data-profile-phone-link><i class="fa fa-phone"></i> <span data-profile-phone><?php echo html_escape($mobile); ?></span></a><?php } ?>
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary profile-hero-action" data-profile-tab="#details"><i class="fa fa-pencil"></i> Edit details</button>
+        </div>
 
-                <div class="box box-warning" style="padding-bottom: 0px;">
-                    <div class="box-body box-profile">
-                        <img class="profile-user-img img-responsive img-circle" src="<?php echo base_url(); ?>assets/dist/img/avatar.png" alt="User profile picture">
-                        <h3 class="profile-username text-center"><?= $name ?></h3>
+        <div class="profile-alerts" aria-live="polite">
+            <?php $error = $this->session->flashdata('error'); if ($error) { ?>
+                <div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-label="Dismiss">×</button><i class="fa fa-exclamation-circle"></i> <?php echo html_escape($error); ?></div>
+            <?php } ?>
+            <?php $success = $this->session->flashdata('success'); if ($success) { ?>
+                <div class="alert alert-success alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-label="Dismiss">×</button><i class="fa fa-check-circle"></i> <?php echo html_escape($success); ?></div>
+            <?php } ?>
+            <?php $noMatch = $this->session->flashdata('nomatch'); if ($noMatch) { ?>
+                <div class="alert alert-warning alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-label="Dismiss">×</button><i class="fa fa-exclamation-triangle"></i> <?php echo html_escape($noMatch); ?></div>
+            <?php } ?>
+            <?php echo validation_errors('<div class="alert alert-danger alert-dismissable"><button type="button" class="close" data-dismiss="alert" aria-label="Dismiss">×</button><i class="fa fa-exclamation-circle"></i> ', '</div>'); ?>
+        </div>
 
-                        <p class="text-muted text-center"><?= $role ?></p>
-
-                        <ul class="list-group">
-                            <li class="list-group-item" style="padding-bottom: 30px;">
-                                <b>Email</b> <a class="pull-right"><?= $email ?></a>
-                            </li>
-                            <li class="list-group-item" style="margin-top: 15px;">
-                                <b>Mobile</b> <a class="pull-right"><?= $mobile ?></a>
-                            </li>
-                            <li class="list-group-item" style="margin-top: 15px;">
-                                <b>Group</b> <a class="pull-right"><?= $group ?></a>
-                            </li>
-                        </ul>
+        <div class="row profile-grid">
+            <aside class="col-md-3">
+                <div class="profile-summary-card">
+                    <div class="profile-card-heading">
+                        <span class="profile-card-icon"><i class="fa fa-id-card-o"></i></span>
+                        <div><h3>Account overview</h3><p>Your workspace identity</p></div>
+                    </div>
+                    <dl class="profile-facts">
+                        <div><dt>Role</dt><dd><?php echo html_escape($role ?: 'Member'); ?></dd></div>
+                        <div><dt>Team</dt><dd><?php echo html_escape($group ?: 'Not assigned'); ?></dd></div>
+                        <div><dt>Member since</dt><dd><?php echo html_escape($memberSince); ?></dd></div>
+                        <div><dt>Git accounts</dt><dd><?php echo (int) $gitAccountCount; ?> connected</dd></div>
+                    </dl>
+                    <div class="profile-security-callout">
+                        <span><i class="fa fa-lock"></i></span>
+                        <div><strong>Security check</strong><p>Use a unique password with at least 8 characters.</p><button type="button" class="btn btn-link" data-profile-tab="#changepass">Review password</button></div>
                     </div>
                 </div>
-
-            </div>
+            </aside>
 
             <div class="col-md-9">
-                <?php
-                    $this->load->helper('form');
-                    $error = $this->session->flashdata('error');
-                    if($error)
-                    {
-                ?>
-                <div class="alert alert-danger alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo html_escape($error); ?>
-                </div>
-                <?php } ?>
-                <?php  
-                    $success = $this->session->flashdata('success');
-                    if($success)
-                    {
-                ?>
-                <div class="alert alert-success alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo html_escape($success); ?>
-                </div>
-                <?php } ?>
-
-                <?php  
-                    $noMatch = $this->session->flashdata('nomatch');
-                    if($noMatch)
-                    {
-                ?>
-                <div class="alert alert-warning alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo html_escape($noMatch); ?>
-                </div>
-                <?php } ?>
-                
-                <div class="row">
-                    <div class="col-md-12">
-                        <?php echo validation_errors('<div class="alert alert-danger alert-dismissable">', ' <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button></div>'); ?>
-                    </div>
-                </div>
-                <div class="nav-tabs-custom">
-                    <ul class="nav nav-tabs">
-                        <li class="<?= ($active == "details")? "active" : "" ?>"><a href="#details" data-toggle="tab">Details</a></li>
-                        <li class="<?= ($active == "changepass")? "active" : "" ?>"><a href="#changepass" data-toggle="tab">Change Password</a></li>
-                        <li class="<?= ($active == "git")? "active" : "" ?>"><a href="#git" data-toggle="tab">Git Accounts</a></li>
+                <div class="nav-tabs-custom profile-tabs">
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="<?php echo $activeTab === 'details' ? 'active' : ''; ?>"><a href="#details" data-toggle="tab" role="tab"><i class="fa fa-user-o"></i><span>Personal details</span></a></li>
+                        <li class="<?php echo $activeTab === 'changepass' ? 'active' : ''; ?>"><a href="#changepass" data-toggle="tab" role="tab"><i class="fa fa-lock"></i><span>Password</span></a></li>
+                        <li class="<?php echo $activeTab === 'git' ? 'active' : ''; ?>"><a href="#git" data-toggle="tab" role="tab"><i class="fa fa-code-fork"></i><span>Git accounts</span><span class="profile-tab-count"><?php echo (int) $gitAccountCount; ?></span></a></li>
                     </ul>
                     <div class="tab-content">
-                        <div class="<?= ($active == "details")? "active" : "" ?> tab-pane" id="details">
-                            <form action="<?php echo base_url() ?>profileUpdate" method="post" id="editProfile" role="form">
-                                <?php $this->load->helper('form'); ?>
-                                <div class="box-body" style="padding-bottom: 35px;">
-                                    <div class="row">
-                                        <div class="col-md-12">                                
-                                            <div class="form-group">
-                                                <label for="fname">Full Name</label>
-                                                <input type="text" class="form-control" id="fname" name="fname" placeholder="<?php echo html_escape($name); ?>" value="<?php echo set_value('fname', $name); ?>" maxlength="128" />
-                                                <input type="hidden" value="<?php echo html_escape($userId); ?>" name="userId" id="userId" />    
-                                            </div>
-                                        </div>
+                        <div class="<?php echo $activeTab === 'details' ? 'active' : ''; ?> tab-pane" id="details">
+                            <div class="profile-section-heading">
+                                <div><span class="profile-section-kicker">Personal information</span><h3>How others see you</h3><p>These details identify you throughout JobSeeker.</p></div>
+                                <span class="profile-save-state" id="profileSaveState"><i class="fa fa-check-circle"></i> Up to date</span>
+                            </div>
+                            <form action="<?php echo base_url('profileUpdate'); ?>" method="post" id="editProfile" role="form">
+                                <input type="hidden" value="<?php echo html_escape($userId); ?>" name="userId" id="userId">
+                                <div class="profile-form-grid">
+                                    <div class="form-group profile-form-wide">
+                                        <label for="fname">Full name</label>
+                                        <div class="profile-input-wrap"><i class="fa fa-user-o"></i><input type="text" class="form-control" id="fname" name="fname" value="<?php echo html_escape(set_value('fname', $name)); ?>" maxlength="128" autocomplete="name" required></div>
+                                        <span class="help-block">Use the name your teammates will recognize.</span>
                                     </div>
-                                    <div class="row">
-                                        <div class="col-md-12">
-                                            <div class="form-group">
-                                                <label for="mobile">Mobile Number</label>
-                                                <input type="text" class="form-control" id="mobile" name="mobile" placeholder="<?php echo html_escape($mobile); ?>" value="<?php echo set_value('mobile', $mobile); ?>" maxlength="10">
-                                            </div>
-                                        </div>
+                                    <div class="form-group">
+                                        <label for="email">Email address</label>
+                                        <div class="profile-input-wrap"><i class="fa fa-envelope-o"></i><input type="email" class="form-control" id="email" name="email" value="<?php echo html_escape(set_value('email', $email)); ?>" maxlength="128" autocomplete="email" required></div>
+                                        <span class="help-block">Used to sign in and receive account messages.</span>
                                     </div>
-                                    <div class="row">
-                                        <div class="col-md-12">
-                                            <div class="form-group">
-                                                <label for="email">Email</label>
-                                                <input type="text" class="form-control" id="email" name="email" placeholder="<?php echo html_escape($email); ?>" value="<?php echo set_value('email', $email); ?>">
-                                            </div>
-                                        </div>
+                                    <div class="form-group">
+                                        <label for="mobile">Phone number <span class="profile-label-note">with country code</span></label>
+                                        <div class="profile-input-wrap"><i class="fa fa-phone"></i><input type="tel" class="form-control" id="mobile" name="mobile" value="<?php echo html_escape(set_value('mobile', $mobile)); ?>" maxlength="30" inputmode="tel" autocomplete="tel" placeholder="+1 415 555 2671" aria-describedby="mobileHelp mobilePreview" required></div>
+                                        <span class="help-block" id="mobileHelp">Include <strong>+</strong> and your country calling code for an international number.</span>
+                                        <span class="profile-phone-preview" id="mobilePreview" aria-live="polite"></span>
                                     </div>
-                                </div><!-- /.box-body -->
-                                <div class="box-footer">
-                                    <input type="submit" class="btn btn-primary" value="Submit" />
-                                    <input type="reset" class="btn btn-default" value="Reset" />
+                                </div>
+                                <div class="profile-form-actions">
+                                    <span><i class="fa fa-info-circle"></i> Role and team assignments are managed by an administrator.</span>
+                                    <div><button type="reset" class="btn btn-default"><i class="fa fa-undo"></i> Reset</button><button type="submit" class="btn btn-primary profile-primary-action" id="profileSaveButton"><i class="fa fa-check"></i> Save changes</button></div>
                                 </div>
                             </form>
                         </div>
-                        <div class="<?= ($active == "changepass")? "active" : "" ?> tab-pane" id="changepass">
-                            <form role="form" action="<?php echo base_url() ?>changePassword" method="post">
-                                <div class="box-body">
-                                    <div class="row" style="padding-bottom: 25px;">
-                                        <div class="col-md-12">
-                                            <div class="form-group">
-                                                <label for="inputPassword1">Old Password</label>
-                                                <input type="password" class="form-control" id="inputOldPassword" placeholder="Old password" name="oldPassword" maxlength="20" required>
-                                            </div>
+
+                        <div class="<?php echo $activeTab === 'changepass' ? 'active' : ''; ?> tab-pane" id="changepass">
+                            <div class="profile-section-heading">
+                                <div><span class="profile-section-kicker">Account security</span><h3>Change your password</h3><p>Choose a strong password you do not use anywhere else.</p></div>
+                                <span class="profile-secure-badge"><i class="fa fa-shield"></i> Encrypted</span>
+                            </div>
+                            <form role="form" action="<?php echo base_url('changePassword'); ?>" method="post" id="changePasswordForm">
+                                <input type="email" name="username" value="<?php echo html_escape($email); ?>" autocomplete="username" class="sr-only" tabindex="-1" aria-hidden="true">
+                                <div class="profile-password-layout">
+                                    <div>
+                                        <div class="form-group">
+                                            <label for="inputOldPassword">Current password</label>
+                                            <div class="input-group profile-password-input"><input type="password" class="form-control" id="inputOldPassword" name="oldPassword" maxlength="64" autocomplete="current-password" required><span class="input-group-btn"><button class="btn btn-default profile-password-toggle" type="button" aria-label="Show current password" data-password-target="#inputOldPassword"><i class="fa fa-eye"></i></button></span></div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="inputPassword1">New password</label>
+                                            <div class="input-group profile-password-input"><input type="password" class="form-control" id="inputPassword1" name="newPassword" minlength="8" maxlength="64" autocomplete="new-password" aria-describedby="passwordStrength passwordRequirements" required><span class="input-group-btn"><button class="btn btn-default profile-password-toggle" type="button" aria-label="Show new password" data-password-target="#inputPassword1"><i class="fa fa-eye"></i></button></span></div>
+                                            <div class="profile-password-meter" id="passwordStrength" aria-live="polite"><span></span><span></span><span></span><span></span><strong>Enter a new password</strong></div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="inputPassword2">Confirm new password</label>
+                                            <div class="input-group profile-password-input"><input type="password" class="form-control" id="inputPassword2" name="cNewPassword" minlength="8" maxlength="64" autocomplete="new-password" required><span class="input-group-btn"><button class="btn btn-default profile-password-toggle" type="button" aria-label="Show confirmed password" data-password-target="#inputPassword2"><i class="fa fa-eye"></i></button></span></div>
+                                            <span class="profile-password-match" id="passwordMatch" aria-live="polite"></span>
                                         </div>
                                     </div>
-                                    <div class="row">
-                                        <div class="col-md-12">
-                                            <div class="form-group">
-                                                <label for="inputPassword1">New Password</label>
-                                                <input type="password" class="form-control" id="inputPassword1" placeholder="New password" name="newPassword" maxlength="20" required>
-                                            </div>
-                                        </div>
+                                    <div class="profile-password-tips" id="passwordRequirements">
+                                        <span class="profile-card-icon"><i class="fa fa-lightbulb-o"></i></span>
+                                        <h4>A stronger password has</h4>
+                                        <ul><li data-password-rule="length"><i class="fa fa-circle-o"></i> At least 8 characters</li><li data-password-rule="case"><i class="fa fa-circle-o"></i> Upper and lowercase letters</li><li data-password-rule="number"><i class="fa fa-circle-o"></i> A number</li><li data-password-rule="symbol"><i class="fa fa-circle-o"></i> A symbol</li></ul>
                                     </div>
-                                    <div class="row">
-                                        <div class="col-md-12">
-                                            <div class="form-group">
-                                                <label for="inputPassword2">Confirm New Password</label>
-                                                <input type="password" class="form-control" id="inputPassword2" placeholder="Confirm new password" name="cNewPassword" maxlength="20" required>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div><!-- /.box-body -->
-            
-                                <div class="box-footer">
-                                    <input type="submit" class="btn btn-primary" value="Submit" />
-                                    <input type="reset" class="btn btn-default" value="Reset" />
                                 </div>
+                                <div class="profile-form-actions"><span><i class="fa fa-sign-out"></i> You may need to sign in again on other devices.</span><div><button type="reset" class="btn btn-default">Clear</button><button type="submit" class="btn btn-primary profile-primary-action"><i class="fa fa-lock"></i> Update password</button></div></div>
                             </form>
                         </div>
-                        <div class="<?= ($active == "git")? "active" : "" ?> tab-pane" id="git">
+                        <div class="<?php echo $activeTab === 'git' ? 'active' : ''; ?> tab-pane" id="git">
                             <?php
                             $gitProviderIcons = array('github' => 'fa-github', 'gitlab' => 'fa-gitlab', 'bitbucket' => 'fa-bitbucket', 'azure_devops' => 'fa-windows', 'generic' => 'fa-git');
                             $gitProviderNames = array('github' => 'GitHub', 'gitlab' => 'GitLab', 'bitbucket' => 'Bitbucket', 'azure_devops' => 'Azure DevOps', 'generic' => 'Git');
@@ -388,7 +325,7 @@ $group = $userInfo->group;
     </section>
 </div>
 
-<script src="<?php echo base_url(); ?>assets/js/editUser.js" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/profile.js?v=1" type="text/javascript"></script>
 <script type="text/javascript">
 (function($) {
     var providers = {

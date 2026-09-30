@@ -37,7 +37,7 @@ $groupId = $userInfo->groupId;
                                 <div class="col-md-6">                                
                                     <div class="form-group">
                                         <label for="fname">Full Name</label>
-                                        <input type="text" class="form-control" id="fname" placeholder="Full Name" name="fname" value="<?php echo $name; ?>" maxlength="128">
+                                        <input type="text" class="form-control" id="fname" placeholder="Full Name" name="fname" value="<?php echo html_escape($name); ?>" maxlength="128" autocomplete="name">
                                         <input type="hidden" value="<?php echo $userId; ?>" name="userId" id="userId" />    
                                     </div>
                                     
@@ -45,7 +45,7 @@ $groupId = $userInfo->groupId;
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="email">Email address</label>
-                                        <input type="email" class="form-control" id="email" placeholder="Enter email" name="email" value="<?php echo $email; ?>" maxlength="128">
+                                        <input type="email" class="form-control" id="email" placeholder="Enter email" name="email" value="<?php echo html_escape($email); ?>" maxlength="128" autocomplete="email">
                                     </div>
                                 </div>
                             </div>
@@ -53,21 +53,22 @@ $groupId = $userInfo->groupId;
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="password">Password</label>
-                                        <input type="password" class="form-control" id="password" placeholder="Password" name="password" maxlength="20">
+                                        <input type="password" class="form-control" id="password" placeholder="Password" name="password" maxlength="20" autocomplete="new-password">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="cpassword">Confirm Password</label>
-                                        <input type="password" class="form-control" id="cpassword" placeholder="Confirm Password" name="cpassword" maxlength="20">
+                                        <input type="password" class="form-control" id="cpassword" placeholder="Confirm Password" name="cpassword" maxlength="20" autocomplete="new-password">
                                     </div>
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="mobile">Mobile Number</label>
-                                        <input type="text" class="form-control" id="mobile" placeholder="Mobile Number" name="mobile" value="<?php echo $mobile; ?>" maxlength="12">
+                                        <label for="mobile">Phone Number</label>
+                                        <input type="tel" class="form-control" id="mobile" placeholder="+1 415 555 2671" name="mobile" value="<?php echo html_escape($mobile); ?>" maxlength="30" inputmode="tel" autocomplete="tel">
+                                        <span class="help-block">Include the country calling code for international numbers.</span>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -91,7 +92,7 @@ $groupId = $userInfo->groupId;
                                 </div>  
                                 <div class="col-md-6">
                                     <div class="form-group">
-                                        <label for="role">Groups</label>
+                                        <label for="group">Groups</label>
                                           <select id="group" class="form-control" name="group">
                                             <?php
                                             if(!empty($groups))

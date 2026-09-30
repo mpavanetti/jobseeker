@@ -130,7 +130,7 @@ class User extends BaseController
             $this->form_validation->set_rules('cpassword','Confirm Password','trim|required|matches[password]|max_length[20]');
             $this->form_validation->set_rules('role','Role','trim|required|numeric');
             $this->form_validation->set_rules('group','Group Name','trim|required|max_length[128]');
-            $this->form_validation->set_rules('mobile','Mobile Number','required|min_length[12]');
+            $this->form_validation->set_rules('mobile','Phone Number','trim|required|callback_validPhoneNumber');
             
             if($this->form_validation->run() == FALSE)
             {
@@ -142,7 +142,7 @@ class User extends BaseController
                 $email = strtolower($this->security->xss_clean($this->input->post('email')));
                 $password = $this->input->post('password');
                 $roleId = $this->input->post('role');
-                $mobile = $this->security->xss_clean($this->input->post('mobile'));
+                $mobile = $this->normalizePhoneNumber($this->input->post('mobile'));
                 $group = $this->security->xss_clean($this->input->post('group'));
                 
                 $userInfo = array('email'=>$email, 'password'=>getHashedPassword($password), 'roleId'=>$roleId, 'groupId' => $group, 'name'=> $name,
@@ -265,7 +265,7 @@ class User extends BaseController
             $this->form_validation->set_rules('password','Password','matches[cpassword]|max_length[20]');
             $this->form_validation->set_rules('cpassword','Confirm Password','matches[password]|max_length[20]');
             $this->form_validation->set_rules('role','Role','trim|required|numeric');
-            $this->form_validation->set_rules('mobile','Mobile Number','required|min_length[10]');
+            $this->form_validation->set_rules('mobile','Phone Number','trim|required|callback_validPhoneNumber');
             $this->form_validation->set_rules('group','Group Name','trim|required|max_length[128]');
             
             if($this->form_validation->run() == FALSE)
@@ -278,7 +278,7 @@ class User extends BaseController
                 $email = strtolower($this->security->xss_clean($this->input->post('email')));
                 $password = $this->input->post('password');
                 $roleId = $this->input->post('role');
-                $mobile = $this->security->xss_clean($this->input->post('mobile'));
+                $mobile = $this->normalizePhoneNumber($this->input->post('mobile'));
                 $group = $this->input->post('group');
                 
                 $userInfo = array();
@@ -738,7 +738,7 @@ class User extends BaseController
         $this->load->library('form_validation');
             
         $this->form_validation->set_rules('fname','Full Name','trim|required|max_length[128]');
-        $this->form_validation->set_rules('mobile','Mobile Number','required|min_length[10]');
+        $this->form_validation->set_rules('mobile','Phone Number','trim|required|callback_validPhoneNumber');
         $this->form_validation->set_rules('email','Email','trim|required|valid_email|max_length[128]|callback_emailExists');        
         
         if($this->form_validation->run() == FALSE)
@@ -747,8 +747,8 @@ class User extends BaseController
         }
         else
         {
-            $name = ucwords(strtolower($this->security->xss_clean($this->input->post('fname'))));
-            $mobile = $this->security->xss_clean($this->input->post('mobile'));
+            $name = trim(preg_replace('/\s+/', ' ', $this->security->xss_clean($this->input->post('fname'))));
+            $mobile = $this->normalizePhoneNumber($this->input->post('mobile'));
             $email = strtolower($this->security->xss_clean($this->input->post('email')));
             
             $userInfo = array('name'=>$name, 'email'=>$email, 'mobile'=>$mobile, 'updatedBy'=>$this->vendorId, 'updatedDtm'=>date('Y-m-d H:i:s'));
@@ -777,9 +777,9 @@ class User extends BaseController
     {
         $this->load->library('form_validation');
         
-        $this->form_validation->set_rules('oldPassword','Old password','required|max_length[20]');
-        $this->form_validation->set_rules('newPassword','New password','required|max_length[20]');
-        $this->form_validation->set_rules('cNewPassword','Confirm new password','required|matches[newPassword]|max_length[20]');
+        $this->form_validation->set_rules('oldPassword','Current password','required|max_length[64]');
+        $this->form_validation->set_rules('newPassword','New password','required|min_length[8]|max_length[64]');
+        $this->form_validation->set_rules('cNewPassword','Confirm new password','required|matches[newPassword]|min_length[8]|max_length[64]');
         
         if($this->form_validation->run() == FALSE)
         {
@@ -834,6 +834,48 @@ class User extends BaseController
         }
 
         return $return;
+    }
+
+    /**
+     * Validate a local or international phone number without forcing people to
+     * remove familiar spacing, brackets, or dashes before submitting the form.
+     * The stored representation is normalized separately by
+     * normalizePhoneNumber().
+     */
+    public function validPhoneNumber($phone)
+    {
+        $phone = trim((string) $phone);
+        $international = strpos($phone, '+') === 0 || strpos($phone, '00') === 0;
+
+        if (strlen($phone) > 30 || ! preg_match('/^(?:\+|00)?[0-9][0-9\s().-]*[0-9]$/', $phone)) {
+            $this->form_validation->set_message('validPhoneNumber', 'Enter a valid {field}, for example +1 415 555 2671.');
+            return FALSE;
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+        if (strpos($phone, '00') === 0) {
+            $digits = substr($digits, 2);
+        }
+        if (strlen($digits) < 7 || strlen($digits) > 15 || ($international && substr($digits, 0, 1) === '0')) {
+            $this->form_validation->set_message('validPhoneNumber', 'The {field} must contain 7 to 15 digits, including the country code when provided.');
+            return FALSE;
+        }
+
+        return TRUE;
+    }
+
+    /** Return a compact, dialable value that fits the existing varchar(20). */
+    private function normalizePhoneNumber($phone)
+    {
+        $phone = trim((string) $phone);
+        $hasInternationalPrefix = strpos($phone, '+') === 0 || strpos($phone, '00') === 0;
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        if (strpos($phone, '00') === 0) {
+            $digits = substr($digits, 2);
+        }
+
+        return $hasInternationalPrefix ? '+'.$digits : $digits;
     }
 }
 
