@@ -322,7 +322,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     $('#schema').attr('placeholder', isGit ? 'https://github.com/org/repository.git' : '');
     $('.git-credential-help').toggle(isGit);
     if (updatePort) {
-      var defaults = {mysql:3306, pgsql:5432, sqlserver:1433, oracle_service:1521, oracle_sid:1521, mongodb:27017, redis:6379, snowflake:443, databricks:443, kafka:9092, rabbitmq:5672, elasticsearch:9200, sftp:22, http_api:443, git_repository:443};
+      var defaults = {mysql:3306, pgsql:5432, sqlserver:1433, oracle_service:1521, oracle_sid:1521, mongodb:27017, redis:6379, snowflake:443, databricks:443, kafka:9092, rabbitmq:5672, elasticsearch:9200, sftp:22, http_api:443, google_sheets:443, git_repository:443};
       var knownPorts = ['0','22','443','1433','1521','3306','5432','5672','6379','9092','9200','27017'];
       var current = String($('#port').val() || '0');
       if ($.inArray(current, knownPorts) !== -1) {
@@ -344,6 +344,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     elasticsearch: ['username_password', 'api_key', 'token', 'none', 'custom'],
     sftp: ['username_password', 'ssh_key', 'custom'],
     http_api: ['token', 'api_key', 'username_password', 'none', 'custom'],
+    google_sheets: ['token', 'api_key', 'none', 'custom'],
     aws_s3: ['access_key', 'iam_role', 'web_identity', 'custom'],
     azure_blob: ['sas_token', 'connection_string', 'access_key', 'managed_identity', 'workload_identity', 'service_principal', 'custom'],
     azure_data_lake: ['sas_token', 'connection_string', 'access_key', 'managed_identity', 'workload_identity', 'service_principal', 'custom'],
@@ -372,6 +373,7 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
     azure_data_lake: 'Put the storage account URL (https://ACCOUNT.dfs.core.windows.net) in Endpoint / host unless you use a connection string.',
     gcs: 'Add <code>service_account_json=</code> (the key file on one line), or put <code>project=</code> in Connection parameters to use the worker identity.',
     http_api: 'Connection parameters may set <code>authorization_scheme=</code>, <code>api_key_header=</code> and <code>insecure=1</code>.',
+    google_sheets: 'Store an OAuth access token or Google API key here. Data Assets keep only the Connection key, spreadsheet ID, and range.',
     elasticsearch: 'Connection parameters may set <code>api_key_header=</code> and <code>insecure=1</code>.',
     databricks: 'Put <code>http_path=</code> in Connection parameters.'
   };

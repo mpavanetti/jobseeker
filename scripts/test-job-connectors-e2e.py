@@ -36,6 +36,7 @@ CONNECTOR_TYPES = (
     "elasticsearch",
     "sftp",
     "http_api",
+    "google_sheets",
     "aws_s3",
     "azure_blob",
     "azure_data_lake",

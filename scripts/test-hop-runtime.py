@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix="jobseeker-hop-test-") as root:
     connector_types = (
         "mysql", "pgsql", "sqlserver", "oracle_service", "oracle_sid",
         "mongodb", "redis", "snowflake", "databricks", "kafka", "rabbitmq",
-        "elasticsearch", "sftp", "http_api", "aws_s3", "azure_blob",
+        "elasticsearch", "sftp", "http_api", "google_sheets", "aws_s3", "azure_blob",
         "azure_data_lake", "gcs", "git_repository", "generic_secret",
     )
     connectors = [
