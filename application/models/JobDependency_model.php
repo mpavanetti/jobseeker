@@ -132,7 +132,7 @@ class JobDependency_model extends CI_Model
             $exists = ! empty($candidates);
             $activeRows = array_values(array_filter($candidates, function($row) { return (int) $row['is_active'] === 1; }));
             $active = ! empty($activeRows);
-            $scopedRows = array_values(array_filter($activeRows, function($row) use ($scopeEnvironments, $jobName) {
+            $scopedRows = array_values(array_filter($activeRows, function($row) use ($scopeEnvironments, $environment, $jobName) {
                 $environmentMatch = $environment === 'ALL' || in_array(strtoupper($row['environment']), $scopeEnvironments, TRUE);
                 $jobMatch = $row['job_name'] === '*' || $jobName === '' || $row['job_name'] === $jobName;
                 return $environmentMatch && $jobMatch;

@@ -51,6 +51,8 @@ assert(clientJs.includes('window.JobSeekerJobDependencies'));
   assert(clientJs.includes(fn + ':'), 'job-dependencies.js must export ' + fn);
 });
 assert(clientJs.includes("'dbSettings?edit='") && clientJs.includes("'data-assets'"), 'chips must link to the catalog pages');
+assert(clientJs.includes('jd-preview-asset') && clientJs.includes('data-assets/preview/'), 'dataset chips must open the shared Data Asset preview');
+assert(clientJs.includes('jd-toggle-inline-assets') && clientJs.includes('Show data above logs'), 'job execution must support inline Data Asset previews');
 
 assert(creationView.includes('assets/js/job-dependencies.js'));
 assert(creationView.includes('id="jobDependencyPanel"') && creationView.includes('id="jobDependencyTest"'));
@@ -63,5 +65,6 @@ assert(viewView.includes('Connectors &amp; datasets'));
 
 assert(executionView.includes('assets/js/job-dependencies.js'));
 assert(executionView.includes("JobSeekerJobDependencies.load('JobExecution'"));
+assert(executionView.includes('inlineAssets: true'), 'Job Execution must render Data Assets above its logs on demand');
 
 console.log('Job dependency mapping tests passed.');
