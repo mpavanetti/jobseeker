@@ -658,7 +658,10 @@ def build_run_variables(
     for asset in assets or []:
         try:
             path = translate(asset.path)
-        except JobSeekerError:
+        except JobSeekerError as error:
+            # A connected source that cannot be read leaves its variable unset;
+            # say why, or the pipeline only reports an unresolved ${...}.
+            print("[JobSeeker] Data Asset %s is not available to this Hop run; its Hop variable is skipped: %s" % (asset.key, error))
             continue
         variables.append(
             _described(
