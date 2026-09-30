@@ -42,6 +42,7 @@ class DbSettings extends BaseController
             'elasticsearch' => 'Elasticsearch / OpenSearch',
             'sftp' => 'SFTP / SSH',
             'http_api' => 'HTTP API',
+            'google_sheets' => 'Google Sheets API',
             'aws_s3' => 'AWS S3',
             'azure_blob' => 'Azure Blob Storage',
             'azure_data_lake' => 'Azure Data Lake',

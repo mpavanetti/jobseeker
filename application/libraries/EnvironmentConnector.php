@@ -25,7 +25,7 @@ class EnvironmentConnector
     private $types = array(
         'mysql', 'pgsql', 'sqlserver', 'oracle_service', 'oracle_sid',
         'mongodb', 'redis', 'snowflake', 'databricks', 'kafka',
-        'rabbitmq', 'elasticsearch', 'sftp', 'http_api', 'aws_s3',
+        'rabbitmq', 'elasticsearch', 'sftp', 'http_api', 'google_sheets', 'aws_s3',
         'azure_blob', 'azure_data_lake', 'gcs', 'git_repository',
         'generic_secret'
     );
@@ -236,7 +236,7 @@ class EnvironmentConnector
             'oracle_service' => 1521, 'oracle_sid' => 1521,
             'mongodb' => 27017, 'redis' => 6379, 'snowflake' => 443,
             'databricks' => 443, 'kafka' => 9092, 'rabbitmq' => 5672,
-            'elasticsearch' => 9200, 'sftp' => 22, 'http_api' => 443,
+            'elasticsearch' => 9200, 'sftp' => 22, 'http_api' => 443, 'google_sheets' => 443,
             'git_repository' => 443
         );
         return isset($ports[$type]) ? $ports[$type] : 0;

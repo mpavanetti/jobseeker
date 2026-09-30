@@ -960,7 +960,7 @@ def test_connector(connector: "Connector", timeout: float = 5.0) -> ConnectionTe
 
     if connector_type == "elasticsearch":
         handler = lambda c, r, t: _test_http(c, r, t, "elasticsearch")  # noqa: E731
-    elif connector_type == "http_api":
+    elif connector_type in ("http_api", "google_sheets"):
         handler = lambda c, r, t: _test_http(c, r, t, "http_api")  # noqa: E731
     else:
         handler = _HANDLERS.get(connector_type)
