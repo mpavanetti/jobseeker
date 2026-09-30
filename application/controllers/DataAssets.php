@@ -336,17 +336,19 @@ class DataAssets extends BaseController
                 return $this->normalizeJobSeekerEnvironment($row->Environment) === $selectedEnvironment;
             }));
         }
+        $sourceConnectorTypes = array();
+        foreach ($this->sourceCatalog() as $source) {
+            $sourceConnectorTypes = array_merge($sourceConnectorTypes, $source['connectors']);
+        }
         $data = array(
             'assets' => $this->model->listAssets($selectedEnvironment),
             'statistics' => $this->model->statistics($selectedEnvironment),
             'environments' => $environments,
             'formats' => $this->formats,
             'sourceTypes' => $this->sourceCatalog(),
-            'connections' => array_values(array_filter($this->connectorCatalog->listSettings($selectedEnvironment), function($connector) {
-                $types = array();
-                foreach ($this->sourceCatalog() as $source) $types = array_merge($types, $source['connectors']);
+            'connections' => array_values(array_filter($this->connectorCatalog->listSettings($selectedEnvironment), function($connector) use ($sourceConnectorTypes) {
                 return (int) $connector->is_active === 1 && empty($connector->shadowed)
-                    && in_array((string) $connector->db_type, $types, TRUE);
+                    && in_array((string) $connector->db_type, $sourceConnectorTypes, TRUE);
             })),
             'initialDirection' => in_array($this->input->get('direction'), array('input', 'output'), TRUE) ? $this->input->get('direction') : '',
             'initialEnvironment' => $selectedEnvironment

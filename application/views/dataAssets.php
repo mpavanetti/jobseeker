@@ -63,7 +63,7 @@ function data_asset_source_summary($asset, $source) {
 }
 ?>
 
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/data-assets.css?v=3">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/data-assets.css?v=4">
 
 <div class="content-wrapper data-assets-page">
   <section class="content-header">
@@ -213,7 +213,7 @@ function data_asset_source_summary($asset, $source) {
                 </div>
 
                 <div id="objectStorageSourceOptions" class="well well-sm data-source-options" style="display:none">
-                  <div class="form-group"><label for="assetObjectPath">Object path</label><input id="assetObjectPath" name="object_path" class="form-control" maxlength="1024" placeholder="landing/2026/customers.parquet"><p class="help-block">Inside the bucket or container named in the Connection's resource field; without one, start the path with it. SFTP paths are relative to the Connection's resource directory unless they start with <code>/</code>.</p></div>
+                  <div class="form-group"><label for="assetObjectPath">Object path</label><input id="assetObjectPath" name="object_path" class="form-control" maxlength="1024" placeholder="landing/2026/customers.parquet"><p class="help-block">Inside the bucket or container named in the Connection (resource field, or <code>bucket=</code> parameter); without one, start the path with it. SFTP paths are relative to the Connection's resource directory unless they start with <code>/</code>.</p></div>
                 </div>
 
                 <div id="documentSourceOptions" class="well well-sm data-source-options" style="display:none">
