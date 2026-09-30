@@ -27,16 +27,27 @@ trait JobCreationGitWorkspaceTrait
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $request['message']), $request['status']);
           return;
         }
-        $prepared = $this->preparePersonalGitWorkspace($request, TRUE);
+        // Only a new job gets starter files. A saved job, or one just moved to
+        // Git, already has its code on a branch; starter files would collide
+        // with it when that branch is merged.
+        $prepared = $this->preparePersonalGitWorkspace($request, $this->input->post('scaffold_job') !== '0');
         if (! $prepared['ok']) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $prepared['message']), $prepared['status']);
           return;
         }
         $branch = ! empty($prepared['payload']['workspaceBranch']) ? $prepared['payload']['workspaceBranch'] : $request['workspaceBranch'];
+        $jobNote = '';
+        if ($request['project'] !== NULL && $request['jobPath'] !== '') {
+          if (! empty($prepared['payload']['jobFolderCreated'])) {
+            $jobNote = ' '.$request['jobPath'].' was created with starter files; commit and push it for builds to run it.';
+          } else if (! is_dir($request['jobDirectory'])) {
+            $jobNote = ' '.$request['jobPath'].' is not in your working copy yet: pull or merge '.$request['execution']['branch'].', where this job runs, to get it.';
+          } else {
+            $jobNote = ' This job lives in '.$request['jobPath'].'.';
+          }
+        }
         $message = $request['project'] !== NULL
-          ? 'Your '.$request['project']['name'].' workspace is ready on '.$branch.'.'.($request['jobPath'] !== ''
-            ? (! empty($prepared['payload']['jobFolderCreated']) ? ' '.$request['jobPath'].' was created with starter files; commit and push it for builds to run it.' : ' This job lives in '.$request['jobPath'].'.')
-            : '')
+          ? 'Your '.$request['project']['name'].' workspace is ready on '.$branch.'.'.$jobNote
           : 'Git workspace is ready in OpenVSCode on '.$request['workspaceBranch'].'.';
         $this->jsonJobCreationResponse(array_merge($prepared['payload'], array('message' => $message)));
       }

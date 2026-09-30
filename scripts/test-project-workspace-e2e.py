@@ -45,6 +45,8 @@ CONNECTOR = f"e2e-mono-{RUN}"
 ORDERS_JOB = f"e2e-orders-{RUN}"
 REPORT_JOB = f"e2e-report-{RUN}"
 MOVED_JOB = f"e2e-moved-{RUN}"
+SHARED_PROJECT = f"E2E Shared {RUN}"
+SHARED_JOB = f"e2e-shared-{RUN}"
 JENKINS = "jobseeker-jenkins-1"
 HELPER = "/usr/local/bin/jobseeker-git"
 
@@ -237,6 +239,23 @@ def main() -> None:
         check("Job Creation opens a job folder from the task's link",
               f'openProjectJobFromLink({{"projectId":{project_id},"folder":"jobs\\/orders"}})' in link_page)
 
+        # Setting up the editor installs every job's dependencies without
+        # writing lock files into anyone's job folders.
+        (workspace / "jobs" / "orders" / "pyproject.toml").write_text(
+            (workspace / "jobs" / "orders" / "pyproject.toml").read_text().replace("dependencies = []", 'dependencies = ["six>=1.16"]'))
+        bootstrapped = ide(ide_workspace, "sh .vscode/bootstrap-python.sh >/dev/null 2>&1; .venv/bin/python -c 'import six, jobseeker; print(\"deps-ok\")'; git status --porcelain")
+        check("the editor environment installs job dependencies and writes no lock files",
+              "deps-ok" in bootstrapped.stdout and "poetry.lock" not in bootstrapped.stdout, bootstrapped.stdout + bootstrapped.stderr)
+        run("git", "-C", str(workspace), "checkout", "--", "jobs/orders/pyproject.toml")
+
+        # Opening a job whose code is on a branch never adds starter files
+        # that would collide with it on the next merge.
+        _, reopened = post_json(browser, "/jobCreation/gitPythonExternalOpen", {
+            "job_name": f"e2e-not-here-{RUN}", "environment": "DEV", "pythonProjectId": project_id, "pythonRepositoryUrl": "",
+            "pythonRepositoryBranch": "", "pythonGitJobPath": "jobs/not-here", "pythonEntryPoint": "main.py", "scaffold_job": "0"})
+        check("a job with code elsewhere gets no starter files", reopened.get("ok") is True and reopened.get("jobFolderCreated") is False
+              and not (workspace / "jobs" / "not-here").exists() and "pull or merge" in reopened.get("message", ""), json.dumps(reopened))
+
         # --- Two jobs, one repository -----------------------------------------
         save_job(browser, ORDERS_JOB, project_id, "jobs/orders", "docker", "1")
         jobs.append(ORDERS_JOB)
@@ -264,6 +283,37 @@ def main() -> None:
         check("the Docker job builds from its folder with shared/ importable", result == "SUCCESS"
               and "ORDERS-RAN HELLO-FROM-SHARED" in console, console[-2500:])
         check("only the job's own tests run", "1 passed" in console and "test_report_is_broken" not in console, console[-2500:])
+
+        # --- A project without Git ---------------------------------------------
+        _, local = post_json(browser, "/jobCreation/projectWorkspaceCreateProject",
+                             {"name": SHARED_PROJECT, "type": "python", "repository_url": ""})
+        local_id = str(local["project"]["id"])
+        project_ids.append(local_id)
+        _, local_open = post_json(browser, "/jobCreation/projectWorkspaceOpen", {"project_id": local_id, "environment": "DEV"})
+        shared_folder = ROOT / local_open["workspacePath"]
+        workspaces.append(shared_folder)
+        check("a project without Git opens one shared folder", local_open.get("sharedWorkspace") is True
+              and local_open["workspacePath"].startswith("repository/workspaces/shared/"), json.dumps(local_open))
+        shared_ide = "/home/workspace/" + local_open["workspacePath"]
+        made = ide(shared_ide, "sh .vscode/jobseeker.sh new daily")
+        check("its new-job task does not ask for a push", made.returncode == 0 and "push" not in made.stdout, made.stdout)
+        (shared_folder / "shared" / "ledger.py").write_text('def ledger() -> str:\n    return "LEDGER-FROM-SHARED"\n')
+        daily = shared_folder / "jobs" / "daily" / "main.py"
+        daily.write_text(daily.read_text().replace("from jobseeker import JobSeeker", "from jobseeker import JobSeeker\nfrom shared.ledger import ledger")
+                         .replace('        print(f"', '        print(ledger())\n        print(f"'))
+        _, local_jobs = post_json(browser, "/jobCreation/projectWorkspaceJobs", {"project_id": local_id})
+        daily_job = next(job for job in local_jobs["jobs"] if job["name"] == "daily")
+        browser.request("/jobCreation/send", method="POST", csrf=True, fields={
+            "job_name": SHARED_JOB, "job_names": "", "description": "Shared folder e2e", "environment": "DEV",
+            "checkEnvironment": "1", "timestamp": "1", "trigger_after_save": "0", "linuxCommand": "1",
+            "linuxExecutionStrategy": "script", "linuxScriptType": "python", "pythonSourceMode": "path",
+            "pythonSourcePath": daily_job["sourcePath"], "pythonEntryPoint": "main.py", "pythonRuntimeMode": "local",
+            "pythonVersion": "python3", "checkBuild": "0", "abort": "0", "runJobCheck": "0", "emailCheck": "0",
+            "editableEmailCheck": "0", "winCommand": "0", "action": "0"})
+        jobs.append(SHARED_JOB)
+        result, console = build(browser, SHARED_JOB)
+        check("a shared-folder job imports the project's shared/ code in its build",
+              result == "SUCCESS" and "LEDGER-FROM-SHARED" in console, console[-2000:])
 
         # --- A personal branch -------------------------------------------------
         _, second = post_json(browser, "/jobCreation/projectWorkspaceCreateProject",
