@@ -9,6 +9,7 @@ resources:
   - rbac.yaml
   - mariadb.yaml
   - app.yaml
+  - data-preview.yaml
   - jenkins.yaml
   - openvscode.yaml
   - mailpit.yaml
@@ -31,4 +32,7 @@ images:
     newTag: local
   - name: jobseeker-openvscode
     newName: jobseeker-openvscode
+    newTag: local
+  - name: jobseeker-data-preview
+    newName: jobseeker-data-preview
     newTag: local
