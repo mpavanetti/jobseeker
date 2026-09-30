@@ -643,9 +643,9 @@
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/hop-canvas.js?v=4"></script>
 <?php } ?>
 
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=1">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-dependencies.css?v=2">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/job-task-graph.css?v=2">
-<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=2"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-dependencies.js?v=4"></script>
 <script type="text/javascript" src="<?php echo base_url(); ?>assets/js/job-task-graph.js?v=2"></script>
 
 <script type="text/javascript">
@@ -2000,7 +2000,7 @@
           var hasAny = data && ((data.connectors || []).length || (data.datasets || []).length);
           if (hasAny) {
             $('#deps-' + run.id).html('<strong class="jd-group-label">Connectors &amp; datasets used</strong>');
-            window.JobSeekerJobDependencies.render($('#deps-' + run.id), data, {environment: depEnvironment, showWarnings: false});
+            window.JobSeekerJobDependencies.render($('#deps-' + run.id), data, {environment: depEnvironment, showWarnings: false, inlineAssets: true});
           }
         });
       }

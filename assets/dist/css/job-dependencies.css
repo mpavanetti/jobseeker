@@ -8,6 +8,8 @@
 .jd-chip > a { font-weight: 600; color: #2b3a4a; }
 .jd-chip > small { color: #8a94a6; }
 .jd-chip .jd-light-icon { font-size: 11px; }
+.jd-preview-asset { margin: -2px -5px -2px 0; padding: 1px 4px; border: 0; background: transparent; color: #3c8dbc; line-height: 1; }
+.jd-preview-asset:hover, .jd-preview-asset:focus { color: #23527c; }
 .jd-chip.jd-ok .jd-light-icon { color: #2e8540; }
 .jd-chip.jd-warn { border-color: #f0c36d; background: #fdf6e6; }
 .jd-chip.jd-warn .jd-light-icon { color: #b9770e; }
@@ -32,3 +34,16 @@
 .jd-command-guard .jd-warnings li.jd-bad > strong { color: #c0392b; }
 .jd-command-guard .jd-warnings li.jd-warn > strong { color: #b9770e; }
 .jd-command-guard .jd-warnings li code { display: inline-block; margin: 3px 0; padding: 1px 5px; font-size: 11px; background: #fff; border: 1px solid #e6b0aa; border-radius: 3px; word-break: break-all; }
+.jd-preview-loading { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #777; }
+.jd-preview-meta { margin-bottom: 10px; padding: 7px 9px; border-left: 3px solid #3c8dbc; background: #f5f8fa; font: 12px Menlo, Monaco, Consolas, monospace; }
+.jd-preview-scroll { max-height: 55vh; overflow: auto; border: 1px solid #d2d6de; }
+.jd-preview-scroll .table { margin: 0; white-space: nowrap; }
+.jd-preview-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f4f4f4; }
+.jd-preview-text { max-height: 55vh; margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.jd-inline-assets { margin-top: 8px; }
+.jd-inline-assets-body { margin-top: 9px; }
+.jd-inline-asset { margin-bottom: 10px; border: 1px solid #d2d6de; border-radius: 3px; background: #fff; }
+.jd-inline-asset-title { display: flex; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid #eee; background: #f8fafb; }
+.jd-inline-asset-title span { font-size: 11px; }
+.jd-inline-asset-body .jd-preview-scroll { max-height: 300px; border: 0; }
+.jd-inline-asset-body .jd-preview-text { max-height: 300px; }
