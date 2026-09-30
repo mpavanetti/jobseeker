@@ -55,6 +55,9 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
 .connector-status.active .connector-status-dot { background:#2e8540; }
 .connector-actions { white-space:nowrap; }
 .connector-environment-row td { background:#f4f9fd !important; }
+.connector-monospace { font-family:Menlo,Consolas,monospace; font-size:12px; }
+.connector-secret-hint { margin:-4px 0 0; }
+.connector-secret-hint code { white-space:nowrap; }
 @media (max-width: 991px) { .connector-form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .connector-form-grid .span-4 { grid-column:span 2; } }
 @media (max-width: 600px) { .connector-toolbar { align-items:flex-start; flex-direction:column; } .connector-form-grid { grid-template-columns:1fr; } .connector-form-grid .span-2,.connector-form-grid .span-4 { grid-column:span 1; } }
 </style>
@@ -164,8 +167,11 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
             <div class="connector-secret-panel secret-fields" data-secret-backend="local">
               <h4>Encrypted local values</h4>
               <div class="connector-form-grid">
-                <div class="form-group span-2"><label for="login">Username</label><input class="form-control" id="login" name="login" maxlength="500" autocomplete="off"></div>
-                <div class="form-group span-2"><label for="password">Password</label><input class="form-control" type="password" id="password" name="password" maxlength="2000" autocomplete="new-password"></div>
+                <div class="form-group span-2 connector-login-field"><label for="login" id="connectorLoginLabel">Username</label><input class="form-control" id="login" name="login" maxlength="500" autocomplete="off"></div>
+                <div class="form-group span-2 connector-password-field"><label for="password" id="connectorPasswordLabel">Password</label><input class="form-control" type="password" id="password" name="password" maxlength="2000" autocomplete="new-password"></div>
+                <div class="form-group span-2 connector-ssh-field" style="display:none"><label for="ssh_private_key">Private key</label><textarea class="form-control connector-monospace" id="ssh_private_key" name="ssh_private_key" rows="5" spellcheck="false" autocomplete="off" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea><p class="help-block">Unencrypted, as ssh-keygen writes it.<?php echo $isEditing ? ' Leave blank to keep the saved key.' : ''; ?></p></div>
+                <div class="form-group span-2 connector-ssh-field" style="display:none"><label for="ssh_known_hosts">Known hosts</label><textarea class="form-control connector-monospace" id="ssh_known_hosts" name="ssh_known_hosts" rows="5" spellcheck="false" autocomplete="off" placeholder="github.com ssh-ed25519 AAAA..."></textarea><p class="help-block">The server's pinned host keys, for example from <code>ssh-keyscan -t ed25519 HOST</code>.</p></div>
+                <p class="help-block span-4 connector-secret-hint" id="connectorSecretHint" style="display:none"></p>
                 <div class="form-group span-4"><label for="local_secret_fields">Additional secret fields</label><textarea class="form-control" id="local_secret_fields" name="local_secret_fields" rows="4" spellcheck="false" placeholder="token=...&#10;private_key=...&#10;known_hosts=..."></textarea><p class="help-block git-credential-help" style="display:none">For HTTPS, save <code>token</code> (and optionally a provider username). For SSH, save <code>private_key</code> and pinned <code>known_hosts</code> values. Secrets are never added to a clone URL or console command.</p></div>
                 <?php if ($isEditing && $editing->secret_backend === 'local') { ?>
                   <div class="form-group span-4"><label><input type="checkbox" name="clear_local_secrets" value="1"> Clear all stored local values</label><p class="help-block">Use this when the selected authentication type does not require a saved credential. Otherwise, blank fields preserve the current encrypted values.</p></div>
@@ -324,6 +330,76 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
       }
     }
   }
+  // What each type can authenticate with; the first is its default. A saved
+  // connector keeps showing its own choice even when it is not listed.
+  var relationalAuth = ['username_password', 'connection_string', 'managed_identity', 'service_principal', 'iam_role', 'custom'];
+  var authByType = {
+    mysql: relationalAuth, pgsql: relationalAuth, sqlserver: relationalAuth, oracle_service: relationalAuth, oracle_sid: relationalAuth,
+    mongodb: ['username_password', 'connection_string', 'none', 'custom'],
+    redis: ['username_password', 'token', 'none', 'custom'],
+    snowflake: ['username_password', 'token', 'custom'],
+    databricks: ['token', 'service_principal', 'managed_identity', 'custom'],
+    kafka: ['username_password', 'none', 'custom'],
+    rabbitmq: ['username_password', 'custom'],
+    elasticsearch: ['username_password', 'api_key', 'token', 'none', 'custom'],
+    sftp: ['username_password', 'ssh_key', 'custom'],
+    http_api: ['token', 'api_key', 'username_password', 'none', 'custom'],
+    aws_s3: ['access_key', 'iam_role', 'web_identity', 'custom'],
+    azure_blob: ['sas_token', 'connection_string', 'access_key', 'managed_identity', 'workload_identity', 'service_principal', 'custom'],
+    azure_data_lake: ['sas_token', 'connection_string', 'access_key', 'managed_identity', 'workload_identity', 'service_principal', 'custom'],
+    gcs: ['custom', 'workload_identity'],
+    git_repository: ['token', 'username_password', 'ssh_key'],
+    generic_secret: ['custom', 'username_password', 'token', 'api_key']
+  };
+  // Labels of the two boxes; null hides a box. DbSettings saves each value
+  // under the name the job and the live test read.
+  var authBoxes = {
+    username_password: ['Username', 'Password'],
+    token: ['Username <small class="text-muted">optional</small>', 'Token'],
+    api_key: [null, 'API key'],
+    sas_token: [null, 'SAS token'],
+    connection_string: [null, 'Connection string'],
+    access_key: ['Access key ID', 'Secret access key'],
+    service_principal: ['Client ID', 'Client secret'],
+    ssh_key: ['Username', null],
+    managed_identity: [null, null], workload_identity: [null, null], iam_role: [null, null], web_identity: [null, null], none: [null, null],
+    custom: ['Username <small class="text-muted">optional</small>', 'Password <small class="text-muted">optional</small>']
+  };
+  // Extra fields the live test understands, beyond the two boxes.
+  var secretHints = {
+    aws_s3: 'Optional: <code>session_token=</code>, <code>endpoint_url=</code> for S3-compatible storage. Put <code>bucket=</code> and <code>region=</code> in Connection parameters.',
+    azure_blob: 'Put the storage account URL (https://ACCOUNT.blob.core.windows.net) in Endpoint / host unless you use a connection string.',
+    azure_data_lake: 'Put the storage account URL (https://ACCOUNT.dfs.core.windows.net) in Endpoint / host unless you use a connection string.',
+    gcs: 'Add <code>service_account_json=</code> (the key file on one line), or put <code>project=</code> in Connection parameters to use the worker identity.',
+    http_api: 'Connection parameters may set <code>authorization_scheme=</code>, <code>api_key_header=</code> and <code>insecure=1</code>.',
+    elasticsearch: 'Connection parameters may set <code>api_key_header=</code> and <code>insecure=1</code>.',
+    databricks: 'Put <code>http_path=</code> in Connection parameters.'
+  };
+  function refreshAuthentication(resetDefault) {
+    var type = $('#db_type').val();
+    var select = $('#auth_type');
+    var current = select.val();
+    var allowed = authByType[type] || null;
+    if (resetDefault && allowed) {
+      current = allowed[0];
+      select.val(current);
+    }
+    select.find('option').each(function() {
+      var shown = ! allowed || $.inArray(this.value, allowed) !== -1 || this.value === current;
+      $(this).prop('hidden', ! shown).prop('disabled', ! shown);
+    });
+    var boxes = authBoxes[current] || authBoxes.username_password;
+    if (current === 'access_key' && (type === 'azure_blob' || type === 'azure_data_lake')) {
+      boxes = [null, 'Account key'];
+    }
+    $('.connector-login-field').toggle(boxes[0] !== null);
+    $('.connector-password-field').toggle(boxes[1] !== null);
+    if (boxes[0] !== null) { $('#connectorLoginLabel').html(boxes[0]); }
+    if (boxes[1] !== null) { $('#connectorPasswordLabel').html(boxes[1]); }
+    $('.connector-ssh-field').toggle(current === 'ssh_key');
+    var hint = type === 'git_repository' ? '' : (secretHints[type] || '');
+    $('#connectorSecretHint').html(hint).toggle(hint !== '');
+  }
   function refreshAwsProfile() {
     var active = $('#secret_backend').val() === 'aws_secrets_manager' && $('#aws_auth_mode').val() === 'profile';
     $('.aws-profile-field').toggle(active).find('input').prop('required', active);
@@ -343,10 +419,12 @@ $selectedAwsAuth = isset($referenceValues['auth_mode']) ? $referenceValues['auth
   $(function() {
     if (! syncGlobalEnvironment()) { return; }
     $('#secret_backend').on('change', refreshSecretFields);
-    $('#db_type').on('change', function() { refreshConnectorType(true); });
+    $('#db_type').on('change', function() { refreshConnectorType(true); refreshAuthentication(true); });
+    $('#auth_type').on('change', function() { refreshAuthentication(false); });
     $('#aws_auth_mode').on('change', refreshAwsProfile);
     refreshSecretFields();
     refreshConnectorType(false);
+    refreshAuthentication(false);
     if ($.fn.DataTable) { $('#connectorTable').DataTable({order:[[0,'asc']], pageLength:25}); }
   });
   function renderConnectorTest(response) {

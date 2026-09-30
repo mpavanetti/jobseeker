@@ -349,6 +349,43 @@ class DbSettings extends BaseController
             if ($password !== '') {
                 $secretValues['password'] = $password;
             }
+            // Jobs and the live test read a credential by the name its
+            // authentication gives it (connector.value("token")), so the two
+            // form boxes are also saved under those names. An explicit
+            // additional field of the same name still wins.
+            $namedBoxes = array(
+                'token' => array(NULL, 'token'),
+                'api_key' => array(NULL, 'api_key'),
+                'sas_token' => array(NULL, 'sas_token'),
+                'connection_string' => array(NULL, 'connection_string'),
+                'access_key' => array('access_key_id', 'secret_access_key'),
+                'service_principal' => array('client_id', 'client_secret')
+            );
+            if ($authType === 'access_key' && in_array($dbType, array('azure_blob', 'azure_data_lake'), TRUE)) {
+                $namedBoxes['access_key'] = array(NULL, 'account_key');
+            }
+            if (isset($namedBoxes[$authType])) {
+                list($usernameName, $passwordName) = $namedBoxes[$authType];
+                if ($usernameName !== NULL && $username !== '' && ! isset($additionalSecrets[$usernameName])) {
+                    $secretValues[$usernameName] = $username;
+                }
+                if ($password !== '' && ! isset($additionalSecrets[$passwordName])) {
+                    $secretValues[$passwordName] = $password;
+                }
+            }
+            // A private key and known_hosts span several lines, which the
+            // field=value box cannot hold, so SSH keys have boxes of their own.
+            foreach (array('ssh_private_key' => 'private_key', 'ssh_known_hosts' => 'known_hosts') as $input => $name) {
+                $multiline = trim(str_replace("\r", '', (string) $this->input->post($input)));
+                if ($multiline === '') {
+                    continue;
+                }
+                if (strlen($multiline) > 32768 || strpos($multiline, "\0") !== FALSE) {
+                    $this->session->set_flashdata('error', 'The SSH private key or known_hosts value is too long.');
+                    redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
+                }
+                $secretValues[$name] = $multiline."\n";
+            }
             if ($authType === 'username_password'
                 && (! isset($secretValues['username']) || (string) $secretValues['username'] === ''
                     || ! isset($secretValues['password']) || (string) $secretValues['password'] === '')) {
@@ -360,12 +397,12 @@ class DbSettings extends BaseController
             if ($dbType === 'git_repository' && $authType === 'ssh_key'
                 && ((! isset($secretValues['private_key']) && ! isset($secretValues['ssh_key']))
                     || ! isset($secretValues['known_hosts']))) {
-                $this->session->set_flashdata('error', 'SSH Git authentication requires private_key and known_hosts in the additional local secret fields.');
+                $this->session->set_flashdata('error', 'SSH Git authentication requires a private key and the pinned known_hosts lines.');
                 redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
             }
             if ($dbType === 'git_repository' && in_array($authType, array('token', 'api_key'), TRUE)
                 && ! isset($secretValues[$authType]) && ! isset($secretValues['password'])) {
-                $this->session->set_flashdata('error', 'Git token authentication requires a token/api_key additional field or the password field.');
+                $this->session->set_flashdata('error', 'Git token authentication needs the token.');
                 redirect('dbSettings'.($id > 0 ? '?edit='.$id : '?create=1'));
             }
             $encryptedSecret = $this->model->encryptSecretValues($secretValues);
@@ -511,6 +548,7 @@ class DbSettings extends BaseController
 
     public function testConnector()
     {
+      $this->releaseSessionLock();
         if (! $this->canManageConnectors()) {
             $this->jsonResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
             return;
