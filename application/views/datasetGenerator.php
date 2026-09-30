@@ -21,7 +21,7 @@
   .dataset-profile:hover, .dataset-profile.is-selected { background: #f2f9fd; border-color: #3c8dbc; }
   .dataset-profile input { margin-right: 5px; }
   .dataset-profile strong { display: block; margin-bottom: 4px; }
-  .dataset-profile span { color: #6d7983; display: block; font-size: 12px; line-height: 1.45; }
+  .dataset-profile span { color: #6d7983; display: block; font-size: 12px; font-weight: 400; line-height: 1.45; }
   .dataset-generator-limits { background: #f7f9fa; border: 1px solid #e0e6ea; border-radius: 5px; margin: 12px 0 18px; padding: 14px; }
   .dataset-generator-limits h4 { margin: 0 0 12px; }
   .dataset-estimate { background: #edf7ed; border-left: 3px solid #00a65a; margin-top: 12px; padding: 10px 12px; }
@@ -76,7 +76,7 @@
               </div>
               <div class="form-group">
                 <label for="batch_key">Batch key</label>
-                <input class="form-control dataset-batch-key" id="batch_key" name="batch_key" value="<?php echo html_escape($suggestedBatchKey); ?>" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,31}" required>
+                <input class="form-control dataset-batch-key" id="batch_key" name="batch_key" value="<?php echo html_escape($suggestedBatchKey); ?>" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,31}" required>
                 <p class="help-block">Used to identify every generated row and Jenkins job for exact cleanup.</p>
               </div>
               <div class="row">
@@ -126,7 +126,7 @@
                   <td><span class="label label-<?php echo $statusClass; ?>"><?php echo html_escape($batch->status); ?></span><br><small><?php echo html_escape($batch->profile); ?> / seed <?php echo (int) $batch->seed_value; ?></small></td>
                   <td class="dataset-metric"><?php echo number_format($batch->tmf_rows); ?> TMF<br><small><?php echo number_format($batch->error_rows); ?> errors / <?php echo number_format($batch->pipeline_count); ?> pipelines / <?php echo number_format($batch->pipeline_run_rows); ?> runs</small></td>
                   <td class="dataset-metric"><?php echo isset($metrics['database_seconds']) ? number_format($metrics['database_seconds'], 3).'s' : '&mdash;'; ?><br><small><?php echo isset($metrics['tmf_rows_per_second']) ? number_format($metrics['tmf_rows_per_second'], 1).' TMF rows/s' : ''; ?><?php echo ! empty($batch->include_jenkins) ? ' / '.(int) ($metrics['jenkins_created'] ?? 0).' Jenkins jobs' : ''; ?></small></td>
-                  <td><?php echo html_escape($batch->created_at); ?></td>
+                  <td><?php echo js_time($batch->created_at); ?></td>
                   <td>
                     <form method="post" action="<?php echo base_url(); ?>dataset-generator/delete" class="delete-generated-dataset">
                       <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">

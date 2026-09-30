@@ -2634,7 +2634,7 @@
     $('#runCompareBuilds').on('keydown', function(event) { if (event.key === 'Enter') { event.preventDefault(); compareRuns(); } });
     $('#runCompareClose').on('click', function() { ++runComparisonRequest; $('#runCompareBox').hide(); });
 
-    $('#jobFilter').on('keyup', function() {
+    $('#jobFilter').on('input', function() {
       renderJobOptions($(this).val());
     });
 

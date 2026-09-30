@@ -2780,7 +2780,7 @@
       updateExecutionSummary();
     }
 
-    $('#jobFilter').on('keyup', function() {
+    $('#jobFilter').on('input', function() {
       renderJobOptions($(this).val());
     });
 

@@ -417,7 +417,7 @@ class EmailSettings extends BaseController
 
                     if($result > 0)
                     {
-                        $this->session->set_flashdata('success', 'New Email Template has successfully created and now is available to be used.');
+                        $this->session->set_flashdata('success', 'The email template was created and is now available.');
                     }
                     else
                     {

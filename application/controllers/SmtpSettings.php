@@ -149,7 +149,7 @@ class SmtpSettings extends BaseController
                 
                 if($result > 0)
                 {
-                    $this->session->set_flashdata('success', 'New Smtp Setting has successfully created and now is available to be used. Use Sync Jenkins Mailer if this should become Jenkins default mailer.');
+                    $this->session->set_flashdata('success', 'The SMTP setting was created. Use Sync Jenkins Mailer to make it the Jenkins default mailer.');
                 }
                 else
                 {
@@ -235,7 +235,7 @@ class SmtpSettings extends BaseController
                 
                 if($result > 0)
                 {
-                    $this->session->set_flashdata('success', 'New Smtp Setting has successfully updated. Use Sync Jenkins Mailer if this should become Jenkins default mailer.');
+                    $this->session->set_flashdata('success', 'The SMTP setting was updated. Use Sync Jenkins Mailer to make it the Jenkins default mailer.');
                 }
                 else
                 {

@@ -134,7 +134,7 @@ class GenericSettings extends BaseController
                 
                 if($result > 0)
                 {
-                    $this->session->set_flashdata('success', 'New Generic Setting has successfully created and now is available to be used.');
+                    $this->session->set_flashdata('success', 'The setting was created and is now available.');
                 }
                 else
                 {

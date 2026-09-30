@@ -41,6 +41,7 @@
     var form = document.getElementById('dataAssetForm');
     if (form) form.reset();
     $('#assetId').val('0');
+    $('#assetKey').data('edited', false);
     $('#assetEditorTitle').text('Register data asset');
     $('#saveAssetLabel').text('Publish Data Asset');
     $('#assetJobName').val('*');
@@ -56,7 +57,7 @@
     resetForm();
     $('#assetId').val(asset.id);
     $('#assetName').val(asset.name);
-    $('#assetKey').val(asset.key);
+    $('#assetKey').val(asset.key).data('edited', true);
     $('#assetEnvironment').val(asset.environment);
     $('#assetJobName').val(asset.job);
     $('#assetFormat').val(asset.format);
@@ -199,7 +200,11 @@
     $('#assetFormat').on('change', function () { updateFormatOptions(); updatePreview(); });
     $('input[name="direction"]').on('change', syncRoleDefaults);
     $('#assetKey, #assetEnvironment, #assetJobName').on('input change', updatePreview);
-    $('#assetName').on('blur', function () { if (!$('#assetKey').val()) $('#assetKey').val(slug(this.value)).trigger('input'); });
+    // The key follows the display name as it is typed, until someone edits
+    // the key. (Filling it on blur raced the caret: typing into the key field
+    // right after the name appended to the generated slug.)
+    $('#assetName').on('input', function () { if (!$('#assetKey').data('edited')) $('#assetKey').val(slug(this.value)).trigger('input'); });
+    $('#assetKey').on('input', function (event) { if (event.originalEvent) $(this).data('edited', this.value !== ''); });
     $('#assetKey').on('blur', function () { this.value = slug(this.value); updatePreview(); });
     $('#assetFile').on('change', function () { if (this.files && this.files[0] && !$('#assetFileName').val()) $('#assetFileName').val(this.files[0].name); });
 
