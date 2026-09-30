@@ -3,7 +3,7 @@ $environmentRows = !empty($list) ? $list : array();
 $inactiveEnvironments = max(0, (int) $environments - (int) $activeEnvironments);
 $standaloneDeployment = isset($deployment_mode) && $deployment_mode === 'standalone';
 ?>
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=8">
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=1">
 
 <div class="content-wrapper context-page settings-page">
@@ -122,4 +122,4 @@ $standaloneDeployment = isset($deployment_mode) && $deployment_mode === 'standal
 </div>
 
 <script>window.settingsDetailsConfig = {type: 'environment', deleteUrl: <?php echo json_encode(base_url().'Context/deleteEnvironment'); ?>};</script>
-<script src="<?php echo base_url(); ?>assets/js/settings-details.js?v=1"></script>
+<script src="<?php echo base_url(); ?>assets/js/settings-details.js?v=2"></script>

@@ -65,12 +65,21 @@
         'Delete ' + type + '?',
         '<p>Permanently delete <strong>' + name + '</strong>?</p><p class="text-muted">Deletion may be blocked when context variables still depend on this ' + type + '.</p>',
         function() {
+          var remove = function(force) {
           $.ajax({
             type: 'POST',
             dataType: 'json',
             url: config.deleteUrl,
-            data: {userId: id}
+            data: force ? {userId: id, force: '1'} : {userId: id}
           }).done(function(response) {
+            if (response.status === 'in_use') {
+              var jobs = $.map(response.jobs || [], function(job) { return '<li><code>' + $('<span>').text(job).html() + '</code></li>'; }).join('');
+              alertify.confirm('Jobs follow this ' + type,
+                '<p>These Git jobs take their repository from <strong>' + name + '</strong> at every build:</p><ul>' + jobs + '</ul>'
+                + '<p>They will fail until they are pointed at another project or repository. Delete anyway?</p>',
+                function() { remove(true); }, function() {});
+              return;
+            }
             if (response.status === true) {
               if (window.JobSeekerSettingsTable) {
                 window.JobSeekerSettingsTable.row($button.closest('tr')).remove().draw();
@@ -84,6 +93,8 @@
           }).fail(function() {
             alertify.error('The delete request failed. The ' + type + ' may still be in use.');
           });
+          };
+          remove(false);
         },
         function() {}
       );

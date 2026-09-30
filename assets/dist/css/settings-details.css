@@ -95,7 +95,36 @@
 }
 
 .settings-page .project-field-name {
-  grid-column: span 9;
+  grid-column: span 6;
+}
+
+.settings-page .project-field-type {
+  grid-column: span 3;
+}
+
+.settings-page .project-layout-help {
+  margin: 10px 0 0;
+}
+
+.project-type-chip {
+  background: #eef4fa;
+  border-radius: 10px;
+  color: #3c6e9c;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 4px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.project-type-chip.is-shell {
+  background: #f1f5ea;
+  color: #4d7a2a;
+}
+
+.project-type-chip.is-hop {
+  background: #f6eefa;
+  color: #7a3f9c;
 }
 
 .settings-page .project-field-status {
@@ -499,6 +528,7 @@
   .settings-page .settings-field-wide,
   .settings-page .settings-field-status,
   .settings-page .project-field-name,
+  .settings-page .project-field-type,
   .settings-page .project-field-status {
     grid-column: 1 / -1;
   }

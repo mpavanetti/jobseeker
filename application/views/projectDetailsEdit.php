@@ -1,5 +1,5 @@
 <link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/context-details.css?v=3">
-<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=5">
+<link rel="stylesheet" href="<?php echo base_url(); ?>assets/dist/css/settings-details.css?v=6">
 
 <div class="content-wrapper context-page settings-page">
   <section class="content-header">
@@ -36,6 +36,8 @@
             </div>
             <div class="context-form-grid">
               <div class="context-field project-field-name"><label for="name">Project name <span class="text-danger">*</span></label><input id="name" type="text" name="name" value="<?php echo html_escape($project->ProjectName); ?>" class="form-control" maxlength="255" autocomplete="off" required><span class="context-help">The name must remain unique.</span></div>
+              <?php $editType = isset($project->ProjectType) && in_array($project->ProjectType, array('python', 'shell', 'hop'), TRUE) ? $project->ProjectType : 'python'; ?>
+              <div class="context-field project-field-type"><label for="projectType">Type</label><select id="projectType" class="form-control" name="projectType"><?php foreach (array('python' => 'Python', 'shell' => 'Shell', 'hop' => 'Apache Hop') as $typeKey => $typeLabel) { ?><option value="<?php echo $typeKey; ?>" <?php echo $editType === $typeKey ? 'selected' : ''; ?>><?php echo $typeLabel; ?></option><?php } ?></select></div>
               <div class="context-field project-field-status"><label for="active">Status</label><select id="active" class="form-control" name="active"><option value="1" <?php echo (int) $project->IsActive === 1 ? 'selected' : ''; ?>>Active</option><option value="0" <?php echo (int) $project->IsActive === 0 ? 'selected' : ''; ?>>Inactive</option></select></div>
             </div>
             <?php $this->load->view('includes/projectGitFields', array('repositoryUrl' => (string) $project->GitPath, 'credentialKey' => isset($projectGitCredentialKey) ? $projectGitCredentialKey : '', 'branchDefaults' => isset($projectGitDefaults) ? $projectGitDefaults : array())); ?>
