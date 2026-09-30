@@ -344,7 +344,7 @@ ok('the python builder includes the DAG environment',
 // --- 9. Views ----------------------------------------------------------------------
 
 const header = read('application/views/includes/header.php');
-ok('the console grouper is cache-busted for the task sections', header.indexOf('job-console-groups.js?v=10') !== -1);
+ok('the console grouper is cache-busted for the task sections', header.indexOf('job-console-groups.js?v=11') !== -1);
 ok('the console stylesheet is cache-busted', header.indexOf('job-console-groups.css?v=7') !== -1);
 
 const consoleCss = read('assets/dist/css/job-console-groups.css');
