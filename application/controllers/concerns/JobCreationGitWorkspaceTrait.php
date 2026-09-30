@@ -3,8 +3,11 @@
 /**
  * Git repository jobs developed in OpenVSCode.
  *
- * A Git job's repository is cloned once, with the opener's personal Git
- * account (Profile > Git Accounts), into repository/python/git/<job> and
+ * A job bound to a project is developed in the opener's own workspace of
+ * that project (ProjectWorkspaceTrait), next to the project's other jobs; its
+ * code lives in its job folder there. A job without a project has a working
+ * copy of its own: its repository is cloned once, with the opener's personal
+ * Git account (Profile > Git Accounts), into repository/python/git/<job> and
  * checked out on the development branch configured for its environment (DEV
  * defaults to `develop`; every other environment falls back to `main`).
  * Builds clone the job's own branch with its build credential, never with a
@@ -18,19 +21,24 @@ trait JobCreationGitWorkspaceTrait
 {
       /** Opens the job's Git repository in OpenVSCode, cloning it on first use. */
       public function gitPythonExternalOpen() {
+        $this->releaseSessionLock();
         $request = $this->gitWorkspaceRequest(TRUE);
         if (! $request['ok']) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $request['message']), $request['status']);
           return;
         }
-        $prepared = $this->preparePersonalGitWorkspace($request);
+        $prepared = $this->preparePersonalGitWorkspace($request, TRUE);
         if (! $prepared['ok']) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $prepared['message']), $prepared['status']);
           return;
         }
-        $this->jsonJobCreationResponse(array_merge($prepared['payload'], array(
-          'message' => 'Git workspace is ready in OpenVSCode on '.$request['workspaceBranch'].'.'
-        )));
+        $branch = ! empty($prepared['payload']['workspaceBranch']) ? $prepared['payload']['workspaceBranch'] : $request['workspaceBranch'];
+        $message = $request['project'] !== NULL
+          ? 'Your '.$request['project']['name'].' workspace is ready on '.$branch.'.'.($request['jobPath'] !== ''
+            ? (! empty($prepared['payload']['jobFolderCreated']) ? ' '.$request['jobPath'].' was created with starter files; commit and push it for builds to run it.' : ' This job lives in '.$request['jobPath'].'.')
+            : '')
+          : 'Git workspace is ready in OpenVSCode on '.$request['workspaceBranch'].'.';
+        $this->jsonJobCreationResponse(array_merge($prepared['payload'], array('message' => $message)));
       }
 
       /**
@@ -38,9 +46,12 @@ trait JobCreationGitWorkspaceTrait
        * and opens it in OpenVSCode, where the person reviews, commits and
        * pushes it. Nothing is overwritten: when a sample file would replace
        * one the repository already has, the whole sample goes into
-       * samples/<sample-id>/ instead.
+       * samples/<sample-id>/ instead. The files follow the job's runtime as
+       * an inline workspace does: the Docker Container runtime gets a
+       * Dockerfile the build uses, the Jenkins Agent runtime does not.
        */
       public function gitPythonLoadSample() {
+        $this->releaseSessionLock();
         $request = $this->gitWorkspaceRequest(TRUE);
         if (! $request['ok']) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $request['message']), $request['status']);
@@ -62,19 +73,38 @@ trait JobCreationGitWorkspaceTrait
         if ($dockerImage === '') {
           $dockerImage = $this->cleanPythonDockerImage($this->input->post('pythonDockerImage'), $pythonExecutable === FALSE ? '' : $pythonExecutable);
         }
-        $written = $this->writeSampleIntoGitWorkspace($request['workspace'], $sample, $dockerImage === FALSE ? '' : $dockerImage);
+        // A sample that needs Docker moves the job to Docker; any other sample
+        // runs on whichever runtime the job already has.
+        $sampleNeedsDocker = ! empty($sample['use_dockerfile']) || (isset($sample['runtime']) && $sample['runtime'] === 'docker');
+        $runtime = $sampleNeedsDocker || $this->input->post('pythonRuntimeMode') === 'docker' ? 'docker' : 'local';
+        // In a repository of many jobs the sample goes into this job's folder,
+        // and its entry file stays relative to that folder.
+        if (! $this->ensureDirectory($request['jobDirectory'])) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'JobSeeker could not create '.$request['jobPath'].' in the workspace.'), 500);
+          return;
+        }
+        if ($request['project'] !== NULL && $request['jobPath'] !== '') {
+          $this->removeUntouchedJobStarter($request['jobDirectory'], basename($request['jobPath']));
+        }
+        $written = $this->writeSampleIntoGitWorkspace($request['jobDirectory'], $sample, $dockerImage === FALSE ? '' : $dockerImage, $runtime === 'docker');
         if (! $written['ok']) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $written['message']), $written['status']);
           return;
         }
 
-        $where = $written['folder'] === '' ? 'the repository root' : $written['folder'];
+        $where = $request['jobPath'] === ''
+          ? ($written['folder'] === '' ? 'the repository root' : $written['folder'])
+          : $request['jobPath'].($written['folder'] === '' ? '' : '/'.$written['folder']);
         $this->jsonJobCreationResponse(array_merge($prepared['payload'], array(
-          'message' => $sample['name'].' was added to '.$where.' on '.$request['workspaceBranch'].'. Review it in VS Code, then commit and push.',
+          'message' => $sample['name'].' was added to '.$where.' on '.(! empty($prepared['payload']['workspaceBranch']) ? $prepared['payload']['workspaceBranch'] : $request['workspaceBranch'])
+            .($runtime === 'docker' ? ' with a Dockerfile for the Docker Container runtime' : ' for the Jenkins Agent runtime')
+            .'. Review it in VS Code, then commit and push: builds run what is on the branch.',
           'sampleFiles' => $written['files'],
+          'jobPath' => $request['jobPath'],
           'sampleFolder' => $written['folder'],
           'entryPoint' => $written['entryPoint'],
-          'useDockerfile' => ! empty($sample['use_dockerfile']),
+          'runtime' => $runtime,
+          'useDockerfile' => $runtime === 'docker',
           'runTests' => ! empty($sample['run_tests'])
         )));
       }
@@ -88,6 +118,7 @@ trait JobCreationGitWorkspaceTrait
        * The job itself switches to Git only when the form is saved.
        */
       public function inlinePythonConvertToGit() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -134,6 +165,11 @@ trait JobCreationGitWorkspaceTrait
           $commitMessage = 'Move JobSeeker job '.$jobName.' to Git';
         }
         $commitMessage = substr($commitMessage, 0, 2000);
+        $jobPath = $this->projectWorkspaceLayout()->cleanJobPath($this->input->post('pythonGitJobPath'));
+        if ($jobPath === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'The job folder must be a folder inside the repository, such as jobs/'.$this->projectWorkspaceLayout()->slug($jobName, 'job').'.'), 400);
+          return;
+        }
 
         $location = $this->gitRepositoryLocation($repositoryUrl);
         $accountHost = $location['host'].($location['port'] ? ':'.$location['port'] : '');
@@ -146,15 +182,37 @@ trait JobCreationGitWorkspaceTrait
           return;
         }
 
-        $relativeWorkspace = $this->safeRelativePath('python/git/'.$jobName);
-        $workspace = $relativeWorkspace === FALSE ? FALSE : rtrim($this->inlinePythonRepositoryRoot(), '/\\').DIRECTORY_SEPARATOR.$relativeWorkspace;
-        if ($workspace === FALSE) {
-          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'The Git workspace path could not be resolved.'), 400);
-          return;
-        }
-        if (file_exists($workspace)) {
-          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'repository/'.$relativeWorkspace.' already exists. Open it in VS Code to add these files, or remove the folder to move the job again.'), 409);
-          return;
+        // A project job is pushed from the opener's workspace of the project
+        // when they have none yet (it becomes their workspace); otherwise from
+        // a temporary clone, so their uncommitted work is never touched.
+        $temporaryClone = FALSE;
+        $projectLocation = $project !== NULL ? $this->projectWorkspaceLocation($project) : NULL;
+        if ($projectLocation !== NULL && (is_dir($projectLocation['absolute'].DIRECTORY_SEPARATOR.'.git') || file_exists($projectLocation['absolute']))) {
+          if (! is_dir($projectLocation['absolute'].DIRECTORY_SEPARATOR.'.git')) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'repository/'.$projectLocation['relative'].' exists but is not a Git working copy. Move its files away and try again.'), 409);
+            return;
+          }
+          $relativeWorkspace = '';
+          $workspace = sys_get_temp_dir().DIRECTORY_SEPARATOR.'jobseeker-move-'.bin2hex(random_bytes(8));
+          $temporaryClone = TRUE;
+        } else if ($projectLocation !== NULL) {
+          $relativeWorkspace = $projectLocation['relative'];
+          $workspace = $projectLocation['absolute'];
+          if (! $this->ensureDirectory(dirname($workspace))) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'The Git workspace path could not be created.'), 500);
+            return;
+          }
+        } else {
+          $relativeWorkspace = $this->safeRelativePath('python/git/'.$jobName);
+          $workspace = $relativeWorkspace === FALSE ? FALSE : rtrim($this->inlinePythonRepositoryRoot(), '/\\').DIRECTORY_SEPARATOR.$relativeWorkspace;
+          if ($workspace === FALSE) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'The Git workspace path could not be resolved.'), 400);
+            return;
+          }
+          if (file_exists($workspace)) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'repository/'.$relativeWorkspace.' already exists. Open it in VS Code to add these files, or remove the folder to move the job again.'), 409);
+            return;
+          }
         }
 
         $written = $this->writeInlinePythonDraft($jobName, $draft);
@@ -164,23 +222,35 @@ trait JobCreationGitWorkspaceTrait
         }
         $source = $written['execution']['sourceDirectory'];
 
+        // A first commit to an empty project repository also lays out the project.
+        $projectFiles = $project !== NULL ? $this->projectWorkspaceLayout()->scaffoldFiles($project['type'], $project['name']) : array();
         $connectorDirectory = $this->materializePersonalGitAccount($account, $location['host']);
         try {
-          $result = $this->pushInlineWorkspaceToGit($source, $workspace, $repositoryUrl, $connectorDirectory, $branch, $releaseBranch, $commitMessage, $this->input->post('overwrite') === '1');
+          $result = $this->pushInlineWorkspaceToGit($source, $workspace, $repositoryUrl, $connectorDirectory, $branch, $releaseBranch, $commitMessage, $this->input->post('overwrite') === '1', $jobPath, $projectFiles);
         } finally {
           $this->removeUploadDirectory($connectorDirectory);
         }
-        if (! $result['ok']) {
+        if (! $result['ok'] || $temporaryClone) {
           $this->removeUploadDirectory($workspace);
+        }
+        if (! $result['ok']) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $result['message'], 'conflicts' => isset($result['conflicts']) ? $result['conflicts'] : array()), $result['status']);
           return;
         }
 
-        // The working copy is now the job's VS Code workspace too.
-        $this->configureGitWorkspace($workspace, $jobName, $repositoryUrl);
-        $this->excludeGitWorkspaceTooling($workspace);
-        log_message('info', 'Inline job '.$jobName.' moved to '.$repositoryUrl.' ('.implode(', ', $result['pushed']).') by user '.(int) $this->vendorId.'.');
+        if (! $temporaryClone) {
+          // The working copy is now the VS Code workspace of the job (or of
+          // the opener's project).
+          $this->configureGitWorkspace($workspace, $project !== NULL ? 'project-'.$project['id'] : $jobName, $repositoryUrl);
+          $this->excludeGitWorkspaceTooling($workspace);
+          if ($project !== NULL) {
+            $this->writeProjectWorkspaceTooling($workspace, $project, $projectLocation);
+            $this->writeProjectWorkspaceSessions($workspace, $project, $jobName, $jobPath);
+          }
+        }
+        log_message('info', 'Inline job '.$jobName.' moved to '.$repositoryUrl.($jobPath !== '' ? ' ('.$jobPath.')' : '').' ('.implode(', ', $result['pushed']).') by user '.(int) $this->vendorId.'.');
 
+        $where = $jobPath === '' ? '' : ' in '.$jobPath;
         $this->jsonJobCreationResponse(array(
           'ok' => TRUE,
           'repositoryUrl' => $repositoryUrl,
@@ -189,8 +259,11 @@ trait JobCreationGitWorkspaceTrait
           'commit' => $result['commit'],
           'filesCopied' => $result['files'],
           'entryPoint' => $draft['entryPoint'],
+          'jobPath' => $jobPath,
           'projectId' => $project !== NULL ? (int) $project['id'] : 0,
-          'message' => 'Pushed '.$result['files'].' file(s) to '.implode(' and ', $result['pushed']).'. Save the job to run it from Git.'
+          'message' => 'Pushed '.$result['files'].' file(s)'.$where.' to '.implode(' and ', $result['pushed']).'.'
+            .($temporaryClone ? ' Pull '.$branch.' in your '.$project['name'].' workspace to see them there.' : '')
+            .' Save the job to run it from Git.'
         ));
       }
 
@@ -200,6 +273,7 @@ trait JobCreationGitWorkspaceTrait
        * exactly as a build materializes it; a public build is tested here.
        */
       public function testGitBuildAccess() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -246,7 +320,8 @@ trait JobCreationGitWorkspaceTrait
             'message' => $ok
               ? 'Public read access works'.($branch !== '' ? ' and '.$branch.' exists' : '').'. Builds need no credential.'
               : ($timedOut ? 'The Git provider did not respond within 20 seconds.'
-                : ($run['code'] === 2 ? 'The repository is readable, but '.$branch.' does not exist.' : 'The repository is not publicly readable. Choose a Git connector (a deploy key or token) for builds.'))
+                : ($run['code'] === 2 ? ($branch !== '' ? 'The repository is readable, but '.$branch.' does not exist.' : 'The repository is readable but has no commits yet.')
+                  : 'The repository is not publicly readable. Choose a Git connector (a deploy key or token) for builds.'))
           ), $ok ? 200 : 422);
           return;
         }
@@ -271,6 +346,7 @@ trait JobCreationGitWorkspaceTrait
        * against one listing instead of testing each environment.
        */
       public function gitRemoteBranches() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -377,7 +453,10 @@ trait JobCreationGitWorkspaceTrait
         $code = (int) $match[1];
         $messages = array(
           0 => 'The build credential can read '.($branch !== '' ? $branch.' in ' : '').'this repository.',
-          2 => 'The build credential can reach the repository, but '.$branch.' does not exist.',
+          // Exit 2: the branch (or, with none, HEAD) is missing; when listing,
+          // only a helper too old to know `heads` exits 2 (its usage error).
+          2 => $listBranches ? 'The Jenkins worker has an older jobseeker-git that cannot list branches. Rebuild the Jenkins image (docker compose up -d --build jenkins).'
+            : ($branch !== '' ? 'The build credential can reach the repository, but '.$branch.' does not exist.' : 'The build credential can reach the repository, but it has no commits yet.'),
           78 => $credentialKey.' is not available to this job in '.$environment.', or its host does not match the repository.',
           126 => 'The Jenkins worker does not have the secure JobSeeker Git helper.',
           127 => 'The Jenkins worker does not have the JobSeeker connector helper.'
@@ -434,6 +513,10 @@ trait JobCreationGitWorkspaceTrait
         $jobName = $cleanJobName['name'];
 
         $entryPoint = trim((string) $this->input->post('pythonEntryPoint')) === '' ? 'main.py' : $this->input->post('pythonEntryPoint');
+        $jobPath = $this->projectWorkspaceLayout()->cleanJobPath($this->input->post('pythonGitJobPath'));
+        if ($jobPath === FALSE) {
+          return $fail('The job folder must be a folder inside the repository, such as jobs/load-orders.', 400);
+        }
         $environment = $this->gitWorkspaceEnvironment();
         $projectSelection = $this->selectedGitProject($this->input->post('pythonProjectId'), $environment);
         if ($projectSelection === FALSE) {
@@ -446,10 +529,18 @@ trait JobCreationGitWorkspaceTrait
         $submittedBranch = trim((string) $this->input->post('pythonRepositoryBranch'));
         $jobBranch = $submittedBranch === '' ? $workspaceBranch : $submittedBranch;
         // The workspace clones with the opener's own account, not the job's build credential.
-        $execution = $this->resolveGitPythonExecution($repositoryUrl, $jobBranch, $entryPoint, '', $project);
-        $relativeWorkspace = $this->safeRelativePath('python/git/'.$jobName);
+        $execution = $this->resolveGitPythonExecution($repositoryUrl, $jobBranch, $entryPoint, '', $project, '', '*', $jobPath);
+        if ($project !== NULL) {
+          // A project's jobs share the opener's workspace of the project.
+          $location = $this->projectWorkspaceLocation($project);
+          $relativeWorkspace = $location['relative'];
+          $workspace = $location['absolute'];
+        } else {
+          $relativeWorkspace = $this->safeRelativePath('python/git/'.$jobName);
+          $workspace = $relativeWorkspace === FALSE ? FALSE : rtrim($this->inlinePythonRepositoryRoot(), '/\\').DIRECTORY_SEPARATOR.$relativeWorkspace;
+        }
         if ($execution === FALSE || $relativeWorkspace === FALSE) {
-          return $fail('Check the repository URL, branch and entry file.', 400);
+          return $fail('Check the repository URL, branch, job folder and entry file.', 400);
         }
         return array(
           'ok' => TRUE,
@@ -457,9 +548,11 @@ trait JobCreationGitWorkspaceTrait
           'environment' => $environment,
           'project' => $project,
           'execution' => $execution,
+          'jobPath' => $jobPath,
           'workspaceBranch' => $workspaceBranch,
           'relativeWorkspace' => $relativeWorkspace,
-          'workspace' => rtrim($this->inlinePythonRepositoryRoot(), '/\\').DIRECTORY_SEPARATOR.$relativeWorkspace
+          'workspace' => $workspace,
+          'jobDirectory' => $jobPath === '' ? $workspace : $workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath)
         );
       }
 
@@ -468,7 +561,22 @@ trait JobCreationGitWorkspaceTrait
        * at the opener's identity and account and refreshes the editor files.
        * Existing repository files are never overwritten.
        */
-      private function preparePersonalGitWorkspace($request) {
+      private function preparePersonalGitWorkspace($request, $scaffoldJob = FALSE) {
+        if ($request['project'] !== NULL) {
+          $project = $this->gitProjectSettings()->project($request['project']['id'], TRUE);
+          $prepared = $this->prepareProjectWorkspace($project, array(
+            'environment' => $request['environment'] === '' ? 'DEV' : $request['environment'],
+            'branchMode' => 'shared',
+            'jobName' => $request['jobName'],
+            'jobPath' => $request['jobPath'],
+            'scaffoldJob' => $scaffoldJob
+          ));
+          if ($prepared['ok']) {
+            $prepared['payload']['jobBranch'] = $request['execution']['branch'];
+            $prepared['payload']['jobPath'] = $request['jobPath'];
+          }
+          return $prepared;
+        }
         $workspace = $request['workspace'];
         $openVsCodeRuntime = $this->openVsCodeRuntimeState(TRUE);
         if (empty($openVsCodeRuntime['available']) || empty($openVsCodeRuntime['running'])) {
@@ -528,7 +636,34 @@ trait JobCreationGitWorkspaceTrait
         return NULL;
       }
 
-      private function writeSampleIntoGitWorkspace($workspace, $sample, $dockerImage) {
+      /**
+       * Opening a new project job gives its folder starter files. A sample
+       * added before anyone edited them replaces them all (a starter test
+       * would otherwise import a main.py the sample replaced); once one is
+       * edited, samples go beside them as usual.
+       */
+      private function removeUntouchedJobStarter($jobDirectory, $folderName) {
+        $starter = $this->projectWorkspaceLayout()->jobStarter('python', $folderName, $this->defaultDockerPythonVersion());
+        $present = array();
+        foreach ($starter as $relative => $content) {
+          $path = $jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $relative);
+          if (! file_exists($path)) {
+            continue;
+          }
+          if (! is_file($path) || (string) file_get_contents($path) !== $content) {
+            return;
+          }
+          $present[] = $path;
+        }
+        foreach ($present as $path) {
+          @unlink($path);
+        }
+        if (! empty($present)) {
+          @rmdir($jobDirectory.DIRECTORY_SEPARATOR.'tests');
+        }
+      }
+
+      private function writeSampleIntoGitWorkspace($workspace, $sample, $dockerImage, $withDockerfile) {
         $entryPoint = $this->cleanPythonEntryPoint(isset($sample['entry_point']) ? $sample['entry_point'] : 'main.py', TRUE);
         if ($entryPoint === FALSE) {
           return array('ok' => FALSE, 'status' => 500, 'message' => 'The sample has an invalid entry file.');
@@ -545,7 +680,7 @@ trait JobCreationGitWorkspaceTrait
           $files['requirements.txt'] = $requirements;
         }
         $files['pyproject.toml'] = $this->defaultInlinePythonPyproject('jobseeker-sample-'.$sample['id'], $requirements, $this->pythonVersionFromDockerImage($dockerImage === '' ? $this->defaultPythonDockerImage() : $dockerImage));
-        if (! empty($sample['use_dockerfile'])) {
+        if ($withDockerfile) {
           $files['Dockerfile'] = $this->defaultInlinePythonDockerfile($dockerImage);
         }
         $hasTests = FALSE;
@@ -595,7 +730,7 @@ trait JobCreationGitWorkspaceTrait
        * Copies the inline workspace into a working copy of the repository,
        * commits it, and pushes. Returns the pushed branches and commit.
        */
-      private function pushInlineWorkspaceToGit($source, $workspace, $repositoryUrl, $connectorDirectory, $branch, $releaseBranch, $commitMessage, $overwrite) {
+      private function pushInlineWorkspaceToGit($source, $workspace, $repositoryUrl, $connectorDirectory, $branch, $releaseBranch, $commitMessage, $overwrite, $jobPath = '', $projectFiles = array()) {
         $heads = $this->runCommand(array('timeout', '30', 'jobseeker-git', 'heads', '--connector-dir', $connectorDirectory, '--', $repositoryUrl));
         if ($heads['code'] !== 0) {
           return array('ok' => FALSE, 'status' => 502, 'message' => 'Your Git account could not read the repository.'.$this->gitFailureReason($heads['output']));
@@ -622,9 +757,16 @@ trait JobCreationGitWorkspaceTrait
           }
         }
 
-        $copy = $this->copyInlineWorkspaceFiles($source, $workspace, $overwrite);
+        $jobDirectory = $jobPath === '' ? $workspace : $workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath);
+        if (! $this->ensureDirectory($jobDirectory)) {
+          return array('ok' => FALSE, 'status' => 500, 'message' => 'JobSeeker could not create '.$jobPath.' in the working copy.');
+        }
+        $copy = $this->copyInlineWorkspaceFiles($source, $jobDirectory, $overwrite);
         if (! $copy['ok']) {
           return $copy;
+        }
+        if ($emptyRemote && ! empty($projectFiles)) {
+          $this->writeMissingProjectFiles($workspace, $projectFiles);
         }
         $this->excludeGitWorkspaceTooling($workspace);
 
@@ -746,7 +888,12 @@ trait JobCreationGitWorkspaceTrait
         return preg_match('/^(?:fatal|error|remote): (.+)$/m', (string) $output, $match) ? ' Git said: '.trim($match[1]) : '';
       }
 
-      private function cloneGitPythonWorkspace($execution, $workspace, $workspaceBranch) {
+      /**
+       * A branch the remote does not have yet starts from $baseBranch when the
+       * remote has that one (a work/<name> branch forks the development
+       * branch), else from the remote's default branch.
+       */
+      private function cloneGitPythonWorkspace($execution, $workspace, $workspaceBranch, $baseBranch = '') {
         $url = $execution['repositoryUrl'];
         $location = $this->gitRepositoryLocation($url);
         $host = $location['host'];
@@ -779,10 +926,17 @@ trait JobCreationGitWorkspaceTrait
             : 'Could not clone the repository with your '.$accountHost.' account.'.$reason);
         }
 
-        $remoteRef = 'refs/remotes/origin/'.$workspaceBranch;
-        $checkoutArgs = $this->runCommand(array('git', '-C', $workspace, 'show-ref', '--verify', '--quiet', $remoteRef))['code'] === 0
-          ? array('checkout', '-q', '-B', $workspaceBranch, 'origin/'.$workspaceBranch)
-          : array('checkout', '-q', '-b', $workspaceBranch);
+        $remoteHas = function($branch) use ($workspace) {
+          return $branch !== '' && $this->runCommand(array('git', '-C', $workspace, 'show-ref', '--verify', '--quiet', 'refs/remotes/origin/'.$branch))['code'] === 0;
+        };
+        if ($remoteHas($workspaceBranch)) {
+          $checkoutArgs = array('checkout', '-q', '-B', $workspaceBranch, 'origin/'.$workspaceBranch);
+        } else if ($baseBranch !== $workspaceBranch && $remoteHas($baseBranch)) {
+          // Not tracking the base, so a first push publishes the new branch.
+          $checkoutArgs = array('checkout', '-q', '--no-track', '-b', $workspaceBranch, 'origin/'.$baseBranch);
+        } else {
+          $checkoutArgs = array('checkout', '-q', '-b', $workspaceBranch);
+        }
         $checkout = $this->runCommand(array_merge(array('git', '-C', $workspace), $checkoutArgs));
         return $checkout['code'] === 0 ? array('ok' => TRUE) : array('ok' => FALSE, 'message' => 'The repository was cloned but '.$workspaceBranch.' could not be checked out.');
       }

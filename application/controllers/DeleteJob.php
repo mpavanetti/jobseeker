@@ -247,7 +247,9 @@ class DeleteJob extends BaseController
             array('system' => 'talend', 'relative_root' => 'talend/jobs'),
             array('system' => 'hop', 'relative_root' => 'hop/projects'),
             array('system' => 'python', 'relative_root' => 'python/jobs'),
-            array('system' => 'python-inline', 'relative_root' => 'python/inline')
+            array('system' => 'python-inline', 'relative_root' => 'python/inline'),
+            // The job's OpenVSCode working copy of its Git repository.
+            array('system' => 'python-git', 'relative_root' => 'python/git')
         );
 
         foreach ($locations as $location) {

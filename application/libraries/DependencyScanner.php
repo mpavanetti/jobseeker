@@ -85,7 +85,38 @@ class DependencyScanner
         foreach ($this->readSourceFiles($sourceDirectory) as $contents) {
             $sources[] = array('text' => $contents, 'from' => 'code');
         }
+        $hopManifest = $this->hopManifestSource($sourceDirectory);
+        if ($hopManifest !== NULL) {
+            $sources[] = $hopManifest;
+        }
         return $sources;
+    }
+
+    /**
+     * An Apache Hop project declares the connectors and Data Assets it uses
+     * in .jobseeker-hop.json (HopProject); its .hpl/.hwf files only carry
+     * Hop's own connection names. Present that declaration in the call form
+     * the patterns above already read.
+     */
+    private function hopManifestSource($directory)
+    {
+        $path = rtrim((string) $directory, '/\\').DIRECTORY_SEPARATOR.'.jobseeker-hop.json';
+        if ((string) $directory === '' || ! is_file($path) || is_link($path) || filesize($path) > 256 * 1024) {
+            return NULL;
+        }
+        $manifest = json_decode((string) @file_get_contents($path), TRUE);
+        if (! is_array($manifest)) {
+            return NULL;
+        }
+        $calls = array();
+        foreach (array('connectors' => 'connector', 'assets' => 'asset') as $field => $call) {
+            foreach (isset($manifest[$field]) && is_array($manifest[$field]) ? $manifest[$field] : array() as $key) {
+                if (is_string($key) && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/', $key)) {
+                    $calls[] = $call.'("'.$key.'")';
+                }
+            }
+        }
+        return empty($calls) ? NULL : array('text' => implode("\n", $calls), 'from' => 'hop');
     }
 
     public function keys(array $scan, $kind)

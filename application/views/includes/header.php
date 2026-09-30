@@ -17,6 +17,10 @@ if (! function_exists('jobseeker_normalize_global_environment')) {
 $jobseekerDeploymentMode = isset($deployment_mode) && $deployment_mode === 'standalone' ? 'standalone' : 'multi';
 $jobseekerHopSetting = strtolower(trim((string) getenv('JOBSEEKER_HOP_ENABLED')));
 $jobseekerHopEnabled = ! in_array($jobseekerHopSetting, array('0', 'false', 'off', 'no'), TRUE);
+$jobseekerOpenVsCodeSetting = strtolower(trim((string) getenv('JOBSEEKER_OPENVSCODE_ENABLED')));
+// The sidebar's project launcher needs the editor and a job-management role.
+$jobseekerProjectLauncher = ! in_array($jobseekerOpenVsCodeSetting, array('0', 'false', 'off', 'no'), TRUE)
+  && isset($role) && ($role == ROLE_ADMIN || $role == ROLE_MANAGER);
 $jobseekerStandaloneEnvironment = $jobseekerDeploymentMode === 'standalone'
   ? jobseeker_normalize_global_environment(isset($standalone_environment) ? $standalone_environment : '')
   : '';
@@ -132,7 +136,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=2" type="text/javascript"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=10" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=11" type="text/javascript"></script>
 <script type="text/javascript">
   window.jobseekerTime = {
     serverTimezone: 'UTC',
@@ -1139,7 +1143,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </span>
             </li>
             <li class="dropdown tasks-menu">
-              <a href="#" class="dropdown-toggle" data-toggle="dropdown" aria-expanded="true">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown" aria-label="Show last login" title="Last login" aria-expanded="false">
                 <i class="fa fa-history"></i>
               </a>
               <ul class="dropdown-menu">
@@ -1148,7 +1152,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
             </li>
             <!-- User Account: style can be found in dropdown.less -->
             <li class="dropdown user user-menu">
-              <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown" aria-label="Open account menu" aria-expanded="false">
                 <img src="<?php echo base_url(); ?>assets/dist/img/avatar.png" class="user-image" alt="User Image"/>
                 <span class="hidden-xs"><?php echo html_escape($name); ?></span>
               </a>
@@ -1190,6 +1194,14 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               <i class="fa fa-home"></i> <span>Dashboard</span></i>
             </a>
           </li>
+          <?php if ($jobseekerProjectLauncher) { ?>
+          <li class="jobseeker-sidebar-ide">
+            <a href="#" id="sidebarOpenVsCode" role="button" title="Open a project in VS Code">
+              <i class="jobseeker-vscode-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg></i> <span>VS Code</span>
+              <span class="pull-right-container"><small class="label pull-right jobseeker-ide-badge">Projects</small></span>
+            </a>
+          </li>
+          <?php } ?>
           <li class="treeview">
             <a href="#">
               <i class="fa fa-dashboard"></i> <span>Data Visualization</span>
@@ -1465,3 +1477,4 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
       </section>
       <!-- /.sidebar -->
     </aside>
+    <?php if ($jobseekerProjectLauncher) { $this->load->view('includes/projectWorkspaceLauncher'); } ?>

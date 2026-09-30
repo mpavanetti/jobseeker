@@ -553,6 +553,13 @@ $(document).ready(function(){
           return;
         }
 
+        // availableJobs already resolved the ENVIRONMENT parameter on the
+        // server; one proxied config.xml per job is only for unknown ones.
+        if (job.jobseekerEnvironment || job.environmentFromParameter) {
+          job.environmentHydrated = true;
+          return;
+        }
+
         deleteEnvironmentRequests[name] = $.ajax({
           url: jenkins_url + jenkinsJobPath(name) + '/config.xml',
           method: 'GET',
@@ -747,7 +754,7 @@ $(document).ready(function(){
         return;
       }
 
-      var repositoryWarning = deleteRepositoriesAfterJobs ? '<p><b>Repository folders and files will also be deleted.</b></p>' : '';
+      var repositoryWarning = deleteRepositoriesAfterJobs ? '<p><b>Repository folders and files will also be deleted</b>, including a Git job\'s VS Code working copy: commit and push anything you want to keep first.</p>' : '';
       alertify.confirm('Delete Job Confirmation Required', '<div class="row"><div class="col-3"><div class="text-center"><img src="<?php echo base_url(); ?>assets/images/warning.png" width="200"><h2 style="color: red;"><b>WARNING !</b></h2><p><b>Delete ' + jobs.length + ' selected Jenkins job(s) permanently?</b></p>' + repositoryWarning + optionListHtml(jobs) + '</div></div></div>',
         function(){
           setDeleteBusy(true);

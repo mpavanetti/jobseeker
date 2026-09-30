@@ -5,6 +5,7 @@ require APPPATH . '/controllers/concerns/JobCreationEmailTrait.php';
 require APPPATH . '/controllers/concerns/JobCreationExecutionTrait.php';
 require APPPATH . '/controllers/concerns/JenkinsRunnerTrait.php';
 require APPPATH . '/controllers/concerns/JobCreationGitWorkspaceTrait.php';
+require APPPATH . '/controllers/concerns/ProjectWorkspaceTrait.php';
 
 
 class JobCreation extends BaseController
@@ -13,6 +14,7 @@ class JobCreation extends BaseController
   use JobCreationExecutionTrait;
   use JenkinsRunnerTrait;
   use JobCreationGitWorkspaceTrait;
+  use ProjectWorkspaceTrait;
 
   /** Memoized HopProject library for this request. */
   private $hopProjectLibrary;
@@ -38,8 +40,28 @@ class JobCreation extends BaseController
      */
     public function index()
     {
+      // Every action on this page needs a job-management role; without one
+      // the form would render and then fail on each request it makes.
+      if (! $this->canManageJobs()) {
+        $this->loadThis();
+        return;
+      }
 
-      $this->global['pageTitle'] = 'Job Seeker : Job Creation';
+      $requestedEditJob = '';
+      $requestedEditValue = trim((string) $this->input->get('edit', TRUE));
+      if ($requestedEditValue === '') {
+        $requestedEditValue = trim((string) $this->session->flashdata('job_edit_return'));
+      }
+      if ($requestedEditValue !== '') {
+        $cleanRequestedEditJob = $this->cleanSubmittedJobName($requestedEditValue);
+        if ($cleanRequestedEditJob['ok']) {
+          $requestedEditJob = $cleanRequestedEditJob['name'];
+        }
+      }
+
+      $this->global['pageTitle'] = $requestedEditJob === ''
+        ? 'Job Seeker : Job Creation'
+        : 'Job Seeker : Edit '.$requestedEditJob;
       $gitCredentials = array();
       if ($this->db->table_exists('database_settings')) {
         $this->load->model('DbSettings_model', 'connectorCatalog');
@@ -53,6 +75,11 @@ class JobCreation extends BaseController
       $hopEnabled = $this->hopEnabled();
       $this->load->model('ProjectGitSettings_model', 'jobProjectGitSettings');
       $gitProjects = $this->jobProjectGitSettings->projects(TRUE, TRUE);
+      // Every active project, for the "job folder from a project" picker; a
+      // project without Git runs its shared folder by repository path.
+      $workspaceProjects = array_map(function($project) {
+        return array('id' => $project['id'], 'name' => $project['name'], 'type' => $project['type'], 'hasGit' => $project['repositoryUrl'] !== '');
+      }, $this->jobProjectGitSettings->projects(TRUE, FALSE));
       $this->load->model('UserGitAccount_model', 'jobPersonalGitAccounts');
       $personalGitAccounts = $this->jobPersonalGitAccounts->accounts($this->vendorId);
       $this->load->library('GitHubOAuth');
@@ -78,10 +105,18 @@ class JobCreation extends BaseController
         $hopLogLevels = $hop->logLevels();
       }
       $data = array(
+        'requested_edit_job' => $requestedEditJob,
         'job_creation_dates' => $this->readJobCreationDates(),
         'git_credentials' => $gitCredentials,
         'git_branch_defaults' => $this->gitBranchPolicy()->mapping(),
         'git_projects' => $gitProjects,
+        'workspace_projects' => $workspaceProjects,
+        // Job Creation?project=<id>&folder=jobs/<job>, printed by the "new
+        // job" task in a project's VS Code workspace.
+        'workspace_link' => array(
+          'projectId' => (int) $this->input->get('project'),
+          'folder' => (string) $this->projectWorkspaceLayout()->cleanJobPath($this->input->get('folder', TRUE))
+        ),
         'personal_git_accounts' => $personalGitAccounts,
         'github_oauth_enabled' => $githubOAuthEnabled,
         'hop_enabled' => $hopEnabled,
@@ -113,6 +148,12 @@ class JobCreation extends BaseController
     private function gitProjectSettings() {
       $this->load->model('ProjectGitSettings_model', 'jobProjectGitSettings');
       return $this->jobProjectGitSettings;
+    }
+
+    /** Project layout rules: job folders, workspaces and starter files. */
+    private function projectWorkspaceLayout() {
+      $this->load->library('ProjectWorkspace');
+      return $this->projectworkspace;
     }
 
     /** FALSE when the project is inactive, missing or has no Git repository. */
@@ -732,6 +773,7 @@ class JobCreation extends BaseController
     }
 
     public function runInlinePythonPreview() {
+      $this->releaseSessionLock();
       if (! $this->canManageJobs()) {
         $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
         return;
@@ -1282,6 +1324,17 @@ class JobCreation extends BaseController
           $this->removeUploadDirectory($backupPath);
         }
         echo 'Apache Hop project uploaded and extracted.';
+        return;
+      }
+
+      // Saving looks for the build's launcher one folder down; say so now
+      // rather than after the rest of the form is filled in.
+      if ($safeScriptType === 'talend' && ! glob($extractPath.'/*/*.sh') && ! glob($extractPath.'/*/*.bat')) {
+        if (! $destinationExisted) {
+          $this->removeUploadDirectory($extractPath);
+        }
+        $this->output->set_status_header(400);
+        echo 'This archive has no Talend launcher. Upload the zip Talend builds for the job: its folder holds a *_run.sh (Linux) or *_run.bat (Windows) file.';
         return;
       }
 
@@ -3102,13 +3155,18 @@ class JobCreation extends BaseController
         return preg_match('/^[a-z0-9][a-z0-9-]{0,127}$/', $credentialKey) ? $credentialKey : FALSE;
       }
 
-      private function resolveGitPythonExecution($repositoryUrl, $branch, $entryPoint, $credentialKey = '', $project = NULL, $environment = '', $jobName = '*') {
+      /**
+       * $jobPath is the job's folder in the repository ('' for the root); the
+       * entry file is relative to it, and builds run from it.
+       */
+      private function resolveGitPythonExecution($repositoryUrl, $branch, $entryPoint, $credentialKey = '', $project = NULL, $environment = '', $jobName = '*', $jobPath = '') {
         $repositoryUrl = $this->cleanPythonRepositoryUrl($repositoryUrl);
         $branch = $this->cleanPythonRepositoryBranch($branch);
         $entryPoint = $this->cleanPythonEntryPoint($entryPoint, TRUE);
         $credentialKey = $this->cleanPythonGitCredentialKey($credentialKey);
+        $jobPath = $this->projectWorkspaceLayout()->cleanJobPath($jobPath);
 
-        if ($repositoryUrl === FALSE || $branch === FALSE || $entryPoint === FALSE || $credentialKey === FALSE) {
+        if ($repositoryUrl === FALSE || $branch === FALSE || $entryPoint === FALSE || $credentialKey === FALSE || $jobPath === FALSE) {
           return FALSE;
         }
         if ($credentialKey !== '') {
@@ -3128,6 +3186,9 @@ class JobCreation extends BaseController
           'entryPoint' => $entryPoint,
           'credentialKey' => $credentialKey
         );
+        if ($jobPath !== '') {
+          $execution['jobPath'] = $jobPath;
+        }
         if (is_array($project) && ! empty($project['id'])) {
           $execution['projectId'] = (int) $project['id'];
           $execution['projectName'] = (string) $project['name'];
@@ -3491,6 +3552,7 @@ class JobCreation extends BaseController
       }
 
       public function inlinePythonExternalOpen() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -3630,11 +3692,26 @@ class JobCreation extends BaseController
       private function collectDependencySources($jobName) {
         $sources = array();
 
-        $inlineCode = (string) $this->input->post('pythonInlineCode');
+        // The form posts every editor, including the inline starter template
+        // behind an upload or Git job; scan only what the chosen mode runs.
+        // (A request without the mode fields scans everything it was sent.)
+        $linuxStrategy = (string) $this->input->post('linuxExecutionStrategy');
+        $windowsStrategy = (string) $this->input->post('executionStrategy');
+        $modeKnown = $linuxStrategy !== '' || $windowsStrategy !== '';
+        $usesInline = ! $modeKnown || $linuxStrategy === 'python_inline';
+        $commandFields = $modeKnown ? array() : array('linuxCommandLine', 'windowsCommandLine');
+        if ($linuxStrategy === 'command') {
+          $commandFields[] = 'linuxCommandLine';
+        }
+        if ($windowsStrategy === 'command') {
+          $commandFields[] = 'windowsCommandLine';
+        }
+
+        $inlineCode = $usesInline ? (string) $this->input->post('pythonInlineCode') : '';
         if (trim($inlineCode) !== '') {
           $sources[] = array('text' => $inlineCode, 'from' => 'code');
         }
-        $filesJson = (string) $this->input->post('pythonInlineFilesJson');
+        $filesJson = $usesInline ? (string) $this->input->post('pythonInlineFilesJson') : '';
         if (trim($filesJson) !== '' && strlen($filesJson) < 400000) {
           $payload = json_decode($filesJson, TRUE);
           if (is_array($payload) && isset($payload['files']) && is_array($payload['files'])) {
@@ -3645,10 +3722,37 @@ class JobCreation extends BaseController
             }
           }
         }
-        foreach (array('linuxCommand', 'windowsCommand', 'linuxCommandLine', 'windowsCommandLine', 'pythonRequirementsText') as $field) {
+        foreach (array_merge($commandFields, $usesInline ? array('pythonRequirementsText') : array()) as $field) {
           $value = (string) $this->input->post($field);
           if (trim($value) !== '' && $value !== '0' && $value !== '1') {
             $sources[] = array('text' => $value, 'from' => 'command');
+          }
+        }
+        // Repository Path jobs and Hop projects run files that already exist
+        // (a Hop sample or upload is in place by the time the job is saved).
+        $scriptType = (string) $this->input->post('linuxScriptType');
+        $existingSource = '';
+        if ($linuxStrategy === 'script' && $scriptType === 'python' && (string) $this->input->post('pythonSourceMode') === 'path') {
+          $existingSource = (string) $this->input->post('pythonSourcePath');
+        } else if ($linuxStrategy === 'script' && $scriptType === 'hop') {
+          $existingSource = (string) $this->input->post('hopSourceMode') === 'path'
+            ? (string) $this->input->post('hopProjectPath')
+            : ($jobName !== '' ? 'hop/projects/'.$jobName : '');
+        }
+        if ($linuxStrategy === 'script' && $scriptType === 'python' && (string) $this->input->post('pythonSourceMode') === 'git') {
+          foreach ($this->projectJobSourceDirectories() as $directory) {
+            foreach ($this->dependencyScanner()->sourcesForJob('', $directory) as $repoSource) {
+              $sources[] = $repoSource;
+            }
+          }
+        }
+        if (trim($existingSource) !== '') {
+          $sourcePath = $this->resolveRepositoryPath($existingSource, $this->inlinePythonRepositoryRoot());
+          $sourceDirectory = $sourcePath === FALSE ? FALSE : (is_file($sourcePath) ? dirname($sourcePath) : $sourcePath);
+          if ($sourceDirectory !== FALSE && is_dir($sourceDirectory)) {
+            foreach ($this->dependencyScanner()->sourcesForJob('', $sourceDirectory) as $repoSource) {
+              $sources[] = $repoSource;
+            }
           }
         }
 
@@ -3677,6 +3781,27 @@ class JobCreation extends BaseController
         }
 
         return $sources;
+      }
+
+      /**
+       * A project Git job's folder and the project's shared/ in the viewer's
+       * workspace of the project: what the job will run once it is pushed.
+       */
+      private function projectJobSourceDirectories() {
+        $project = $this->gitProjectSettings()->project((int) $this->input->post('pythonProjectId'), TRUE);
+        $jobPath = $this->projectWorkspaceLayout()->cleanJobPath($this->input->post('pythonGitJobPath'));
+        if ($project === FALSE || $project['repositoryUrl'] === '' || ! is_string($jobPath) || $jobPath === '') {
+          return array();
+        }
+        $workspace = $this->projectWorkspaceLocation($project)['absolute'];
+        $directories = array();
+        foreach (array($jobPath, ProjectWorkspace::SHARED_FOLDER) as $folder) {
+          $directory = $workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $folder);
+          if (is_dir($directory)) {
+            $directories[] = $directory;
+          }
+        }
+        return $directories;
       }
 
       private function dependencyScanner() {
@@ -3833,6 +3958,7 @@ class JobCreation extends BaseController
       }
 
       public function scanDependencies() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -3899,6 +4025,14 @@ class JobCreation extends BaseController
           }
         }
 
+        if (empty($sources) && (string) $this->input->post('pythonSourceMode') === 'git') {
+          foreach ($this->projectJobSourceDirectories() as $directory) {
+            foreach ($this->taskGraphScanner()->sourcesForDirectory($directory) as $source) {
+              $sources[] = $source;
+            }
+          }
+        }
+
         if (empty($sources) && $jobName !== '') {
           $repositoryRoot = $this->inlinePythonRepositoryRoot();
           foreach (array('python/inline', 'python/jobs') as $location) {
@@ -3927,6 +4061,7 @@ class JobCreation extends BaseController
        * the runner stores its own manifest.
        */
       public function scanTasks() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -3953,6 +4088,7 @@ class JobCreation extends BaseController
       }
 
       public function testDependencies() {
+        $this->releaseSessionLock();
         if (! $this->canManageJobs()) {
           $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
           return;
@@ -4068,14 +4204,11 @@ class JobCreation extends BaseController
        * Collecting them here costs one Jenkins call per job on a warm internal
        * connection, shared by every viewer through the cache, instead of one
        * browser round trip per job per page view.
+       *
+       * Read-only, like the Jenkins proxy's GETs: Job List shows it to every role.
        */
       public function jobSchedules() {
-        if (! $this->canManageJobs()) {
-          $this->output->set_status_header(403);
-          $this->output->set_content_type('application/json');
-          echo json_encode(array('schedules' => new stdClass(), 'error' => 'Access denied.'));
-          return;
-        }
+        $this->releaseSessionLock();
 
         $this->load->driver('cache', array('adapter' => 'file'));
         $cacheKey = 'job_schedules';
@@ -4186,13 +4319,12 @@ class JobCreation extends BaseController
         return '';
       }
 
+      /**
+       * Read-only job catalog behind Job List, Job Execution and Job View,
+       * which every role may open; triggering stays with the managers.
+       */
       public function availableJobs() {
-        if (! $this->canManageJobs()) {
-          $this->output->set_status_header(403);
-          $this->output->set_content_type('application/json');
-          echo json_encode(array('jobs' => array(), 'error' => 'Access denied.'));
-          return;
-        }
+        $this->releaseSessionLock();
 
         $requestedEnvironment = trim((string) $this->input->get('environment', TRUE));
         if ($requestedEnvironment === '') {
@@ -4232,11 +4364,27 @@ class JobCreation extends BaseController
         {
             header('Content-Type: text/html; charset=utf-8');
 
+            $originalJobName = trim((string) $this->security->xss_clean($this->input->post('original_job_name')));
+            $jobCreationReturn = 'JobCreation';
+            if ($originalJobName !== '') {
+              $cleanOriginalJobName = $this->cleanSubmittedJobName($originalJobName);
+              if ($cleanOriginalJobName['ok']) {
+                $originalJobName = $cleanOriginalJobName['name'];
+                $jobCreationReturn .= '?edit='.rawurlencode($originalJobName);
+                // Any validation redirect should reopen the same editing
+                // workspace instead of dropping the user into create mode.
+                $this->session->set_flashdata('job_edit_return', $originalJobName);
+              } else {
+                $originalJobName = '';
+              }
+            }
+
             $this->load->library('form_validation');
 
             // Basic inputs
             $this->form_validation->set_rules('job_name','Job Name','trim|max_length[50]');
             $this->form_validation->set_rules('job_names','Bulk Job Names','trim|max_length[5000]');
+            $this->form_validation->set_rules('original_job_name','Original Job Name','trim|max_length[50]');
             $this->form_validation->set_rules('description','Description','trim|max_length[5000]');
 
       
@@ -4262,18 +4410,27 @@ class JobCreation extends BaseController
 
                 if (! $submittedJobs['ok']) {
                   $this->session->set_flashdata('error', $submittedJobs['message']);
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $jobNames = $submittedJobs['names'];
                 $job_name = $jobNames[0];
+
+                // Edit mode deliberately updates one known Jenkins identity.
+                // A changed name used to create a second job silently while the
+                // original remained in place, which made a typo look like a
+                // rename. Creating a separate job now starts from New Job.
+                if ($originalJobName !== '' && (count($jobNames) !== 1 || $job_name !== $originalJobName)) {
+                  $this->session->set_flashdata('error', 'The name of an existing Jenkins job cannot be changed while editing it. Start a new job if you want a separate copy.');
+                  redirect($jobCreationReturn);
+                }
                 $description = trim((string) $this->security->xss_clean($this->input->post('description')));
                 $triggerAfterSave = $this->security->xss_clean($this->input->post('trigger_after_save')) == '1' ? '1' : '0';
                 $submittedUpstreamJobs = $this->cleanSubmittedJobNameList($this->input->post('upstreamJobList'));
 
                 if (! $submittedUpstreamJobs['ok']) {
                   $this->session->set_flashdata('error', $submittedUpstreamJobs['message']);
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $upstreamJobNames = $submittedUpstreamJobs['names'];
@@ -4331,7 +4488,7 @@ class JobCreation extends BaseController
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
-                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                            redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
@@ -4354,7 +4511,7 @@ class JobCreation extends BaseController
                           // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
-                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                            redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
@@ -4379,7 +4536,7 @@ class JobCreation extends BaseController
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
-                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                            redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
@@ -4406,6 +4563,7 @@ class JobCreation extends BaseController
                 $pythonProjectId = (int) $this->input->post('pythonProjectId');
                 $pythonRepositoryUrl = $this->input->post('pythonRepositoryUrl');
                 $pythonRepositoryBranch = $this->input->post('pythonRepositoryBranch');
+                $pythonGitJobPath = $this->input->post('pythonGitJobPath');
                 $pythonGitCredentialKey = $this->input->post('pythonGitCredentialKey');
                 $pythonEntryPointRaw = $this->input->post('pythonEntryPoint');
                 $pythonInlineCode = $this->input->post('pythonInlineCode');
@@ -4590,7 +4748,7 @@ class JobCreation extends BaseController
                           $scriptArguments = array();
 
                           if ($scriptPath === FALSE || $sourceDirectory === FALSE || ! is_file($scriptPath)) {
-                            $this->session->set_flashdata('error', 'Your file was not uploaded to the server or no executable file was found inside the zip archive.');
+                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                             redirect('JobCreation');
                           }
                           
@@ -4612,7 +4770,7 @@ class JobCreation extends BaseController
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
-                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                            redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
@@ -4631,7 +4789,7 @@ class JobCreation extends BaseController
                           $scriptArguments = array();
 
                           if ($scriptPath === FALSE || ! is_file($scriptPath)) {
-                            $this->session->set_flashdata('error', 'Your file was not uploaded to the server or no executable file was found inside the zip archive.');
+                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                             redirect('JobCreation');
                           }
 
@@ -4654,7 +4812,7 @@ class JobCreation extends BaseController
                            // checking whether a file is directory or not 
                           if (is_dir($filePath)) {
                             // echo "My File is a directory";
-                           $this->session->set_flashdata('error', 'Your file was not  uploaded to the server or no executable file was found inside the zip archive.');
+                           $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
                            redirect('JobCreation');
                           } else {
                             if (file_exists($filePath)) {
@@ -4690,7 +4848,11 @@ class JobCreation extends BaseController
                           if ($pythonSourceMode === 'path') {
                             $pythonExecution = $this->resolvePathPythonExecution($repositoryRoot, $pythonSourcePath, $pythonEntryPoint);
                           } else if ($pythonSourceMode === 'git') {
-                            $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw, $pythonGitCredentialKey, $pythonGitProject, $environment, $job_name);
+                            if ($this->projectWorkspaceLayout()->cleanJobPath($pythonGitJobPath) === FALSE) {
+                              $this->session->set_flashdata('error', 'The job folder must be a folder inside the repository, such as jobs/load-orders, or empty for the repository root.');
+                              redirect('JobCreation');
+                            }
+                            $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw, $pythonGitCredentialKey, $pythonGitProject, $environment, $job_name, $pythonGitJobPath);
                           } else if ($pythonSourceMode === 'inline') {
                             $pythonExecution = $this->resolveInlinePythonExecution($repositoryRoot, $job_name, $pythonEntryPointRaw, $pythonInlineCode, $pythonRequirementsTextForInlineSave, $pythonDockerfileTextForInlineSave, $pythonInlineFiles, $pythonPyprojectTextForInlineSave);
                           } else {
@@ -5164,12 +5326,13 @@ class JobCreation extends BaseController
                  $this->session->set_flashdata('success', $successMessage);
                  $this->session->set_flashdata('saved_job_name', $savedJobNames[0]);
                  $this->session->set_flashdata('saved_job_names', $savedJobNames);
+                 $this->session->set_flashdata('saved_jobs_triggered', $triggerAfterSave === '1' && $triggeredCount > 0);
                  $this->session->set_flashdata('saved_job_creation_dates', $savedJobCreationDates);
                  if (isset($savedJobCreationDates[$savedJobNames[0]])) {
                    $this->session->set_flashdata('saved_job_created_at', $savedJobCreationDates[$savedJobNames[0]]);
                  }
 
-                redirect('JobCreation');
+                redirect($jobCreationReturn);
 
             }
         }

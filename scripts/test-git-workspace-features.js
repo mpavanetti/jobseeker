@@ -16,6 +16,7 @@ const projectEditView = read('application/views/projectDetailsEdit.php');
 const projectGitFields = read('application/views/includes/projectGitFields.php');
 const projectGitScript = read('assets/js/project-git.js');
 const profile = read('application/views/profile.php');
+const profileCss = read('assets/dist/css/profile.css');
 const accounts = read('application/models/UserGitAccount_model.php');
 const githubOAuth = read('application/libraries/GitHubOAuth.php');
 const credential = read('application/controllers/GitCredential.php');
@@ -64,7 +65,7 @@ assert(creationView.includes('.linux-python-options .linux-execution-choice-grid
 
 // Small UI fixes.
 assert(header.includes('.sidebar-mini:not(.sidebar-mini-expand-feature).sidebar-collapse .sidebar-menu > li:hover > .treeview-menu') && header.includes('width: 230px;'), 'the collapsed sidebar flyout must fit its longest labels.');
-assert(profile.includes('.git-provider-card .btn-block { white-space:normal; }') && profile.includes("'API token'") && !profile.includes('App password or token'), 'provider buttons must wrap, and Bitbucket must ask for an API token.');
+assert(profileCss.includes('.git-provider-card .btn-block { white-space: normal; }') && profile.includes("'API token'") && !profile.includes('App password or token'), 'provider buttons must wrap, and Bitbucket must ask for an API token.');
 assert(gitHelper.includes('bitbucket.org) token_username=x-token-auth'), 'Bitbucket access tokens need the x-token-auth user.');
 assert(!projectSettings.includes("'credentialKey' => (string) $row->credential_key"), 'branch rows must not carry a credential.');
 assert(creationView.includes('id="pythonGitEntrySlot"') && creationView.includes("appendTo(isGitSource ? '#pythonGitEntrySlot'"), 'a Git job\'s entry file must sit in the Repository card.');
@@ -86,6 +87,9 @@ assert(gitWorkspace.includes("'.env.jobseeker'") && gitWorkspace.includes("'.ven
 assert(gitWorkspace.includes("$environment === '0' ? '' : $environment"), "the placeholder environment '0' must mean all environments.");
 assert(gitHelper.includes('heads|push') && gitHelper.includes('git -C "$worktree" -c credential.helper= push'), 'jobseeker-git must support heads and push.');
 assert(creationView.includes('id="addSelectedSampleToGit"') && creationView.includes("'jobCreation/gitPythonLoadSample'"), 'a Git job must be able to load a sample into its repository.');
+assert(creationView.includes("pythonRuntimeMode: $('#pythonRuntimeMode').val() || 'local'") && gitWorkspace.includes("$this->input->post('pythonRuntimeMode') === 'docker'")
+  && gitWorkspace.includes('if ($withDockerfile) {') && creationView.includes("response.runtime === 'docker'"), 'a sample added to Git must follow the job runtime (Docker gets a Dockerfile).');
+assert(execution.includes('function gitEntryPointCheckLine()') && execution.includes('Commit and push it from the job'), 'a Git build missing its entry file must say which branch and repository it read.');
 assert(creationView.includes('id="movePythonInlineToGit"') && creationView.includes("jobCreation/inlinePythonConvertToGit"), 'an inline job must offer Move to Git.');
 assert(creationView.includes('id="testPythonGitBuildAccess"') && creationView.includes("jobCreation/testGitBuildAccess"), 'the build credential must be testable against the job repository.');
 assert(creationView.includes("environment === '0' ? '' : environment"), "the Git panel must not label the placeholder environment '0'.");

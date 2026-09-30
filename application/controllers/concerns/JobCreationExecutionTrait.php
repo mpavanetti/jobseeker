@@ -289,6 +289,89 @@ trait JobCreationExecutionTrait
         );
       }
 
+      /**
+       * Samples and edits in the job's VS Code working copy reach a build only
+       * once they are pushed, so a missing entry file says where it was looked for.
+       */
+      private function gitEntryPointCheckLine() {
+        return '[ -f "$JOBSEEKER_SCRIPT_PATH" ] || { echo "Python entry point $JOBSEEKER_ENTRYPOINT is not on ${JOBSEEKER_GIT_REPOSITORY_BRANCH:-the default branch} of $JOBSEEKER_GIT_REPOSITORY_URL${JOBSEEKER_GIT_JOB_PATH:+ in $JOBSEEKER_GIT_JOB_PATH}. Commit and push it from the job\'s Git workspace in VS Code, or correct the entry file." >&2; exit 66; }';
+      }
+
+      /**
+       * Clones the job's repository into $WORKSPACE/jobseeker-python-source
+       * and points JOBSEEKER_SOURCE_DIR at the job's folder in it.
+       *
+       * A repository can hold many jobs, one folder each (jobs/<job>). Such a
+       * job clones sparsely and without file contents outside its folder and
+       * shared/, so a build downloads only what it runs and never sees another
+       * job's files. Workers whose jobseeker-git predates sparse clones fall
+       * back to a full shallow clone of the branch. A job without a folder
+       * runs from the repository root, as before.
+       *
+       * Expects JOBSEEKER_GIT_REPOSITORY_URL, _BRANCH and _CREDENTIAL_KEY.
+       */
+      private function gitSourceCheckoutLines($execution, $withBranch) {
+        $jobPath = isset($execution['jobPath']) ? (string) $execution['jobPath'] : '';
+        $target = '"$WORKSPACE/jobseeker-python-source"';
+        $branchOption = $withBranch ? ' --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH"' : '';
+        $publicFailure = ' || { echo "Git could not clone $JOBSEEKER_GIT_REPOSITORY_URL without a credential. A private repository needs a build credential: choose a Git connector under Build access (builds never use a personal Git account)." >&2; exit 128; }';
+        $lines = array('rm -rf '.$target);
+        if ($jobPath !== '') {
+          $lines[] = 'export JOBSEEKER_GIT_JOB_PATH='.escapeshellarg($jobPath);
+          // shared/ holds the code a project's jobs have in common.
+          $lines[] = 'JOBSEEKER_GIT_SPARSE_PATHS="$JOBSEEKER_GIT_JOB_PATH shared"';
+        }
+        $sparseProbe = $jobPath !== '' ? ' JOBSEEKER_GIT_SPARSE_ARGS=""; if jobseeker-git features 2>/dev/null | grep -qx sparse; then for JOBSEEKER_GIT_SPARSE_PATH in $JOBSEEKER_GIT_SPARSE_PATHS; do JOBSEEKER_GIT_SPARSE_ARGS="$JOBSEEKER_GIT_SPARSE_ARGS --sparse $JOBSEEKER_GIT_SPARSE_PATH"; done; else echo "[JobSeeker] This worker\'s jobseeker-git cannot clone one folder; cloning the whole branch."; fi;' : '';
+        $credentialClone = ' command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; };'
+          .$sparseProbe
+          .' JOBSEEKER_CONNECTOR_KEY="$JOBSEEKER_GIT_CREDENTIAL_KEY" jobseeker-git clone'.($jobPath !== '' ? ' $JOBSEEKER_GIT_SPARSE_ARGS' : '').' --connector-dir "$JOBSEEKER_CONNECTORS_DIR/$JOBSEEKER_GIT_CREDENTIAL_KEY"'.$branchOption.' -- "$JOBSEEKER_GIT_REPOSITORY_URL" '.$target.';';
+        $publicClone = $jobPath !== ''
+          ? ' git clone --depth 1 --filter=blob:none --sparse'.$branchOption.' -- "$JOBSEEKER_GIT_REPOSITORY_URL" '.$target.$publicFailure.';'
+            // The paths are validated folder names, safe to split on spaces.
+            .' git -C '.$target.' sparse-checkout set --cone -- $JOBSEEKER_GIT_SPARSE_PATHS;'
+          : ' git clone --depth 1'.$branchOption.' -- "$JOBSEEKER_GIT_REPOSITORY_URL" '.$target.$publicFailure.';';
+        $lines[] = 'if [ -n "$JOBSEEKER_GIT_CREDENTIAL_KEY" ]; then'.$credentialClone.' else'.$publicClone.' fi';
+        $lines[] = 'export JOBSEEKER_GIT_ROOT='.$target;
+        if ($jobPath !== '') {
+          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$JOBSEEKER_GIT_ROOT/$JOBSEEKER_GIT_JOB_PATH"';
+          $lines[] = 'printf "%s\n" "[JobSeeker] Job folder $JOBSEEKER_GIT_JOB_PATH"';
+          $lines[] = '[ -d "$JOBSEEKER_SOURCE_DIR" ] || { echo "The job folder $JOBSEEKER_GIT_JOB_PATH is not on ${JOBSEEKER_GIT_REPOSITORY_BRANCH:-the default branch} of $JOBSEEKER_GIT_REPOSITORY_URL. Commit and push it from your project workspace in VS Code, or correct the job folder." >&2; exit 66; }';
+        } else {
+          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$JOBSEEKER_GIT_ROOT"';
+        }
+        $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
+        $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
+        $lines[] = $this->gitEntryPointCheckLine();
+        return $lines;
+      }
+
+      /**
+       * The Docker runtime installs a project from pyproject.toml, so the
+       * agent must too, or a job that `uv add`ed a package breaks when it moves
+       * to the Jenkins Agent. requirements.txt still wins when there is one; the
+       * JobSeeker SDK is always installed on its own.
+       */
+      private function agentPyprojectRequirementsLines() {
+        $reader = 'import re, sys, tomllib'."\n"
+          .'deps = tomllib.load(open(sys.argv[1], "rb")).get("project", {}).get("dependencies", [])'."\n"
+          .'sys.stdout.write("".join(d.strip() + "\n" for d in deps if re.split(r"[\s\[<>=!~;@(]", d.strip(), maxsplit=1)[0].lower().replace("_", "-") != "jobseeker-runtime"))';
+        $read = '"$JOBSEEKER_PYTHON" -c '.escapeshellarg($reader).' "$JOBSEEKER_PYPROJECT" > "$JOBSEEKER_PYPROJECT_REQUIREMENTS" 2>/dev/null'
+          .' || python3 -c '.escapeshellarg($reader).' "$JOBSEEKER_PYPROJECT" > "$JOBSEEKER_PYPROJECT_REQUIREMENTS" 2>/dev/null';
+        return array(
+          'JOBSEEKER_PYPROJECT=""',
+          'if [ -z "$JOBSEEKER_REQUIREMENTS" ] && [ -f "$JOBSEEKER_SOURCE_DIR/pyproject.toml" ]; then JOBSEEKER_PYPROJECT="$JOBSEEKER_SOURCE_DIR/pyproject.toml"; fi',
+          'if [ -z "$JOBSEEKER_REQUIREMENTS" ] && [ -f "$JOBSEEKER_SCRIPT_DIR/pyproject.toml" ]; then JOBSEEKER_PYPROJECT="$JOBSEEKER_SCRIPT_DIR/pyproject.toml"; fi',
+          'if [ -n "$JOBSEEKER_PYPROJECT" ]; then',
+          '  JOBSEEKER_PYPROJECT_REQUIREMENTS="$WORKSPACE/.jobseeker-pyproject-requirements.txt"',
+          '  if '.$read.'; then',
+          '    if [ -s "$JOBSEEKER_PYPROJECT_REQUIREMENTS" ]; then echo "No requirements.txt; installing the dependencies listed in pyproject.toml."; JOBSEEKER_REQUIREMENTS="$JOBSEEKER_PYPROJECT_REQUIREMENTS"; fi',
+          '  else',
+          '    echo "The dependencies in pyproject.toml could not be read (invalid TOML, or no Python 3.11+ on this agent); they are not installed." >&2',
+          '  fi',
+          'fi'
+        );
+      }
+
       private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument, $runtimeOptions = array()) {
         $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
@@ -309,15 +392,7 @@ trait JobCreationExecutionTrait
         );
 
         if ($followsProject) {
-          $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
-          $lines[] = 'if [ -n "$JOBSEEKER_GIT_CREDENTIAL_KEY" ]; then'
-            .' command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; };'
-            .' JOBSEEKER_CONNECTOR_KEY="$JOBSEEKER_GIT_CREDENTIAL_KEY" jobseeker-git clone --connector-dir "$JOBSEEKER_CONNECTORS_DIR/$JOBSEEKER_GIT_CREDENTIAL_KEY" --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH" -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source";'
-            .' else git clone --depth 1 --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH" -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source"; fi';
-          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
-          $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
-          $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
-          $lines[] = '[ -f "$JOBSEEKER_SCRIPT_PATH" ] || { echo "Python entry point was not found after the Git checkout: $JOBSEEKER_ENTRYPOINT" >&2; exit 66; }';
+          $lines = array_merge($lines, $this->gitSourceCheckoutLines($execution, TRUE));
         } else if ($execution['mode'] === 'git') {
           $lines[] = 'printf "%s\n" "[JobSeeker] Git source checkout"';
           $lines[] = 'export JOBSEEKER_GIT_REPOSITORY_URL='.escapeshellarg($execution['repositoryUrl']);
@@ -325,22 +400,31 @@ trait JobCreationExecutionTrait
           $lines[] = 'export JOBSEEKER_GIT_CREDENTIAL_KEY='.escapeshellarg(isset($execution['credentialKey']) ? $execution['credentialKey'] : '');
           $lines[] = 'export JOBSEEKER_PROJECT_ID='.escapeshellarg(isset($execution['projectId']) ? (string) $execution['projectId'] : '');
           $lines[] = 'export JOBSEEKER_PROJECT_NAME='.escapeshellarg(isset($execution['projectName']) ? $execution['projectName'] : '');
-          $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
-          if (! empty($execution['credentialKey'])) {
-            $lines[] = 'command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; }';
-            $cloneCommand = 'JOBSEEKER_CONNECTOR_KEY='.escapeshellarg($execution['credentialKey']).' jobseeker-git clone --connector-dir "$JOBSEEKER_CONNECTORS_DIR/$JOBSEEKER_GIT_CREDENTIAL_KEY"';
+          if (empty($execution['jobPath'])) {
+            // Unchanged for single-job repositories, whose saved configs and
+            // promotions match these lines.
+            $lines[] = 'rm -rf "$WORKSPACE/jobseeker-python-source"';
+            if (! empty($execution['credentialKey'])) {
+              $lines[] = 'command -v jobseeker-git >/dev/null || { echo "The secure JobSeeker Git helper is not installed on this Jenkins worker." >&2; exit 127; }';
+              $cloneCommand = 'JOBSEEKER_CONNECTOR_KEY='.escapeshellarg($execution['credentialKey']).' jobseeker-git clone --connector-dir "$JOBSEEKER_CONNECTORS_DIR/$JOBSEEKER_GIT_CREDENTIAL_KEY"';
+            } else {
+              $cloneCommand = 'git clone --depth 1';
+            }
+            if ($execution['branch'] !== '') {
+              $cloneCommand .= ' --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH"';
+            }
+            $cloneCommand .= ' -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source"';
+            if (empty($execution['credentialKey'])) {
+              $cloneCommand .= ' || { echo "Git could not clone $JOBSEEKER_GIT_REPOSITORY_URL without a credential. A private repository needs a build credential: choose a Git connector under Build access (builds never use a personal Git account)." >&2; exit 128; }';
+            }
+            $lines[] = $cloneCommand;
+            $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
+            $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
+            $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
+            $lines[] = $this->gitEntryPointCheckLine();
           } else {
-            $cloneCommand = 'git clone --depth 1';
+            $lines = array_merge($lines, $this->gitSourceCheckoutLines($execution, $execution['branch'] !== ''));
           }
-          if ($execution['branch'] !== '') {
-            $cloneCommand .= ' --branch "$JOBSEEKER_GIT_REPOSITORY_BRANCH"';
-          }
-          $cloneCommand .= ' -- "$JOBSEEKER_GIT_REPOSITORY_URL" "$WORKSPACE/jobseeker-python-source"';
-          $lines[] = $cloneCommand;
-          $lines[] = 'export JOBSEEKER_SOURCE_DIR="$WORKSPACE/jobseeker-python-source"';
-          $lines[] = 'export JOBSEEKER_ENTRYPOINT='.escapeshellarg($execution['entryPoint']);
-          $lines[] = 'export JOBSEEKER_SCRIPT_PATH="$JOBSEEKER_SOURCE_DIR/$JOBSEEKER_ENTRYPOINT"';
-          $lines[] = '[ -f "$JOBSEEKER_SCRIPT_PATH" ] || { echo "Python entry point was not found after the Git checkout: $JOBSEEKER_ENTRYPOINT" >&2; exit 66; }';
         } else {
           $lines[] = 'export JOBSEEKER_SOURCE_DIR='.escapeshellarg($execution['sourceDirectory']);
           $lines[] = 'export JOBSEEKER_SCRIPT_PATH='.escapeshellarg($execution['scriptPath']);
@@ -388,7 +472,8 @@ trait JobCreationExecutionTrait
             '  PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check --target /tmp/jobseeker-python-libs -r "$JOBSEEKER_REQUIREMENTS"',
             '  JOBSEEKER_USER_LIBS="/tmp/jobseeker-python-libs"',
             'fi',
-            'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="/tmp/jobseeker-runtime-libs:$JOBSEEKER_USER_LIBS:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="/tmp/jobseeker-runtime-libs:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi'
+            'if [ -n "$JOBSEEKER_USER_LIBS" ]; then export PYTHONPATH="/tmp/jobseeker-runtime-libs:$JOBSEEKER_USER_LIBS:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; else export PYTHONPATH="/tmp/jobseeker-runtime-libs:/tmp/jobseeker-context/source:/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"; fi',
+            'if [ -d /tmp/jobseeker-context/project ]; then export PYTHONPATH="$PYTHONPATH:/tmp/jobseeker-context/project"; fi'
           );
 
           if ($runTests) {
@@ -446,6 +531,9 @@ trait JobCreationExecutionTrait
           // Editor virtual environments and caches are local development
           // state. Never stream them into the disposable Jenkins container.
           $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type d \( -name .git -o -name .venv -o -name venv -o -name __pycache__ -o -name .pytest_cache -o -name .mypy_cache -o -name .ruff_cache \) -prune -exec rm -rf {} +';
+          // A job folder's project code in shared/ travels with it and is
+          // importable in the container as it is on the agent (`shared.x`).
+          $lines[] = 'if [ -n "${JOBSEEKER_GIT_JOB_PATH:-}" ] && [ -d "$JOBSEEKER_GIT_ROOT/shared" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/project" && cp -R "$JOBSEEKER_GIT_ROOT/shared" "$JOBSEEKER_DOCKER_CONTEXT/project/shared" && find "$JOBSEEKER_DOCKER_CONTEXT/project" -type d \\( -name .git -o -name __pycache__ \\) -prune -exec rm -rf {} +; fi';
           $lines[] = 'cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk/"';
           $lines[] = 'JOBSEEKER_DOCKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_DOCKER_ENTRYPOINT")"';
           // The copied workspace is authoritative. Embedded values support
@@ -500,6 +588,7 @@ trait JobCreationExecutionTrait
           $lines[] = 'JOBSEEKER_REQUIREMENTS=""';
           $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
           $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
+          $lines = array_merge($lines, $this->agentPyprojectRequirementsLines());
           $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
           $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
           $lines[] = '  "$JOBSEEKER_PYTHON" -m venv "$JOBSEEKER_VENV" || { echo "Unable to create Python virtual environment. Install python3-venv on this Jenkins agent or switch this job to Docker runtime."; exit 127; }';
@@ -513,6 +602,7 @@ trait JobCreationExecutionTrait
           $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"';
           $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'fi';
+          $lines[] = 'if [ -n "${JOBSEEKER_GIT_JOB_PATH:-}" ]; then export PYTHONPATH="$PYTHONPATH:$JOBSEEKER_GIT_ROOT"; fi';
           $lines[] = 'printf "%s\n" "[JobSeeker] Python execution"';
           $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
         }
