@@ -11,15 +11,72 @@ class DataAssets extends BaseController
         'xlsx' => array('label' => 'Excel', 'extensions' => array('xlsx', 'xls')),
         'parquet' => array('label' => 'Parquet', 'extensions' => array('parquet')),
         'xml' => array('label' => 'XML', 'extensions' => array('xml')),
+        'html' => array('label' => 'Web page / HTML', 'extensions' => array('html', 'htm')),
         'txt' => array('label' => 'Text', 'extensions' => array('txt', 'log', 'dat')),
+        'table' => array('label' => 'Table rows, materialized as CSV', 'extensions' => array('csv')),
         'binary' => array('label' => 'Binary / custom', 'extensions' => array())
     );
+
+    /**
+     * Where an asset's data lives, the formats that make sense for it, and the
+     * Connection types that can reach it. A file format applies only to
+     * sources that deliver a file. Tables, sheets, and collections have their
+     * own shape, which jobs receive as CSV or JSON Lines.
+     */
+    private function sourceCatalog()
+    {
+        $files = array('csv', 'json', 'jsonl', 'xlsx', 'parquet', 'xml', 'html', 'txt', 'binary');
+        $labels = function($keys) {
+            $result = array();
+            foreach ($keys as $key) $result[$key] = $this->formats[$key]['label'];
+            return $result;
+        };
+        return array(
+            'upload' => array(
+                'label' => 'File uploaded or written by a job', 'short' => 'File',
+                'formats' => $labels($files), 'connectors' => array(), 'connection' => 'none', 'hint' => ''
+            ),
+            'url' => array(
+                'label' => 'Web page, REST API, or file URL', 'short' => 'Web / API',
+                'formats' => $labels(array('json', 'jsonl', 'csv', 'xml', 'html', 'txt', 'xlsx', 'parquet', 'binary')),
+                'connectors' => array('http_api'), 'connection' => 'optional',
+                'hint' => 'Optional: an HTTP API Connection adds its authentication, and a URL starting with / uses its host.'
+            ),
+            'google_sheet' => array(
+                'label' => 'Google Sheet', 'short' => 'Google Sheet',
+                'formats' => array('csv' => 'Sheet rows, materialized as CSV'),
+                'connectors' => array('google_sheets'), 'connection' => 'optional',
+                'hint' => 'Public and published sheets need no Connection; private ones use a Google Sheets API Connection.'
+            ),
+            'database_table' => array(
+                'label' => 'Database table or view', 'short' => 'Database table',
+                'formats' => array('table' => 'Table rows, materialized as CSV'),
+                'connectors' => array('mysql', 'pgsql', 'sqlserver', 'oracle_service', 'oracle_sid', 'snowflake', 'databricks'),
+                'connection' => 'required',
+                'hint' => 'A MySQL/MariaDB, PostgreSQL, SQL Server, Oracle, Snowflake, or Databricks Connection.'
+            ),
+            'object_storage' => array(
+                'label' => 'File in cloud storage or SFTP', 'short' => 'Cloud storage',
+                'formats' => $labels($files),
+                'connectors' => array('aws_s3', 'azure_blob', 'azure_data_lake', 'gcs', 'sftp'), 'connection' => 'required',
+                'hint' => 'An S3, Azure Blob, Azure Data Lake, Google Cloud Storage, or SFTP Connection.'
+            ),
+            'document_collection' => array(
+                'label' => 'MongoDB collection or Elasticsearch index', 'short' => 'Documents',
+                'formats' => array('jsonl' => 'Documents, materialized as JSON Lines'),
+                'connectors' => array('mongodb', 'elasticsearch'), 'connection' => 'required',
+                'hint' => 'A MongoDB or Elasticsearch / OpenSearch Connection.'
+            )
+        );
+    }
 
     public function __construct()
     {
         parent::__construct();
         $this->load->helper(array('url', 'form'));
         $this->load->model('DataAssets_model', 'model');
+        $this->load->model('DbSettings_model', 'connectorCatalog');
+        $this->load->library('DataAssetSource');
         $this->load->library('session');
         $this->isLoggedIn();
     }
@@ -130,36 +187,66 @@ class DataAssets extends BaseController
         return 'jobseeker://'.strtolower($environment).'/'.$scope.'/'.$assetKey;
     }
 
+    private function sourceType($asset)
+    {
+        $type = is_array($asset) ? (isset($asset['source_type']) ? $asset['source_type'] : '') : (isset($asset->source_type) ? $asset->source_type : '');
+        $catalog = $this->sourceCatalog();
+        return isset($catalog[trim((string) $type)]) ? trim((string) $type) : 'upload';
+    }
+
+    private function connectorForAssetScope($connectorKey, $environment, $jobName)
+    {
+        if ($connectorKey === '') return NULL;
+        foreach ($this->connectorCatalog->listSettings($environment) as $connector) {
+            if ((string) $connector->connector_key !== $connectorKey || (int) $connector->is_active !== 1 || ! empty($connector->shadowed)) continue;
+            $environmentMatches = $environment === 'ALL' || in_array($this->normalizeJobSeekerEnvironment($connector->environment), array($this->normalizeJobSeekerEnvironment($environment), 'ALL'), TRUE);
+            $jobMatches = $jobName === '*' || $connector->job_name === '*' || (string) $connector->job_name === (string) $jobName;
+            if ($environmentMatches && $jobMatches) return $connector;
+        }
+        return NULL;
+    }
+
+    /** One asset as the runtime catalog publishes it: coordinates, never secrets. */
+    private function manifestEntry(array $asset)
+    {
+        $options = json_decode(isset($asset['options_json']) ? $asset['options_json'] : '', TRUE);
+        $source = json_decode(isset($asset['source_config_json']) ? $asset['source_config_json'] : '', TRUE);
+        $sourceType = $this->sourceType($asset);
+        $absolutePath = $this->absoluteStoragePath($asset['storage_path']);
+        return array(
+            'key' => $asset['asset_key'],
+            'name' => $asset['name'],
+            'uri' => $this->assetUri($asset),
+            'direction' => $asset['direction'],
+            'format' => $asset['format'],
+            'environment' => $asset['environment'],
+            'job' => $asset['job_name'],
+            'source_type' => $sourceType,
+            'connector_key' => ! empty($asset['connector_key']) ? $asset['connector_key'] : NULL,
+            'source' => is_array($source) ? $source : array(),
+            'relative_path' => str_replace('\\', '/', $asset['storage_path']),
+            'file_name' => $asset['file_name'],
+            'required' => (bool) $asset['is_required'],
+            'active' => (bool) $asset['is_active'],
+            'version' => (int) $asset['version'],
+            'size' => $asset['file_size'] === NULL ? NULL : (int) $asset['file_size'],
+            'checksum' => $asset['checksum'],
+            'uploaded_at' => $asset['uploaded_at'],
+            'exists' => $sourceType !== 'upload' || ($absolutePath !== FALSE && is_file($absolutePath)),
+            'options' => is_array($options) ? $options : array(),
+            'description' => $asset['description']
+        );
+    }
+
     private function manifestPayload()
     {
         $assets = array();
         foreach ($this->model->manifestAssets() as $asset) {
-            $options = json_decode(isset($asset['options_json']) ? $asset['options_json'] : '', TRUE);
-            $absolutePath = $this->absoluteStoragePath($asset['storage_path']);
-            $assets[] = array(
-                'key' => $asset['asset_key'],
-                'name' => $asset['name'],
-                'uri' => $this->assetUri($asset),
-                'direction' => $asset['direction'],
-                'format' => $asset['format'],
-                'environment' => $asset['environment'],
-                'job' => $asset['job_name'],
-                'relative_path' => str_replace('\\', '/', $asset['storage_path']),
-                'file_name' => $asset['file_name'],
-                'required' => (bool) $asset['is_required'],
-                'active' => (bool) $asset['is_active'],
-                'version' => (int) $asset['version'],
-                'size' => $asset['file_size'] === NULL ? NULL : (int) $asset['file_size'],
-                'checksum' => $asset['checksum'],
-                'uploaded_at' => $asset['uploaded_at'],
-                'exists' => $absolutePath !== FALSE && is_file($absolutePath),
-                'options' => is_array($options) ? $options : array(),
-                'description' => $asset['description']
-            );
+            $assets[] = $this->manifestEntry($asset);
         }
 
         return array(
-            'schema_version' => 1,
+            'schema_version' => 2,
             'generated_at' => gmdate('c'),
             'repository_root_env' => 'JOBSEEKER_REPOSITORY_ROOT',
             'assets' => $assets
@@ -189,6 +276,9 @@ class DataAssets extends BaseController
     private function refreshStoredMetadata()
     {
         foreach ($this->model->listAssets() as $asset) {
+            if ($this->sourceType($asset) !== 'upload') {
+                continue;
+            }
             $absolutePath = $this->absoluteStoragePath($asset->storage_path);
             if ($absolutePath === FALSE || ! is_file($absolutePath)) {
                 continue;
@@ -251,6 +341,13 @@ class DataAssets extends BaseController
             'statistics' => $this->model->statistics($selectedEnvironment),
             'environments' => $environments,
             'formats' => $this->formats,
+            'sourceTypes' => $this->sourceCatalog(),
+            'connections' => array_values(array_filter($this->connectorCatalog->listSettings($selectedEnvironment), function($connector) {
+                $types = array();
+                foreach ($this->sourceCatalog() as $source) $types = array_merge($types, $source['connectors']);
+                return (int) $connector->is_active === 1 && empty($connector->shadowed)
+                    && in_array((string) $connector->db_type, $types, TRUE);
+            })),
             'initialDirection' => in_array($this->input->get('direction'), array('input', 'output'), TRUE) ? $this->input->get('direction') : '',
             'initialEnvironment' => $selectedEnvironment
         );
@@ -289,9 +386,43 @@ class DataAssets extends BaseController
 			: $this->normalizeEnvironment($this->input->post('environment'));
         $selectedEnvironment = $this->selectedEnvironment();
         $jobName = $this->normalizeJobName($this->input->post('job_name'));
+        $sourceType = strtolower(trim((string) $this->input->post('source_type')));
+        if ($sourceType === '') {
+            $sourceType = $existing ? $this->sourceType($existing) : 'upload';
+        }
+        $connectorKey = $this->normalizeAssetKey($this->input->post('connector_key'));
         $description = trim((string) $this->input->post('description'));
         $fileName = $this->normalizedFileName($this->input->post('file_name'));
         $hasUpload = isset($_FILES['asset_file']) && isset($_FILES['asset_file']['error']) && $_FILES['asset_file']['error'] !== UPLOAD_ERR_NO_FILE;
+
+        $catalog = $this->sourceCatalog();
+        if (! isset($catalog[$sourceType])) {
+            $this->session->set_flashdata('error', 'Select a supported Data Asset source.');
+            redirect('data-assets');
+        }
+        $source = $catalog[$sourceType];
+        // A table, sheet, or collection has one shape; files choose a format.
+        if (count($source['formats']) === 1) {
+            $format = key($source['formats']);
+        } else if (! isset($source['formats'][$format])) {
+            $this->session->set_flashdata('error', 'A '.$source['label'].' source cannot deliver '.(isset($this->formats[$format]) ? $this->formats[$format]['label'] : 'that format').'.');
+            redirect('data-assets');
+        }
+        if ($source['connection'] === 'none') {
+            $connectorKey = '';
+        }
+        if ($sourceType !== 'upload' && $direction !== 'input') {
+            $this->session->set_flashdata('error', 'Web, spreadsheet, database, storage, and document sources are read-only inputs. Use a file asset for outputs.');
+            redirect('data-assets');
+        }
+        if ($sourceType !== 'upload' && $hasUpload) {
+            $this->session->set_flashdata('error', 'Choose either an external source or an uploaded file, not both.');
+            redirect('data-assets');
+        }
+        if ($sourceType === 'upload' && $existing && $this->sourceType($existing) !== 'upload' && ! $hasUpload) {
+            $this->session->set_flashdata('error', 'Upload a seed file when changing a connected source back to a file asset.');
+            redirect('data-assets');
+        }
 
         if ($assetKey === '' || strlen($assetKey) > 128 || $name === '' || strlen($name) > 200) {
             $this->session->set_flashdata('error', 'Provide a name and an asset key using letters, numbers, or dashes.');
@@ -321,6 +452,97 @@ class DataAssets extends BaseController
             redirect('data-assets');
         }
 
+        $sourceConfig = array();
+        if ($sourceType === 'url') {
+            $sourceUrl = trim((string) $this->input->post('source_url'));
+            $responsePath = trim((string) $this->input->post('response_path'));
+            if ($sourceUrl === '' || strlen($sourceUrl) > 2000 || strlen($responsePath) > 500) {
+                $this->session->set_flashdata('error', 'Provide a valid web or API source URL.');
+                redirect('data-assets');
+            }
+            $credentialError = $this->dataassetsource->validateNoEmbeddedCredentials($sourceUrl);
+            if ($credentialError !== NULL) {
+                $this->session->set_flashdata('error', $credentialError);
+                redirect('data-assets');
+            }
+            if ($connectorKey === '') {
+                $urlError = $this->dataassetsource->validatePublicUrl($sourceUrl);
+                if ($urlError !== NULL) {
+                    $this->session->set_flashdata('error', $urlError);
+                    redirect('data-assets');
+                }
+            } else if ($sourceUrl[0] !== '/' && ! preg_match('#^https?://#i', $sourceUrl)) {
+                $this->session->set_flashdata('error', 'Authenticated API URLs must be absolute or start with / to use the Connection host.');
+                redirect('data-assets');
+            }
+            $sourceConfig = array('url' => $sourceUrl, 'response_path' => $responsePath);
+        } else if ($sourceType === 'google_sheet') {
+            $sourceUrl = trim((string) $this->input->post('google_public_url'));
+            $spreadsheetId = trim((string) $this->input->post('spreadsheet_id'));
+            $sheetRange = trim((string) $this->input->post('sheet_range'));
+            if (($sourceUrl === '' && $spreadsheetId === '') || strlen($sourceUrl) > 2000
+                || ! preg_match('/^[A-Za-z0-9_-]{0,200}$/', $spreadsheetId)
+                || strlen($sheetRange) > 300 || preg_match('/[\x00-\x1F\x7F]/', $sheetRange)) {
+                $this->session->set_flashdata('error', 'Provide a public Google Sheet URL or a valid spreadsheet ID and range.');
+                redirect('data-assets');
+            }
+            if ($sourceUrl !== '') {
+                $credentialError = $this->dataassetsource->validateNoEmbeddedCredentials($sourceUrl);
+                if ($credentialError !== NULL) {
+                    $this->session->set_flashdata('error', $credentialError);
+                    redirect('data-assets');
+                }
+            }
+            if ($connectorKey === '' && $sourceUrl !== '') {
+                $urlError = $this->dataassetsource->validatePublicUrl($sourceUrl);
+                if ($urlError !== NULL) {
+                    $this->session->set_flashdata('error', $urlError);
+                    redirect('data-assets');
+                }
+            }
+            $sourceConfig = array('url' => $sourceUrl, 'spreadsheet_id' => $spreadsheetId, 'range' => $sheetRange);
+        } else if ($sourceType === 'database_table') {
+            $tableName = trim((string) $this->input->post('table_name'));
+            $tableSchema = trim((string) $this->input->post('table_schema'));
+            $identifier = '[A-Za-z_][A-Za-z0-9_$]{0,127}';
+            if (! preg_match('/^'.$identifier.'$/', $tableName)
+                || ($tableSchema !== '' && ! preg_match('/^'.$identifier.'(\.'.$identifier.')?$/', $tableSchema))) {
+                $this->session->set_flashdata('error', 'Use letters, digits, _ and $ for the table name, and schema or catalog.schema for its schema.');
+                redirect('data-assets');
+            }
+            $sourceConfig = array('table' => $tableName, 'schema' => $tableSchema);
+        } else if ($sourceType === 'object_storage') {
+            $objectPath = trim((string) $this->input->post('object_path'));
+            if ($objectPath === '' || strlen($objectPath) > 1024 || preg_match('/[\x00-\x1F\x7F]/', $objectPath)
+                || in_array('..', explode('/', $objectPath), TRUE)) {
+                $this->session->set_flashdata('error', 'Provide the object path, without .. segments, such as landing/customers.csv.');
+                redirect('data-assets');
+            }
+            $sourceConfig = array('path' => $objectPath);
+        } else if ($sourceType === 'document_collection') {
+            $collection = trim((string) $this->input->post('collection_name'));
+            if (! preg_match('/^[A-Za-z0-9_][A-Za-z0-9_.\-*]{0,254}$/', $collection)) {
+                $this->session->set_flashdata('error', 'Use letters, digits, _, -, . and * for the collection or index name.');
+                redirect('data-assets');
+            }
+            $sourceConfig = array('collection' => $collection);
+        }
+
+        if ($connectorKey !== '') {
+            $connector = $this->connectorForAssetScope($connectorKey, $environment, $jobName);
+            if (! $connector) {
+                $this->session->set_flashdata('error', 'The selected Connection is inactive or outside this asset scope. Configure it in Connections first.');
+                redirect('data-assets');
+            }
+            if (! in_array((string) $connector->db_type, $source['connectors'], TRUE)) {
+                $this->session->set_flashdata('error', 'A '.$source['label'].' source cannot use a '.$connector->db_type.' Connection.');
+                redirect('data-assets');
+            }
+        } else if ($source['connection'] === 'required') {
+            $this->session->set_flashdata('error', 'A '.$source['label'].' source needs a Connection. Create one under Connections first.');
+            redirect('data-assets');
+        }
+
         $upload = NULL;
         if ($hasUpload) {
             $upload = $this->getUploadedFile('asset_file', $this->formats[$format]['extensions'], 104857600);
@@ -335,6 +557,27 @@ class DataAssets extends BaseController
 
         if ($fileName === '' && $existing) {
             $fileName = $existing->file_name;
+        }
+        if ($fileName === '' && in_array($sourceType, array('url', 'object_storage'), TRUE)) {
+            $sourcePath = $sourceType === 'url' ? parse_url(isset($sourceConfig['url']) ? $sourceConfig['url'] : '', PHP_URL_PATH) : $sourceConfig['path'];
+            $fileName = $this->normalizedFileName(basename((string) $sourcePath));
+            $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            if ($fileName !== '' && ! empty($this->formats[$format]['extensions']) && ! in_array($extension, $this->formats[$format]['extensions'], TRUE)) {
+                $fileName .= '.'.$this->formats[$format]['extensions'][0];
+            }
+        }
+        if ($fileName === '' && $sourceType === 'database_table') {
+            $fileName = $sourceConfig['table'].'.csv';
+        }
+        if ($fileName === '' && $sourceType === 'document_collection') {
+            $fileName = $this->normalizedFileName(str_replace('*', 'all', $sourceConfig['collection'])).'.jsonl';
+        }
+        if ($fileName === '' && $sourceType === 'google_sheet') {
+            $fileName = $assetKey.'.csv';
+        }
+        if ($fileName === '' && $sourceType !== 'upload') {
+            $extension = isset($this->formats[$format]) && ! empty($this->formats[$format]['extensions']) ? $this->formats[$format]['extensions'][0] : 'dat';
+            $fileName = $assetKey.'.'.$extension;
         }
         if ($fileName === '') {
             $this->session->set_flashdata('error', 'Provide the runtime file name or upload an input file.');
@@ -356,7 +599,7 @@ class DataAssets extends BaseController
             redirect('data-assets');
         }
 
-        if ($existing && empty($existing->legacy_source) && $existing->storage_path !== $storagePath) {
+        if ($sourceType === 'upload' && $existing && empty($existing->legacy_source) && $existing->storage_path !== $storagePath) {
             $oldPath = $this->absoluteStoragePath($existing->storage_path);
             if (! $hasUpload && $oldPath !== FALSE && is_file($oldPath) && ! @rename($oldPath, $absolutePath)) {
                 $this->session->set_flashdata('error', 'The existing asset file could not be moved to its new scope.');
@@ -377,9 +620,20 @@ class DataAssets extends BaseController
             $fileSize = filesize($absolutePath);
             $checksum = hash_file('sha256', $absolutePath);
             $uploadedAt = date('Y-m-d H:i:s');
-        } else if (is_file($absolutePath)) {
+        } else if ($sourceType === 'upload' && is_file($absolutePath)) {
             $fileSize = filesize($absolutePath);
             $checksum = hash_file('sha256', $absolutePath);
+        } else if ($sourceType !== 'upload') {
+            $previousSourceType = $existing ? $this->sourceType($existing) : '';
+            $previousConfig = $existing ? (string) $existing->source_config_json : '';
+            $nextConfig = json_encode($sourceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if (! $existing || $previousSourceType !== $sourceType || $previousConfig !== $nextConfig
+                || (string) $existing->connector_key !== $connectorKey) {
+                $version++;
+            }
+            $fileSize = NULL;
+            $checksum = NULL;
+            $uploadedAt = date('Y-m-d H:i:s');
         }
 
         $delimiter = (string) $this->input->post('delimiter');
@@ -408,6 +662,9 @@ class DataAssets extends BaseController
             'format' => $format,
             'environment' => $environment,
             'job_name' => $jobName,
+            'source_type' => $sourceType,
+            'connector_key' => $connectorKey === '' ? NULL : $connectorKey,
+            'source_config_json' => json_encode($sourceConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'storage_path' => str_replace('\\', '/', $storagePath),
             'file_name' => $fileName,
             'options_json' => json_encode($options),
@@ -519,6 +776,8 @@ class DataAssets extends BaseController
     {
         $this->output
             ->set_status_header($status)
+            ->set_header('Cache-Control: private, no-store, max-age=0')
+            ->set_header('Pragma: no-cache')
             ->set_content_type('application/json', 'utf-8')
             ->set_output(json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
     }
@@ -580,11 +839,6 @@ class DataAssets extends BaseController
 
     public function preview($id)
     {
-        if (! $this->canManageAssets()) {
-            $this->previewResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
-            return;
-        }
-
         $asset = $this->model->getAsset((int) $id);
         if (! $asset) {
             $this->previewResponse(array('ok' => FALSE, 'message' => 'The selected data asset no longer exists.'), 404);
@@ -594,6 +848,78 @@ class DataAssets extends BaseController
             $this->previewResponse(array('ok' => FALSE, 'message' => 'The data asset is outside the selected environment.'), 404);
             return;
         }
+
+        $result = $this->servicePreview($asset);
+        if ($result === NULL) {
+            // Without the Data Preview service, uploaded text files still
+            // preview in-process; every other source needs the service.
+            if ($this->sourceType($asset) === 'upload' && in_array(strtolower((string) $asset->format), array('csv', 'json', 'jsonl', 'txt', 'xml', 'html'), TRUE)) {
+                $this->legacyFilePreview($asset);
+                return;
+            }
+            $this->previewResponse(array('ok' => FALSE, 'message' => 'The Data Preview service is not reachable, so this source cannot be previewed. Start the data-preview service.'), 503);
+            return;
+        }
+        $status = ! empty($result['ok']) ? 200 : (isset($result['status']) ? (int) $result['status'] : 422);
+        unset($result['status']);
+        if (! empty($result['ok'])) {
+            $catalog = $this->sourceCatalog();
+            $result = array_merge(array(
+                'name' => $asset->name,
+                'file_name' => $asset->file_name,
+                'version' => (int) $asset->version,
+                'source_label' => $catalog[$this->sourceType($asset)]['short']
+            ), $result);
+        }
+        $this->previewResponse($result, $status);
+    }
+
+    /** The environment and job whose Connection scope a preview uses. */
+    private function previewScope($asset)
+    {
+        $environment = $this->selectedEnvironment();
+        if ($environment === 'ALL') {
+            $assetEnvironment = $this->normalizeJobSeekerEnvironment($asset->environment);
+            $environment = $assetEnvironment !== '' && $assetEnvironment !== 'ALL' ? $assetEnvironment : 'DEV';
+        }
+        $jobName = (string) $asset->job_name;
+        if ($jobName === '*') {
+            // Job screens pass the job, so job-scoped Connections resolve as in a run.
+            $requested = $this->normalizeJobName($this->input->get('job', TRUE));
+            $jobName = $requested !== FALSE && $requested !== '*' ? $requested : 'jobseeker-data-preview';
+        }
+        return array($environment, $jobName);
+    }
+
+    /**
+     * Ask the Data Preview service for a sample. It receives the asset's
+     * catalog entry and, when the asset uses one, that single Connection's
+     * runtime payload. NULL means the service could not be reached.
+     */
+    private function servicePreview($asset)
+    {
+        $request = array('asset' => $this->manifestEntry((array) $asset));
+        if (! empty($asset->connector_key)) {
+            list($environment, $jobName) = $this->previewScope($asset);
+            $row = $this->connectorCatalog->runtimeSetting($asset->connector_key, $environment, $jobName);
+            if (! $row) {
+                return array('ok' => FALSE, 'status' => 422, 'message' => 'Connection '.$asset->connector_key.' is not active for '.$environment.' / '.$jobName.'. Check it under Connections.');
+            }
+            try {
+                $request['connector'] = $this->connectorCatalog->runtimePayload((array) $row);
+            } catch (Exception $exception) {
+                $this->connectorCatalog->logRuntimeAccess((array) $row, $environment, $jobName, 'failed-preview');
+                log_message('error', 'Data Asset preview could not resolve connector '.$asset->connector_key.': '.$exception->getMessage());
+                return array('ok' => FALSE, 'status' => 502, 'message' => 'The credential of Connection '.$asset->connector_key.' could not be read.');
+            }
+            $this->connectorCatalog->logRuntimeAccess((array) $row, $environment, $jobName, 'granted-preview');
+        }
+        return $this->dataassetsource->requestPreview($request);
+    }
+
+    /** In-process preview of an uploaded text file, used when the service is down. */
+    private function legacyFilePreview($asset)
+    {
         $absolutePath = $this->absoluteStoragePath($asset->storage_path);
         if ($absolutePath === FALSE || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
             $this->previewResponse(array('ok' => FALSE, 'message' => 'Upload or generate the asset file before previewing it.'), 404);
@@ -681,12 +1007,15 @@ class DataAssets extends BaseController
             $payload['truncated'] = $handle !== FALSE && ! feof($handle);
             if ($handle !== FALSE) fclose($handle);
             $payload = array_merge($payload, $this->tablePreviewFromRecords($records));
-        } else if (in_array($format, array('txt', 'xml'), TRUE)) {
+        } else if (in_array($format, array('txt', 'xml', 'html'), TRUE)) {
             $handle = fopen($absolutePath, 'rb');
             $text = $handle === FALSE ? '' : fread($handle, 65536);
             $payload['truncated'] = filesize($absolutePath) > 65536;
             if ($handle !== FALSE) fclose($handle);
             $payload['kind'] = 'text';
+            if ($format === 'html') {
+                $text = trim(preg_replace('/\s+/', ' ', strip_tags($text)));
+            }
             $payload['text'] = $this->previewCell($text, isset($options['encoding']) ? strtoupper($options['encoding']) : 'UTF-8', 65536);
         } else {
             $this->previewResponse(array(

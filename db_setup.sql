@@ -318,6 +318,9 @@ CREATE TABLE IF NOT EXISTS `data_assets` (
   `format` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'csv',
   `environment` varchar(100) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'ALL',
   `job_name` varchar(200) COLLATE utf8_unicode_ci NOT NULL DEFAULT '*',
+  `source_type` varchar(30) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'upload',
+  `connector_key` varchar(128) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `source_config_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
   `storage_path` varchar(1000) COLLATE utf8_unicode_ci NOT NULL,
   `file_name` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
   `options_json` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
@@ -338,7 +341,8 @@ CREATE TABLE IF NOT EXISTS `data_assets` (
   UNIQUE KEY `data_assets_legacy` (`legacy_source`,`legacy_id`),
   KEY `data_assets_environment` (`environment`),
   KEY `data_assets_direction` (`direction`),
-  KEY `data_assets_active` (`is_active`)
+  KEY `data_assets_active` (`is_active`),
+  KEY `data_assets_connector` (`connector_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `data_asset_migrations` (

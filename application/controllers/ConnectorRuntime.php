@@ -45,55 +45,6 @@ class ConnectorRuntime extends BaseController
         return preg_match('/^[A-Za-z0-9._\-\/ ]{1,200}$/', $value) ? $value : FALSE;
     }
 
-    private function connectorPayload($row)
-    {
-        $backend = isset($row['secret_backend']) ? (string) $row['secret_backend'] : 'local';
-        $reference = json_decode(isset($row['secret_reference']) ? (string) $row['secret_reference'] : '', TRUE);
-        if (! is_array($reference)) {
-            $reference = array();
-        }
-
-        $secret = array('backend' => $backend);
-        if ($backend === 'deployment') {
-            // `.env` connector secrets are already in this PHP process. Send
-            // them through the same authenticated, run-scoped value contract
-            // as an encrypted local connector; the worker never needs the
-            // application's whole environment and the UI never receives them.
-            $values = isset($row['_secret_values']) && is_array($row['_secret_values'])
-                ? $row['_secret_values'] : array();
-            $secret['backend'] = 'local';
-            $secret['values'] = (object) array_map(function($value) { return (string) $value; }, $values);
-        } else if ($backend === 'local') {
-            $values = $this->connectors->decryptLocalSecret(isset($row['secret_encrypted']) ? $row['secret_encrypted'] : '');
-            if ($values === FALSE) {
-                throw new RuntimeException('Connector '.$row['connector_key'].' has an unreadable local secret.');
-            }
-            // Keep the runtime schema stable: an empty secret is an object, not
-            // a JSON list, just like a populated field-to-value mapping.
-            $secret['values'] = (object) array_map(function($value) { return (string) $value; }, $values);
-        } else {
-            $secret['reference'] = $reference;
-        }
-
-        return array(
-            'key' => (string) $row['connector_key'],
-            'type' => (string) $row['db_type'],
-            'environment' => (string) $row['environment'],
-            'job' => (string) $row['job_name'],
-            'description' => (string) $row['description'],
-            'config' => array(
-                'auth_type' => isset($row['auth_type']) ? (string) $row['auth_type'] : 'username_password',
-                'host' => (string) $row['address'],
-                'port' => (int) $row['port'],
-                'database' => (string) $row['schema'],
-                'additional_parameters' => (string) $row['additional_parameters'],
-                'oracle_service_name' => (string) $row['oracle_ServiceName'],
-                'oracle_sid' => (string) $row['oracle_sid']
-            ),
-            'secret' => $secret
-        );
-    }
-
     public function index()
     {
         if ($this->input->method(TRUE) !== 'POST') {
@@ -152,7 +103,7 @@ class ConnectorRuntime extends BaseController
                 // still fails, but with a precise "connector unavailable" error
                 // from its own step instead of a blanket HTTP 500 here.
                 try {
-                    $connectors[] = $this->connectorPayload($row);
+                    $connectors[] = $this->connectors->runtimePayload($row);
                     $this->connectors->logRuntimeAccess($row, $environment, $jobName, $ide ? 'granted-ide' : 'granted');
                 } catch (Exception $exception) {
                     $this->connectors->logRuntimeAccess($row, $environment, $jobName, $ide ? 'failed-ide' : 'failed');

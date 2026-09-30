@@ -5,7 +5,9 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from jobseeker import DataAssetCatalog, JobSeeker, JobSeekerError
 
@@ -89,9 +91,114 @@ def test_documented_csv_transform():
             assert stream.read() == "country,active_customers\nUK,1\nUS,2\n"
 
 
+def test_remote_source_materialization():
+    class Handler(BaseHTTPRequestHandler):
+        requests = 0
+
+        def do_GET(self):
+            Handler.requests += 1
+            payload = b'{"data":{"items":[{"id":7,"state":"ready"}]}}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with tempfile.TemporaryDirectory(prefix="jobseeker-remote-data-asset-") as repository:
+            relative_path = "data-assets/dev/remote-api/remote-items/items.json"
+            item = contract("remote-items", "input", "DEV", "remote-api", relative_path)
+            item.update({
+                "format": "json",
+                "source_type": "url",
+                "source": {
+                    "url": "http://127.0.0.1:%d/items" % server.server_port,
+                    "response_path": "data.items",
+                },
+                "connector_key": None,
+            })
+            os.makedirs(os.path.join(repository, "data-assets"))
+            with open(os.path.join(repository, "data-assets", "manifest.json"), "w", encoding="utf-8") as stream:
+                json.dump({"schema_version": 2, "assets": [item]}, stream)
+
+            asset = DataAssetCatalog(environment="DEV", job="remote-api", repository_root=repository).resolve("remote-items")
+            assert asset is not None and asset.source_type == "url"
+            assert asset.read() == [{"id": 7, "state": "ready"}]
+            assert Path(asset.path).read_text(encoding="utf-8").startswith('{"data"')
+            assert Handler.requests == 1, "one resolved asset instance should materialize its source once"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_remote_source_credentials_stay_scoped():
+    from jobseeker.sources import http_get
+
+    seen = []
+
+    class Target(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append((self.path, self.headers.get("Authorization")))
+            if self.path == "/same":
+                self.send_response(302)
+                self.send_header("Location", "/final")
+                self.end_headers()
+                return
+            if self.path == "/denied?key=super-secret-api-key":
+                self.send_response(403)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args):
+            pass
+
+    target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
+
+    class Origin(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "http://localhost:%d/elsewhere" % target.server_port)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    origin = ThreadingHTTPServer(("127.0.0.1", 0), Origin)
+    threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in (target, origin)]
+    for thread in threads:
+        thread.start()
+    try:
+        credentials = {"Authorization": "Bearer connector-token"}
+        http_get("http://127.0.0.1:%d/same" % target.server_port, credentials)
+        assert seen[-1] == ("/final", "Bearer connector-token"), "a same-host redirect keeps the Connection credential"
+        http_get("http://127.0.0.1:%d/start" % origin.server_port, credentials)
+        assert seen[-1] == ("/elsewhere", None), "a cross-host redirect must not receive the Connection credential"
+        try:
+            http_get("http://127.0.0.1:%d/denied?key=super-secret-api-key" % target.server_port, {})
+            raise AssertionError("an HTTP error must fail the read")
+        except JobSeekerError as error:
+            assert "super-secret-api-key" not in str(error), "HTTP errors must not print a URL's API key"
+    finally:
+        for server in (target, origin):
+            server.shutdown()
+            server.server_close()
+
+
 def main():
     test_documented_transform()
     test_documented_csv_transform()
+    test_remote_source_materialization()
+    test_remote_source_credentials_stay_scoped()
     with tempfile.TemporaryDirectory(prefix="jobseeker-data-assets-") as repository:
         data_directory = os.path.join(repository, "data-assets")
         os.makedirs(os.path.join(data_directory, "all", "customer-reference"))

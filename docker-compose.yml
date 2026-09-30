@@ -129,6 +129,7 @@ services:
       - JOBSEEKER_DB_NAME=${JOBSEEKER_DB_NAME:-jobseeker}
       - JOBSEEKER_ENCRYPTION_KEY=${JOBSEEKER_ENCRYPTION_KEY:-change-this-local-development-key-before-shared-use}
       - JOBSEEKER_CONNECTOR_API_TOKEN=${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+      - JOBSEEKER_DATA_PREVIEW_URL=${JOBSEEKER_DATA_PREVIEW_URL:-http://data-preview:8000}
       - JOBSEEKER_COOKIE_SECURE=${JOBSEEKER_COOKIE_SECURE:-false}
       - JOBSEEKER_COMMAND_GUARD_ENFORCE=${JOBSEEKER_COMMAND_GUARD_ENFORCE:-false}
       - JOBSEEKER_TIMEZONE=${JOBSEEKER_TIMEZONE:-UTC}
@@ -290,6 +291,37 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 20s
+
+  # Previews Data Assets for the web UI: uploaded files (Excel and Parquet
+  # included), web and API sources, Google Sheets, database tables, cloud
+  # storage, and document collections. It reads with the SDK code jobs use and
+  # the same drivers as the Jenkins workers. PHP authorizes each request and
+  # sends only the one Connection the asset references.
+  data-preview:
+    build:
+      context: .
+      dockerfile: docker/data_preview_image
+    image: jobseeker-data-preview:local
+    user: "0:0" # drops to the checkout owner, see docker/jobseeker-host-user.sh
+    depends_on:
+      repository-data-init:
+        condition: service_completed_successfully
+    networks:
+      - internal
+    volumes:
+      - ./repository:/php/repository:ro
+      # Follow the checkout's SDK, as PHP follows ./application.
+      - ./application/third_party/python/jobseeker_sdk/src:/opt/jobseeker/sdk-src:ro
+    environment:
+      - PYTHONPATH=/opt/jobseeker/sdk-src
+      - JOBSEEKER_REPOSITORY_ROOT=/php/repository
+      - JOBSEEKER_CONNECTOR_API_TOKEN=${JOBSEEKER_CONNECTOR_API_TOKEN:-jobseeker-local-connector-token}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
       start_period: 20s
 
   # Long-lived Apache Hop Server. Jenkins still schedules and triggers every
