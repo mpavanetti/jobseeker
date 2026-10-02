@@ -30,15 +30,34 @@ trait ProjectWorkspaceTrait
         $this->load->model('UserGitAccount_model', 'gitAccounts');
         $accounts = $this->gitAccounts->accounts($this->vendorId);
         $projects = array();
+        $runtimesEnabled = $this->workspaceRuntimesEnabled();
+        $runtimeSettings = $runtimesEnabled ? $this->workspaceRuntimeService()->model()->allProjectSettings() : array();
+        $catalog = $runtimesEnabled ? $this->workspaceRuntimeService()->model()->runtimes() : array();
         foreach ($this->gitProjectSettings()->projects(TRUE, FALSE) as $project) {
-          $projects[] = $this->projectWorkspaceSummary($project, $environment, $accounts);
+          $summary = $this->projectWorkspaceSummary($project, $environment, $accounts);
+          $key = isset($runtimeSettings[$summary['id']]) ? $runtimeSettings[$summary['id']]['runtimeKey'] : WorkspaceRuntime::DEFAULT_KEY;
+          $summary['runtime'] = array(
+            'key' => $key,
+            'label' => $runtimesEnabled ? $this->projectRuntimeLabel($key, $catalog) : 'Default editor',
+            'isolation' => isset($runtimeSettings[$summary['id']]) ? $runtimeSettings[$summary['id']]['isolation'] : 'user'
+          );
+          $projects[] = $summary;
+        }
+        // What "Add a sample" offers a Python project.
+        $samples = array();
+        foreach ($this->projectPythonSamples() as $sample) {
+          $samples[] = array('id' => $sample['id'], 'name' => $sample['name'], 'description' => isset($sample['description']) ? (string) $sample['description'] : '',
+            'complexity' => isset($sample['complexity']) ? (string) $sample['complexity'] : '', 'folder' => $this->projectWorkspaceLayout()->sampleFolder($sample['id']));
         }
         $this->jsonJobCreationResponse(array(
           'ok' => TRUE,
           'environment' => $environment,
           'openVsCodeEnabled' => $this->openVsCodeEnabled(),
+          'runtimesEnabled' => $runtimesEnabled,
           'types' => $this->projectWorkspaceLayout()->types(),
-          'projects' => $projects
+          'projects' => $projects,
+          'samples' => $samples,
+          'sampleUrl' => base_url().'jobCreation/projectWorkspaceSample'
         ));
       }
 
@@ -132,6 +151,11 @@ trait ProjectWorkspaceTrait
         $payload = $prepared['payload'];
         $where = $project['repositoryUrl'] !== '' ? 'your working copy on '.$payload['workspaceBranch'] : 'the shared project folder';
         $payload['message'] = $project['name'].' opens in '.$where.($payload['created'] ? ' (new)' : '').'.';
+        if (isset($payload['runtime']['status']) && $payload['runtime']['status'] === 'building') {
+          $payload['message'] = $project['name'].' is ready in '.$where.'. Building its '.$payload['runtime']['label'].' runtime first; the editor opens when it is done.';
+        } else if (isset($payload['runtime']['label'])) {
+          $payload['message'] = $project['name'].' opens in '.$where.', in '.$payload['runtime']['label'].(! empty($payload['runtime']['shared']) ? ' (shared)' : '').'.';
+        }
         $this->jsonJobCreationResponse($payload);
       }
 
@@ -173,6 +197,7 @@ trait ProjectWorkspaceTrait
         $this->jsonJobCreationResponse(array(
           'ok' => TRUE,
           'project' => array('id' => $project['id'], 'name' => $project['name'], 'type' => $project['type'], 'hasGit' => $location['hasGit']),
+          'runtime' => $this->projectRuntimeJobImage($project, $location),
           'environment' => $environment,
           'workspace' => array(
             'exists' => $state['exists'],
@@ -183,6 +208,203 @@ trait ProjectWorkspaceTrait
           ),
           'jobs' => $jobs
         ));
+      }
+
+      /**
+       * Adds a sample from the sample library to the viewer's workspace of a
+       * Python project, as jobs/<folder>. An existing folder is never
+       * replaced. In VS Code, the task "JobSeeker: add sample" does the same.
+       */
+      public function projectWorkspaceSample() {
+        $this->releaseSessionLock();
+        if (! $this->canManageJobs() || strtoupper((string) $this->input->method(TRUE)) !== 'POST') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        $project = $this->gitProjectSettings()->project((int) $this->input->post('project_id'), TRUE);
+        if ($project === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'That project is inactive or no longer exists.'), 404);
+          return;
+        }
+        if ($project['type'] !== 'python') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Samples are Python jobs; '.$project['name'].' is not a Python project.'), 409);
+          return;
+        }
+        $sample = $this->pythonSampleById((string) $this->input->post('sample_id'));
+        if ($sample === NULL) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'That Python sample is not in the sample library.'), 404);
+          return;
+        }
+        $location = $this->projectWorkspaceLocation($project);
+        if (! is_dir($location['absolute'])) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Open the project once first: the sample is added to your workspace of it.'), 409);
+          return;
+        }
+        $layout = $this->projectWorkspaceLayout();
+        $requested = trim((string) $this->input->post('folder'));
+        $folder = $layout->sampleFolder($requested !== '' ? $requested : $sample['id']);
+        $jobPath = ProjectWorkspace::JOBS_FOLDER.'/'.$folder;
+        if (file_exists($location['absolute'].DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath))) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $jobPath.' already exists in your workspace. Give the sample another folder name.', 'folder' => $folder), 409);
+          return;
+        }
+        $settings = $this->projectRuntimeSettings($project);
+        $files = $this->projectSampleFiles($sample, $this->projectPythonVersion($project, $location), $this->projectRuntimeUsesDefault($settings));
+        if ($files === FALSE) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'The sample has an invalid entry file.'), 500);
+          return;
+        }
+        $jobFiles = array();
+        foreach ($files as $path => $content) {
+          $jobFiles[$jobPath.'/'.$path] = $content;
+        }
+        $written = $this->writeMissingProjectFiles($location['absolute'], $jobFiles);
+        if (count($written) !== count($jobFiles)) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'JobSeeker could not write every file of the sample into '.$jobPath.'.'), 500);
+          return;
+        }
+        // Runs of the new folder in the editor use its own connector scope.
+        $this->writeConnectorIdeSession($location['absolute'].DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath), $folder, $project);
+        log_message('info', 'User '.(int) $this->vendorId.' added the sample '.$sample['id'].' to project '.(int) $project['id'].' as '.$jobPath.'.');
+        $this->jsonJobCreationResponse(array(
+          'ok' => TRUE,
+          'path' => $jobPath,
+          'files' => $written,
+          'jobCreationUrl' => base_url().'JobCreation?project='.(int) $project['id'].'&folder='.$jobPath,
+          'message' => $sample['name'].' was added as '.$jobPath.' in '.($location['hasGit'] ? 'your working copy. Open the project to run it, then commit and push it.' : 'the project folder. Open the project to run it.')
+        ));
+      }
+
+      /**
+       * The defaults in a notebook's cell tagged "parameters", so the form can
+       * offer them: a job folder of a project (the viewer's workspace of it)
+       * or a repository path, plus the notebook's file name. Also returns the
+       * project's Context keys for the environment, the values a parameter
+       * can read.
+       */
+      public function notebookParameters() {
+        $this->releaseSessionLock();
+        if (! $this->canManageJobs()) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Access denied.'), 403);
+          return;
+        }
+        $entry = $this->cleanPythonEntryPoint($this->input->post('entry') ?: $this->input->get('entry'), TRUE);
+        if ($entry === FALSE || strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'ipynb') {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'Choose a notebook (.ipynb) entry file.'), 400);
+          return;
+        }
+        $root = rtrim($this->inlinePythonRepositoryRoot(), '/\\');
+        $projectId = (int) ($this->input->post('project_id') ?: $this->input->get('project_id'));
+        $project = NULL;
+        if ($projectId > 0) {
+          $project = $this->gitProjectSettings()->project($projectId, TRUE);
+          $jobPath = $this->projectWorkspaceLayout()->cleanJobPath((string) ($this->input->post('job_path') ?: $this->input->get('job_path')));
+          if ($project === FALSE || $jobPath === FALSE) {
+            $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => 'That project or job folder is not available.'), 404);
+            return;
+          }
+          $location = $this->projectWorkspaceLocation($project);
+          $folder = $location['absolute'].($jobPath === '' ? '' : DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath));
+        } else {
+          $folder = $this->resolveRepositoryPath((string) ($this->input->post('source_path') ?: $this->input->get('source_path')), $root);
+          if ($folder !== FALSE && is_file($folder)) {
+            $folder = dirname($folder);
+          }
+        }
+        $file = $folder === FALSE ? FALSE : $this->resolvePythonFile($folder, $entry);
+        if ($file === FALSE || filesize($file) > 32 * 1024 * 1024) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $entry.' was not found in that folder.'), 404);
+          return;
+        }
+        $notebook = json_decode((string) file_get_contents($file), TRUE);
+        if (! is_array($notebook) || ! isset($notebook['cells']) || ! is_array($notebook['cells'])) {
+          $this->jsonJobCreationResponse(array('ok' => FALSE, 'message' => $entry.' is not a readable notebook.'), 422);
+          return;
+        }
+        $parameters = array();
+        $hasParametersCell = FALSE;
+        $codeCells = 0;
+        foreach ($notebook['cells'] as $cell) {
+          if (! is_array($cell) || (isset($cell['cell_type']) ? $cell['cell_type'] : '') !== 'code') {
+            continue;
+          }
+          $codeCells++;
+          $tags = isset($cell['metadata']['tags']) && is_array($cell['metadata']['tags']) ? $cell['metadata']['tags'] : array();
+          if ($hasParametersCell || ! in_array('parameters', $tags, TRUE)) {
+            continue;
+          }
+          $hasParametersCell = TRUE;
+          $source = isset($cell['source']) ? (is_array($cell['source']) ? implode('', $cell['source']) : (string) $cell['source']) : '';
+          foreach (preg_split('/\r\n|\r|\n/', $source) as $line) {
+            $parameter = $this->notebookParameterLine($line);
+            if ($parameter !== NULL) {
+              $parameters[] = $parameter;
+            }
+          }
+        }
+        $environment = $this->projectWorkspaceEnvironment();
+        $contextKeys = array();
+        if (is_array($project) || preg_match('#/workspaces/shared/[a-z0-9._-]+-(\d+)/#', str_replace('\\', '/', $file), $match)) {
+          $contextProject = is_array($project) ? $project : $this->gitProjectSettings()->project((int) $match[1], TRUE);
+          if (is_array($contextProject)) {
+            $rows = $this->db->select('ContextKey')->from('vw_contextdetails')
+              ->where('ProjectName', $contextProject['name'])->where('Environment', $environment)->where('IsActive', 1)
+              ->order_by('ContextKey', 'ASC')->get()->result_array();
+            foreach ($rows as $row) {
+              $contextKeys[] = (string) $row['ContextKey'];
+            }
+            $project = $contextProject;
+          }
+        }
+        $this->jsonJobCreationResponse(array(
+          'ok' => TRUE,
+          'entry' => $entry,
+          'codeCells' => $codeCells,
+          'hasParametersCell' => $hasParametersCell,
+          'parameters' => $parameters,
+          'environment' => $environment,
+          'project' => is_array($project) ? array('id' => $project['id'], 'name' => $project['name']) : NULL,
+          'contextKeys' => array_values(array_unique($contextKeys))
+        ));
+      }
+
+      /** name = value  # comment, from a parameters cell; NULL for other lines. */
+      private function notebookParameterLine($line) {
+        if (! preg_match('/^([A-Za-z_][A-Za-z0-9_]{0,63})\s*(?::\s*[^=]+?)?=\s*(.+)$/', rtrim((string) $line), $match)) {
+          return NULL;
+        }
+        $rest = $match[2];
+        $value = $rest;
+        $comment = '';
+        // A # starts a comment only outside a quoted string.
+        $quote = '';
+        for ($index = 0, $length = strlen($rest); $index < $length; $index++) {
+          $character = $rest[$index];
+          if ($quote !== '') {
+            if ($character === '\\') {
+              $index++;
+            } else if ($character === $quote) {
+              $quote = '';
+            }
+          } else if ($character === '"' || $character === "'") {
+            $quote = $character;
+          } else if ($character === '#') {
+            $value = substr($rest, 0, $index);
+            $comment = trim(substr($rest, $index + 1));
+            break;
+          }
+        }
+        $value = trim($value);
+        // Python literals become what the form's values mean: JSON or text.
+        if (preg_match('/^([\'"])(.*)\1$/s', $value, $quoted)) {
+          $text = stripcslashes($quoted[2]);
+          $value = preg_match('/^(-?\d+(\.\d+)?|true|false|null|True|False|None)$/', $text) ? json_encode($text) : $text;
+        } else if ($value === 'True' || $value === 'False') {
+          $value = strtolower($value);
+        } else if ($value === 'None') {
+          $value = 'null';
+        }
+        return array('name' => $match[1], 'value' => $value, 'comment' => $comment);
       }
 
       /** The top-bar environment, or DEV when "All environments" is selected. */
@@ -363,10 +585,24 @@ trait ProjectWorkspaceTrait
         $fail = function($status, $message) {
           return array('ok' => FALSE, 'status' => $status, 'message' => $message);
         };
-        $openVsCodeRuntime = $this->openVsCodeRuntimeState(TRUE);
-        if (empty($openVsCodeRuntime['available']) || empty($openVsCodeRuntime['running'])) {
-          return $fail(503, isset($openVsCodeRuntime['message']) ? $openVsCodeRuntime['message'] : 'OpenVSCode could not be started.');
+        // The Default runtime opens in the shared OpenVSCode service; any other
+        // runtime in a deployment of its own (WorkspaceRuntimeTrait).
+        $runtimeSettings = $this->projectRuntimeSettings($project);
+        $openVsCodeRuntime = array('ready' => FALSE, 'idleShutdownMinutes' => 0);
+        if ($this->projectRuntimeUsesDefault($runtimeSettings)) {
+          $openVsCodeRuntime = $this->openVsCodeRuntimeState(TRUE);
+          if (empty($openVsCodeRuntime['available']) || empty($openVsCodeRuntime['running'])) {
+            return $fail(503, isset($openVsCodeRuntime['message']) ? $openVsCodeRuntime['message'] : 'OpenVSCode could not be started.');
+          }
+        } else {
+          $engine = $this->workspaceRuntimeService()->engineState();
+          if (! $engine['available'] || ! $engine['toolkit']) {
+            return $fail(503, $engine['message']);
+          }
         }
+        // The editor installs the SDK from the repository's copy each time it
+        // opens; refresh that copy, so editors follow JobSeeker's SDK as jobs do.
+        $this->ensurePythonSharedLibrary(rtrim($this->inlinePythonRepositoryRoot(), '/\\'));
         $layout = $this->projectWorkspaceLayout();
         $location = $this->projectWorkspaceLocation($project);
         $workspace = $location['absolute'];
@@ -423,7 +659,7 @@ trait ProjectWorkspaceTrait
         $jobFolderCreated = FALSE;
         if ($jobPath !== '' && ! empty($options['scaffoldJob']) && ! file_exists($workspace.DIRECTORY_SEPARATOR.$jobPath)) {
           $jobFiles = array();
-          foreach ($layout->jobStarter($project['type'], basename($jobPath), $this->defaultDockerPythonVersion()) as $path => $content) {
+          foreach ($layout->jobStarter($project['type'], basename($jobPath), $this->projectPythonVersion($project, $location)) as $path => $content) {
             $jobFiles[$jobPath.'/'.$path] = $content;
           }
           $scaffolded = array_merge($scaffolded, $this->writeMissingProjectFiles($workspace, $jobFiles));
@@ -440,7 +676,7 @@ trait ProjectWorkspaceTrait
         if ($openVsCodeUrl === '') {
           return $fail(500, 'OpenVSCode Server workspace path could not be resolved.');
         }
-        return array('ok' => TRUE, 'payload' => array(
+        $payload = array(
           'ok' => TRUE,
           'openVsCodePath' => $openVsCodePath,
           'openVsCodeUrl' => $openVsCodeUrl,
@@ -454,7 +690,19 @@ trait ProjectWorkspaceTrait
           'created' => $created,
           'scaffolded' => $scaffolded,
           'jobFolderCreated' => $jobFolderCreated
-        ));
+        );
+        if (! $this->projectRuntimeUsesDefault($runtimeSettings)) {
+          $launched = $this->launchProjectRuntime($project, $location, $runtimeSettings);
+          if (! $launched['ok']) {
+            return $fail($launched['status'], $launched['message']);
+          }
+          // Until a build finishes there is no editor URL yet.
+          if (! isset($launched['payload']['openVsCodeUrl'])) {
+            unset($payload['openVsCodeUrl'], $payload['launchUrls']);
+          }
+          $payload = array_merge($payload, $launched['payload']);
+        }
+        return array('ok' => TRUE, 'payload' => $payload);
       }
 
       /** Writes each file that does not exist yet; returns the ones written. */
@@ -484,14 +732,14 @@ trait ProjectWorkspaceTrait
        * its folder's session under its real name.
        */
       private function writeProjectWorkspaceSessions($workspace, $project, $jobName, $jobPath) {
-        $this->writeConnectorIdeSession($workspace, '*');
+        $this->writeConnectorIdeSession($workspace, '*', $project);
         foreach ($this->projectWorkspaceLayout()->detectJobs($workspace, $project['type']) as $job) {
           if ($jobName === '' || $job['path'] !== $jobPath) {
-            $this->writeConnectorIdeSession($workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $job['path']), $job['name']);
+            $this->writeConnectorIdeSession($workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $job['path']), $job['name'], $project);
           }
         }
         if ($jobName !== '' && $jobPath !== '' && is_dir($workspace.DIRECTORY_SEPARATOR.$jobPath)) {
-          $this->writeConnectorIdeSession($workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath), $jobName);
+          $this->writeConnectorIdeSession($workspace.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $jobPath), $jobName, $project);
         }
       }
 
@@ -505,7 +753,8 @@ trait ProjectWorkspaceTrait
       private function writeProjectWorkspaceTooling($workspace, $project, $location) {
         $layout = $this->projectWorkspaceLayout();
         $type = $project['type'];
-        $pythonVersion = $this->defaultDockerPythonVersion();
+        // The runtime's Python: what the "new job" task's pyproject.toml requires.
+        $pythonVersion = $this->projectPythonVersion($project, $location);
         $editorRepositoryRoot = $this->openVsCodeWorkspaceRoot().'/repository';
         $files = array();
 
@@ -581,9 +830,27 @@ trait ProjectWorkspaceTrait
               'problemMatcher' => array()
             ),
             $newJobTask,
+            array('label' => 'JobSeeker: add sample', 'type' => 'shell', 'command' => 'sh .vscode/jobseeker-samples.sh "${input:jobseekerSample}"', 'problemMatcher' => array()),
             array('label' => 'JobSeeker: ruff check', 'type' => 'shell', 'command' => '. .venv/bin/activate && ruff check .', 'problemMatcher' => array()),
             array('label' => 'JobSeeker: mypy', 'type' => 'shell', 'command' => '. .venv/bin/activate && mypy .', 'problemMatcher' => array())
           );
+          // The sample library, as job folders for this project's runtime.
+          $samples = array();
+          $sampleOptions = array();
+          $onDefaultEditor = $this->projectRuntimeUsesDefault($this->projectRuntimeSettings($project));
+          foreach ($this->projectPythonSamples() as $sample) {
+            $sampleFiles = $this->projectSampleFiles($sample, $pythonVersion, $onDefaultEditor);
+            if ($sampleFiles !== FALSE) {
+              $samples[] = array('id' => $sample['id'], 'name' => $sample['name'], 'files' => $sampleFiles);
+              $sampleOptions[] = array('label' => $sample['name'], 'value' => $sample['id']);
+            }
+          }
+          $tasks['inputs'][] = array('id' => 'jobseekerSample', 'type' => 'pickString', 'description' => 'Sample to add as a new job folder under jobs/', 'options' => $sampleOptions);
+          $sampleScript = $layout->sampleScript($samples, base_url().'JobCreation', $project['id'], $location['hasGit']);
+          if (! $this->writeInlinePythonProjectFile($workspace, '.vscode/jobseeker-samples.sh', $sampleScript, $files, TRUE)) {
+            return FALSE;
+          }
+          @chmod($workspace.DIRECTORY_SEPARATOR.'.vscode'.DIRECTORY_SEPARATOR.'jobseeker-samples.sh', 0755);
           $launch = array('version' => '0.2.0', 'configurations' => array(array(
             'name' => 'JobSeeker: debug current job file',
             'type' => 'debugpy',
@@ -630,10 +897,70 @@ trait ProjectWorkspaceTrait
             return FALSE;
           }
         }
+        $this->mergeProjectWorkspaceTasks($workspace, $tasks);
         if ($type === 'python' && ! $this->ensureInlinePythonInterpreterPlaceholder($workspace)) {
           return FALSE;
         }
         return ! $location['hasGit'] || $this->excludeProjectWorkspaceTooling($workspace);
+      }
+
+      /**
+       * tasks.json is written once, since people add their own tasks; a
+       * project opened before a JobSeeker task existed gets it here. Tasks
+       * and inputs are matched by label and id, and the sample list is kept
+       * current. A file that is not plain JSON is left alone.
+       */
+      private function mergeProjectWorkspaceTasks($workspace, $tasks) {
+        $path = $workspace.DIRECTORY_SEPARATOR.'.vscode'.DIRECTORY_SEPARATOR.'tasks.json';
+        $current = is_file($path) ? json_decode((string) file_get_contents($path), TRUE) : NULL;
+        if (! is_array($current) || (isset($current['tasks']) && ! is_array($current['tasks'])) || (isset($current['inputs']) && ! is_array($current['inputs']))) {
+          return;
+        }
+        $merged = $current + array('tasks' => array(), 'inputs' => array());
+        $labels = array();
+        foreach ($merged['tasks'] as $task) {
+          $labels[isset($task['label']) ? (string) $task['label'] : ''] = TRUE;
+        }
+        foreach ($tasks['tasks'] as $task) {
+          if (! isset($labels[$task['label']])) {
+            $merged['tasks'][] = $task;
+          }
+        }
+        foreach ($tasks['inputs'] as $input) {
+          $found = FALSE;
+          foreach ($merged['inputs'] as $index => $existing) {
+            if (isset($existing['id']) && $existing['id'] === $input['id']) {
+              $found = TRUE;
+              if ($input['id'] === 'jobseekerSample') {
+                $merged['inputs'][$index] = $input;
+              }
+            }
+          }
+          if (! $found) {
+            $merged['inputs'][] = $input;
+          }
+        }
+        if ($merged != $current) {
+          file_put_contents($path, json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", LOCK_EX);
+        }
+      }
+
+      /** The Python and notebook samples of the sample library (application/config/job_samples.php). */
+      private function projectPythonSamples() {
+        $samples = require APPPATH.'config/job_samples.php';
+        return array_values(array_filter(is_array($samples) ? $samples : array(), function($sample) {
+          return isset($sample['id'], $sample['name'], $sample['family']) && in_array($sample['family'], array('python', 'notebook'), TRUE);
+        }));
+      }
+
+      /**
+       * A sample as a job folder of this project. It requires the project
+       * runtime's Python; a sample that ships a Dockerfile keeps it only on
+       * the Default editor, since jobs of a runtime run in the runtime's image.
+       */
+      private function projectSampleFiles($sample, $pythonVersion, $onDefaultEditor) {
+        $withDockerfile = ! empty($sample['use_dockerfile']) && $onDefaultEditor;
+        return $this->pythonSampleFiles($sample, $pythonVersion, 'python:'.$pythonVersion.'-slim', $withDockerfile);
       }
 
       /** Keeps the editor's files, at any depth, out of the project's commits. */
@@ -670,12 +997,31 @@ trait ProjectWorkspaceTrait
           'if ! command -v "$python_bin" >/dev/null 2>&1; then',
           '  if command -v uv >/dev/null 2>&1; then uv python install "$target"; python_bin="$(uv python find "$target")"; else python_bin=python3; fi',
           'fi',
-          '# Replace the placeholder interpreter JobSeeker leaves until this runs.',
-          'if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c "import sys; raise SystemExit(0 if sys.prefix != sys.base_prefix else 1)" 2>/dev/null; then',
+          '# In a workspace runtime the image\'s Python and preinstalled packages are',
+          '# the base of .venv; a .venv made in another runtime is replaced.',
+          'venv_flags=',
+          '[ "${JOBSEEKER_VENV_SYSTEM_SITE_PACKAGES:-0}" = 1 ] && venv_flags=--system-site-packages',
+          'venv_id="${JOBSEEKER_RUNTIME:-default}${venv_flags:+ $venv_flags}"',
+          '# Also replaces the placeholder interpreter JobSeeker leaves until this runs.',
+          'if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c "import sys; raise SystemExit(0 if sys.prefix != sys.base_prefix else 1)" 2>/dev/null \\',
+          '  || [ "$(cat .venv/.jobseeker-runtime 2>/dev/null || echo default)" != "$venv_id" ]; then',
           '  rm -rf .venv',
-          '  if command -v uv >/dev/null 2>&1; then uv venv --seed -p "$python_bin" .venv; else "$python_bin" -m venv .venv; fi',
+          '  if command -v uv >/dev/null 2>&1; then uv venv --seed $venv_flags -p "$python_bin" .venv; else "$python_bin" -m venv $venv_flags .venv; fi',
+          '  printf \'%s\\n\' "$venv_id" > .venv/.jobseeker-runtime',
           'fi',
-          '. .venv/bin/activate',
+          'site_dir="$(.venv/bin/python -c \'import sysconfig; print(sysconfig.get_path("purelib"))\')"',
+          '# A runtime whose Python is a virtual environment itself (a Dockerfile\'s',
+          '# /opt/venv on PATH): --system-site-packages reaches only the interpreter',
+          '# under it, so .venv reads that environment\'s packages through a .pth.',
+          'runtime_sites=',
+          'if [ -n "$venv_flags" ]; then',
+          '  runtime_sites="$("$python_bin" -c \'import site, sys; print("\\n".join(site.getsitepackages()) if sys.prefix != sys.base_prefix else "")\' 2>/dev/null || true)"',
+          'fi',
+          'if [ -n "$runtime_sites" ]; then printf \'%s\\n\' "$runtime_sites" > "$site_dir/_jobseeker_runtime.pth"; else rm -f "$site_dir/_jobseeker_runtime.pth"; fi',
+          '# shared/ imports from anywhere, as in builds: notebooks and the debugger too.',
+          'printf \'%s\\n\' "$(pwd)" > "$site_dir/_jobseeker_project.pth"',
+          '# uv\'s activate script reads unset variables.',
+          'set +u; . .venv/bin/activate; set -u',
           'command -v poetry >/dev/null 2>&1 || python -m pip install --quiet --disable-pip-version-check "poetry==2.4.1"',
           'command -v ruff >/dev/null 2>&1 || python -m pip install --quiet --disable-pip-version-check "ruff==0.16.4"',
           'command -v mypy >/dev/null 2>&1 || python -m pip install --quiet --disable-pip-version-check "mypy==2.3.1"',
@@ -700,6 +1046,10 @@ trait ProjectWorkspaceTrait
           '  if [ -s "$dir/pyproject.toml" ] && [ -f "$dir/poetry.lock" ]; then',
           '    echo "Installing $dir (poetry.lock)"',
           '    (cd "$dir" && { poetry check --lock --no-interaction >/dev/null 2>&1 || poetry lock --no-interaction --no-ansi; } && poetry install --no-root --no-interaction --no-ansi) || echo "Could not install the dependencies of $dir." >&2',
+          '  elif [ -s "$dir/pyproject.toml" ] && [ -f "$dir/uv.lock" ] && command -v uv >/dev/null 2>&1; then',
+          '    echo "Installing $dir (uv.lock)"',
+          '    # The locked versions, without the project itself or local paths (the SDK is installed above).',
+          '    (cd "$dir" && uv export --frozen --no-hashes --no-emit-project --format requirements-txt) | grep -v -i -E "^(-e |\\.|/|file:|jobseeker[-_]runtime)" | python -m pip install --quiet --disable-pip-version-check -r /dev/stdin || echo "Could not install the dependencies of $dir." >&2',
           '  elif [ -s "$dir/pyproject.toml" ]; then',
           '    deps="$(jobseeker_dependencies "$dir/pyproject.toml")" || { echo "Could not read $dir/pyproject.toml." >&2; continue; }',
           '    [ -z "$deps" ] || { echo "Installing $dir (pyproject.toml)"; printf "%s\\n" "$deps" | python -m pip install --quiet --disable-pip-version-check -r /dev/stdin || echo "Could not install the dependencies of $dir." >&2; }',

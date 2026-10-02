@@ -29,7 +29,9 @@ assert(jobCreation.includes('JOBSEEKER_CONNECTORS_DIR/jobseeker-asset'), 'Docker
 assert(jobCreation.includes('JOBSEEKER_CONNECTORS_DIR/.jobseeker-sdk'), 'Docker jobs must receive the read-only runtime SDK used by helper commands.');
 assert.strictEqual((jobCreation.match(/JOBSEEKER_CONNECTORS_DIR=\/run\/jobseeker-connectors/g) || []).length, 3);
 assert.strictEqual((jobCreation.match(/JOBSEEKER_CONNECTORS_VOLUME:\/run\/jobseeker-connectors:ro/g) || []).length, 3);
-assert.strictEqual((jobCreation.match(/export PATH=\"\$JOBSEEKER_CONNECTORS_DIR:\$PATH\"/g) || []).length, 3, 'Every Docker runtime must expose the materialized connector helper on PATH.');
+assert(jobCreation.includes('export PATH="$JOBSEEKER_CONNECTORS_DIR:${JOBSEEKER_IMAGE_PATH:+$JOBSEEKER_IMAGE_PATH:}$PATH"'), 'Docker jobs put the connector helper first, then the PATH of the image, which a login shell resets.');
+assert.strictEqual((jobCreation.match(/\$this->dockerScriptPathLine\(\)/g) || []).length, 3, 'Every Docker runtime must expose the materialized connector helper on PATH.');
+assert.strictEqual((jobCreation.match(/\$this->dockerLoginShell\(\)/g) || []).length, 3, 'Every Docker runtime keeps the image PATH through its login shell.');
 assert(!jobCreation.includes('jobseeker-local-connector-token'));
 
 assert(controller.includes("hash_equals($expected"));

@@ -110,6 +110,22 @@ trait JobCreationExecutionTrait
         );
       }
 
+      /**
+       * The shell a job's container runs its script in: a login shell, which
+       * resets PATH from /etc/profile and so drops what the image put there
+       * (a Dockerfile's /opt/venv/bin, a runtime's tools). The image's PATH
+       * travels as JOBSEEKER_IMAGE_PATH, and scripts put it first again, so a
+       * job finds the Python it was developed with in the editor.
+       */
+      private function dockerLoginShell() {
+        return 'sh -c \'JOBSEEKER_IMAGE_PATH="$PATH"; export JOBSEEKER_IMAGE_PATH; exec sh -lc "$@"\' jobseeker';
+      }
+
+      /** The first line of every script dockerLoginShell() runs. */
+      private function dockerScriptPathLine() {
+        return 'export PATH="$JOBSEEKER_CONNECTORS_DIR:${JOBSEEKER_IMAGE_PATH:+$JOBSEEKER_IMAGE_PATH:}$PATH"';
+      }
+
       private function dockerJobResourceLines($runtimeOptions) {
         $cpu = isset($runtimeOptions['cpuLimit']) ? $runtimeOptions['cpuLimit'] : '1';
         $memory = isset($runtimeOptions['memoryLimitMb']) ? (int) $runtimeOptions['memoryLimitMb'] : 512;
@@ -163,7 +179,7 @@ trait JobCreationExecutionTrait
         $lines = array_merge($lines, $this->dockerContextEnvLines());
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc \'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"; printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh\' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = '  '.$this->dockerLoginShell().' '.escapeshellarg($this->dockerScriptPathLine().'; printf "%s" "$JOBSEEKER_LINUX_COMMAND_B64" | base64 -d | sh').' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
         $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
@@ -188,7 +204,7 @@ trait JobCreationExecutionTrait
 
         $dockerScript = implode("\n", array(
           'set -e',
-          'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"',
+          $this->dockerScriptPathLine(),
           'mkdir -p /tmp/jobseeker-context',
           'tar -C /tmp/jobseeker-context -xf -',
           'cd /tmp/jobseeker-context/source',
@@ -237,7 +253,7 @@ trait JobCreationExecutionTrait
         $lines = array_merge($lines, $this->dockerContextEnvLines());
         $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
         $lines[] = '  "$JOBSEEKER_DOCKER_IMAGE" \\';
-        $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
+        $lines[] = '  '.$this->dockerLoginShell().' '.escapeshellarg($dockerScript).' sh'.($argumentString !== '' ? ' '.$argumentString : '').' || JOBSEEKER_DOCKER_STATUS=$?';
         $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
         $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
         $lines[] = 'if [ "$JOBSEEKER_DOCKER_STATUS" -ne 0 ]; then exit "$JOBSEEKER_DOCKER_STATUS"; fi';
@@ -352,10 +368,15 @@ trait JobCreationExecutionTrait
        * to the Jenkins Agent. requirements.txt still wins when there is one; the
        * JobSeeker SDK is always installed on its own.
        */
-      private function agentPyprojectRequirementsLines() {
-        $reader = 'import re, sys, tomllib'."\n"
+      /** Python that prints a pyproject.toml's [project] dependencies, one per line, without the SDK. */
+      private function pyprojectDependencyReader() {
+        return 'import re, sys, tomllib'."\n"
           .'deps = tomllib.load(open(sys.argv[1], "rb")).get("project", {}).get("dependencies", [])'."\n"
           .'sys.stdout.write("".join(d.strip() + "\n" for d in deps if re.split(r"[\s\[<>=!~;@(]", d.strip(), maxsplit=1)[0].lower().replace("_", "-") != "jobseeker-runtime"))';
+      }
+
+      private function agentPyprojectRequirementsLines() {
+        $reader = $this->pyprojectDependencyReader();
         $read = '"$JOBSEEKER_PYTHON" -c '.escapeshellarg($reader).' "$JOBSEEKER_PYPROJECT" > "$JOBSEEKER_PYPROJECT_REQUIREMENTS" 2>/dev/null'
           .' || python3 -c '.escapeshellarg($reader).' "$JOBSEEKER_PYPROJECT" > "$JOBSEEKER_PYPROJECT_REQUIREMENTS" 2>/dev/null';
         return array(
@@ -373,6 +394,64 @@ trait JobCreationExecutionTrait
         );
       }
 
+      /** Whether a Python job's entry file is a Jupyter notebook. */
+      private function isNotebookExecution($execution) {
+        $entry = isset($execution['entryPoint']) && $execution['entryPoint'] !== '' ? $execution['entryPoint'] : (isset($execution['scriptPath']) ? $execution['scriptPath'] : '');
+        return strtolower(pathinfo((string) $entry, PATHINFO_EXTENSION)) === 'ipynb';
+      }
+
+      /**
+       * Settings of a notebook run, exported where Edit mode reads them back,
+       * and the folder its executed notebook is published in:
+       * repository/notebook-runs/<job>/<build>/, the last 20 builds per job.
+       * JOBSEEKER_NOTEBOOK_PARAMETERS is the job's Jenkins parameter, so one
+       * run can override values (a JSON object) without editing the job.
+       */
+      private function notebookRuntimeLines($runtimeOptions) {
+        $notebook = isset($runtimeOptions['notebook']) && is_array($runtimeOptions['notebook']) ? $runtimeOptions['notebook'] : array();
+        $parameters = isset($notebook['parameters']) && is_array($notebook['parameters']) ? $notebook['parameters'] : array();
+        $lines = array('export JOBSEEKER_NOTEBOOK=1');
+        if (! empty($parameters)) {
+          $lines[] = 'export JOBSEEKER_NOTEBOOK_SPEC='.escapeshellarg('b64:'.base64_encode(json_encode(array_values($parameters), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)));
+        }
+        $lines[] = 'export JOBSEEKER_NOTEBOOK_CELL_TIMEOUT='.escapeshellarg((string) (isset($notebook['cellTimeout']) ? (int) $notebook['cellTimeout'] : 0));
+        $lines[] = 'export JOBSEEKER_NOTEBOOK_ALLOW_ERRORS='.escapeshellarg(! empty($notebook['allowErrors']) ? '1' : '0');
+        $lines[] = 'export JOBSEEKER_NOTEBOOK_TMF='.escapeshellarg(! isset($notebook['track']) || $notebook['track'] ? '1' : '0');
+        $lines[] = 'export JOBSEEKER_NOTEBOOK_PARAMETERS="${JOBSEEKER_NOTEBOOK_PARAMETERS:-}"';
+        $lines[] = 'JOBSEEKER_NOTEBOOK_SLUG="$(printf "%s" "${JOB_NAME:-${JOBSEEKER_JOB_NAME:-job}}" | tr "/ " "--" | tr -cd "A-Za-z0-9_.-" | cut -c1-120)"';
+        $lines[] = 'JOBSEEKER_NOTEBOOK_RUNS="$JOBSEEKER_REPOSITORY_ROOT/notebook-runs/${JOBSEEKER_NOTEBOOK_SLUG:-job}"';
+        $lines[] = 'export JOBSEEKER_NOTEBOOK_RUN_DIR="$JOBSEEKER_NOTEBOOK_RUNS/${BUILD_NUMBER:-0}"';
+        $lines[] = 'export JOBSEEKER_NOTEBOOK_PUBLISHED="notebook-runs/${JOBSEEKER_NOTEBOOK_SLUG:-job}/${BUILD_NUMBER:-0}/$(basename "$JOBSEEKER_SCRIPT_PATH")"';
+        // Group-readable, so the web app can serve it whichever user it runs as.
+        $lines[] = 'rm -rf "$JOBSEEKER_NOTEBOOK_RUN_DIR"; (umask 027; mkdir -p "$JOBSEEKER_NOTEBOOK_RUN_DIR")';
+        $lines[] = 'ls -1 "$JOBSEEKER_NOTEBOOK_RUNS" | grep -E "^[0-9]+$" | sort -rn | tail -n +21 | while read -r JOBSEEKER_OLD_RUN; do rm -rf "$JOBSEEKER_NOTEBOOK_RUNS/$JOBSEEKER_OLD_RUN"; done';
+        return $lines;
+      }
+
+      /**
+       * Runs the notebook with the SDK's runner (jobseeker.notebook), after
+       * installing nbclient and ipykernel when the environment lacks them;
+       * they go after the job's own packages on PYTHONPATH. Without them the
+       * runner still runs plain Python cells.
+       */
+      private function notebookRunnerLines($python, $librariesDirectory, $notebook, $output) {
+        $check = ' -c "import nbclient, nbformat, ipykernel" >/dev/null 2>&1';
+        return array(
+          'printf "%s\n" "[JobSeeker] Notebook execution"',
+          'if ! '.$python.$check.'; then',
+          // An agent's workspace keeps the last install between builds.
+          '  if [ -d '.$librariesDirectory.' ] && PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}"'.$librariesDirectory.' '.$python.$check.'; then',
+          '    export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}"'.$librariesDirectory,
+          '  else',
+          '    echo "[JobSeeker] No Jupyter kernel in this environment: installing nbclient and ipykernel for this run. A runtime with Jupyter, or ipykernel in the job\'s dependencies, skips this step."',
+          '    rm -rf '.$librariesDirectory,
+          '    if PIP_ROOT_USER_ACTION=ignore '.$python.' -m pip install --quiet --disable-pip-version-check --target '.$librariesDirectory.' "nbclient>=0.10" "nbformat>=5.10" "ipykernel>=6.29"; then export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}"'.$librariesDirectory.'; else echo "[JobSeeker] nbclient and ipykernel could not be installed; the notebook runs without a Jupyter kernel."; fi',
+          '  fi',
+          'fi',
+          $python.' -u -m jobseeker.notebook run '.$notebook.' --output '.$output
+        );
+      }
+
       private function buildPythonExecutionCommand($execution, $repositoryRoot, $environmentArgument, $runtimeOptions = array()) {
         $pythonLibraryPath = rtrim($repositoryRoot, '/\\').'/python/lib';
         $runtimeMode = isset($runtimeOptions['mode']) ? $runtimeOptions['mode'] : 'local';
@@ -383,6 +462,7 @@ trait JobCreationExecutionTrait
         $dockerfileText = isset($runtimeOptions['dockerfileText']) ? (string) $runtimeOptions['dockerfileText'] : '';
         $runTests = ! isset($runtimeOptions['runTests']) || (bool) $runtimeOptions['runTests'];
         $followsProject = $execution['mode'] === 'git' && ! empty($execution['followProject']) && ! empty($execution['projectId']);
+        $notebook = $this->isNotebookExecution($execution);
         $lines = array_merge(
           array('set -e'),
           $this->dataAssetsRuntimeLines($repositoryRoot),
@@ -433,6 +513,11 @@ trait JobCreationExecutionTrait
           // project's shared/ code is importable, as it is in the editor.
           if (preg_match('#^(.+/workspaces/shared/[a-z0-9._-]+)/jobs/[^/]+/?$#', str_replace('\\', '/', (string) $execution['sourceDirectory']), $projectMatch)) {
             $lines[] = 'export JOBSEEKER_PROJECT_ROOT='.escapeshellarg($projectMatch[1]);
+            // Context values are read for the job's own project first.
+            if (! empty($execution['projectName'])) {
+              $lines[] = 'export JOBSEEKER_PROJECT_ID='.escapeshellarg((string) (int) $execution['projectId']);
+              $lines[] = 'export JOBSEEKER_PROJECT_NAME='.escapeshellarg($execution['projectName']);
+            }
           }
         }
 
@@ -450,11 +535,14 @@ trait JobCreationExecutionTrait
         $lines[] = 'printf "%s\n" "dataset=Not reported" "rows_read=Not reported" "rows_written=Not reported" "rows_rejected=Not reported" "duration=Not reported" > "$JOBSEEKER_EMAIL_METRICS_FILE"';
         $lines[] = 'export JOBSEEKER_SCRIPT_DIR="$(dirname "$JOBSEEKER_SCRIPT_PATH")"';
         $lines[] = 'cd "$JOBSEEKER_SOURCE_DIR"';
+        if ($notebook) {
+          $lines = array_merge($lines, $this->notebookRuntimeLines($runtimeOptions));
+        }
 
         if ($runtimeMode === 'docker') {
           $dockerScriptLines = array(
             'set -e',
-            'export PATH="$JOBSEEKER_CONNECTORS_DIR:$PATH"',
+            $this->dockerScriptPathLine(),
             'mkdir -p /tmp/jobseeker-context',
             'tar -C /tmp/jobseeker-context -xf -',
             'cd /tmp/jobseeker-context/source',
@@ -471,7 +559,18 @@ trait JobCreationExecutionTrait
             'if [ -n "$JOBSEEKER_PROJECT_DIR" ]; then',
             '  if [ "${JOBSEEKER_DEPENDENCIES_PREINSTALLED:-0}" != "1" ]; then',
             '    PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check "poetry==2.4.1"',
-            '    (cd "$JOBSEEKER_PROJECT_DIR" && export POETRY_VIRTUALENVS_CREATE=false && if [ -f poetry.lock ] && ! poetry check --lock --no-interaction >/dev/null 2>&1; then echo "poetry.lock does not match pyproject.toml; refreshing it for this run."; poetry lock --no-interaction --no-ansi; fi && poetry install --no-root --no-interaction --no-ansi)',
+            '    if (cd "$JOBSEEKER_PROJECT_DIR" && export POETRY_VIRTUALENVS_CREATE=false && if [ -f poetry.lock ] && ! poetry check --lock --no-interaction >/dev/null 2>&1; then echo "poetry.lock does not match pyproject.toml; refreshing it for this run."; poetry lock --no-interaction --no-ansi; fi && poetry install --no-root --no-interaction --no-ansi) > /tmp/jobseeker-poetry.log 2>&1; then',
+            '      cat /tmp/jobseeker-poetry.log',
+            '    else',
+            '      cat /tmp/jobseeker-poetry.log',
+            // A requires-python that leaves out the image's Python (a job
+            // written for another runtime) is what Poetry alone refuses; the
+            // editor installs with pip, so the job does too, and says so.
+            '      grep -q "is not supported by the project" /tmp/jobseeker-poetry.log || exit 1',
+            '      echo "[JobSeeker] requires-python in pyproject.toml leaves out this image\'s Python $(python -c \'import platform; print(platform.python_version())\'), so Poetry refuses it. Installing the dependencies it lists with pip, as VS Code does. Set requires-python to include the runtime\'s Python to install with Poetry again."',
+            '      python -c '.escapeshellarg($this->pyprojectDependencyReader()).' "$JOBSEEKER_PROJECT_DIR/pyproject.toml" > /tmp/jobseeker-pyproject-requirements.txt',
+            '      if [ -s /tmp/jobseeker-pyproject-requirements.txt ]; then PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check -r /tmp/jobseeker-pyproject-requirements.txt; fi',
+            '    fi',
             '  fi',
             'elif [ -n "$JOBSEEKER_REQUIREMENTS" ]; then',
             '  rm -rf /tmp/jobseeker-python-libs',
@@ -501,10 +600,12 @@ trait JobCreationExecutionTrait
             ));
           }
 
-          $dockerScriptLines = array_merge($dockerScriptLines, array(
-            'printf "%s\n" "[JobSeeker] Python execution"',
-            'python -u "$JOBSEEKER_ENTRYPOINT" "$@"'
-          ));
+          $dockerScriptLines = array_merge($dockerScriptLines, $notebook
+            ? $this->notebookRunnerLines('python', '/tmp/jobseeker-notebook-libs', '"$JOBSEEKER_ENTRYPOINT"', '"/jobseeker-notebook/$(basename "$JOBSEEKER_ENTRYPOINT")"')
+            : array(
+              'printf "%s\n" "[JobSeeker] Python execution"',
+              'python -u "$JOBSEEKER_ENTRYPOINT" "$@"'
+            ));
           $dockerScript = implode("\n", $dockerScriptLines);
 
           $lines[] = 'export JOBSEEKER_DOCKER_IMAGE='.escapeshellarg($dockerImage);
@@ -529,7 +630,10 @@ trait JobCreationExecutionTrait
           $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME=""';
           $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME=""';
           $lines[] = 'JOBSEEKER_CONNECTORS_VOLUME=""';
-          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; if [ -n "$JOBSEEKER_CONNECTORS_VOLUME" ]; then docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DATA_ASSETS_VOLUME" ]; then docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
+          if ($notebook) {
+            $lines[] = 'JOBSEEKER_NOTEBOOK_VOLUME=""';
+          }
+          $lines[] = 'jobseeker_python_docker_cleanup() { rm -rf "$JOBSEEKER_DOCKER_CONTEXT" "$JOBSEEKER_CONNECTORS_DIR"; '.($notebook ? 'if [ -n "$JOBSEEKER_NOTEBOOK_VOLUME" ]; then docker volume rm "$JOBSEEKER_NOTEBOOK_VOLUME" >/dev/null 2>&1 || true; fi; ' : '').'if [ -n "$JOBSEEKER_CONNECTORS_VOLUME" ]; then docker volume rm "$JOBSEEKER_CONNECTORS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_EMAIL_METRICS_VOLUME" ]; then docker volume rm "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DATA_ASSETS_VOLUME" ]; then docker volume rm "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null 2>&1 || true; fi; if [ -n "$JOBSEEKER_DOCKER_BUILT_IMAGE" ]; then docker image rm "$JOBSEEKER_DOCKER_BUILT_IMAGE" >/dev/null 2>&1 || true; fi; }';
           $lines[] = 'trap jobseeker_python_docker_cleanup EXIT';
           $lines[] = 'rm -rf "$JOBSEEKER_DOCKER_CONTEXT"';
           $lines[] = 'mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/source" "$JOBSEEKER_DOCKER_CONTEXT/jobseeker-sdk"';
@@ -537,6 +641,8 @@ trait JobCreationExecutionTrait
           // Editor virtual environments and caches are local development
           // state. Never stream them into the disposable Jenkins container.
           $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type d \( -name .git -o -name .venv -o -name venv -o -name __pycache__ -o -name .pytest_cache -o -name .mypy_cache -o -name .ruff_cache \) -prune -exec rm -rf {} +';
+          // The editor's connector session stays in the editor.
+          $lines[] = 'find "$JOBSEEKER_DOCKER_CONTEXT/source" -type f -name .env.jobseeker -delete';
           // A job folder's project code in shared/ travels with it and is
           // importable in the container as it is on the agent (`shared.x`).
           $lines[] = 'if [ -n "${JOBSEEKER_PROJECT_ROOT:-}" ] && [ -d "$JOBSEEKER_PROJECT_ROOT/shared" ]; then mkdir -p "$JOBSEEKER_DOCKER_CONTEXT/project" && cp -R "$JOBSEEKER_PROJECT_ROOT/shared" "$JOBSEEKER_DOCKER_CONTEXT/project/shared" && find "$JOBSEEKER_DOCKER_CONTEXT/project" -type d \\( -name .git -o -name __pycache__ \\) -prune -exec rm -rf {} +; fi';
@@ -553,10 +659,17 @@ trait JobCreationExecutionTrait
           $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/Dockerfile"; fi';
           $lines[] = 'if [ -f "$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile" ]; then JOBSEEKER_DOCKERFILE="$JOBSEEKER_DOCKER_CONTEXT/source/$JOBSEEKER_DOCKER_SCRIPT_DIR/Dockerfile"; fi';
           $lines[] = 'JOBSEEKER_DOCKER_RUN_IMAGE="$JOBSEEKER_DOCKER_IMAGE"';
-          $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then printf "%s\n" "[JobSeeker] Docker image build"; JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILT_IMAGE="$JOBSEEKER_DOCKER_RUN_IMAGE"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; DOCKER_BUILDKIT=1 docker build --network host --pull -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
+          $lines[] = 'if [ -n "$JOBSEEKER_DOCKERFILE" ]; then printf "%s\n" "[JobSeeker] Docker image build"; JOBSEEKER_DOCKER_TAG="$(printf "%s" "${JOB_NAME:-job}-${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"; if [ -z "$JOBSEEKER_DOCKER_TAG" ]; then JOBSEEKER_DOCKER_TAG="manual"; fi; JOBSEEKER_DOCKER_RUN_IMAGE="jobseeker-python-custom:$JOBSEEKER_DOCKER_TAG"; JOBSEEKER_DOCKER_BUILT_IMAGE="$JOBSEEKER_DOCKER_RUN_IMAGE"; JOBSEEKER_DOCKER_BUILD_CONTEXT="$(dirname "$JOBSEEKER_DOCKERFILE")"; JOBSEEKER_DOCKER_PULL="--pull"; if grep -Eiq "^[[:space:]]*FROM[[:space:]]+(--platform=[^[:space:]]+[[:space:]]+)?jobseeker-runtime/" "$JOBSEEKER_DOCKERFILE"; then JOBSEEKER_DOCKER_PULL=""; echo "Building FROM a JobSeeker workspace runtime, which exists only in this job runtime: base images are not pulled."; fi; DOCKER_BUILDKIT=1 docker build --network host $JOBSEEKER_DOCKER_PULL -t "$JOBSEEKER_DOCKER_RUN_IMAGE" -f "$JOBSEEKER_DOCKERFILE" "$JOBSEEKER_DOCKER_BUILD_CONTEXT"; fi';
           $lines[] = 'JOBSEEKER_EMAIL_METRICS_VOLUME="$(printf "jobseeker-email-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
           $lines[] = 'docker volume create "$JOBSEEKER_EMAIL_METRICS_VOLUME" >/dev/null';
           $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "chmod 0777 /jobseeker-email"';
+          if ($notebook) {
+            // The executed notebook comes back out of the container through a
+            // volume of its own, into the published run folder.
+            $lines[] = 'JOBSEEKER_NOTEBOOK_VOLUME="$(printf "jobseeker-notebook-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
+            $lines[] = 'docker volume create "$JOBSEEKER_NOTEBOOK_VOLUME" >/dev/null';
+            $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_NOTEBOOK_VOLUME:/jobseeker-notebook" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "chmod 0777 /jobseeker-notebook"';
+          }
           $lines[] = 'mkdir -p "$JOBSEEKER_REPOSITORY_ROOT/data-assets"';
           $lines[] = 'JOBSEEKER_DATA_ASSETS_VOLUME="$(printf "jobseeker-assets-%s-%s" "${JOB_NAME:-job}" "${BUILD_NUMBER:-0}" | tr "[:upper:]/ " "[:lower:]--" | tr -cd "a-z0-9_.-" | cut -c1-120)"';
           $lines[] = 'docker volume create "$JOBSEEKER_DATA_ASSETS_VOLUME" >/dev/null';
@@ -570,6 +683,11 @@ trait JobCreationExecutionTrait
           $lines[] = '  -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email" \\';
           $lines[] = '  -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" \\';
           $lines[] = '  -v "$JOBSEEKER_CONNECTORS_VOLUME:/run/jobseeker-connectors:ro" \\';
+          if ($notebook) {
+            $lines[] = '  -v "$JOBSEEKER_NOTEBOOK_VOLUME:/jobseeker-notebook" \\';
+            $lines[] = '  -e JOBSEEKER_NOTEBOOK_SPEC -e JOBSEEKER_NOTEBOOK_CELL_TIMEOUT -e JOBSEEKER_NOTEBOOK_ALLOW_ERRORS \\';
+            $lines[] = '  -e JOBSEEKER_NOTEBOOK_TMF -e JOBSEEKER_NOTEBOOK_PARAMETERS -e JOBSEEKER_NOTEBOOK_PUBLISHED \\';
+          }
           $lines[] = '  -e "JOBSEEKER_ENTRYPOINT=$JOBSEEKER_DOCKER_ENTRYPOINT" \\';
           $lines[] = '  -e JOBSEEKER_EMAIL_METRICS_FILE=/jobseeker-email/jobseeker-email-metrics.properties \\';
           $lines[] = '  -e JOBSEEKER_REPOSITORY_ROOT=/jobseeker-repository \\';
@@ -577,6 +695,7 @@ trait JobCreationExecutionTrait
           $lines[] = '  -e JOBSEEKER_CONNECTORS_DIR=/run/jobseeker-connectors \\';
           $lines[] = '  -e JOBSEEKER_CONNECTOR_HELPER=/run/jobseeker-connectors/jobseeker-connector \\';
           $lines[] = '  -e JOBSEEKER_ENVIRONMENT -e JOBSEEKER_JOB_NAME -e JOBSEEKER_DATA_ASSET_JOB \\';
+          $lines[] = '  -e JOBSEEKER_PROJECT_ID -e JOBSEEKER_PROJECT_NAME \\';
           $lines = array_merge($lines, $this->dockerContextEnvLines());
           $lines[] = '  -e JOBSEEKER_DAG_RESUME -e JOBSEEKER_DAG_TASKS -e JOBSEEKER_DAG_MAX_PARALLEL \\';
           $lines[] = '  -e JOBSEEKER_DAG_FAIL_FAST -e JOBSEEKER_DAG_STATE \\';
@@ -584,7 +703,10 @@ trait JobCreationExecutionTrait
           $lines[] = '  -e JOB_NAME -e BUILD_NUMBER -e BUILD_ID -e JOBSEEKER_CONTAINER_NAME \\';
           $lines[] = '  -e JOBSEEKER_DB_HOST -e JOBSEEKER_DB_PORT -e JOBSEEKER_DB_USER -e JOBSEEKER_DB_PASSWORD -e JOBSEEKER_DB_NAME \\';
           $lines[] = '  "$JOBSEEKER_DOCKER_RUN_IMAGE" \\';
-          $lines[] = '  sh -lc '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '').' || JOBSEEKER_DOCKER_STATUS=$?';
+          $lines[] = '  '.$this->dockerLoginShell().' '.escapeshellarg($dockerScript).' sh'.($environmentArgument !== '' ? ' '.$environmentArgument : '').' || JOBSEEKER_DOCKER_STATUS=$?';
+          if ($notebook) {
+            $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_NOTEBOOK_VOLUME:/jobseeker-notebook:ro" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c "tar -C /jobseeker-notebook -cf - ." | (umask 027; tar -C "$JOBSEEKER_NOTEBOOK_RUN_DIR" -xf -) || echo "[JobSeeker] The executed notebook could not be copied out of the container."';
+          }
           $lines[] = 'printf "%s\n" "[JobSeeker] Cleanup"';
           $lines[] = 'docker run --rm --user 0 --entrypoint cat -v "$JOBSEEKER_EMAIL_METRICS_VOLUME:/jobseeker-email:ro" "$JOBSEEKER_DOCKER_RUN_IMAGE" /jobseeker-email/jobseeker-email-metrics.properties > "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" 2>/dev/null && mv "$JOBSEEKER_EMAIL_METRICS_FILE.tmp" "$JOBSEEKER_EMAIL_METRICS_FILE" || rm -f "$JOBSEEKER_EMAIL_METRICS_FILE.tmp"';
           $lines[] = 'docker run --rm --user 0 --entrypoint sh -v "$JOBSEEKER_DATA_ASSETS_VOLUME:/jobseeker-repository" "$JOBSEEKER_DOCKER_RUN_IMAGE" -c \'rm -f /jobseeker-repository/data-assets/manifest.json; tar -C /jobseeker-repository -cf - data-assets\' | tar -C "$JOBSEEKER_REPOSITORY_ROOT" -xf -';
@@ -609,8 +731,12 @@ trait JobCreationExecutionTrait
           $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'fi';
           $lines[] = 'if [ -n "${JOBSEEKER_PROJECT_ROOT:-}" ]; then export PYTHONPATH="$PYTHONPATH:$JOBSEEKER_PROJECT_ROOT"; fi';
-          $lines[] = 'printf "%s\n" "[JobSeeker] Python execution"';
-          $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+          if ($notebook) {
+            $lines = array_merge($lines, $this->notebookRunnerLines('"$JOBSEEKER_RUN_PYTHON"', '"$WORKSPACE/.jobseeker-notebook-libs"', '"$JOBSEEKER_SCRIPT_PATH"', '"$JOBSEEKER_NOTEBOOK_RUN_DIR/$(basename "$JOBSEEKER_SCRIPT_PATH")"'));
+          } else {
+            $lines[] = 'printf "%s\n" "[JobSeeker] Python execution"';
+            $lines[] = '"$JOBSEEKER_RUN_PYTHON" -u "$JOBSEEKER_SCRIPT_PATH"'.($environmentArgument !== '' ? ' '.$environmentArgument : '');
+          }
         }
 
         return implode("\n", $lines);

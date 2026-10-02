@@ -460,6 +460,72 @@ CREATE TABLE IF NOT EXISTS `project_git_defaults` (
   CONSTRAINT `project_git_defaults_project_fk` FOREIGN KEY (`project_id`) REFERENCES `projectdetails` (`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
+-- Workspace runtimes (doc/jobseeker/Architecture/workspace-runtimes.md): the
+-- catalog of runtime recipes, their content-addressed builds, each project's
+-- choice (none means the Default editor) and the editors deployed from them.
+-- WorkspaceRuntime_model creates the same tables on existing databases.
+CREATE TABLE IF NOT EXISTS `workspace_runtimes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `runtime_key` varchar(40) COLLATE utf8_unicode_ci NOT NULL,
+  `name` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `description` varchar(500) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `kind` varchar(20) COLLATE utf8_unicode_ci NOT NULL,
+  `spec_json` longtext COLLATE utf8_unicode_ci NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `workspace_runtimes_key` (`runtime_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `workspace_runtime_builds` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `build_hash` char(12) COLLATE utf8_unicode_ci NOT NULL,
+  `image_key` varchar(40) COLLATE utf8_unicode_ci NOT NULL,
+  `runtime_image` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `ide_image` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `status` varchar(20) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'building',
+  `message` varchar(2000) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `started_by` int(11) NOT NULL DEFAULT 0,
+  `started_at` datetime NOT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `workspace_runtime_builds_hash` (`build_hash`),
+  KEY `workspace_runtime_builds_key` (`image_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `project_workspace_runtimes` (
+  `project_id` int(11) NOT NULL,
+  `runtime_key` varchar(40) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'default',
+  `isolation` varchar(10) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'user',
+  `cpus` decimal(5,2) NOT NULL DEFAULT 2.00,
+  `memory_mb` int(11) NOT NULL DEFAULT 4096,
+  `updated_by` int(11) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`project_id`),
+  CONSTRAINT `project_workspace_runtimes_project_fk` FOREIGN KEY (`project_id`) REFERENCES `projectdetails` (`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `workspace_runtime_instances` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `project_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL DEFAULT 0,
+  `container_name` varchar(100) COLLATE utf8_unicode_ci NOT NULL,
+  `port` int(11) NOT NULL,
+  `token_salt` char(32) COLLATE utf8_unicode_ci NOT NULL,
+  `runtime_key` varchar(40) COLLATE utf8_unicode_ci NOT NULL,
+  `image` varchar(255) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `spec_hash` char(12) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `created_at` datetime NOT NULL,
+  `last_opened_at` datetime DEFAULT NULL,
+  `last_opened_by` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `workspace_runtime_instances_owner` (`project_id`,`user_id`),
+  UNIQUE KEY `workspace_runtime_instances_name` (`container_name`),
+  UNIQUE KEY `workspace_runtime_instances_port` (`port`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
 -- Copiando dados para a tabela jobseeker.projectdetails: ~0 rows (aproximadamente)
 /*!40000 ALTER TABLE `projectdetails` DISABLE KEYS */;
 /*!40000 ALTER TABLE `projectdetails` ENABLE KEYS */;
@@ -564,6 +630,31 @@ CREATE TABLE IF NOT EXISTS `smtp_settings` (
 INSERT INTO `smtp_settings` (`name`, `smtp_host`, `smtp_port`, `username`, `password`, `ssl`, `is_enabled`, `is_default`, `reply_to`, `creation_date`, `owner`, `description`) VALUES
   ('Local Mailpit', 'mailpit', 1025, '', '', 0, 1, 1, 'jobseeker@local.test', CURRENT_TIMESTAMP(6), 'System', 'Local test inbox; captures Jenkins emails in Mailpit and does not deliver to external mailboxes.');
 /*!40000 ALTER TABLE `smtp_settings` ENABLE KEYS */;
+
+-- Append-only application activity trail. Request secrets are redacted by the
+-- application before request_data is stored; only administrators can view it.
+CREATE TABLE IF NOT EXISTS `audit_log` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `actor_user_id` int(11) NOT NULL,
+  `actor_name` varchar(128) COLLATE utf8_unicode_ci NOT NULL,
+  `actor_role` varchar(50) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `operation` varchar(20) COLLATE utf8_unicode_ci NOT NULL,
+  `action` varchar(190) COLLATE utf8_unicode_ci NOT NULL,
+  `http_method` varchar(10) COLLATE utf8_unicode_ci NOT NULL,
+  `request_uri` varchar(2048) COLLATE utf8_unicode_ci NOT NULL,
+  `request_data` longtext COLLATE utf8_unicode_ci DEFAULT NULL,
+  `ip_address` varchar(45) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `user_agent` varchar(512) COLLATE utf8_unicode_ci NOT NULL DEFAULT '',
+  `status_code` smallint(5) unsigned NOT NULL DEFAULT 200,
+  `outcome` varchar(20) COLLATE utf8_unicode_ci NOT NULL,
+  `duration_ms` int(10) unsigned NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `audit_log_created` (`created_at`),
+  KEY `audit_log_actor` (`actor_user_id`,`created_at`),
+  KEY `audit_log_action` (`action`,`created_at`),
+  KEY `audit_log_outcome` (`outcome`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Copiando estrutura para tabela jobseeker.tbl_groups
 CREATE TABLE IF NOT EXISTS `tbl_groups` (
