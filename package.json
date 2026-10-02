@@ -68,7 +68,7 @@
   },
   "dependencies": {
     "alertifyjs": "1.14.0",
-    "animate.css": "3.7.2",
+    "animate.css": "4.1.1",
     "chart.js": "2.9.4",
     "ckeditor4": "4.25.2",
     "datatables.net": "3.1.2",
