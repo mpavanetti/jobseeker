@@ -49,6 +49,8 @@ JobSeeker supports Python, Apache Hop, Talend, shell, Docker, and other Jenkins-
 - Publish environment-aware Data Assets behind stable `jobseeker://` URIs for Python, shell, Talend, and Docker jobs.
 - Resolve named ETL connectors by environment and job scope from encrypted local values, worker variables, Azure Key Vault, or AWS Secrets Manager.
 - Open inline Docker Python jobs as full projects in the bundled OpenVSCode Server with Poetry, uv, Ruff, mypy, BasedPyright, pytest, coverage, and debugpy.
+- Give each project its own workspace runtime, a dev container: a Python version with packages, a Conda environment, any Dockerfile, the project's `devcontainer.json` with its features, or one of 18 templates for data engineering, streaming, dashboards, APIs, ML, LLM apps, Spark, geospatial and cloud work. It opens as a VS Code editor of its own, just for you or shared by the team, the project's Docker jobs run the same image, and any runtime downloads as a `.devcontainer` for VS Code on your machine ([details](doc/jobseeker/Architecture/workspace-runtimes.md)).
+- Schedule Jupyter notebooks as jobs: a project's `.ipynb` runs top to bottom in a kernel with papermill-style parameters (literal values, Context values or environment variables, overridable per run), Transaction Monitoring per run, and a build log drawn as the executed notebook with its charts and tables ([details](doc/Python/README.MD#notebooks-as-jobs)).
 - Gate Python execution with pytest and keep test output separate from application output in the Jenkins console.
 
 ### Monitoring and analytics
@@ -129,8 +131,9 @@ JobSeeker | http://localhost/
 Jenkins | http://localhost:8080/login
 Mailpit | http://localhost:8025/
 OpenVSCode Server | http://localhost:3000/ (normally opened from a job's **Code** action)
+Workspace gateway | http://localhost:3001/ (editors of projects on a workspace runtime, opened from **VS Code** in the sidebar; HTTPS once `scripts/workspace-gateway-certificate.sh` has made its certificate, which VS Code's notebooks need when the gateway is reached by name)
 
-Use `JOBSEEKER_HTTP_PORT`, `JENKINS_HTTP_PORT`, `JOBSEEKER_MAILPIT_HTTP_PORT`, or `JOBSEEKER_OPENVSCODE_PORT` in `.env` when a default port is already in use.
+Use `JOBSEEKER_HTTP_PORT`, `JENKINS_HTTP_PORT`, `JOBSEEKER_MAILPIT_HTTP_PORT`, `JOBSEEKER_OPENVSCODE_PORT`, or `JOBSEEKER_WORKSPACE_GATEWAY_PORT` in `.env` when a default port is already in use.
 
 ### Optional Apache Hop
 
@@ -219,6 +222,9 @@ Variable | Purpose
 `JOBSEEKER_OPENVSCODE_TOKEN` | Protects the browser-based Python workspace.
 `JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES` | Stops an unused editor automatically; use `0` to keep it running.
 `JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED` | Adds the optional Continue local-AI extension to the OpenVSCode image.
+`JOBSEEKER_WORKSPACE_RUNTIMES_ENABLED` | Offers workspace runtimes in the VS Code launcher and on the Runtimes page (default `true`; needs the Docker job runtime).
+`JOBSEEKER_WORKSPACE_GATEWAY_PORT` / `JOBSEEKER_WORKSPACE_GATEWAY_PUBLIC_URL` | Where browsers reach runtime editors (default port `3001`), and its public URL behind a reverse proxy.
+`JOBSEEKER_WORKSPACE_IDE_PORTS` | Ports runtime editors listen on inside the job runtime (default `3100-3199`, one per deployment).
 `JOBSEEKER_TMF_RESULT_LIMIT` | Bounds the newest TMF rows rendered in one response (default 1,000, maximum 10,000).
 `JOBSEEKER_HOP_ENABLED` | Enables the optional Apache Hop UI and integration (default `true`).
 `JOBSEEKER_HOP_IMAGE` | Container image for Hop jobs. Empty uses the public `apache/hop` image, which installs missing JDBC drivers per run; point it at `jobseeker-hop:local` to bake them in.
@@ -261,6 +267,7 @@ MariaDB | Stores users, settings, contexts, pipeline definitions, TMF records, a
 Jenkins | Schedules jobs and pipelines, retains history and console output, and can create disposable Kubernetes agents for execution.
 Docker runtime | Builds and runs isolated Docker workloads without exposing its daemon directly to the application.
 OpenVSCode Server | Provides full project workspaces for inline Docker Python jobs.
+Workspace runtimes | Build project runtime images on the Docker job runtime and run each project's VS Code editor from them, behind the workspace gateway.
 Mailpit | Captures local email notifications during development and evaluation.
 
 Browser requests to Jenkins pass through an authenticated server-side proxy. Jenkins credentials and connector secrets are not sent to the browser. Pipeline definitions compile to hidden Jenkins Pipeline jobs, so Jenkins remains the durable scheduler and execution engine.
@@ -291,6 +298,7 @@ ETL connectors | [doc/jobseeker/ETL/connectors/README.md](doc/jobseeker/ETL/conn
 Transaction Monitoring Framework | [doc/jobseeker/TransactionMonitoring/README.md](doc/jobseeker/TransactionMonitoring/README.md)
 Insight Studio and connected BI | [doc/jobseeker/DataVisualization/README.md](doc/jobseeker/DataVisualization/README.md)
 Python ETL | [doc/Python/README.MD](doc/Python/README.MD)
+Workspace runtimes and dev containers | [doc/jobseeker/Architecture/workspace-runtimes.md](doc/jobseeker/Architecture/workspace-runtimes.md)
 Lightweight runtime assessment | [doc/jobseeker/Architecture/lightweight-runtime.md](doc/jobseeker/Architecture/lightweight-runtime.md)
 Kubernetes deployment and scaling | [deploy/kubernetes/README.md](deploy/kubernetes/README.md)
 Talend ETL | [doc/Talend/README.md](doc/Talend/README.md)
