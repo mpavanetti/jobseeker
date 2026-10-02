@@ -35,3 +35,6 @@ graphify-out/
 
 # Playwright MCP snapshots and screenshots
 .playwright-mcp/
+
+# Workspace runtime build contexts and logs.
+application/cache/workspace_runtime_builds/

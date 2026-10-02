@@ -1,0 +1,69 @@
+#!/bin/sh
+# Fetches the dev container features a project's devcontainer.json lists,
+# while JobSeeker builds its editor image (a build stage with curl, jq and
+# tar). Features are OCI artifacts: a tarball with install.sh and
+# devcontainer-feature.json. Usage:
+#   jobseeker-features FEATURES_JSON TARGET
+# FEATURES_JSON is [{"ref": "ghcr.io/devcontainers/features/node:1",
+# "options": {"version": "20"}}, ...], in install order. Each feature lands in
+# TARGET/NN/ with:
+#   install.sh ...        the feature itself
+#   jobseeker.env         its options as environment variables, defaults first
+#   container.env         its containerEnv, sourced by the editor at start
+#   extensions            VS Code extensions it recommends
+#   ref                   what it is
+set -eu
+
+features=$1
+target=$2
+accept='application/vnd.oci.image.manifest.v1+json'
+mkdir -p "$target"
+
+count=$(jq 'length' "$features")
+index=0
+while [ "$index" -lt "$count" ]; do
+  ref=$(jq -r ".[$index].ref" "$features")
+  directory=$(printf '%s/%02d' "$target" "$index")
+  mkdir -p "$directory"
+  registry=${ref%%/*}
+  rest=${ref#*/}
+  case "$rest" in
+    *@*) repository=${rest%@*}; reference=${rest#*@} ;;
+    *:*) repository=${rest%:*}; reference=${rest##*:} ;;
+    *) repository=$rest; reference=latest ;;
+  esac
+  echo "Fetching dev container feature $ref"
+
+  # Anonymous pull token, from the registry's own challenge (ghcr.io, Docker Hub, ...).
+  token=
+  challenge=$(curl -sS -o /dev/null -D - -H "Accept: $accept" "https://$registry/v2/$repository/manifests/$reference" \
+    | tr -d '\r' | sed -n 's/^[Ww][Ww][Ww]-[Aa]uthenticate: *Bearer *//p')
+  if [ -n "$challenge" ]; then
+    realm=$(printf '%s' "$challenge" | sed -n 's/.*realm="\([^"]*\)".*/\1/p')
+    service=$(printf '%s' "$challenge" | sed -n 's/.*service="\([^"]*\)".*/\1/p')
+    token=$(curl -fsSL -G "$realm" --data-urlencode "service=$service" --data-urlencode "scope=repository:$repository:pull" | jq -r '.token // .access_token')
+  fi
+  get() {
+    if [ -n "$token" ]; then curl -fsSL -H "Authorization: Bearer $token" "$@"; else curl -fsSL "$@"; fi
+  }
+  layer=$(get -H "Accept: $accept" "https://$registry/v2/$repository/manifests/$reference" | jq -r '.layers[0].digest')
+  get -o "$directory/feature.tar" "https://$registry/v2/$repository/blobs/$layer"
+  tar -xf "$directory/feature.tar" -C "$directory"
+  rm -f "$directory/feature.tar"
+  [ -f "$directory/install.sh" ] || { echo "$ref has no install.sh." >&2; exit 1; }
+
+  printf '%s\n' "$ref" > "$directory/ref"
+  metadata="$directory/devcontainer-feature.json"
+  [ -f "$metadata" ] || echo '{}' > "$metadata"
+  # Option ids become variable names as the dev container spec names them.
+  jq -r --argjson chosen "$(jq -c ".[$index].options // {}" "$features")" '
+    ((.options // {}) | with_entries(.value = .value.default) | with_entries(select(.value != null))) + $chosen
+    | to_entries[]
+    | "export \(.key | ascii_upcase | gsub("[^A-Z0-9_]"; "_") | sub("^[0-9_]+"; "_"))=\(.value | tostring | @sh)"
+  ' "$metadata" > "$directory/jobseeker.env"
+  jq -r '(.containerEnv // {}) | to_entries[]
+    | select(.key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+    | "export \(.key)=\"\(.value | tostring | gsub("\\\\"; "\\\\\\\\") | gsub("\""; "\\\""))\""' "$metadata" > "$directory/container.env"
+  jq -r '(.customizations.vscode.extensions // [])[]' "$metadata" > "$directory/extensions"
+  index=$((index + 1))
+done

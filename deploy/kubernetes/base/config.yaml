@@ -25,6 +25,9 @@ data:
   JOBSEEKER_OPENVSCODE_PUBLIC_URL: https://vscode.jobseeker.example/
   JOBSEEKER_OPENVSCODE_WORKSPACE: /home/workspace
   JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES: "0"
+  # Workspace runtimes build and run editors on a Docker engine, which this
+  # base does not provide (doc/jobseeker/Architecture/workspace-runtimes.md).
+  JOBSEEKER_WORKSPACE_RUNTIMES_ENABLED: "false"
   # Interactive editor sessions are intentionally limited to the development
   # connector catalog. Leave empty to disable connector access in OpenVSCode.
   JOBSEEKER_OPENVSCODE_CONNECTOR_ENVIRONMENT: DEV

@@ -1,0 +1,5 @@
+# Certificates and keys made by scripts/workspace-gateway-certificate.sh stay
+# on this machine.
+*
+!.gitignore
+!README.md

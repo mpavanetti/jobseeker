@@ -1,0 +1,142 @@
+#!/bin/sh
+# Entrypoint of a workspace runtime deployment: the runtime's image with
+# /opt/jobseeker-ide on top (see docker/workspace_toolkit_image). JobSeeker
+# creates the container with:
+#   JOBSEEKER_IDE_PORT        port to listen on (the job runtime's network)
+#   JOBSEEKER_IDE_BASE_PATH   path the workspace gateway serves it under
+#   JOBSEEKER_IDE_TOKEN       this deployment's connection token
+#   JOBSEEKER_IDE_FOLDER      the project folder, for dev container commands
+#   JOBSEEKER_IDE_IDLE_MINUTES  stop after this long without a browser; 0 never
+#   JOBSEEKER_IDE_SPEC        identity of this deployment's configuration
+#   JOBSEEKER_IDE_POST_CREATE / _POST_START / _MACHINE_SETTINGS  from devcontainer.json
+set -eu
+
+root=/opt/jobseeker-ide
+server="$root/server/bin/openvscode-server"
+port="${JOBSEEKER_IDE_PORT:?JOBSEEKER_IDE_PORT is required}"
+base_path="${JOBSEEKER_IDE_BASE_PATH:-/}"
+home="${HOME:-/home/workspace}"
+state="$home/.openvscode-server"
+folder="${JOBSEEKER_IDE_FOLDER:-$home}"
+
+mkdir -p "$state/data/Machine" "$home/.jobseeker"
+token_file="$state/connection-token"
+(umask 077 && printf '%s' "${JOBSEEKER_IDE_TOKEN:?JOBSEEKER_IDE_TOKEN is required}" > "$token_file")
+unset JOBSEEKER_IDE_TOKEN
+
+# The environment dev container features declare (PATH for Node.js, ...).
+if [ -f /etc/jobseeker-features.env ]; then
+  . /etc/jobseeker-features.env
+fi
+
+# Workspace bootstrap (.vscode/bootstrap-python.sh) builds the project's .venv
+# from the runtime's own Python, seeing what the image preinstalled.
+if [ -z "${JOBSEEKER_WORKSPACE_PYTHON:-}" ]; then
+  JOBSEEKER_WORKSPACE_PYTHON="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+fi
+export JOBSEEKER_WORKSPACE_PYTHON
+export JOBSEEKER_VENV_SYSTEM_SITE_PACKAGES="${JOBSEEKER_VENV_SYSTEM_SITE_PACKAGES:-1}"
+case ":$PATH:" in
+  *":$root/bin:"*) ;;
+  *) export PATH="$PATH:$root/bin" ;;
+esac
+export SHELL="${SHELL:-$(sed -n "s#^[^:]*:[^:]*:$(id -u):[^:]*:[^:]*:[^:]*:##p" /etc/passwd | head -n 1)}"
+[ -n "$SHELL" ] || export SHELL=/bin/sh
+
+if [ -n "${JOBSEEKER_IDE_MACHINE_SETTINGS:-}" ]; then
+  printf '%s\n' "$JOBSEEKER_IDE_MACHINE_SETTINGS" > "$state/data/Machine/settings.json"
+fi
+
+run_hook() {
+  name=$1
+  command=$2
+  [ -n "$command" ] || return 0
+  (
+    cd "$folder" 2>/dev/null || cd "$home"
+    echo "[JobSeeker] $name: $command"
+    sh -c "$command"
+    echo "[JobSeeker] $name finished with status $?"
+  ) >> "$home/.jobseeker/$name.log" 2>&1 &
+}
+
+spec="${JOBSEEKER_IDE_SPEC:-default}"
+if [ -n "${JOBSEEKER_IDE_POST_CREATE:-}" ] && [ ! -f "$home/.jobseeker/post-create-$spec" ]; then
+  touch "$home/.jobseeker/post-create-$spec"
+  run_hook post-create "$JOBSEEKER_IDE_POST_CREATE"
+fi
+run_hook post-start "${JOBSEEKER_IDE_POST_START:-}"
+
+# A deployment sees only its own project, whose folder-open task builds .venv.
+# In Restricted Mode that task, the Jupyter extension and debugging are off,
+# so notebooks cannot find a kernel; the project is trusted instead.
+set -- "$server" --host 0.0.0.0 --port "$port" --server-base-path "$base_path" \
+  --disable-workspace-trust \
+  --connection-token-file "$token_file" \
+  --extensions-dir "$root/extensions" \
+  --user-data-dir "$state/data" \
+  --server-data-dir "$state"
+
+idle_minutes="${JOBSEEKER_IDE_IDLE_MINUTES:-30}"
+case "$idle_minutes" in ''|*[!0-9]*) idle_minutes=30 ;; esac
+[ "$idle_minutes" -le 1440 ] || idle_minutes=1440
+if [ "$idle_minutes" -gt 0 ] && ! command -v awk >/dev/null 2>&1; then
+  echo "[JobSeeker IDE] awk is missing, so idle editors cannot be detected; idle shutdown is disabled." >&2
+  idle_minutes=0
+fi
+if [ "$idle_minutes" -eq 0 ]; then
+  echo "[JobSeeker IDE] Listening on $port$base_path; idle shutdown is disabled."
+  exec "$@"
+fi
+
+# Browsers keep a connection to the port while an editor is open. Loopback
+# peers are probes, never editors. Editors share the job runtime's network, so
+# only this deployment's port counts.
+port_hex=$(printf '%04X' "$port")
+has_connected_editor()
+{
+  awk -v port=":$port_hex" '
+    substr($2, length($2) - 4) == port && $4 == "01" {
+      split($3, remote, ":")
+      address = remote[1]
+      if (address != "0100007F" &&
+          address != "00000000000000000000000001000000" &&
+          address != "00000000000000000000000000000000") {
+        connected = 1
+      }
+    }
+    END { exit connected ? 0 : 1 }
+  ' /proc/net/tcp /proc/net/tcp6 2>/dev/null
+}
+
+"$@" &
+server_pid=$!
+idle_stop=0
+stopping=0
+last_connected_at=$(date +%s)
+# A stop from JobSeeker or Docker is not a crash: exit 0 so it is not reported as one.
+trap 'stopping=1; kill -TERM "$server_pid" 2>/dev/null || true' TERM INT HUP
+echo "[JobSeeker IDE] Listening on $port$base_path; stops after $idle_minutes minute(s) without a connected editor."
+
+while kill -0 "$server_pid" 2>/dev/null; do
+  now=$(date +%s)
+  if has_connected_editor; then
+    last_connected_at=$now
+  elif [ $((now - last_connected_at)) -ge $((idle_minutes * 60)) ]; then
+    idle_stop=1
+    echo "[JobSeeker IDE] No editor connected for $idle_minutes minute(s); stopping."
+    kill -TERM "$server_pid" 2>/dev/null || true
+    break
+  fi
+  # In the background so a stop signal is handled at once, not after the sleep.
+  sleep 10 &
+  wait $! 2>/dev/null || true
+done
+
+set +e
+wait "$server_pid"
+status=$?
+set -e
+if [ "$idle_stop" -eq 1 ] || [ "$stopping" -eq 1 ]; then
+  exit 0
+fi
+exit "$status"

@@ -1,0 +1,43 @@
+# The editor half of every workspace runtime (doc/jobseeker/Architecture/workspace-runtimes.md).
+#
+# Runtime images stay what their recipe builds, so jobs can run them as they
+# are. Their IDE variant copies /opt/jobseeker-ide from this image: the
+# OpenVSCode server, the Python extensions JobSeeker workspaces recommend, uv,
+# and the Git helpers workspaces use. The `workspace-toolkit` Compose service
+# builds it on the job runtime's Docker Engine, where runtimes are built.
+ARG OPENVSCODE_VERSION=1.105.1
+FROM ghcr.io/astral-sh/uv:0.12.6 AS uv
+
+FROM gitpod/openvscode-server:${OPENVSCODE_VERSION} AS toolkit
+USER root
+COPY --from=uv /uv /uvx /opt/jobseeker-ide/bin/
+# The Mypy extension stays on 2026.4.0: 2026.6.0 on Open VSX ships without its
+# vscode_common_python_lsp module, so its language server never starts.
+RUN set -eux; \
+	cp -a "${OPENVSCODE_SERVER_ROOT}" /opt/jobseeker-ide/server; \
+	mkdir -p /opt/jobseeker-ide/extensions /tmp/jobseeker-ide-install; \
+	for extension in \
+		ms-python.python@2026.4.0 \
+		ms-python.debugpy@2026.6.0 \
+		charliermarsh.ruff@2026.74.0 \
+		ms-python.mypy-type-checker@2026.4.0 \
+		detachhead.basedpyright@1.39.10; do \
+		/opt/jobseeker-ide/server/bin/openvscode-server \
+			--extensions-dir /opt/jobseeker-ide/extensions \
+			--user-data-dir /tmp/jobseeker-ide-install \
+			--install-extension "$extension"; \
+	done; \
+	/opt/jobseeker-ide/server/bin/openvscode-server \
+		--extensions-dir /opt/jobseeker-ide/extensions \
+		--user-data-dir /tmp/jobseeker-ide-install \
+		--uninstall-extension ms-python.vscode-python-envs; \
+	# Uninstalling only marks the folder; drop it now instead of at every start.
+	rm -rf /opt/jobseeker-ide/extensions/ms-python.vscode-python-envs-* /opt/jobseeker-ide/extensions/.obsolete /tmp/jobseeker-ide-install
+
+COPY jenkins/jobseeker-git openvscode/jobseeker-git-credential openvscode/jobseeker-git-ssh \
+	workspace_runtime/jobseeker-ide workspace_runtime/jobseeker-ide-setup workspace_runtime/jobseeker-features /opt/jobseeker-ide/bin/
+RUN chmod 0755 /opt/jobseeker-ide/bin/* && chmod -R a+rX /opt/jobseeker-ide
+
+FROM scratch
+LABEL org.jobseeker.workspace-toolkit="1"
+COPY --from=toolkit /opt/jobseeker-ide /opt/jobseeker-ide

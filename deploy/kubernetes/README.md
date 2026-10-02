@@ -190,6 +190,13 @@ OpenVSCode is managed as a Kubernetes Deployment, so JobSeeker checks its
 Service health instead of trying to start or stop a Docker container. Keep it
 at one replica unless editor workspaces are assigned per user.
 
+Workspace runtimes (per-project editors built from a Python, Conda, Dockerfile
+or `devcontainer.json` recipe) need a Docker engine to build and run them, so
+the base sets `JOBSEEKER_WORKSPACE_RUNTIMES_ENABLED=false` and every project
+opens in the shared editor. The planned Kubernetes backend (in-cluster image
+builds, one Pod and Service per deployment) is described in
+[Workspace runtimes](../../doc/jobseeker/Architecture/workspace-runtimes.md#kubernetes).
+
 ## Operations
 
 Useful checks:

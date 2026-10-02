@@ -1,5 +1,11 @@
 FROM nginx:1.29-alpine
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/workspace-gateway.conf /etc/nginx/conf.d/workspace-gateway.conf
+# The gateway listens on HTTP until a certificate is mounted; the start script
+# switches it to HTTPS then.
+COPY docker/nginx/40-jobseeker-workspace-gateway-tls.sh /docker-entrypoint.d/40-jobseeker-workspace-gateway-tls.sh
+RUN chmod 0755 /docker-entrypoint.d/40-jobseeker-workspace-gateway-tls.sh \
+	&& echo 'listen 0.0.0.0:8081;' > /etc/nginx/conf.d/workspace-gateway-listen.inc
 
 RUN addgroup --gid 1000 mygroup
 RUN adduser  --system --no-create-home --disabled-password --uid 1000 --ingroup mygroup myuser

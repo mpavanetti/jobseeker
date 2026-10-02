@@ -74,7 +74,7 @@ RUN set -eux; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \
-		--install-extension ms-python.mypy-type-checker@2026.6.0; \
+		--install-extension ms-python.mypy-type-checker@2026.4.0; \
 	"${OPENVSCODE_SERVER_ROOT}/bin/openvscode-server" \
 		--extensions-dir /home/workspace/.openvscode-server/extensions \
 		--user-data-dir /home/workspace/.openvscode-server/data \
