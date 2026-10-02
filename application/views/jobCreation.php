@@ -476,6 +476,41 @@
   .project-job-state.is-ok { color:#2e7d32; }
   .project-job-state.is-warning { color:#b26a00; }
   .project-job-picker-note { color:#4d5b69; flex-basis:100%; font-size:12px; margin:2px 0 0; }
+  .project-job-chip.is-notebook strong .fa { color:#e46e00; }
+
+  /* Notebook entry files: parameters and options of the run. */
+  .python-notebook-panel { background:linear-gradient(180deg, #fffaf3 0, #fff 64px); border:1px solid #f0d9b5; border-radius:8px; margin:0 0 15px; padding:12px 14px; }
+  .python-notebook-head { align-items:flex-start; display:grid; gap:10px; grid-template-columns:auto minmax(0, 1fr); }
+  .python-notebook-head > div { display:flex; flex-direction:column; gap:2px; }
+  .python-notebook-head > div span { color:#6b5b45; font-size:12px; }
+  .python-notebook-icon { align-items:center; background:#f37626; border-radius:8px; color:#fff; display:inline-flex; font-size:16px; height:34px; justify-content:center; width:34px; }
+  .python-notebook-facts { display:flex; flex-wrap:wrap; gap:6px 12px; grid-column:2; font-size:12px; color:#6b7a89; }
+  .python-notebook-facts:empty { display:none; }
+  .python-notebook-facts .is-ok { color:#2e7d32; }
+  .python-notebook-facts .is-warning { color:#b26a00; }
+  .python-notebook-section { margin-top:12px; }
+  .python-notebook-section-head { align-items:center; display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; margin-bottom:6px; }
+  .python-notebook-section-head label { margin:0; }
+  .python-notebook-actions { display:flex; flex-wrap:wrap; gap:6px; }
+  .python-notebook-parameters { display:flex; flex-direction:column; gap:6px; }
+  .python-notebook-parameter { align-items:center; display:grid; gap:6px; grid-template-columns:minmax(110px, 1fr) 130px minmax(140px, 2fr) 30px; }
+  .python-notebook-parameter .python-notebook-name { font-family:Menlo, Consolas, monospace; }
+  .python-notebook-parameter[data-source="context"] .python-notebook-value { border-color:#9ccbe6; background:#f5fbff; }
+  .python-notebook-parameter[data-source="env"] .python-notebook-value { border-color:#c9b8e8; background:#faf7ff; }
+  .python-notebook-remove { color:#9aa5b1; padding:4px 6px; }
+  .python-notebook-remove:hover { color:#dd4b39; }
+  .python-notebook-empty { border:1px dashed #e3d3bb; border-radius:6px; color:#8a7a63; font-size:12px; padding:8px 10px; }
+  .python-notebook-panel .help-block { font-size:12px; margin-bottom:0; }
+  .python-notebook-options { align-items:end; border-top:1px solid #f1e6d6; display:grid; gap:4px 18px; grid-template-columns:minmax(160px, 220px) minmax(0, 1fr); margin-top:12px; padding-top:10px; }
+  .python-notebook-options .form-group { grid-row:span 2; margin-bottom:0; }
+  .python-notebook-options .checkbox { margin:0; }
+  .python-notebook-options .checkbox label { font-size:13px; }
+  @media (max-width: 767px) {
+    .python-notebook-parameter { grid-template-columns:minmax(0, 1fr) 110px 30px; }
+    .python-notebook-parameter .python-notebook-value { grid-column:1 / span 2; }
+    .python-notebook-options { grid-template-columns:1fr; }
+    .python-notebook-options .form-group { grid-row:auto; }
+  }
 
   .linux-execution-choice {
     align-items: flex-start;
@@ -1379,6 +1414,19 @@
   .job-config-canvas #editableEmail > .col-lg-6,
   .job-config-canvas #environmentBox > .col-lg-6 {
     float: none;
+    padding-left: 0;
+    padding-right: 0;
+    width: 100%;
+  }
+
+  /* The panels sit in a column of the stack: no second gutter, so a panel
+     lines up with the option cards above it. */
+  .job-config-panel-stack > .row > [class*="col-"] {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .job-name-input-group {
     width: 100%;
   }
 
@@ -1490,7 +1538,8 @@
   #runJob .box-body,
   #environmentBox .box-body,
   #editableEmail .box-body {
-    max-height: 540px;
+    /* Long sections (Python) use the viewport rather than a small scroll box. */
+    max-height: max(540px, calc(100vh - 190px));
     overflow-y: auto;
   }
 
@@ -2294,6 +2343,7 @@
               <option value="all">All runtimes</option>
               <option value="shell">Linux shell</option>
               <option value="python">Python / JobSeeker SDK</option>
+              <option value="notebook">Jupyter notebooks</option>
             </select>
           </div>
           <div class="form-group">
@@ -2317,6 +2367,7 @@
               <option value="email_metrics">Email metrics</option>
               <option value="pipelines">Pipelines</option>
               <option value="task_dag">Task DAG</option>
+              <option value="notebooks">Jupyter notebooks</option>
               <option value="jenkins">Jenkins runtime</option>
               <option value="docker">Docker</option>
               <option value="tests">Automated tests</option>
@@ -2821,8 +2872,9 @@
                       </div>
                       <div class="col-md-12 pythonEntryPointColumn">
                         <div class="form-group" id="pythonEntryPointGroup">
-                          <label for="pythonEntryPoint" id="pythonEntryPointLabel">Entry Python File or Nested Path</label>
-                          <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" placeholder="main.py or pyjob/main.py">
+                          <label for="pythonEntryPoint" id="pythonEntryPointLabel">Entry file <small class="text-muted">script or notebook</small></label>
+                          <input type="text" class="form-control" id="pythonEntryPoint" name="pythonEntryPoint" maxlength="500" autocomplete="off" list="pythonEntryPointOptions" placeholder="main.py, pyjob/main.py or report.ipynb">
+                          <datalist id="pythonEntryPointOptions"></datalist>
                           <p class="help-block" id="pythonEntryPointHelp" style="display: none;">Path inside the job folder, such as <code>main.py</code>.</p>
                         </div>
                       </div>
@@ -2937,6 +2989,9 @@
                             <option value="python:3.12-slim">
                             <option value="python:3.11-slim">
                             <option value="python:3.10-slim">
+                            <?php foreach (isset($runtime_images) ? $runtime_images : array() as $runtimeImage) { ?>
+                            <option value="<?php echo html_escape($runtimeImage['image']); ?>" label="<?php echo html_escape($runtimeImage['name'].' runtime'); ?>">
+                            <?php } ?>
                           </datalist>
                           <input type="hidden" name="pythonUseDockerfile" value="0">
                           <div class="checkbox pythonDockerfileModeControl" style="display: none;">
@@ -2944,7 +2999,7 @@
                           </div>
                           <input type="hidden" name="pythonRunTests" value="0">
                           <div class="checkbox pythonDockerTestControl" style="display: none;">
-                            <label><input type="checkbox" id="pythonRunTests" name="pythonRunTests" value="1" checked> Run pytest before Python execution</label>
+                            <label><input type="checkbox" id="pythonRunTests" name="pythonRunTests" value="1" checked> Run pytest before <span id="pythonRunTestsTarget">Python execution</span></label>
                           </div>
                         </div>
                       </div>
@@ -2971,6 +3026,42 @@
                         </div>
                       </div>
                     </div>
+                    <div class="pythonNotebookForm python-notebook-panel" id="pythonNotebookPanel" style="display: none;">
+                      <div class="python-notebook-head">
+                        <span class="python-notebook-icon" aria-hidden="true"><i class="fa fa-book"></i></span>
+                        <div>
+                          <strong>Notebook run</strong>
+                          <span>Every cell runs top to bottom in a Jupyter kernel, like <em>Run All</em>. The first cell that raises fails the build; the log shows each cell with its output.</span>
+                        </div>
+                        <span class="python-notebook-facts" id="pythonNotebookFacts" aria-live="polite"></span>
+                      </div>
+                      <div class="python-notebook-section">
+                        <div class="python-notebook-section-head">
+                          <label>Parameters</label>
+                          <div class="python-notebook-actions">
+                            <button type="button" class="btn btn-default btn-xs" id="pythonNotebookLoadDefaults" title="List the variables of the notebook's cell tagged parameters"><i class="fa fa-magic"></i> From the notebook</button>
+                            <button type="button" class="btn btn-default btn-xs" id="pythonNotebookAddParameter"><i class="fa fa-plus"></i> Add parameter</button>
+                          </div>
+                        </div>
+                        <input type="hidden" id="pythonNotebookParameters" name="pythonNotebookParameters" value="[]">
+                        <div class="python-notebook-parameters" id="pythonNotebookParameterRows"></div>
+                        <datalist id="pythonNotebookContextKeys"></datalist>
+                        <p class="help-block">Values go into a cell tagged <code>injected-parameters</code> after the cell tagged <code>parameters</code>, as papermill does. <strong>Context</strong> reads the project's value for the job's environment when the build starts; <strong>Environment</strong> reads a variable of the build. Numbers, <code>true</code>/<code>false</code>, lists and quoted strings are typed as JSON. One run can override them with the build parameter <code>JOBSEEKER_NOTEBOOK_PARAMETERS</code>, such as <code>{"rows": 10}</code>.</p>
+                      </div>
+                      <div class="python-notebook-options">
+                        <div class="form-group">
+                          <label for="pythonNotebookCellTimeout">Cell timeout</label>
+                          <div class="input-group"><input type="number" class="form-control" id="pythonNotebookCellTimeout" name="pythonNotebookCellTimeout" min="0" max="86400" step="1" placeholder="No limit" inputmode="numeric"><span class="input-group-addon">seconds</span></div>
+                        </div>
+                        <div class="checkbox">
+                          <label><input type="checkbox" id="pythonNotebookAllowErrors" name="pythonNotebookAllowErrors" value="1"> Keep running cells after one fails <small class="text-muted">(the build still fails)</small></label>
+                        </div>
+                        <input type="hidden" id="pythonNotebookTrack" name="pythonNotebookTrack" value="1">
+                        <div class="checkbox">
+                          <label><input type="checkbox" id="pythonNotebookTrackToggle" checked> Record the run in Transaction Monitoring <small class="text-muted">(cells as records)</small></label>
+                        </div>
+                      </div>
+                    </div>
                     <div class="row pythonInlineSourceForm" style="display: none;">
                       <div class="col-md-12">
                         <div class="form-group">
@@ -2985,7 +3076,7 @@
                               <div class="python-inline-sidebar-header">
                                 <span class="python-inline-sidebar-title">Files</span>
                                 <div class="python-inline-sidebar-actions">
-                                  <button type="button" class="btn btn-xs" id="addPythonInlineFile" title="Add Python file"><i class="fa fa-file-code-o"></i></button>
+                                  <button type="button" class="btn btn-xs" id="addPythonInlineFile" title="Add Python or README file"><i class="fa fa-file-code-o"></i></button>
                                   <button type="button" class="btn btn-xs" id="addPythonInlineFolder" title="Add folder"><i class="fa fa-folder-o"></i></button>
                                 </div>
                               </div>
@@ -3009,7 +3100,7 @@
                                     <button type="button" class="btn btn-xs python-open-vscode-pill" id="openPythonInlineInVscodeWeb" title="Open this workspace in VS Code (OpenVSCode)"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path fill="currentColor" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg> VS Code</button>
                                     <button type="button" class="btn btn-xs" id="expandPythonInlineEditor" title="Expand editor"><i class="fa fa-expand"></i></button>
                                     <button type="button" class="btn btn-xs" id="applyPythonInlineTemplate" title="Insert JobSeeker template"><i class="fa fa-magic"></i></button>
-                                    <span class="linux-code-editor-meta">python</span>
+                                    <span class="linux-code-editor-meta" id="pythonInlineExtraEditorLanguage">python</span>
                                   </span>
                                 </div>
                                 <div class="linux-code-editor-body">
@@ -3078,7 +3169,7 @@
                                     </div>
                                   </div>
                                   <div class="python-lint-panel" id="pythonInlineExtraLintPanel" aria-live="polite"></div>
-                                  <div class="linux-code-editor-status"><span>Python</span><span id="pythonInlineExtraCursorPosition">Ln 1, Col 1</span><span>Spaces: 4</span><span>UTF-8</span><span>LF</span></div>
+                                  <div class="linux-code-editor-status"><span id="pythonInlineExtraEditorStatusLanguage">Python</span><span id="pythonInlineExtraCursorPosition">Ln 1, Col 1</span><span>Spaces: 4</span><span>UTF-8</span><span>LF</span></div>
                                 </div>
                               </div>
                             </div>
@@ -3127,7 +3218,7 @@
                       <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                     </div>
                     <h3 class="box-title">
-                      <b>Schedule Job</b></h3>
+                      <b>Schedule</b></h3>
                     </div>
                     <div class="box-body" style="padding: 18px;">
                       <div class="row">
@@ -3351,7 +3442,7 @@
                       <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                     </div>
                     <h3 class="box-title">
-                      <b>Enable Email Notification</b></h3>
+                      <b>Failure Email</b></h3>
                     </div><div class="box-body">
                       <div class="col-md-12">
                         <div class="form-group">
@@ -3375,9 +3466,10 @@
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                       </div>
                       <h3 class="box-title">
-                        <b>Abort the job if its stuck option</b></h3>
+                        <b>Timeout</b></h3>
                       </div>
                       <div class="box-body" style="padding: 20px;">
+                        <div class="row">
                         <div class="col-md-6">
                           <div class="form-group">
                             <label for="timeoutStrategy">Timeout Strategy</label>
@@ -3398,6 +3490,7 @@
                             <label for="timeoutMinutes">Timeout Minutes</label>
                             <input type="number" class="form-control" id="timeoutMinutes" name="timeoutMinutes" min="1"  maxlength="50" autocomplete="off">
                           </div>
+                        </div>
                         </div>
                       </div>
                     </div>
@@ -3424,7 +3517,7 @@
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                       </div>
                       <h3 class="box-title">
-                        <b>Wire job pipeline</b></h3>
+                        <b>Pipeline Wiring</b></h3>
                       </div>
                       <div class="box-body job-flow-panel">
                         <select id="jobList" name="jobList[]" multiple="multiple" style="display: none;"></select>
@@ -3503,7 +3596,7 @@
                         <button type="button" class="btn btn-box-tool" data-widget="collapse"><i class="fa fa-minus"></i></button>
                       </div>
                       <h3 class="box-title">
-                        <b>Editable email notification</b></h3>
+                        <b>Email Templates</b></h3>
                       </div>
                       <div class="box-body">
                         <div class="row">
@@ -3787,6 +3880,9 @@
       });
 
       $('#pythonInlineCode, #pythonInlineExtraCode').on('keydown', function(event) {
+        if (this.id === 'pythonInlineExtraCode' && ! /\.py$/i.test(pythonInlineActiveExtraPath)) {
+          return;
+        }
         handlePythonCodeEditorKey(event, this);
       }).on('click keyup select', function() {
         updatePythonCursorPosition(this);
@@ -4419,7 +4515,8 @@
         environments: 'Environments',
         docker: 'Docker',
         tests: 'Tests',
-        task_dag: 'Task DAG'
+        task_dag: 'Task DAG',
+        notebooks: 'Notebooks'
       };
       var selectedJobSampleId = '';
       var environmentHelper = window.JobSeekerEnvironment || {
@@ -4428,8 +4525,8 @@
         normalize: function(value) { return $.trim(String(value || '')).toUpperCase(); },
         text: function(info) { return info && info.environment ? info.environment : 'Unknown'; }
       };
-      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests'];
-      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitJobPath', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
+      var draftCheckboxFields = ['checkBuild', 'checkEnvironment', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck', 'pythonUseDockerfile', 'pythonRunTests', 'pythonNotebookAllowErrors'];
+      var draftScalarFields = ['job_name', 'description', 'executionStrategy', 'scriptType', 'windowsCommandLine', 'linuxExecutionStrategy', 'linuxScriptType', 'pythonSourceMode', 'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitJobPath', 'pythonGitCredentialKey', 'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText', 'pythonInlineFilesJson', 'pythonWorkspaceSignature', 'pythonRuntimeMode', 'pythonVersion', 'pythonDockerImage', 'containerCpuLimit', 'containerMemoryLimitMb', 'pythonNotebookParameters', 'pythonNotebookCellTimeout', 'pythonNotebookTrack', 'hopSourceMode', 'hopSample', 'hopProjectPath', 'hopEntryFile', 'hopEngine', 'hopRunConfig', 'hopLogLevel', 'hopParameters', 'linuxCommandLine', 'action', 'tag', 'customCronExpression', 'repetitiveMinute', 'repetitiveHour', 'repetitiveDayOfMonth', 'repetitiveMonth', 'repetitiveDayOfWeek', 'recipients', 'timeoutStrategy', 'timeoutSeconds', 'timeoutMinutes', 'onSuccess', 'attSuccess', 'onFailure', 'attFailure', 'onAbort', 'attAbort', 'environment'];
       var draftArrayFields = ['singleMinute', 'singleHour', 'singleDayOfMonth', 'singleMonth', 'singleDayOfWeek', 'jobList', 'upstreamJobList'];
 
       function pythonInlineJobSeekerTemplate() {
@@ -4439,7 +4536,7 @@
           'import os',
           'from os import path',
           '',
-          'from jobseeker import JobSeeker',
+          'from jobseeker import JobSeeker, JobSeekerDependencyError',
           '',
           '',
           'JOB_NAME = path.basename(__file__).replace(".py", "")',
@@ -4455,10 +4552,14 @@
           '            if source is None:',
           '                print("Optional Data Asset customer-reference is not registered for this scope.")',
           '            else:',
-          '                source_rows = source.read()',
-          '                sample_rows = source_rows[:5] if isinstance(source_rows, list) else str(source_rows)[:2000]',
-          '                print("Resolved {} (version {})".format(source.uri, source.version))',
-          '                print(sample_rows)',
+          '                try:',
+          '                    source_rows = source.read()',
+          '                except JobSeekerDependencyError as error:',
+          '                    print("Optional asset {} needs extra packages ({}); continuing without it.".format(source.uri, error))',
+          '                else:',
+          '                    sample_rows = source_rows[:5] if isinstance(source_rows, list) else str(source_rows)[:2000]',
+          '                    print("Resolved {} (version {})".format(source.uri, source.version))',
+          '                    print(sample_rows)',
           '            rows = tmf.context("rows", cast=int, default=5)',
           '            rows = min(rows, 5) if PREVIEW else rows',
           '            wait_seconds = 0.2 if PREVIEW else 1',
@@ -4540,10 +4641,10 @@
           var tags = $.map(sample.tags || [], function(tag) {
             return '<span class="label label-default">' + escapeHtml(tag) + '</span>';
           }).join('');
-          var familyLabel = sample.family === 'python' ? 'Python' : 'Shell';
+          var familyLabel = sample.family === 'python' ? 'Python' : (sample.family === 'notebook' ? 'Notebook' : 'Shell');
           cards.push(
             '<button type="button" class="job-sample-card' + (selectedJobSampleId === sample.id ? ' is-selected' : '') + '" data-job-sample-id="' + escapeAttribute(sample.id) + '">' +
-              '<span class="job-sample-card-header"><span class="label label-primary">' + familyLabel + '</span><span class="label label-info">' + escapeHtml(sample.complexity) + '</span></span>' +
+              '<span class="job-sample-card-header"><span class="label ' + (sample.family === 'notebook' ? 'label-warning' : 'label-primary') + '">' + familyLabel + '</span><span class="label label-info">' + escapeHtml(sample.complexity) + '</span></span>' +
               '<strong>' + escapeHtml(sample.name) + '</strong>' +
               '<p>' + escapeHtml(sample.description) + '</p>' +
               '<span class="job-sample-integrations">' + integrations + '</span>' +
@@ -4558,9 +4659,11 @@
         $('#jobSampleGrid').html(cards.join(''));
 
         var selected = jobSampleById(selectedJobSampleId);
-        $('#loadSelectedJobSample').prop('disabled', ! selected);
-        $('#addSelectedSampleToGit').prop('disabled', ! selected || selected.family !== 'python');
-        $('#jobSampleSelection').text(selected ? selected.name + ' — ' + selected.complexity : 'Select a sample to continue.');
+        // A notebook is a project's job folder: it goes into a repository or a
+        // project workspace, never into the inline editor's Python files.
+        $('#loadSelectedJobSample').prop('disabled', ! selected || selected.family === 'notebook');
+        $('#addSelectedSampleToGit').prop('disabled', ! selected || (selected.family !== 'python' && selected.family !== 'notebook'));
+        $('#jobSampleSelection').text(selected ? selected.name + ' — ' + selected.complexity + (selected.family === 'notebook' ? ' · add it to a Git job\'s repository, or to a project from VS Code > Start from a sample' : '') : 'Select a sample to continue.');
       }
 
       function applyJobSample(sample) {
@@ -4608,7 +4711,14 @@
           $('#pythonRequirementsText').val(sample.requirements || '');
           $('#pythonPyprojectText').val(sample.pyproject || '');
           $('#pythonDockerfileText').val(sample.dockerfile || '');
-          $('#pythonWorkspaceSignature').val('');
+          // In edit mode this is the optimistic-lock baseline for the
+          // workspace loaded from Jenkins. Loading a sample is an intentional
+          // form replacement, not an external disk change, so preserve the
+          // baseline and let the server compare it with the live workspace.
+          // A new-job draft must not inherit a token from a cached workspace.
+          if (editingOriginalJob === '') {
+            $('#pythonWorkspaceSignature').val('');
+          }
           pythonPyprojectUserEdited = !! sample.pyproject;
           pythonDockerfileUserEdited = !! sample.dockerfile;
           pythonInlineOpenPanes = { code: true, requirements: false, pyproject: false, dockerfile: false, extra: false };
@@ -5765,8 +5875,16 @@
 
         lineNumbers.html(lines.join('<br>'));
         lineNumbers.scrollTop(editor.scrollTop());
-        renderPythonSyntaxHighlight(editor, $('#pythonInlineExtraCodeHighlight'));
-        renderPythonLintPanel($('#pythonInlineExtraLintPanel'), lintPythonInlineCode(value));
+        var isPython = /\.py$/i.test(pythonInlineActiveExtraPath || '');
+        if (isPython) {
+          renderPythonSyntaxHighlight(editor, $('#pythonInlineExtraCodeHighlight'));
+          renderPythonLintPanel($('#pythonInlineExtraLintPanel'), lintPythonInlineCode(value));
+        } else {
+          $('#pythonInlineExtraCodeHighlight').text(value);
+          $('#pythonInlineExtraLintPanel').empty().hide();
+        }
+        $('#pythonInlineExtraEditorLanguage').text(isPython ? 'python' : 'markdown');
+        $('#pythonInlineExtraEditorStatusLanguage').text(isPython ? 'Python' : 'Markdown');
         $('#pythonInlineExtraTabFile, #pythonInlineExtraEditorFile').text(pythonInlineActiveExtraPath || 'lib.py');
       }
 
@@ -6208,6 +6326,20 @@
 
       function waitForPythonExternalReady(response, webWindow, requestDraftStillActive, attempt) {
         attempt = attempt || 0;
+        // A project on a workspace runtime may build its image before its
+        // editor starts; the launcher script follows both in the waiting tab.
+        if (response.openVsCodeStatusUrl && window.jobseekerFollowRuntime) {
+          var building = response.runtime && response.runtime.status === 'building';
+          setPythonExternalSyncStatus(building ? 'Building the ' + response.runtime.label + ' runtime; VS Code opens when it is ready...' : 'Starting the project editor...', '');
+          window.jobseekerFollowRuntime(response, webWindow, 'VS Code', 0, function(status) {
+            if (status && status.ready) {
+              setPythonExternalSyncStatus('VS Code opened in the ' + (status.label || 'project') + ' runtime.', 'ready');
+            } else {
+              setPythonExternalSyncStatus((status && (status.message || (status.build && status.build.message))) || 'The runtime could not start.', 'error');
+            }
+          });
+          return;
+        }
         if (attempt >= 30) {
           if (webWindow) {
             webWindow.close();
@@ -6346,12 +6478,21 @@
         return normalizedPath;
       }
 
+      function normalizePythonInlineProjectFilePath(path) {
+        var normalizedPath = normalizePythonInlineWorkspacePath(path, false);
+        if (normalizedPath === '' || (! /\.py$/i.test(normalizedPath) && ! /(^|\/)readme\.md$/i.test(normalizedPath))) {
+          return '';
+        }
+
+        return normalizedPath;
+      }
+
       function pythonInlineEntryPath() {
         return normalizePythonInlineWorkspacePath($.trim($('#pythonEntryPoint').val()) || 'main.py', true) || 'main.py';
       }
 
       function pythonInlineExtraFile(path) {
-        path = normalizePythonInlineWorkspacePath(path, true);
+        path = normalizePythonInlineProjectFilePath(path);
         for (var index = 0; index < pythonInlineExtraFiles.length; index++) {
           if (pythonInlineExtraFiles[index].path === path) {
             return pythonInlineExtraFiles[index];
@@ -6369,7 +6510,7 @@
       }
 
       function ensurePythonInlineParentDirectories(path) {
-        var parts = normalizePythonInlineWorkspacePath(path, true).split('/');
+        var parts = normalizePythonInlineProjectFilePath(path).split('/');
         var currentPath = '';
 
         for (var index = 0; index < parts.length - 1; index++) {
@@ -6441,7 +6582,7 @@
         });
 
         $.each(payload && $.isArray(payload.files) ? payload.files : [], function(index, file) {
-          var path = normalizePythonInlineWorkspacePath(file && file.path ? file.path : '', true);
+          var path = normalizePythonInlineProjectFilePath(file && file.path ? file.path : '');
           if (path !== '' && path.toLowerCase() !== pythonInlineEntryPath().toLowerCase() && ! pythonInlineExtraFile(path)) {
             pythonInlineExtraFiles.push({ path: path, content: String(file.content || '') });
             ensurePythonInlineParentDirectories(path);
@@ -6592,7 +6733,8 @@
           });
 
           $.each(pythonInlineExtraFiles, function(index, file) {
-            rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'extra' && pythonInlineActiveExtraPath == file.path ? ' active' : '') + '" data-python-inline-pane="extra" data-python-inline-path="' + escapeAttribute(file.path) + '"><i class="fa fa-file-code-o"></i><span>' + escapeHtml(file.path) + '</span></button><button type="button" class="python-inline-file-remove" title="Remove" data-python-inline-type="file" data-python-inline-path="' + escapeAttribute(file.path) + '"><i class="fa fa-trash"></i></button></div>');
+            var fileIcon = /\.py$/i.test(file.path) ? 'fa-file-code-o' : 'fa-file-text-o';
+            rows.push('<div class="python-inline-file-row"><button type="button" class="python-inline-file' + (pythonInlineActivePane == 'extra' && pythonInlineActiveExtraPath == file.path ? ' active' : '') + '" data-python-inline-pane="extra" data-python-inline-path="' + escapeAttribute(file.path) + '"><i class="fa ' + fileIcon + '"></i><span>' + escapeHtml(file.path) + '</span></button><button type="button" class="python-inline-file-remove" title="Remove" data-python-inline-type="file" data-python-inline-path="' + escapeAttribute(file.path) + '"><i class="fa fa-trash"></i></button></div>');
           });
         }
 
@@ -6610,7 +6752,7 @@
         pane = pane == 'extra' ? 'extra' : (pane == 'dockerfile' ? 'dockerfile' : (pane == 'pyproject' ? 'pyproject' : (pane == 'requirements' ? 'requirements' : 'code')));
 
         if (pane == 'extra') {
-          extraPath = normalizePythonInlineWorkspacePath(extraPath, true);
+          extraPath = normalizePythonInlineProjectFilePath(extraPath);
           if (extraPath === '' || ! pythonInlineExtraFile(extraPath)) {
             return;
           }
@@ -6661,7 +6803,7 @@
           return;
         }
 
-        var path = normalizePythonInlineWorkspacePath(window.prompt('Python file path', 'libs/helper.py'), true);
+        var path = normalizePythonInlineProjectFilePath(window.prompt('Python or README file path', 'libs/helper.py'));
         if (path === '') {
           return;
         }
@@ -6703,7 +6845,7 @@
       }
 
       function removePythonInlineWorkspacePath(path, type) {
-        path = normalizePythonInlineWorkspacePath(path, type != 'directory');
+        path = type == 'directory' ? normalizePythonInlineWorkspacePath(path, false) : normalizePythonInlineProjectFilePath(path);
         if (path === '') {
           return;
         }
@@ -7072,6 +7214,10 @@
           pythonDockerImage: '',
           containerCpuLimit: '1',
           containerMemoryLimitMb: '512',
+          pythonNotebookParameters: '[]',
+          pythonNotebookCellTimeout: '',
+          pythonNotebookTrack: '1',
+          pythonNotebookAllowErrors: '0',
           hopSourceMode: 'upload',
           hopSample: '',
           hopProjectPath: '',
@@ -7234,6 +7380,11 @@
 
           if (draft.linuxExecutionStrategy === 'script') {
             if (draft.linuxScriptType === 'python') {
+              if (/\.ipynb$/i.test(draft.pythonEntryPoint || '')) {
+                var notebookParameters = [];
+                try { notebookParameters = JSON.parse(draft.pythonNotebookParameters || '[]'); } catch (error) { notebookParameters = []; }
+                return 'Notebook ' + draft.pythonEntryPoint + ' / ' + draftSelectedValue(draft, 'pythonSourceMode', 'upload') + (notebookParameters.length ? ' / ' + notebookParameters.length + ' parameter' + (notebookParameters.length === 1 ? '' : 's') : '') + ' / ' + draftPythonRuntimeSummary(draft);
+              }
               return 'Python / ' + draftSelectedValue(draft, 'pythonSourceMode', 'upload') + ' / ' + draftPythonRuntimeSummary(draft);
             }
             if (draft.linuxScriptType === 'talend') {
@@ -7491,6 +7642,8 @@
         loadPythonInlineFilesFromHidden();
         updatePythonRuntimeControls();
         renderPythonInlineWorkspace();
+        renderNotebookParametersFromHidden();
+        syncNotebookPanel(true);
         if (pythonWorkspaceAllowsInlineCode()) {
           setPythonInlinePane('code');
         }
@@ -8183,8 +8336,8 @@
         var isGitSource = isPythonScript && sourceMode == 'git';
         var entryGroup = $('#pythonEntryPointGroup');
         entryGroup.appendTo(isGitSource ? '#pythonGitEntrySlot' : '.pythonEntryPointColumn');
-        $('#pythonEntryPointLabel').text(isGitSource ? 'Entry file' : 'Entry Python File or Nested Path');
-        $('#pythonEntryPoint').attr('placeholder', isGitSource ? 'main.py' : 'main.py or pyjob/main.py');
+        $('#pythonEntryPointLabel').html(isInlinePythonExecution ? 'Entry file' : 'Entry file <small class="text-muted">script or notebook</small>');
+        $('#pythonEntryPoint').attr('placeholder', isInlinePythonExecution ? 'main.py' : (isGitSource ? 'main.py or report.ipynb' : 'main.py, pyjob/main.py or report.ipynb'));
         $('#pythonEntryPointHelp').toggle(isGitSource);
         $('.pythonSourceForm').toggle((isPythonScript || isInlinePythonExecution) && !isGitSource);
         $('.pythonSourceModeColumn').hide();
@@ -8210,6 +8363,7 @@
         updatePythonDockerfileEditor();
         updatePythonRuntimeControls();
         renderPythonInlineWorkspace();
+        syncNotebookPanel(false);
 
         if (! isScriptExecution || scriptType == '0' || scriptType == '' || (isPythonScript && sourceMode != 'upload')) {
           $('.linuxUploadScript').hide();
@@ -8695,12 +8849,209 @@
         }
         list.html($.map(response.jobs, function(job) {
           var state = projectJobStates[job.state] || projectJobStates.local;
-          return '<button type="button" class="project-job-chip" data-job-path="' + escapeAttribute(job.path) + '">'
-            + '<strong>' + escapeHtml(job.name) + '</strong>'
-            + '<small>' + escapeHtml(job.entryPoint || 'no entry file') + (job.runtime === 'docker' ? ' · Dockerfile' : '') + (job.hasTests ? ' · tests' : '') + '</small>'
+          var others = (job.entryPoints || []).length - 1;
+          var notebook = /\.ipynb$/i.test(job.entryPoint || '');
+          return '<button type="button" class="project-job-chip' + (notebook ? ' is-notebook' : '') + '" data-job-path="' + escapeAttribute(job.path) + '">'
+            + '<strong>' + (notebook ? '<i class="fa fa-book" title="Notebook"></i> ' : '') + escapeHtml(job.name) + '</strong>'
+            + '<small>' + escapeHtml(job.entryPoint || 'no script or notebook') + (others > 0 ? ' +' + others : '') + (job.runtime === 'docker' ? ' · Dockerfile' : '') + (job.hasTests ? ' · tests' : '') + '</small>'
             + '<span class="project-job-state ' + state[0] + '"><i class="fa ' + state[1] + '"></i> ' + state[2] + '</span></button>';
         }).join('') + note);
       }
+
+      // Notebook entry files (.ipynb): parameters, cell timeout and tracking.
+      var notebookParametersRequest = null;
+      var notebookEntryTimer = null;
+      var notebookLoadedFor = '';
+      var notebookSources = {value: 'Value', context: 'Context', env: 'Environment'};
+
+      function pythonEntryIsNotebook() {
+        return /\.ipynb$/i.test($.trim($('#pythonEntryPoint').val() || ''));
+      }
+
+      function notebookPanelApplies() {
+        return $('#linuxCommand').is(':checked') && $('#linuxExecutionStrategy').val() == 'script' && $('#linuxScriptType').val() == 'python' && pythonEntryIsNotebook();
+      }
+
+      function syncNotebookPanel(loadDetails) {
+        var applies = notebookPanelApplies();
+        $('#pythonNotebookPanel').toggle(applies);
+        $('#pythonRunTestsTarget').text(applies ? 'the notebook runs' : 'Python execution');
+        if (! applies) {
+          return;
+        }
+        var key = JSON.stringify(notebookSourceRequestData());
+        if (loadDetails !== false && key !== notebookLoadedFor) {
+          loadNotebookParameters(false);
+        }
+      }
+
+      function notebookParameterRow(parameter) {
+        parameter = $.extend({name: '', source: 'value', value: ''}, parameter || {});
+        var source = notebookSources[parameter.source] ? parameter.source : 'value';
+        var options = $.map(notebookSources, function(label, value) {
+          return '<option value="' + value + '"' + (value === source ? ' selected' : '') + '>' + label + '</option>';
+        }).join('');
+        var row = $('<div class="python-notebook-parameter">'
+          + '<input type="text" class="form-control input-sm python-notebook-name" maxlength="64" spellcheck="false" placeholder="name" aria-label="Parameter name">'
+          + '<select class="form-control input-sm python-notebook-source" aria-label="Where the value comes from">' + options + '</select>'
+          + '<input type="text" class="form-control input-sm python-notebook-value" maxlength="2000" spellcheck="false" aria-label="Value">'
+          + '<button type="button" class="btn btn-link btn-sm python-notebook-remove" title="Remove parameter"><i class="fa fa-times"></i></button>'
+          + '</div>');
+        row.find('.python-notebook-name').val(parameter.name);
+        row.find('.python-notebook-value').val(parameter.value);
+        syncNotebookParameterRow(row);
+        return row;
+      }
+
+      function syncNotebookParameterRow(row) {
+        var source = row.find('.python-notebook-source').val();
+        var value = row.find('.python-notebook-value');
+        value.attr('placeholder', source === 'context' ? 'Context key (the name when empty)' : (source === 'env' ? 'Variable name (the name when empty)' : 'value, 42, true or "007"'));
+        if (source === 'context') {
+          value.attr('list', 'pythonNotebookContextKeys');
+        } else {
+          value.removeAttr('list');
+        }
+        row.attr('data-source', source);
+      }
+
+      function renderNotebookParameters(parameters) {
+        var rows = $('#pythonNotebookParameterRows').empty();
+        $.each(parameters || [], function(index, parameter) {
+          rows.append(notebookParameterRow(parameter));
+        });
+        if (! (parameters || []).length) {
+          rows.append('<div class="python-notebook-empty">No parameters: the notebook runs with its own values.</div>');
+        }
+      }
+
+      function renderNotebookParametersFromHidden() {
+        var parameters = [];
+        try {
+          parameters = JSON.parse($('#pythonNotebookParameters').val() || '[]');
+        } catch (error) {
+          parameters = [];
+        }
+        renderNotebookParameters($.isArray(parameters) ? parameters : []);
+        $('#pythonNotebookTrackToggle').prop('checked', $('#pythonNotebookTrack').val() !== '0');
+      }
+
+      function collectNotebookParameters() {
+        var parameters = [];
+        $('#pythonNotebookParameterRows .python-notebook-parameter').each(function() {
+          var row = $(this);
+          var name = $.trim(row.find('.python-notebook-name').val() || '');
+          var value = row.find('.python-notebook-value').val() || '';
+          if (name !== '' || $.trim(value) !== '') {
+            parameters.push({name: name, source: row.find('.python-notebook-source').val() || 'value', value: value});
+          }
+        });
+        return parameters;
+      }
+
+      function syncNotebookParametersInput() {
+        $('#pythonNotebookParameters').val(JSON.stringify(collectNotebookParameters()));
+        updateJobCreationReview();
+        scheduleJobDraftCacheSave();
+      }
+
+      function notebookSourceRequestData() {
+        var data = {entry: $.trim($('#pythonEntryPoint').val() || ''), environment: gitPanelEnvironment()};
+        var mode = $('#pythonSourceMode').val() || 'upload';
+        var project = mode === 'git' ? selectedGitProject() : null;
+        if (project) {
+          data.project_id = project.id;
+          data.job_path = $.trim($('#pythonGitJobPath').val() || '');
+        } else if (mode === 'path') {
+          data.source_path = $.trim($('#pythonSourcePath').val() || '');
+        } else {
+          data.source_path = 'python/jobs/' + ($.trim($('#job_name').val() || '') || '_');
+        }
+        return data;
+      }
+
+      // Reads the notebook: how many code cells, its cell tagged parameters,
+      // and the project's Context keys. With fillDefaults its parameters are
+      // added as rows, reading a Context value of the same name when the
+      // project has one.
+      function loadNotebookParameters(fillDefaults) {
+        var data = notebookSourceRequestData();
+        var facts = $('#pythonNotebookFacts');
+        if (notebookParametersRequest) {
+          notebookParametersRequest.abort();
+        }
+        notebookLoadedFor = JSON.stringify(data);
+        facts.html('<i class="fa fa-spinner fa-spin"></i> Reading the notebook...');
+        notebookParametersRequest = $.ajax({url: '<?php echo base_url(); ?>jobCreation/notebookParameters', type: 'POST', dataType: 'json', data: data})
+          .done(function(response) {
+            var keys = response.contextKeys || [];
+            $('#pythonNotebookContextKeys').html($.map(keys, function(key) { return '<option value="' + escapeAttribute(key) + '">'; }).join(''));
+            facts.html('<span><i class="fa fa-code"></i> ' + response.codeCells + ' code cell' + (response.codeCells === 1 ? '' : 's') + '</span>'
+              + '<span class="' + (response.hasParametersCell ? 'is-ok' : '') + '"><i class="fa fa-tag"></i> ' + (response.hasParametersCell ? (response.parameters.length + ' in its parameters cell') : 'no cell tagged parameters') + '</span>'
+              + (response.project ? '<span><i class="fa fa-sliders"></i> ' + keys.length + ' ' + escapeHtml(response.project.name) + ' context value' + (keys.length === 1 ? '' : 's') + ' in ' + escapeHtml(response.environment) + '</span>' : ''));
+            if (! fillDefaults) {
+              return;
+            }
+            if (! response.parameters.length) {
+              toastr.info(response.hasParametersCell ? 'The parameters cell of ' + response.entry + ' assigns no variables.' : 'Tag the cell that sets the notebook\'s defaults with "parameters" (in VS Code: ... > Add Cell Tag) to list them here. Values you add go in a new first cell.', 'Notebook', {timeOut: 9000});
+              return;
+            }
+            var current = collectNotebookParameters();
+            var known = {};
+            $.each(current, function(index, parameter) { known[parameter.name] = true; });
+            var added = [];
+            $.each(response.parameters, function(index, parameter) {
+              if (known[parameter.name]) {
+                return;
+              }
+              var fromContext = $.inArray(parameter.name, keys) !== -1;
+              current.push({name: parameter.name, source: fromContext ? 'context' : 'value', value: fromContext ? parameter.name : parameter.value});
+              added.push(parameter.name + (fromContext ? ' (Context)' : ''));
+            });
+            renderNotebookParameters(current);
+            syncNotebookParametersInput();
+            if (added.length) {
+              toastr.success('Added ' + added.join(', ') + ' from the notebook. Change a value to run it with another one.', 'Notebook parameters', {timeOut: 8000});
+            }
+          })
+          .fail(function(xhr, status) {
+            if (status !== 'abort') {
+              facts.html('<span class="is-warning"><i class="fa fa-exclamation-triangle"></i> ' + escapeHtml((xhr.responseJSON && xhr.responseJSON.message) || 'The notebook could not be read.') + '</span>');
+            }
+          })
+          .always(function() { notebookParametersRequest = null; });
+      }
+
+      $('#pythonEntryPoint').on('input change', function() {
+        clearTimeout(notebookEntryTimer);
+        notebookEntryTimer = setTimeout(function() { syncNotebookPanel(true); }, 350);
+      });
+      $('#pythonSourcePath, #pythonGitJobPath').on('change', function() { syncNotebookPanel(true); });
+      $('#pythonNotebookAddParameter').on('click', function() {
+        $('#pythonNotebookParameterRows .python-notebook-empty').remove();
+        var row = notebookParameterRow();
+        $('#pythonNotebookParameterRows').append(row);
+        row.find('.python-notebook-name').trigger('focus');
+      });
+      $('#pythonNotebookLoadDefaults').on('click', function() { loadNotebookParameters(true); });
+      $('#pythonNotebookParameterRows')
+        .on('input change', 'input, select', function() {
+          syncNotebookParameterRow($(this).closest('.python-notebook-parameter'));
+          syncNotebookParametersInput();
+        })
+        .on('click', '.python-notebook-remove', function() {
+          $(this).closest('.python-notebook-parameter').remove();
+          if (! $('#pythonNotebookParameterRows .python-notebook-parameter').length) {
+            renderNotebookParameters([]);
+          }
+          syncNotebookParametersInput();
+        });
+      $('#pythonNotebookTrackToggle').on('change', function() {
+        $('#pythonNotebookTrack').val($(this).is(':checked') ? '1' : '0');
+        scheduleJobDraftCacheSave();
+      });
+      $('#pythonNotebookAllowErrors, #pythonNotebookCellTimeout').on('change', function() { scheduleJobDraftCacheSave(); });
+      renderNotebookParametersFromHidden();
 
       // Fills the form from a job folder: a Git project's folder runs from
       // the repository; a shared folder runs in place by repository path.
@@ -8715,10 +9066,23 @@
           applyLinuxPythonChoice('path');
           $('#pythonSourcePath').val(job.sourcePath);
         }
+        // Every script and notebook of the folder is offered as the entry file.
+        $('#pythonEntryPointOptions').html($.map(job.entryPoints || [], function(entry) { return '<option value="' + escapeAttribute(entry) + '">'; }).join(''));
+        var previousParameters = collectNotebookParameters();
         $('#pythonEntryPoint').val(job.entryPoint || 'main.py').trigger('change');
-        if (job.runtime === 'docker' && $('#pythonRuntimeMode').val() !== 'docker') {
+        if (/\.ipynb$/i.test(job.entryPoint || '')) {
+          // A notebook brings its parameters cell along, unless the form has some.
+          setTimeout(function() { loadNotebookParameters(!previousParameters.length); }, 0);
+        }
+        // A project on a workspace runtime runs its jobs in that image, where
+        // they were developed; a folder with its own Dockerfile builds that.
+        var runtimeImage = response.runtime && response.runtime.image && job.runtime !== 'docker' ? response.runtime.image : '';
+        if ((job.runtime === 'docker' || runtimeImage) && $('#pythonRuntimeMode').val() !== 'docker') {
           setSelectValue('#pythonRuntimeMode', 'docker');
           updatePythonSourceControls();
+        }
+        if (runtimeImage) {
+          $('#pythonDockerImage').val(runtimeImage).trigger('change');
         }
         $('#pythonRunTests').prop('checked', !!job.hasTests);
         // A folder's name replaces a generated placeholder name, never one typed.
@@ -8734,7 +9098,8 @@
         scheduleJobDraftCacheSave(0);
         var state = projectJobStates[job.state] || projectJobStates.local;
         var warning = job.state === 'pushed' || job.state === 'local' ? '' : ' It is ' + state[2] + ' yet: builds run what is pushed.';
-        toastr[warning ? 'warning' : 'success']('The form now runs ' + job.path + ' of ' + response.project.name + '.' + warning, 'Project job', {timeOut: 9000});
+        var where = runtimeImage ? ' in the project\'s ' + response.runtime.label + ' runtime' : '';
+        toastr[warning ? 'warning' : 'success']('The form now runs ' + job.path + ' of ' + response.project.name + where + '.' + warning, 'Project job', {timeOut: 9000});
       }
 
       function openProjectJobFromLink(link) {
@@ -8788,7 +9153,7 @@
 
       $('#addSelectedSampleToGit').on('click', function() {
         var sample = jobSampleById(selectedJobSampleId);
-        if (sample && sample.family === 'python') {
+        if (sample && (sample.family === 'python' || sample.family === 'notebook')) {
           addSampleToGitRepository(sample);
         }
       });
@@ -9549,6 +9914,27 @@
       }
     }
 
+    // A notebook job's options, from the exports its command carries.
+    function hydrateNotebookOptions(command) {
+      var spec = shellExportValue(command, 'JOBSEEKER_NOTEBOOK_SPEC');
+      var parameters = [];
+      if (spec.indexOf('b64:') === 0 && window.atob) {
+        try {
+          parameters = JSON.parse(decodeURIComponent(escape(window.atob(spec.substring(4)))));
+        } catch (error) {
+          parameters = [];
+        }
+      }
+      $('#pythonNotebookParameters').val(JSON.stringify($.isArray(parameters) ? parameters : []));
+      var timeout = shellExportValue(command, 'JOBSEEKER_NOTEBOOK_CELL_TIMEOUT');
+      $('#pythonNotebookCellTimeout').val(timeout === '' || timeout === '0' ? '' : timeout);
+      $('#pythonNotebookAllowErrors').prop('checked', shellExportValue(command, 'JOBSEEKER_NOTEBOOK_ALLOW_ERRORS') === '1');
+      $('#pythonNotebookTrack').val(shellExportValue(command, 'JOBSEEKER_NOTEBOOK_TMF') === '0' ? '0' : '1');
+      renderNotebookParametersFromHidden();
+      // Once the rest of the job is in the form, read the notebook it runs.
+      setTimeout(function() { syncNotebookPanel(true); }, 0);
+    }
+
     function relativeScriptPath(sourceDirectory, scriptPath) {
       if (sourceDirectory !== '' && scriptPath.indexOf(sourceDirectory + '/') === 0) {
         return scriptPath.substring(sourceDirectory.length + 1);
@@ -9738,6 +10124,7 @@
       setSelectValue('#linuxScriptType', 'python');
       $('.pythonSourceForm').show();
       hydratePythonRuntime(command);
+      hydrateNotebookOptions(command);
 
       var gitRepositoryUrl = shellExportValue(command, 'JOBSEEKER_GIT_REPOSITORY_URL');
       if (gitRepositoryUrl !== '') {

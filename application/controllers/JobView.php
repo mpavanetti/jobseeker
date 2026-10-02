@@ -71,6 +71,46 @@ class JobView extends BaseController
             return $cleanDates;
         }
 
+    /**
+     * The executed notebook of a notebook job's build, as the runner saved it
+     * under repository/notebook-runs/<job>/<build>/ (the console's
+     * "[JobSeeker Notebook] saved" marker names it). JSON for the console's
+     * notebook view, or the .ipynb itself with download=1. While a build runs
+     * in a container it appears only once the build has finished.
+     */
+    public function notebookRun()
+    {
+        $this->releaseSessionLock();
+        $path = trim(str_replace('\\', '/', (string) $this->input->get('path')), '/');
+        if (! preg_match('#^notebook-runs/[A-Za-z0-9_.-]{1,120}/\d{1,10}/[^/\\\\]{1,200}\.ipynb$#', $path) || strpos($path, '..') !== FALSE) {
+            $this->output->set_status_header(400)->set_content_type('application/json')->set_output(json_encode(array('ok' => FALSE, 'message' => 'That is not an executed notebook path.')));
+            return;
+        }
+        $base = realpath($this->repositoryRootPath().DIRECTORY_SEPARATOR.'notebook-runs');
+        $file = $base === FALSE ? FALSE : realpath($this->repositoryRootPath().DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path));
+        if ($file === FALSE || strpos($file, $base.DIRECTORY_SEPARATOR) !== 0 || ! is_file($file)) {
+            $this->output->set_status_header(404)->set_content_type('application/json')->set_output(json_encode(array('ok' => FALSE, 'message' => 'The executed notebook is not available yet. A notebook that runs in a container is published when its build finishes.')));
+            return;
+        }
+        if (filesize($file) > 64 * 1024 * 1024) {
+            $this->output->set_status_header(413)->set_content_type('application/json')->set_output(json_encode(array('ok' => FALSE, 'message' => 'The executed notebook is larger than 64 MB; download it from the repository instead.')));
+            return;
+        }
+        if ($this->input->get('download') === '1') {
+            $this->output
+                ->set_content_type('application/x-ipynb+json')
+                ->set_header('Content-Disposition: attachment; filename="'.str_replace('"', '', basename($file)).'"')
+                ->set_header('X-Content-Type-Options: nosniff')
+                ->set_output(file_get_contents($file));
+            return;
+        }
+        $this->output
+            ->set_content_type('application/json')
+            ->set_header('Cache-Control: no-store')
+            ->set_header('X-Content-Type-Options: nosniff')
+            ->set_output(file_get_contents($file));
+    }
+
     public function dependencies()
     {
         $this->output->set_content_type('application/json');

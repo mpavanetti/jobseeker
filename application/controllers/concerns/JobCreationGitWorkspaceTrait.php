@@ -640,7 +640,7 @@ trait JobCreationGitWorkspaceTrait
       private function pythonSampleById($sampleId) {
         $samples = require APPPATH.'config/job_samples.php';
         foreach (is_array($samples) ? $samples : array() as $sample) {
-          if (isset($sample['id'], $sample['family']) && $sample['id'] === $sampleId && $sample['family'] === 'python') {
+          if (isset($sample['id'], $sample['family']) && $sample['id'] === $sampleId && in_array($sample['family'], array('python', 'notebook'), TRUE)) {
             return $sample;
           }
         }
@@ -654,17 +654,16 @@ trait JobCreationGitWorkspaceTrait
        * edited, samples go beside them as usual.
        */
       private function removeUntouchedJobStarter($jobDirectory, $folderName) {
-        $starter = $this->projectWorkspaceLayout()->jobStarter('python', $folderName, $this->defaultDockerPythonVersion());
-        $present = array();
-        foreach ($starter as $relative => $content) {
-          $path = $jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $relative);
-          if (! file_exists($path)) {
-            continue;
+        // Starters follow the project runtime's Python, so any version's counts.
+        $present = FALSE;
+        foreach (array_unique(array_merge(array($this->defaultDockerPythonVersion(), '3.10'), array('3.11', '3.12', '3.13', '3.14'))) as $version) {
+          $present = $this->untouchedJobStarterFiles($jobDirectory, $this->projectWorkspaceLayout()->jobStarter('python', $folderName, $version));
+          if ($present !== FALSE) {
+            break;
           }
-          if (! is_file($path) || (string) file_get_contents($path) !== $content) {
-            return;
-          }
-          $present[] = $path;
+        }
+        if ($present === FALSE) {
+          return;
         }
         foreach ($present as $path) {
           @unlink($path);
@@ -674,10 +673,33 @@ trait JobCreationGitWorkspaceTrait
         }
       }
 
-      private function writeSampleIntoGitWorkspace($workspace, $sample, $dockerImage, $withDockerfile) {
+      /** The starter files present in a job folder, or FALSE when any was edited. */
+      private function untouchedJobStarterFiles($jobDirectory, $starter) {
+        $present = array();
+        foreach ($starter as $relative => $content) {
+          $path = $jobDirectory.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $relative);
+          if (! file_exists($path)) {
+            continue;
+          }
+          if (! is_file($path) || (string) file_get_contents($path) !== $content) {
+            return FALSE;
+          }
+          $present[] = $path;
+        }
+        return $present;
+      }
+
+      /**
+       * A Python sample as the files of a job folder: its entry file and
+       * other files, a pyproject.toml for $pythonVersion, and a Dockerfile
+       * FROM $dockerImage when asked.
+       *
+       * @return array|FALSE relative path => content; FALSE for a bad entry file
+       */
+      private function pythonSampleFiles($sample, $pythonVersion, $dockerImage, $withDockerfile) {
         $entryPoint = $this->cleanPythonEntryPoint(isset($sample['entry_point']) ? $sample['entry_point'] : 'main.py', TRUE);
         if ($entryPoint === FALSE) {
-          return array('ok' => FALSE, 'status' => 500, 'message' => 'The sample has an invalid entry file.');
+          return FALSE;
         }
         $requirements = isset($sample['requirements']) ? (string) $sample['requirements'] : '';
         $files = array($entryPoint => isset($sample['code']) ? (string) $sample['code'] : "\n");
@@ -690,7 +712,7 @@ trait JobCreationGitWorkspaceTrait
         if (trim($requirements) !== '') {
           $files['requirements.txt'] = $requirements;
         }
-        $files['pyproject.toml'] = $this->defaultInlinePythonPyproject('jobseeker-sample-'.$sample['id'], $requirements, $this->pythonVersionFromDockerImage($dockerImage === '' ? $this->defaultPythonDockerImage() : $dockerImage));
+        $files['pyproject.toml'] = $this->defaultInlinePythonPyproject('jobseeker-sample-'.$sample['id'], $requirements, $pythonVersion);
         if ($withDockerfile) {
           $files['Dockerfile'] = $this->defaultInlinePythonDockerfile($dockerImage);
         }
@@ -701,6 +723,16 @@ trait JobCreationGitWorkspaceTrait
         if (! empty($sample['run_tests']) && ! $hasTests) {
           $files['tests/test_smoke.py'] = "def test_python_environment():\n    assert True\n";
         }
+        return $files;
+      }
+
+      private function writeSampleIntoGitWorkspace($workspace, $sample, $dockerImage, $withDockerfile) {
+        $pythonVersion = $this->pythonVersionFromDockerImage($dockerImage === '' ? $this->defaultPythonDockerImage() : $dockerImage);
+        $files = $this->pythonSampleFiles($sample, $pythonVersion, $dockerImage, $withDockerfile);
+        if ($files === FALSE) {
+          return array('ok' => FALSE, 'status' => 500, 'message' => 'The sample has an invalid entry file.');
+        }
+        $entryPoint = $this->cleanPythonEntryPoint(isset($sample['entry_point']) ? $sample['entry_point'] : 'main.py', TRUE);
 
         // Never overwrite: a sample that would replace any existing file goes
         // into its own folder, where the build finds its pyproject/Dockerfile.

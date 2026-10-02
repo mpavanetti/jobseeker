@@ -71,6 +71,12 @@ assert(compose.includes('repository-data-init:'), 'Compose must initialize the w
 assert(compose.includes('mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs'), 'Repository initialization must create the inline Python workspace root.');
 assert(compose.includes("tar -C /bundled-sdk --exclude='__pycache__'"), 'Repository initialization must seed the SDK without copying transient Python caches or relying on Docker to create a root-owned bind path.');
 assert((compose.match(/repository-data-init:\n\s+condition: service_completed_successfully/g) || []).length >= 3, 'PHP, Jenkins, and OpenVSCode must wait for repository initialization.');
+assert(controller.includes("strtolower(basename($path)) === 'readme.md'") && controller.includes('isInlinePythonWorkspaceFile($relativePath)'),
+  'Inline workspaces must persist generated README files alongside Python modules.');
+assert(view.includes('function normalizePythonInlineProjectFilePath(path)') && view.includes("! /(^|\\/)readme\\.md$/i.test(normalizedPath)"),
+  'The inline editor must load and round-trip README.md from sample workspaces.');
+assert(view.includes('from jobseeker import JobSeeker, JobSeekerDependencyError') && view.includes('except JobSeekerDependencyError as error:'),
+  'The blank inline starter must tolerate optional assets whose file format dependency is unavailable.');
 
 let editor = textarea('if ready:', 9);
 context.handlePythonCodeEditorKey(key('Enter'), editor);

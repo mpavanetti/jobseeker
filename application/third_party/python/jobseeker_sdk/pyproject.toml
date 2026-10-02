@@ -16,6 +16,7 @@ jobseeker-asset = "jobseeker:asset_cli"
 jobseeker-connector = "jobseeker:connector_cli"
 jobseeker-hop = "jobseeker.hop:main"
 jobseeker-dag = "jobseeker.dag:dag_cli"
+jobseeker-notebook = "jobseeker.notebook:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

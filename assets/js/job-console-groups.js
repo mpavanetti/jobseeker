@@ -22,6 +22,8 @@
     'python-environment': { title: 'Python environment', icon: 'fa-wrench' },
     'python-tests': { title: 'Python tests', icon: 'fa-check-square-o' },
     python: { title: 'Python execution', icon: 'fa-code' },
+    // A notebook job draws its run as the notebook (job-console-notebook.js).
+    notebook: { title: 'Notebook run', icon: 'fa-book' },
     shell: { title: 'Shell execution', icon: 'fa-terminal' },
     email: { title: 'Email notification', icon: 'fa-envelope-o' },
     cleanup: { title: 'Cleanup', icon: 'fa-trash-o' },
@@ -84,12 +86,15 @@
 
   function isCleanup(line) {
     // The cleanup call, not the `name() {` definition or the `trap` that
-    // registers it early in the build (those are setup).
-    return /^(?:\+\s*)?jobseeker_python_(?:docker_)?cleanup\s*$|rm -rf .*jobseeker-python-docker-context|docker image rm\b|docker run .*jobseeker-email.*jobseeker-email-metrics\.properties|rm -f .*jobseeker-email-metrics\.properties\.tmp|docker run .*jobseeker-assets.*data-assets\/manifest\.json/i.test(line);
+    // registers it early in the build (those are setup). The job's own
+    // `docker run` mounts the email and Data Asset volumes too, so only the
+    // commands that read them back count.
+    return /^(?:\+\s*)?jobseeker_python_(?:docker_)?cleanup\s*$|rm -rf .*jobseeker-python-docker-context|tar -C \/jobseeker-notebook -cf|docker image rm\b|docker run .*--entrypoint cat .*jobseeker-email-metrics\.properties|rm -f .*jobseeker-email-metrics\.properties\.tmp|docker run .*--entrypoint sh .*jobseeker-assets.*rm -f \/jobseeker-repository\/data-assets\/manifest\.json/i.test(line);
   }
 
   function isPythonCommand(line) {
-    return /^(?:\+\s*)?"?(?:[^"\s]+\/)?python(?:3(?:\.\d+)?)?"?\s+-u(?:\s|$)/i.test(line);
+    // A notebook job's runner opens its own section.
+    return /^(?:\+\s*)?"?(?:[^"\s]+\/)?python(?:3(?:\.\d+)?)?"?\s+-u(?:\s|$)(?!\s*-m\s+jobseeker\.notebook\b)/i.test(line);
   }
 
   function isPytestCommand(line) {
@@ -127,6 +132,10 @@
 
     if (/^\[JobSeeker\]\s+Python execution\s*$/i.test(line)) {
       return 'python';
+    }
+
+    if (/^\[JobSeeker\]\s+Notebook execution\s*$/i.test(line)) {
+      return 'notebook';
     }
 
     if (/^\[JobSeeker\]\s+Cleanup\s*$/i.test(line)) {
@@ -207,7 +216,7 @@
 
     if (/^\[JobSeeker\]/.test(line)) {
       // "DEV runs develop (project) from ..." belongs to the checkout.
-      if (currentKind === 'hop-execution' || currentKind === 'source') {
+      if (currentKind === 'hop-execution' || currentKind === 'source' || currentKind === 'notebook') {
         return currentKind;
       }
       return 'jobseeker';
@@ -237,7 +246,7 @@
       return 'email';
     }
 
-    if (currentKind === 'source' || currentKind === 'docker-execution' || currentKind === 'hop-execution' || currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'shell' || currentKind === 'cleanup' || currentKind === 'result') {
+    if (currentKind === 'source' || currentKind === 'docker-execution' || currentKind === 'hop-execution' || currentKind === 'python-tests' || currentKind === 'python' || currentKind === 'notebook' || currentKind === 'shell' || currentKind === 'cleanup' || currentKind === 'result') {
       return currentKind;
     }
 
@@ -644,13 +653,18 @@
     return node;
   }
 
-  function defaultOpen(section, index, total, options) {
+  function defaultOpen(section, index, total, options, hasNotebook) {
+    // A notebook run is read in its notebook view; the container command
+    // that started it stays folded unless it failed.
+    if (hasNotebook && section.kind === 'docker-execution') {
+      return section.hasError;
+    }
     if (section.kind === 'hop-run' || section.kind === 'hop-step' || section.kind === 'hop-log') {
       // A pipeline can have dozens of transforms. Open what failed, the run
       // itself, and a log with nothing to choose between.
       return section.hasError || section.kind === 'hop-run' || total === 1;
     }
-    return section.hasError || section.kind === 'docker-execution' || section.kind === 'hop-execution' || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'shell' || section.kind === 'email' || section.kind === 'cleanup' ||
+    return section.hasError || section.kind === 'docker-execution' || section.kind === 'hop-execution' || section.kind === 'python-tests' || section.kind === 'python' || section.kind === 'notebook' || section.kind === 'shell' || section.kind === 'email' || section.kind === 'cleanup' ||
       section.kind === 'result' || total === 1 || (!! options.live && index === total - 1);
   }
 
@@ -681,6 +695,39 @@
     }
   }
 
+  /**
+   * A section's body: its lines, or for a notebook run the notebook view
+   * (job-console-notebook.js), which can switch back to the lines.
+   */
+  function sectionContent(host, state, section, options) {
+    var notebookConsole = typeof window !== 'undefined' ? window.JobSeekerNotebookConsole : null;
+    if (section.kind !== 'notebook' || ! notebookConsole) {
+      return element('pre', 'job-console-content', section.text);
+    }
+    state.notebooks = state.notebooks || {};
+    var notebookState = state.notebooks[section.id] = state.notebooks[section.id] || {view: 'notebook'};
+    var rerender = function() { render(host, parserFor(options)(state.text), options); };
+    if (notebookState.view === 'log') {
+      var wrapper = element('div', 'job-console-notebook-log');
+      var back = button('notebook-view', 'Notebook view', 'fa-book');
+      back.addEventListener('click', function() {
+        notebookState.view = 'notebook';
+        rerender();
+      });
+      wrapper.appendChild(back);
+      wrapper.appendChild(element('pre', 'job-console-content', section.text));
+      return wrapper;
+    }
+    var holder = element('div', 'job-console-content job-console-notebook');
+    holder.appendChild(notebookConsole.render(notebookConsole.parse(section.text), {
+      state: notebookState,
+      live: !! options.live,
+      rerender: rerender,
+      idPrefix: (host.id || 'console') + '-' + section.id
+    }));
+    return holder;
+  }
+
   function render(host, parsed, options) {
     options = options || {};
     var state = stateFor(host);
@@ -698,6 +745,7 @@
     toolbar.appendChild(button('copy', 'Copy', 'fa-copy'));
     toolbar.appendChild(element('span', 'job-console-total', parsed.sections.length + ' section' + (parsed.sections.length === 1 ? '' : 's')));
 
+    var hasNotebook = parsed.sections.some(function(section) { return section.kind === 'notebook'; });
     parsed.sections.forEach(function(section, index) {
       var isNew = ! state.knownIds[section.id];
       var details = element('details', 'job-console-section job-console-section-' + section.kind + (section.hasError ? ' has-error' : ''));
@@ -705,7 +753,7 @@
       var title = element('span', 'job-console-title');
       var meta = element('span', 'job-console-meta');
       var lineBadge = element('span', 'job-console-badge', section.lineCount + ' line' + (section.lineCount === 1 ? '' : 's'));
-      var content = element('pre', 'job-console-content', section.text);
+      var content = sectionContent(host, state, section, options);
 
       details.setAttribute('data-console-section-id', section.id);
       details.setAttribute('data-console-kind', section.kind);
@@ -714,7 +762,7 @@
       }
 
       if (isNew) {
-        state.openById[section.id] = defaultOpen(section, index, parsed.sections.length, options);
+        state.openById[section.id] = defaultOpen(section, index, parsed.sections.length, options, hasNotebook);
         state.knownIds[section.id] = true;
 
         if (options.live && previousLastId && previousLastId !== section.id && ! state.touchedById[previousLastId]) {
