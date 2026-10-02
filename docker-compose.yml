@@ -73,6 +73,11 @@ services:
         condition: service_healthy
     ports: 
       - "${JOBSEEKER_HTTP_PORT:-80}:8080"
+      # Workspace gateway: editors of workspace runtime deployments, each behind
+      # a token of its own. Published like JobSeeker itself, on every interface
+      # and on IPv4 and IPv6 (browsers often reach hosts such as name.local over
+      # IPv6), unless JOBSEEKER_WORKSPACE_GATEWAY_HOST pins it to one address.
+      - "${JOBSEEKER_WORKSPACE_GATEWAY_HOST:+${JOBSEEKER_WORKSPACE_GATEWAY_HOST}:}${JOBSEEKER_WORKSPACE_GATEWAY_PORT:-3001}:8081"
     networks:
       - internal
     volumes:
@@ -81,6 +86,9 @@ services:
       - ./system:/var/www/html/system
       - ./.project:/var/www/html/.project
       - ./index.php:/var/www/html/index.php
+      # The workspace gateway serves HTTPS when this holds tls.crt and tls.key
+      # (scripts/workspace-gateway-certificate.sh).
+      - ./nginx/workspace-gateway-tls:/etc/nginx/workspace-gateway-tls:ro
      # - ./logs/nginx:/var/log/nginx/
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
@@ -146,6 +154,14 @@ services:
       - JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES=${JOBSEEKER_OPENVSCODE_IDLE_TIMEOUT_MINUTES:-30}
       - JOBSEEKER_DOCKER_MONITOR_URL=http://docker-monitor-proxy:8080
       - JOBSEEKER_DOCKER_RUNTIME_URL=http://docker-runtime:2375
+      - JOBSEEKER_WORKSPACE_RUNTIMES_ENABLED=${JOBSEEKER_WORKSPACE_RUNTIMES_ENABLED:-true}
+      - JOBSEEKER_WORKSPACE_GATEWAY_PORT=${JOBSEEKER_WORKSPACE_GATEWAY_PORT:-3001}
+      - JOBSEEKER_WORKSPACE_GATEWAY_PUBLIC_URL=${JOBSEEKER_WORKSPACE_GATEWAY_PUBLIC_URL:-}
+      - JOBSEEKER_WORKSPACE_GATEWAY_TLS=${JOBSEEKER_WORKSPACE_GATEWAY_TLS:-false}
+      - JOBSEEKER_WORKSPACE_IDE_PORTS=${JOBSEEKER_WORKSPACE_IDE_PORTS:-3100-3199}
+      - JOBSEEKER_WORKSPACE_RUNTIME_REPOSITORY=/php/repository
+      - JOBSEEKER_WORKSPACE_DEFAULT_CPUS=${JOBSEEKER_WORKSPACE_DEFAULT_CPUS:-2}
+      - JOBSEEKER_WORKSPACE_DEFAULT_MEMORY_MB=${JOBSEEKER_WORKSPACE_DEFAULT_MEMORY_MB:-4096}
       - JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION=${JOBSEEKER_DEFAULT_DOCKER_PYTHON_VERSION:-3.13}
       - JOBSEEKER_HOP_ENABLED=${JOBSEEKER_HOP_ENABLED:-true}
       - JOBSEEKER_HOP_VERSION=${JOBSEEKER_HOP_VERSION:-2.19.0}
@@ -247,10 +263,12 @@ services:
     volumes:
       - ./repository:/home/workspace/repository
       # Job workspaces may consume the SDK and its wheel, but must never edit
-      # the shared source used to build wheels for other jobs.
+      # the shared source used to build wheels for other jobs. The parent is
+      # mounted: JobSeeker refreshes the SDK by renaming a new folder into
+      # place, which a bind mount of the old folder would never see.
       - type: bind
-        source: ./repository/python/lib/jobseeker-sdk
-        target: /home/workspace/repository/python/lib/jobseeker-sdk
+        source: ./repository/python/lib
+        target: /home/workspace/repository/python/lib
         read_only: true
       - type: volume
         source: openvscode-server-data
@@ -415,6 +433,9 @@ services:
       - DOCKER_TLS_CERTDIR=
     volumes:
       - jobseeker-docker-cache:/var/lib/docker
+      # Workspace runtime editors run here and bind-mount only the project
+      # folders they serve (application/libraries/WorkspaceRuntimeService.php).
+      - ./repository:/php/repository
     networks:
       - internal
     healthcheck:
@@ -423,6 +444,22 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # Builds the editor layer of workspace runtimes (VS Code server, extensions,
+  # Git helpers) on the job runtime's engine, where runtimes are built, then
+  # exits. Cached layers make later starts take a few seconds.
+  workspace-toolkit:
+    image: docker:27-cli
+    depends_on:
+      docker-runtime:
+        condition: service_healthy
+    environment:
+      - DOCKER_HOST=tcp://docker-runtime:2375
+    volumes:
+      - ./docker:/src:ro
+    networks:
+      - internal
+    command: ["docker", "build", "--quiet", "--tag", "jobseeker-workspace-toolkit:local", "--file", "/src/workspace_toolkit_image", "/src"]
 
   jenkins:
     build:

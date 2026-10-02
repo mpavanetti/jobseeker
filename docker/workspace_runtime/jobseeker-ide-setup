@@ -1,0 +1,110 @@
+#!/bin/sh
+# Runs as root while JobSeeker builds the IDE variant of a workspace runtime,
+# right after /opt/jobseeker-ide was copied in. It makes the runtime image fit
+# for the editor without changing what the runtime itself provides:
+#   - refuses images the VS Code server cannot run on (musl, no glibc);
+#   - adds Git, curl and the OpenSSH client when missing, for Source Control
+#     and JobSeeker's Git credential helpers, and ps, which the Jupyter
+#     extension uses to stop a kernel's processes;
+#   - links those helpers where workspace Git configs expect them;
+#   - adds a passwd entry for the checkout owner, whom editors run as;
+#   - installs the dev container features fetched into /opt/jobseeker-features
+#     (docker/workspace_runtime/jobseeker-features), as the spec runs them;
+#   - installs the extensions a dev container and its features ask for.
+set -eu
+
+root=/opt/jobseeker-ide
+uid="${JOBSEEKER_UID:-1000}"
+gid="${JOBSEEKER_GID:-1000}"
+
+if ! "$root/server/node" --version >/dev/null 2>&1; then
+  echo "JobSeeker: this image cannot run the VS Code server. Runtimes need a glibc-based Linux such as Debian, Ubuntu or RHEL; Alpine (musl) images are not supported." >&2
+  exit 1
+fi
+
+missing=
+for tool in git curl ssh ps; do
+  command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+if [ -n "$missing" ]; then
+  echo "JobSeeker: adding$missing for the editor."
+  if command -v apt-get >/dev/null 2>&1; then
+    { DEBIAN_FRONTEND=noninteractive apt-get update \
+      && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git curl openssh-client procps ca-certificates \
+      && rm -rf /var/lib/apt/lists/*; } || echo "JobSeeker: apt-get could not install$missing." >&2
+  elif command -v dnf >/dev/null 2>&1; then
+    { dnf install -y git curl openssh-clients procps-ng ca-certificates && dnf clean all; } || echo "JobSeeker: dnf could not install$missing." >&2
+  elif command -v microdnf >/dev/null 2>&1; then
+    { microdnf install -y git curl openssh-clients procps-ng ca-certificates && microdnf clean all; } || echo "JobSeeker: microdnf could not install$missing." >&2
+  elif command -v yum >/dev/null 2>&1; then
+    { yum install -y git curl openssh-clients procps-ng ca-certificates && yum clean all; } || echo "JobSeeker: yum could not install$missing." >&2
+  elif command -v zypper >/dev/null 2>&1; then
+    zypper --non-interactive install git curl openssh-clients procps ca-certificates || echo "JobSeeker: zypper could not install$missing." >&2
+  else
+    echo "JobSeeker: no known package manager; install$missing in the runtime's Dockerfile for Source Control to work." >&2
+  fi
+fi
+
+mkdir -p /usr/local/bin
+for helper in jobseeker-git jobseeker-git-credential jobseeker-git-ssh; do
+  ln -sf "$root/bin/$helper" "/usr/local/bin/$helper"
+done
+
+# A real account (passwd, shadow, group), so su and sudo-style tools used by
+# dev container features accept it as they accept any other user.
+shell=/bin/sh
+[ -x /bin/bash ] && shell=/bin/bash
+if ! grep -q "^[^:]*:[^:]*:$gid:" /etc/group; then
+  group=workspace
+  grep -q '^workspace:' /etc/group && group=jobseeker-workspace
+  if command -v groupadd >/dev/null 2>&1; then
+    groupadd -g "$gid" "$group"
+  else
+    echo "$group:x:$gid:" >> /etc/group
+    [ ! -f /etc/gshadow ] || echo "$group:!::" >> /etc/gshadow
+  fi
+fi
+if ! grep -q "^[^:]*:[^:]*:$uid:" /etc/passwd; then
+  name=workspace
+  grep -q '^workspace:' /etc/passwd && name=jobseeker-workspace
+  if command -v useradd >/dev/null 2>&1; then
+    useradd -u "$uid" -g "$gid" -d /home/workspace -M -s "$shell" -c "JobSeeker workspace" "$name"
+  else
+    echo "$name:x:$uid:$gid:JobSeeker workspace:/home/workspace:$shell" >> /etc/passwd
+    [ ! -f /etc/shadow ] || echo "$name:*:$(( $(date +%s) / 86400 )):0:99999:7:::" >> /etc/shadow
+  fi
+fi
+
+# Features run as root with their options in the environment, for the user
+# editors run as; their containerEnv is sourced when the editor starts.
+extensions=${JOBSEEKER_IDE_EXTENSIONS:-}
+if [ -d /opt/jobseeker-features ]; then
+  user=$(awk -F: -v uid="$uid" '$3 == uid { print $1; exit }' /etc/passwd)
+  : > /etc/jobseeker-features.env
+  for feature in /opt/jobseeker-features/*/; do
+    [ -f "$feature/install.sh" ] || continue
+    echo "JobSeeker: installing dev container feature $(cat "$feature/ref")"
+    (
+      cd "$feature"
+      . ./jobseeker.env
+      export _REMOTE_USER="$user" _REMOTE_USER_HOME=/home/workspace _CONTAINER_USER="$user" _CONTAINER_USER_HOME=/home/workspace
+      chmod +x install.sh
+      ./install.sh
+    ) || { echo "JobSeeker: the feature $(cat "$feature/ref") failed to install." >&2; exit 1; }
+    cat "$feature/container.env" >> /etc/jobseeker-features.env
+    extensions="$extensions $(tr '\n' ' ' < "$feature/extensions")"
+  done
+  rm -rf /opt/jobseeker-features
+fi
+
+for extension in $extensions; do
+  "$root/server/bin/openvscode-server" --extensions-dir "$root/extensions" \
+    --user-data-dir /tmp/jobseeker-ide-install --install-extension "$extension" \
+    || echo "JobSeeker: extension $extension could not be installed." >&2
+done
+rm -rf /tmp/jobseeker-ide-install
+
+# The home becomes a named volume; Docker seeds it from this directory, with
+# its owner, the first time a deployment mounts it.
+mkdir -p /home/workspace/.openvscode-server/data
+chown -R "$uid:$gid" /home/workspace "$root/extensions"

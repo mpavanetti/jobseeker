@@ -26,6 +26,9 @@ services:
   docker-runtime:
     profiles: [full]
 
+  workspace-toolkit:
+    profiles: [full]
+
   openvscode-data-init:
     profiles: [full]
 
