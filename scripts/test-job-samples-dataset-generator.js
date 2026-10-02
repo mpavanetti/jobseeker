@@ -19,10 +19,13 @@ function assert(condition, message) {
 
 const shellSamples = (samples.match(/'family'\s*=>\s*'shell'/g) || []).length;
 const pythonSamples = (samples.match(/'family'\s*=>\s*'python'/g) || []).length;
+const notebookSamples = (samples.match(/'family'\s*=>\s*'notebook'/g) || []).length;
 assert(shellSamples >= 6, 'The catalog must keep at least six shell examples.');
 assert(pythonSamples >= 8, 'The catalog must keep at least eight Python/JobSeeker examples.');
 assert(samples.includes("'complexity' => 'simple'") && samples.includes("'complexity' => 'intermediate'") && samples.includes("'complexity' => 'advanced'"), 'Samples must span all supported complexity levels.');
-assert((samples.match(/'integrations'\s*=>\s*array\(/g) || []).length === shellSamples + pythonSamples, 'Every sample must declare the platform integrations it demonstrates.');
+assert((samples.match(/'integrations'\s*=>\s*array\(/g) || []).length === shellSamples + pythonSamples + notebookSamples, 'Every sample must declare the platform integrations it demonstrates.');
+// Notebook samples are project job folders with a cell tagged parameters.
+assert(notebookSamples >= 2 && /'entry_point'\s*=>\s*'report\.ipynb'/.test(samples) && samples.includes("array('parameters')"), 'The catalog must include parameterised notebook samples.');
 assert(samples.includes("'files' => array(") && samples.includes('tests/test_rules.py') && samples.includes('tests/test_aggregate.py'), 'The Python catalog must include multi-file tested workspaces.');
 assert(samples.includes('from jobseeker import JobSeeker') && samples.includes('tmf.progress'), 'Python templates must exercise the JobSeeker TMF SDK.');
 assert(samples.includes('tmf.asset(') && samples.includes('tmf.connector('), 'Python templates must cover governed assets and scoped connectors.');

@@ -50,4 +50,21 @@ if (array_keys($shell['datasets']) !== array('orders-current')) {
     exit(1);
 }
 
-echo "DependencyScanner variable defaults: 5 checks passed.\n";
+// A notebook job folder: the code cells are scanned, not the JSON (whose
+// escaped quotes no pattern reads) nor the outputs.
+$folder = sys_get_temp_dir().'/jobseeker-scanner-'.getmypid();
+@mkdir($folder);
+file_put_contents($folder.'/report.ipynb', json_encode(array('cells' => array(
+    array('cell_type' => 'markdown', 'source' => 'tmf.asset("from-markdown")'),
+    array('cell_type' => 'code', 'source' => array("asset_key = \"orders-current\"\n", 'tmf.connector("jobseeker-mariadb")')),
+    array('cell_type' => 'code', 'source' => 'rows = get_asset(asset_key).read()', 'outputs' => array(array('text' => 'tmf.asset("from-output")')))
+))));
+$notebook = $scanner->scan($scanner->sourcesForJob('', $folder));
+@unlink($folder.'/report.ipynb');
+@rmdir($folder);
+if (array_keys($notebook['connectors']) !== array('jobseeker-mariadb') || isset($notebook['datasets']['from-markdown']) || isset($notebook['datasets']['from-output'])) {
+    fwrite(STDERR, 'FAIL: a notebook\'s code cells were not scanned on their own: '.json_encode($notebook)."\n");
+    exit(1);
+}
+
+echo "DependencyScanner variable defaults and notebooks: 6 checks passed.\n";

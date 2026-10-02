@@ -1305,6 +1305,21 @@
         usesDocker: false
       };
       var encodedCommand = shellExportValue(rawCommand, 'JOBSEEKER_LINUX_COMMAND_B64');
+      // The project a job belongs to: a Git job names it, a job folder of a
+      // project without Git runs from workspaces/shared/<name>-<id>.
+      var projectMatch = /\/workspaces\/shared\/[a-z0-9._-]+-(\d+)\/jobs\//.exec(runtime.sourceDirectory || runtime.scriptPath || '');
+      runtime.projectId = parseInt(shellExportValue(rawCommand, 'JOBSEEKER_PROJECT_ID') || (projectMatch ? projectMatch[1] : '0'), 10) || 0;
+      // A notebook job carries its parameters (name, source, value) for the run.
+      runtime.notebook = shellExportValue(rawCommand, 'JOBSEEKER_NOTEBOOK') === '1';
+      runtime.notebookParameters = [];
+      var notebookSpec = shellExportValue(rawCommand, 'JOBSEEKER_NOTEBOOK_SPEC');
+      if (notebookSpec.indexOf('b64:') === 0) {
+        try {
+          runtime.notebookParameters = JSON.parse(decodeURIComponent(escape(window.atob(notebookSpec.substring(4))))) || [];
+        } catch (error) {
+          runtime.notebookParameters = [];
+        }
+      }
 
       runtime.commandPreview = decodeBase64Text(encodedCommand);
       runtime.usesDocker = runtime.dockerImage !== '' || runtime.pythonRuntime === 'docker' || runtime.linuxRuntime === 'docker' || /docker run/.test(rawCommand);
@@ -1318,6 +1333,9 @@
 
       runtime.entryPoint = displayEntryPointFromRuntime(runtime);
       runtime.sourceKind = sourceKindFromRuntime(runtime);
+      if (runtime.notebook) {
+        runtime.type = 'Jupyter notebook';
+      }
       return runtime;
     }
 
@@ -1356,6 +1374,9 @@
         runtimeField('Python', runtime.pythonExecutable ? escapeHtml(runtime.pythonExecutable) : renderMuted('None')) +
         runtimeField('Script Type', runtime.scriptType ? escapeHtml(labelFromScriptType(runtime.scriptType)) : renderMuted('None')) +
         runtimeField('Source Path', runtime.sourceDirectory || runtime.scriptPath ? escapeHtml(runtime.sourceDirectory || runtime.scriptPath) : renderMuted('None')) +
+        (runtime.notebook ? runtimeField('Notebook parameters', runtime.notebookParameters.length ? $.map(runtime.notebookParameters, function(parameter) {
+          return '<code>' + escapeHtml(parameter.name) + '</code> ' + (parameter.source === 'value' ? '= <code>' + escapeHtml(parameter.value) + '</code>' : '<span class="label label-info">' + escapeHtml(parameter.source === 'context' ? 'Context ' + (parameter.value || parameter.name) : '$' + (parameter.value || parameter.name)) + '</span>');
+        }).join('<br>') : renderMuted('The notebook\'s own values')) : '') +
       '</div>';
 
       if (runtime.commandPreview) {
@@ -1998,6 +2019,8 @@
           '<div class="box-header with-border job-detail-header">' +
             '<h3 class="box-title"><b>' + escapeHtml(detail.name) + '</b> ' + environmentHelper.label(config.environmentInfo) + '</h3>' +
             '<div class="job-detail-actions">' +
+              (config.runtime && config.runtime.notebook ? '<button type="button" class="btn btn-warning btn-sm job-notebook-run" data-job="' + escapeAttribute(detail.name) + '"><i class="fa fa-book"></i> Run with parameters</button>' : '') +
+              (config.runtime && config.runtime.projectId && window.jobseekerOpenProject ? '<button type="button" class="btn btn-default btn-sm job-open-project" data-project="' + escapeAttribute(config.runtime.projectId) + '" title="Develop this job in its project\'s editor"><i class="fa fa-code"></i> VS Code</button>' : '') +
               '<button type="button" class="btn btn-primary btn-sm job-compare-runs" data-job="' + escapeAttribute(detail.name) + '"><i class="fa fa-columns"></i> Compare runs</button>' +
               (detail.jenkinsUrl ? '<a class="btn btn-default btn-sm" href="' + escapeAttribute(detail.jenkinsUrl) + '" target="_blank" rel="noopener"><i class="fa fa-external-link"></i> Jenkins</a>' : '') +
               (detail.jenkinsUrl ? '<a class="btn btn-default btn-sm" href="' + escapeAttribute(detail.jenkinsUrl + 'configure') + '" target="_blank" rel="noopener"><i class="fa fa-cog"></i> Configure</a>' : '') +
@@ -2620,6 +2643,88 @@
     }
 
     $(document).on('click', '.job-compare-runs', function() { openRunComparison($(this).attr('data-job')); });
+
+    // A notebook job, once, with other parameter values: they travel as the
+    // build parameter JOBSEEKER_NOTEBOOK_PARAMETERS and override the job's.
+    function openNotebookRun(jobName) {
+      var detail = loadedJobDetails[jobName];
+      var config = detail ? parseJobConfig(detail.configXml || '', jobName) : null;
+      var runtime = config ? config.runtime : null;
+      if (! runtime || ! runtime.notebook) {
+        toastr.error('This job does not run a notebook.', 'Notebook');
+        return;
+      }
+      var environment = environmentHelper.text(config.environmentInfo);
+      var rows = $.map(runtime.notebookParameters, function(parameter) {
+        var configured = parameter.source === 'value' ? parameter.value : (parameter.source === 'context' ? 'Context ' + (parameter.value || parameter.name) : '$' + (parameter.value || parameter.name));
+        return '<tr><td><code>' + escapeHtml(parameter.name) + '</code></td><td class="text-muted">' + escapeHtml(configured) + '</td>'
+          + '<td><input type="text" class="form-control input-sm notebook-run-value" data-name="' + escapeAttribute(parameter.name) + '" placeholder="keep" spellcheck="false"></td></tr>';
+      }).join('');
+      var modal = $('#notebookRunModal');
+      if (! modal.length) {
+        modal = $('<div class="modal fade" id="notebookRunModal" tabindex="-1" role="dialog"><div class="modal-dialog" role="document"><div class="modal-content">'
+          + '<div class="modal-header"><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button><h4 class="modal-title"><i class="fa fa-book"></i> Run <span class="notebook-run-job"></span> with parameters</h4></div>'
+          + '<div class="modal-body"><p class="text-muted notebook-run-help"></p><table class="table table-condensed notebook-run-table"><thead><tr><th>Parameter</th><th>Job value</th><th>This run</th></tr></thead><tbody></tbody></table>'
+          + '<div class="notebook-run-extra"><label>Other values <small class="text-muted">one <code>name=value</code> per line, for variables the job does not set</small></label><textarea class="form-control input-sm notebook-run-more" rows="2" spellcheck="false" placeholder="start_date=2026-10-01"></textarea></div></div>'
+          + '<div class="modal-footer"><button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button><button type="button" class="btn btn-warning notebook-run-go"><i class="fa fa-play"></i> Run once</button></div>'
+          + '</div></div></div>').appendTo('body');
+      }
+      modal.data('job', jobName).data('environment', environment);
+      modal.find('.notebook-run-job').text(jobName);
+      modal.find('.notebook-run-help').html('Values for this run only, in ' + escapeHtml(environment || 'its environment') + '. Empty keeps the job\'s value; numbers, <code>true</code>/<code>false</code>, lists and quoted strings are typed as JSON.');
+      modal.find('tbody').html(rows || '<tr><td colspan="3" class="text-muted">The job sets no parameters; add values below.</td></tr>');
+      modal.find('.notebook-run-more').val('');
+      modal.modal('show');
+    }
+
+    $(document).on('click', '.job-notebook-run', function() { openNotebookRun($(this).attr('data-job')); });
+    $(document).on('click', '.job-open-project', function() {
+      if (window.jobseekerOpenProject) {
+        window.jobseekerOpenProject($(this).attr('data-project'));
+      }
+    });
+    $(document).on('click', '#notebookRunModal .notebook-run-go', function() {
+      var modal = $('#notebookRunModal');
+      var jobName = modal.data('job');
+      var overrides = {};
+      var invalid = '';
+      modal.find('.notebook-run-value').each(function() {
+        var value = $(this).val();
+        if ($.trim(value) !== '') {
+          overrides[$(this).attr('data-name')] = value;
+        }
+      });
+      $.each(String(modal.find('.notebook-run-more').val() || '').split(/\r?\n/), function(index, line) {
+        if ($.trim(line) === '') {
+          return;
+        }
+        var match = /^\s*([A-Za-z_][A-Za-z0-9_]{0,63})\s*=(.*)$/.exec(line);
+        if (! match) {
+          invalid = line;
+          return false;
+        }
+        overrides[match[1]] = $.trim(match[2]);
+      });
+      if (invalid) {
+        toastr.error('"' + invalid + '" is not name=value with a Python name.', 'Notebook');
+        return;
+      }
+      var button = $(this).prop('disabled', true);
+      var data = {JOBSEEKER_NOTEBOOK_PARAMETERS: $.isEmptyObject(overrides) ? '' : JSON.stringify(overrides)};
+      if (modal.data('environment') && modal.data('environment') !== 'Unknown') {
+        data.ENVIRONMENT = modal.data('environment');
+      }
+      jenkinsRequest(jenkinsJobPath(jobName) + '/buildWithParameters', 'POST', {data: data})
+        .done(function() {
+          modal.modal('hide');
+          toastr.success(jobName + ' was queued' + ($.isEmptyObject(overrides) ? '.' : ' with ' + Object.keys(overrides).join(', ') + '.') + ' Its console opens here when it starts.', 'Notebook', {timeOut: 7000});
+          setTimeout(loadSelectedJobs, 4000);
+        })
+        .fail(function(xhr) {
+          toastr.error(xhr && xhr.status === 400 ? 'Jenkins refused the run: save the job again to add its notebook parameter.' : responseMessage(xhr, 'Jenkins could not queue the run.'), 'Notebook');
+        })
+        .always(function() { button.prop('disabled', false); });
+    });
     $(document).on('click', '.run-compare-pick', function() {
       var number = Number($(this).attr('data-build'));
       var numbers = runNumbersFromInput();

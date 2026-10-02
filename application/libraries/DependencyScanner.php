@@ -236,7 +236,7 @@ class DependencyScanner
             return array();
         }
         $transient = array('.git', '.venv', 'venv', '.vscode', '.uv-cache', '.jobseeker-wheels', '.jobseeker-python-libs', '__pycache__', '.mypy_cache', '.ruff_cache', '.pytest_cache', 'node_modules', 'htmlcov', 'build', 'dist');
-        $scannable = array('py', 'sh', 'bash', 'ps1', 'bat', 'cmd', 'sql', 'item', 'properties', 'xml', 'txt', 'cfg', 'ini', 'toml', 'json', 'yaml', 'yml', 'java', 'groovy', 'r');
+        $scannable = array('py', 'ipynb', 'sh', 'bash', 'ps1', 'bat', 'cmd', 'sql', 'item', 'properties', 'xml', 'txt', 'cfg', 'ini', 'toml', 'json', 'yaml', 'yml', 'java', 'groovy', 'r');
 
         $root = rtrim($directory, DIRECTORY_SEPARATOR);
         $iterator = new RecursiveIteratorIterator(
@@ -264,14 +264,34 @@ class DependencyScanner
             if ($extension !== '' && ! in_array($extension, $scannable, TRUE)) {
                 continue;
             }
-            if ($item->getSize() > 512 * 1024) {
+            // A notebook carries its outputs (images) too, so it may be larger.
+            if ($item->getSize() > ($extension === 'ipynb' ? 8 * 1024 * 1024 : 512 * 1024)) {
                 continue;
             }
             $contents = @file_get_contents($item->getPathname());
+            if ($contents !== FALSE && $extension === 'ipynb') {
+                $contents = $this->notebookCode($contents);
+            }
             if ($contents !== FALSE && strpos($contents, "\0") === FALSE) {
                 $files[] = $contents;
             }
         }
         return $files;
+    }
+
+    /** The code cells of a notebook, as the source a script would have. */
+    private function notebookCode($json)
+    {
+        $notebook = json_decode($json, TRUE);
+        if (! is_array($notebook) || ! isset($notebook['cells']) || ! is_array($notebook['cells'])) {
+            return FALSE;
+        }
+        $code = array();
+        foreach ($notebook['cells'] as $cell) {
+            if (is_array($cell) && isset($cell['cell_type'], $cell['source']) && $cell['cell_type'] === 'code') {
+                $code[] = is_array($cell['source']) ? implode('', $cell['source']) : (string) $cell['source'];
+            }
+        }
+        return implode("\n\n", $code);
     }
 }

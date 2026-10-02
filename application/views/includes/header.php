@@ -99,7 +99,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   <!-- Alertify Js -->
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/alertify.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
-  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=7" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=8" rel="stylesheet" type="text/css" />
   <!-- jQuery UI -->
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
@@ -136,7 +136,8 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=2" type="text/javascript"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=11" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-notebook.js?v=3" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=13" type="text/javascript"></script>
 <script type="text/javascript">
   window.jobseekerTime = {
     serverTimezone: 'UTC',
@@ -1201,6 +1202,13 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               <span class="pull-right-container"><small class="label pull-right jobseeker-ide-badge">Projects</small></span>
             </a>
           </li>
+          <?php if ($role == ROLE_ADMIN || $role == ROLE_MANAGER) { ?>
+          <li class="jobseeker-sidebar-runtimes<?php echo uri_string() === 'workspace-runtimes' ? ' active' : ''; ?>">
+            <a href="<?php echo base_url(); ?>workspace-runtimes" title="Environments projects develop and run in">
+              <i class="fa fa-cubes"></i> <span>Runtimes</span>
+            </a>
+          </li>
+          <?php } ?>
           <?php } ?>
           <li class="treeview">
             <a href="#">
@@ -1440,6 +1448,12 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               <a href="<?php echo base_url(); ?>User/groupsListing">
                 <i class="fa fa-users"></i>
                 <span>Groups</span>
+              </a>
+            </li>
+            <li<?php echo $jobseekerCurrentController === 'auditlog' ? ' class="active"' : ''; ?>>
+              <a href="<?php echo base_url(); ?>audit-log">
+                <i class="fa fa-shield"></i>
+                <span>Audit Log</span>
               </a>
             </li>
             <?php

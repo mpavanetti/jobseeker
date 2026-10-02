@@ -384,7 +384,7 @@ PYTHON
 import os
 from typing import Any
 
-from jobseeker import JobSeeker
+from jobseeker import JobSeeker, JobSeekerDependencyError
 
 
 INPUT_ASSET = os.getenv("JOBSEEKER_INPUT_ASSET", "customer-reference")
@@ -397,6 +397,17 @@ def normalize(row: Any) -> dict[str, Any]:
     return {"value": row}
 
 
+def read_optional_rows(source: Any, fallback: list[dict[str, Any]]) -> list[Any]:
+    if source is None:
+        return fallback
+    try:
+        rows = source.read()
+    except JobSeekerDependencyError as error:
+        print(f"{source.uri} needs optional tabular packages ({error}); using preview rows")
+        return fallback
+    return rows if isinstance(rows, list) else [rows]
+
+
 def main() -> None:
     environment = os.getenv("ENVIRONMENT", "LOCAL")
     job_name = os.getenv("JOB_NAME", "python-asset-transform")
@@ -404,9 +415,9 @@ def main() -> None:
     with JobSeeker(environment=environment, job=job_name) as js:
         with js.task("Normalize customer reference", "STG_CUSTOMER") as tmf:
             source = tmf.asset(INPUT_ASSET, required=False)
-            rows = source.read() if source is not None else [
+            rows = read_optional_rows(source, [
                 {"Customer_ID": 1, "Name": "Preview Customer"}
-            ]
+            ])
             normalized = [normalize(row) for row in rows]
             tmf.progress(total=len(rows), processed=len(rows), msg="Rows normalized")
 
@@ -751,9 +762,21 @@ PYTHON
         'code' => <<<'PYTHON'
 import os
 
-from jobseeker import JobSeeker
+from jobseeker import JobSeeker, JobSeekerDependencyError
 
 from quality.rules import validate_rows
+
+
+def read_optional_rows(source):
+    fallback = [{"customer_id": "1001", "email": "preview@example.com"}]
+    if source is None:
+        return fallback
+    try:
+        rows = source.read()
+    except JobSeekerDependencyError as error:
+        print(f"{source.uri} needs optional tabular packages ({error}); using preview rows")
+        return fallback
+    return rows if isinstance(rows, list) else fallback
 
 
 def main() -> None:
@@ -763,9 +786,7 @@ def main() -> None:
     with JobSeeker(environment=environment, job=job_name) as js:
         with js.task("Customer quality gate", "DQ_CUSTOMER") as tmf:
             source = tmf.asset("customer-reference", required=False)
-            rows = source.read() if source is not None else [
-                {"customer_id": "1001", "email": "preview@example.com"}
-            ]
+            rows = read_optional_rows(source)
             failures = validate_rows(rows)
             processed = len(rows) - len(failures)
             tmf.progress(total=len(rows), processed=processed, msg=f"Rejected {len(failures)} rows")
@@ -836,7 +857,18 @@ import os
 import time
 from typing import Any
 
-from jobseeker import JobSeeker
+from jobseeker import JobSeeker, JobSeekerDependencyError
+
+
+def read_optional_rows(source, fallback: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if source is None:
+        return fallback
+    try:
+        rows = source.read()
+    except JobSeekerDependencyError as error:
+        print(f"{source.uri} needs optional tabular packages ({error}); using preview rows")
+        return fallback
+    return rows if isinstance(rows, list) else fallback
 
 
 def main() -> None:
@@ -847,9 +879,9 @@ def main() -> None:
     with JobSeeker(environment=environment, job=job_name) as js:
         with js.task("Extract orders", "STG_ORDERS") as extract:
             source = extract.asset("orders-inbound", required=False)
-            rows: list[dict[str, Any]] = source.read() if source is not None else [
+            rows = read_optional_rows(source, [
                 {"order_id": "preview-1", "amount": "42.50"}
-            ]
+            ])
             extract.finish(total=len(rows), processed=len(rows), msg="Orders extracted")
 
         with js.task("Transform orders", "DW_ORDERS", records_total=len(rows)) as transform:
@@ -895,10 +927,21 @@ import os
 import time
 from typing import Any
 
-from jobseeker import JobSeeker
+from jobseeker import JobSeeker, JobSeekerDependencyError
 
 
 CONNECTOR_KEY = os.getenv("JOBSEEKER_CONNECTOR", "jobseeker-mariadb")
+
+
+def read_optional_rows(source, fallback: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if source is None:
+        return fallback
+    try:
+        rows = source.read()
+    except JobSeekerDependencyError as error:
+        print(f"{source.uri} needs optional tabular packages ({error}); using preview rows")
+        return fallback
+    return rows if isinstance(rows, list) else fallback
 
 
 def as_bool(value: Any) -> bool:
@@ -940,9 +983,9 @@ def main() -> None:
                 print(f"Connector {connector.key} passed in {getattr(result, 'latency_ms', 0)} ms")
 
             source = discover.asset("orders-inbound", required=False)
-            rows: list[dict[str, Any]] = source.read() if source is not None else [
+            rows = read_optional_rows(source, [
                 {"order_id": "preview-1", "amount": "42.50", "source": "preview"}
-            ]
+            ])
             rows = rows[:batch_size]
             discover.finish(total=len(rows), processed=len(rows), msg=f"Loaded {len(rows)} orders")
 
@@ -1094,7 +1137,7 @@ transaction for them; the row counts they report show up in the task graph's
 Rows column and on the Results page.
 """
 
-from jobseeker import dag
+from jobseeker import JobSeekerDependencyError, dag
 
 from pipeline.rules import reject_reasons, summarise
 
@@ -1113,7 +1156,11 @@ def load_customers(ctx):
     # that has no catalog at all, so this starter runs before any Data Asset
     # has been published.
     source = ctx.asset("customers-inbound", required=False)
-    rows = source.read() if source is not None else SAMPLE_ROWS
+    try:
+        rows = source.read() if source is not None else SAMPLE_ROWS
+    except JobSeekerDependencyError as error:
+        ctx.log(f"customers-inbound needs optional tabular packages ({error}); using the built-in sample batch")
+        rows = SAMPLE_ROWS
     if source is None:
         ctx.log("customers-inbound is not registered; using the built-in sample batch")
     ctx.push("rows", list(rows))
@@ -1561,7 +1608,139 @@ def test_partition_key_handles_a_missing_watermark() -> None:
 PYTHON
             )
         )
-    )
+    ),
+    // Notebooks run as the entry file of a project job (jobseeker.notebook):
+    // added to a project from the launcher or VS Code's "JobSeeker: add
+    // sample", not loaded into the inline editor, which edits Python files.
+    array(
+        'id' => 'notebook-sales-report',
+        'name' => 'Notebook: parameterised sales report',
+        'family' => 'notebook',
+        'complexity' => 'simple',
+        'description' => 'A Jupyter notebook with a parameters cell, a Context value, a pandas summary and a chart. As a job, each run gets its parameters, a cell-by-cell log and a TMF transaction.',
+        'tags' => array('notebook', 'pandas', 'parameters', 'context'),
+        'integrations' => array('notebooks', 'contexts', 'tmf', 'environments'),
+        'job_description' => 'A parameterised Jupyter notebook report run by JobSeeker.',
+        'entry_point' => 'report.ipynb',
+        'runtime' => 'local',
+        'requirements' => "pandas>=2.2\nmatplotlib>=3.8\nipykernel>=6.29\nnbclient>=0.10\n",
+        'cells' => array(
+            array('markdown', "# Daily sales report\n\nSimulates a day of orders for one **region**, summarises them and plots revenue by hour.\n\n- In VS Code: **Run All** with the `.venv` kernel.\n- As a job: Job Creation reads the cell tagged `parameters` and lets each run set `rows`, `region` and `threshold`, or read them from Context Settings."),
+            array('code', <<<'PYTHON'
+rows = 200  # orders to simulate
+region = "us"
+threshold = 0.25  # share of the daily revenue that flags an hour
+PYTHON
+, array('parameters')),
+            array('code', <<<'PYTHON'
+from jobseeker import get_context
+
+# Context Settings > Context Details: a "currency" value for this project.
+currency = get_context("currency", default="USD")
+print(f"Region {region}: {rows} orders, revenue in {currency}")
+PYTHON
+),
+            array('code', <<<'PYTHON'
+import numpy as np
+import pandas as pd
+
+rng = np.random.default_rng(42)
+orders = pd.DataFrame({
+    "hour": rng.integers(0, 24, rows),
+    "amount": rng.gamma(2.0, 30.0, rows).round(2),
+})
+orders["region"] = region
+orders.describe().round(2)
+PYTHON
+),
+            array('code', <<<'PYTHON'
+import matplotlib.pyplot as plt
+
+by_hour = orders.groupby("hour")["amount"].sum()
+ax = by_hour.plot(kind="bar", color="#f37626", figsize=(8, 3), title=f"Revenue by hour ({region})")
+ax.set_ylabel(currency)
+plt.show()
+PYTHON
+),
+            array('markdown', "## Summary\n\nThe last cell fails the run when there is nothing to report, so a scheduled job turns red instead of publishing an empty report."),
+            array('code', <<<'PYTHON'
+total = float(orders["amount"].sum())
+flagged = by_hour[by_hour > total * threshold / 6]
+print(f"Total revenue: {total:,.2f} {currency}")
+print(f"Hours above the threshold: {list(flagged.index)}")
+assert rows > 0, "No orders to report"
+{"region": region, "orders": rows, "revenue": round(total, 2)}
+PYTHON
+),
+        ),
+        'files' => array(
+            array('path' => 'README.md', 'content' => "# Notebook: parameterised sales report\n\n`report.ipynb` is the job's entry file. JobSeeker runs it top to bottom in a Jupyter kernel and fails the build on the first cell that raises.\n\n## Develop\n\nOpen the project in VS Code, open `report.ipynb`, choose **Select Kernel > Python Environments > .venv** and **Run All**.\n\n## Schedule\n\nIn Job Creation choose **From a project workspace**, this project and this folder. The form lists the variables of the cell tagged `parameters`; give each a value, or read it from **Context**. **Run with parameters** on View Job runs it once with other values.\n\nThe build log shows each cell with its output, the executed notebook (charts included) can be downloaded from it, and Transaction Monitoring records the run with its cells as records.\n"),
+        ),
+    ),
+    array(
+        'id' => 'notebook-data-checks',
+        'name' => 'Notebook: data quality checks',
+        'family' => 'notebook',
+        'complexity' => 'intermediate',
+        'description' => 'Standard-library checks over a governed Data Asset (or sample rows), with a Markdown summary. A failed check fails the build at its cell; the TMF error carries the traceback.',
+        'tags' => array('notebook', 'data quality', 'data asset'),
+        'integrations' => array('notebooks', 'data_assets', 'tmf', 'environments'),
+        'job_description' => 'Notebook data quality checks run by JobSeeker.',
+        'entry_point' => 'checks.ipynb',
+        'runtime' => 'local',
+        'requirements' => "ipykernel>=6.29\nnbclient>=0.10\n",
+        'cells' => array(
+            array('markdown', "# Data quality checks\n\nReads the `quality-input` Data Asset when it is registered (ETL > Data Assets), else a few sample rows, then checks them. Each check is one cell: the log shows which one failed."),
+            array('code', <<<'PYTHON'
+asset_key = "quality-input"
+min_rows = 3
+required_columns = ["id", "email", "amount"]
+max_amount = 10000
+PYTHON
+, array('parameters')),
+            array('code', <<<'PYTHON'
+import csv
+import io
+
+from jobseeker import get_asset
+
+asset = get_asset(asset_key, required=False)
+if asset is not None and asset.exists():
+    with asset.open("r") as handle:
+        rows = list(csv.DictReader(handle))
+    source = f"Data Asset {asset_key}"
+else:
+    sample = "id,email,amount\n1,ana@example.com,120.50\n2,bo@example.com,75\n3,cy@example.com,310.25\n"
+    rows = list(csv.DictReader(io.StringIO(sample)))
+    source = "sample rows (register the Data Asset to check real data)"
+print(f"{len(rows)} rows from {source}")
+PYTHON
+),
+            array('code', <<<'PYTHON'
+missing = [column for column in required_columns if rows and column not in rows[0]]
+assert not missing, f"Missing columns: {missing}"
+assert len(rows) >= min_rows, f"Only {len(rows)} rows, expected at least {min_rows}"
+PYTHON
+),
+            array('code', <<<'PYTHON'
+bad_emails = [row["id"] for row in rows if "@" not in row.get("email", "")]
+too_large = [row["id"] for row in rows if float(row.get("amount") or 0) > max_amount]
+assert not bad_emails, f"Rows with an invalid email: {bad_emails}"
+assert not too_large, f"Rows above {max_amount}: {too_large}"
+PYTHON
+),
+            array('code', <<<'PYTHON'
+from IPython.display import Markdown, display
+
+total = sum(float(row["amount"]) for row in rows)
+display(Markdown(f"**{len(rows)}** rows passed every check · total amount **{total:,.2f}** · source: {source}"))
+PYTHON
+),
+        ),
+        'files' => array(
+            array('path' => 'README.md', 'content' => "# Notebook: data quality checks\n\n`checks.ipynb` is the job's entry file. Each check is a cell with `assert`: the first one that fails stops the run, marks the build failed and records the traceback in Transaction Monitoring.\n\nRegister a CSV Data Asset with the key `quality-input` (ETL > Data Assets) to check real data, or set `asset_key` as a notebook parameter in Job Creation.\n"),
+        ),
+    ),
 );
 
 /*
@@ -1599,6 +1778,7 @@ foreach ($samples as &$sample) {
         'email_metrics' => 'structured email/run metrics',
         'pipelines' => 'pipeline-ready execution',
         'task_dag' => 'the JobSeeker task DAG runtime',
+        'notebooks' => 'Jupyter notebooks run as jobs',
         'docker' => 'a reproducible Docker runtime',
         'tests' => 'automated tests',
         'jenkins' => 'Jenkins build metadata',
@@ -1643,6 +1823,39 @@ foreach ($samples as &$sample) {
 
     $files[] = array('path' => 'README.md', 'content' => $readme);
     $sample['files'] = $files;
+}
+unset($sample);
+
+// A notebook sample keeps its cells as code, so they are reviewable and
+// syntax checked like every other sample; projects receive them as .ipynb.
+foreach ($samples as &$sample) {
+    if (! isset($sample['family'], $sample['cells']) || $sample['family'] !== 'notebook') {
+        continue;
+    }
+    $cells = array();
+    foreach ($sample['cells'] as $index => $cell) {
+        $item = array(
+            'cell_type' => $cell[0],
+            'id' => substr(md5($sample['id'].':'.$index), 0, 8),
+            'metadata' => empty($cell[2]) ? new stdClass() : array('tags' => array_values($cell[2])),
+            'source' => rtrim($cell[1], "\n")
+        );
+        if ($cell[0] === 'code') {
+            $item['execution_count'] = NULL;
+            $item['outputs'] = array();
+        }
+        $cells[] = $item;
+    }
+    $sample['code'] = json_encode(array(
+        'cells' => $cells,
+        'metadata' => array(
+            'kernelspec' => array('display_name' => 'Python 3', 'language' => 'python', 'name' => 'python3'),
+            'language_info' => array('name' => 'python')
+        ),
+        'nbformat' => 4,
+        'nbformat_minor' => 5
+    ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n";
+    unset($sample['cells']);
 }
 unset($sample);
 

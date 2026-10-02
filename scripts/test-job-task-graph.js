@@ -344,8 +344,8 @@ ok('the python builder includes the DAG environment',
 // --- 9. Views ----------------------------------------------------------------------
 
 const header = read('application/views/includes/header.php');
-ok('the console grouper is cache-busted for the task sections', header.indexOf('job-console-groups.js?v=11') !== -1);
-ok('the console stylesheet is cache-busted', header.indexOf('job-console-groups.css?v=7') !== -1);
+ok('the console grouper is cache-busted for the task sections', header.indexOf('job-console-groups.js?v=13') !== -1);
+ok('the console stylesheet is cache-busted', header.indexOf('job-console-groups.css?v=8') !== -1);
 
 const consoleCss = read('assets/dist/css/job-console-groups.css');
 ['task', 'dag'].forEach((kind) => {
@@ -556,7 +556,10 @@ ok('a Python job declares the two task parameters',
   jobCreation.indexOf("'name', 'JOBSEEKER_DAG_RESUME'") !== -1 &&
   jobCreation.indexOf("'name', 'JOBSEEKER_DAG_TASKS'") !== -1);
 ok('a shell job does not grow them',
-  /createRuntimeEnvironmentProperties\(\$dom, \$environment, \$includeTaskParameters = FALSE\)/.test(jobCreation));
+  /createRuntimeEnvironmentProperties\(\$dom, \$environment, \$includeTaskParameters = FALSE(?:, \$includeNotebookParameters = FALSE)?\)/.test(jobCreation));
+ok('a notebook job gets its run-override parameter instead',
+  jobCreation.indexOf("'name', 'JOBSEEKER_NOTEBOOK_PARAMETERS'") !== -1 &&
+  jobCreation.indexOf('$declaresTasks && ! $runsNotebook, $runsNotebook') !== -1);
 ok('the builder only asks for them on a Python job', jobCreation.indexOf('$declaresTasks = ') !== -1);
 
 ok('the client can queue a re-run', clientJs.indexOf("'jobExecution/runTasks'") !== -1);

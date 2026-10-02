@@ -43,4 +43,11 @@ assert(editor.includes("$(window).on('beforeunload'"),
 assert(editor.includes("$('#clearEditJob, #newJobFromHeader').click(startNewJob)"),
   'Both edit exits must use the guarded new-job transition.');
 
+// Intentional inline replacements keep their loaded optimistic-lock token,
+// while validation/conflict redirects keep the operator in the same job.
+assert(/\$\('#pythonDockerfileText'\)\.val\(sample\.dockerfile \|\| ''\);[\s\S]{0,700}if \(editingOriginalJob === ''\) \{\s*\$\('#pythonWorkspaceSignature'\)\.val\(''\);/.test(editor),
+  'Loading a sample while editing must preserve the workspace baseline signature.');
+assert(!controller.includes("redirect('JobCreation');"),
+  'Edit validation failures must return to the same edit URL.');
+
 console.log('Job edit workspace checks passed.');

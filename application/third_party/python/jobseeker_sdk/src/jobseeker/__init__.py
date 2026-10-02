@@ -1075,6 +1075,15 @@ def _ide_connector_session() -> Optional[Dict[str, str]]:
         directory = parent
 
 
+def _ide_session_value(name: str) -> str:
+    """One value of the editor session, or "" outside an editor JobSeeker opened."""
+    try:
+        session = _ide_connector_session()
+    except OSError:
+        return ""
+    return str((session or {}).get(name, "") or "").strip()
+
+
 def _materialize_ide_connectors(session: Dict[str, str]) -> str:
     """Fetch the session's catalog into a private directory removed at exit."""
     directory = tempfile.mkdtemp(prefix="jobseeker-connectors-")
@@ -1472,7 +1481,9 @@ class JobSeeker:
         instance_id: Optional[str] = None,
         install_signal_handlers: bool = True,
     ):
-        self.environment = environment or _env("JOBSEEKER_ENVIRONMENT", "LOCAL")
+        # In an editor JobSeeker opened, the workspace's session names the
+        # environment it was opened for, so a notebook reads what its job will.
+        self.environment = environment or _env("JOBSEEKER_ENVIRONMENT") or _ide_session_value("JOBSEEKER_CONNECTOR_ENVIRONMENT") or "LOCAL"
         self.job = _safe_job_name(job)
         self.interface_id = interface_id
         self.id = instance_id or _new_instance_id()
@@ -1578,13 +1589,19 @@ class JobSeeker:
         project: Optional[str] = None,
     ) -> Any:
         payload = self._base_payload()
-        payload.update({"key": key, "project": project})
+        # A job of a project (JOBSEEKER_PROJECT_NAME) reads its own project's
+        # value first, so two projects may both define "rows"; a key only
+        # another project defines is still found, as before projects mattered.
+        implicit_project = "" if project else (_env("JOBSEEKER_PROJECT_NAME") or _ide_session_value("JOBSEEKER_PROJECT_NAME"))
+        payload.update({"key": key, "project": project or implicit_project or None})
         # A worker that cannot reach the settings database can still be handed a
         # value by its own environment, so a transport failure is held rather
         # than raised until the fallback below has had its turn.
         transport_error = None
         try:
             value = self.transport.get_context(payload)
+            if value is None and implicit_project:
+                value = self.transport.get_context(dict(payload, project=None))
         except Exception as error:  # noqa: BLE001 - re-raised below if nothing answers
             transport_error = error
             value = None
@@ -1928,14 +1945,14 @@ class TmfTask:
         self.client._unregister_task(self)
         return ok
 
-    def fail(self, msg: str, origin: str = "Python Method", code: int = 1) -> bool:
+    def fail(self, msg: str, origin: str = "Python Method", code: int = 1, type: str = "Python Exception") -> bool:  # noqa: A002 - the TMF column is named "type"
         payload = self._base_payload()
         payload.update(
             {
                 "message": msg,
                 "origin": origin,
                 "code": code,
-                "type": "Python Exception",
+                "type": type or "Python Exception",
                 "event_text": "Error(s) Found",
             }
         )
