@@ -380,7 +380,160 @@
   width: 14px;
 }
 
+/* Runtime panel: what the project opens in (WorkspaceRuntimeTrait). */
+.project-launcher-runtime {
+  border: 1px solid #e3e8ee;
+  border-radius: 4px;
+  margin: 0 0 12px;
+  padding: 10px;
+}
+
+.project-launcher-runtime-head {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.project-launcher-runtime-head a {
+  font-size: 12px;
+}
+
+.project-launcher-runtime-help {
+  color: #6b7a89;
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.project-launcher-runtime-help.is-error {
+  color: #b3261e;
+}
+
+.project-launcher-runtime-help.is-warning {
+  color: #7a5200;
+}
+
+.project-launcher-starter {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.project-launcher-starter select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.project-launcher-isolation {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.project-launcher-isolation label {
+  border: 1px solid #e3e8ee;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font-weight: normal;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 8px;
+  position: relative;
+}
+
+.project-launcher-isolation label.is-checked {
+  background: #f3f9fe;
+  border-color: #007acc;
+}
+
+.project-launcher-isolation input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.project-launcher-isolation small {
+  color: #6b7a89;
+  line-height: 1.3;
+}
+
+.project-launcher-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.project-launcher-resources label {
+  align-items: center;
+  color: #6b7a89;
+  display: flex;
+  font-weight: 600;
+  gap: 6px;
+  margin: 0;
+}
+
+.project-launcher-resources input {
+  width: 72px;
+}
+
+.project-launcher-resources select {
+  width: 90px;
+}
+
+.project-launcher-runtime-state {
+  font-size: 12px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.project-launcher-runtime-state .btn-link {
+  padding: 0 4px;
+}
+
+.project-launcher-runtime-badge {
+  border-radius: 3px;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  text-transform: uppercase;
+}
+
+.project-launcher-runtime-badge.is-ready {
+  background: #e3f4e5;
+  color: #2e7d32;
+}
+
+.project-launcher-runtime-badge.is-building {
+  background: #e6f2fb;
+  color: #0065a9;
+}
+
+.project-launcher-runtime-badge.is-failed,
+.project-launcher-runtime-badge.is-missing {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+.project-launcher-runtime-badge.is-outdated {
+  background: #fff8e6;
+  color: #7a5200;
+}
+
+.project-launcher-runtime-badge.is-none {
+  background: #eef1f4;
+  color: #4d5b69;
+}
+
 @media (max-width: 767px) {
+  .project-launcher-isolation {
+    grid-template-columns: 1fr;
+  }
+
   .project-launcher-columns {
     grid-template-columns: 1fr;
   }
@@ -403,3 +556,9 @@
 .project-launcher [hidden] {
   display: none !important;
 }
+
+/* The one-time trust of the editors' certificate. */
+.project-launcher-trust details { margin-top: 6px; }
+.project-launcher-trust summary { cursor: pointer; font-weight: 600; }
+.project-launcher-trust ul { margin: 6px 0; padding-left: 18px; }
+.project-launcher-trust li { margin-bottom: 2px; }

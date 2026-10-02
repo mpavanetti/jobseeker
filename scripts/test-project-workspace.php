@@ -80,22 +80,28 @@ project_workspace_tree($project, array(
     'jobs/README.md' => '',
     'jobs/cleanup/run.sh' => '',
     'jobs/flow/main.hwf' => '',
-    'jobs/flow/pipelines/load.hpl' => ''
+    'jobs/flow/pipelines/load.hpl' => '',
+    'jobs/analysis/explore.ipynb' => '{}',
+    'jobs/analysis/report-checkpoint.ipynb' => '{}',
+    'jobs/load-orders/profile.ipynb' => '{}'
 ));
 $jobs = $layout->detectJobs($project, 'python');
 $byName = array();
 foreach ($jobs as $job) {
     $byName[$job['name']] = $job;
 }
-project_workspace_assert(array_keys($byName) === array('cleanup', 'flow', 'load-orders', 'report'), 'job folders found, hidden ones skipped: '.implode(',', array_keys($byName)));
+project_workspace_assert(array_keys($byName) === array('analysis', 'cleanup', 'flow', 'load-orders', 'report'), 'job folders found, hidden ones skipped: '.implode(',', array_keys($byName)));
+project_workspace_assert($byName['analysis']['entryPoint'] === 'explore.ipynb' && $byName['analysis']['notebooks'] === array('explore.ipynb'), 'a notebook is a Python entry file, checkpoints are not');
 project_workspace_assert($byName['load-orders']['path'] === 'jobs/load-orders' && $byName['load-orders']['entryPoint'] === 'main.py', 'main.py is the entry file');
-project_workspace_assert($byName['load-orders']['entryPoints'] === array('main.py', 'helpers.py'), 'other modules follow the entry file');
+project_workspace_assert($byName['load-orders']['entryPoints'] === array('main.py', 'helpers.py', 'profile.ipynb'), 'other modules follow the entry file, then notebooks');
 project_workspace_assert($byName['load-orders']['runtime'] === 'docker' && $byName['load-orders']['hasTests'] && $byName['load-orders']['hasPyproject'], 'a Dockerfile selects the Docker runtime');
 project_workspace_assert($byName['report']['entryPoint'] === 'report.py' && $byName['report']['runtime'] === 'local' && $byName['report']['hasRequirements'], 'test files are never entry files');
 $shellJobs = $layout->detectJobs($project, 'shell');
-project_workspace_assert($shellJobs[0]['name'] === 'cleanup' && $shellJobs[0]['entryPoint'] === 'run.sh', 'shell jobs run run.sh');
+$shellCleanup = array_values(array_filter($shellJobs, function($job) { return $job['name'] === 'cleanup'; }));
+project_workspace_assert($shellCleanup[0]['entryPoint'] === 'run.sh' && $shellCleanup[0]['notebooks'] === array(), 'shell jobs run run.sh');
 $hopJobs = $layout->detectJobs($project, 'hop');
-project_workspace_assert($hopJobs[1]['name'] === 'flow' && $hopJobs[1]['entryPoints'] === array('main.hwf', 'pipelines/load.hpl'), 'Hop workflows come before pipelines');
+$hopFlow = array_values(array_filter($hopJobs, function($job) { return $job['name'] === 'flow'; }));
+project_workspace_assert($hopFlow[0]['entryPoints'] === array('main.hwf', 'pipelines/load.hpl'), 'Hop workflows come before pipelines');
 project_workspace_assert($layout->detectJobs($root.'/missing', 'python') === array(), 'a missing workspace has no jobs');
 
 // Scaffolding and starters.
@@ -143,6 +149,26 @@ if (trim((string) shell_exec('command -v sh')) !== '' && trim((string) shell_exe
     project_workspace_assert(strpos($run, 'cwd='.realpath($project).'/jobs/load-orders ') !== FALSE && strpos($run, 'path='.realpath($project).'/jobs/load-orders:'.realpath($project).' ') !== FALSE && strpos($run, ' DEV') !== FALSE, 'run starts in the job folder: '.$run);
     $test = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh test '.escapeshellarg($project.'/jobs/report/tests/x.py').' 2>&1');
     project_workspace_assert(strpos($test, 'Testing jobs/report') !== FALSE && strpos($test, 'args=-m pytest') !== FALSE, 'test runs the current job only: '.$test);
+
+    // The sample task adds a sample from the library as a new job folder.
+    project_workspace_assert($layout->sampleFolder('python-task-dag') === 'task-dag' && $layout->sampleFolder('Odd Name!') === 'odd-name', 'samples go into folders named after them');
+    $samples = array(
+        array('id' => 'python-task-dag', 'name' => 'Task DAG', 'files' => array('main.py' => "print('dag')\n", 'pipeline/rules.py' => "RULES = 'it''s'\n", 'pyproject.toml' => "[project]\n")),
+        array('id' => 'python-sdk-progress', 'name' => 'Progress', 'files' => array('main.py' => "print('progress')\n"))
+    );
+    file_put_contents($vscode.'/jobseeker-samples.sh', $layout->sampleScript($samples, 'http://jobseeker.local/JobCreation', 12));
+    $added = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker-samples.sh python-task-dag 2>&1');
+    project_workspace_assert(file_get_contents($project.'/jobs/task-dag/main.py') === "print('dag')\n" && file_get_contents($project.'/jobs/task-dag/pipeline/rules.py') === "RULES = 'it''s'\n",
+        'the sample task writes every file of the sample, byte for byte: '.$added);
+    project_workspace_assert(strpos($added, 'http://jobseeker.local/JobCreation?project=12&folder=jobs/task-dag') !== FALSE && strpos($added, 'Commit and push') !== FALSE, 'it prints the Job Creation link: '.$added);
+    file_put_contents($project.'/jobs/task-dag/main.py', 'edited');
+    exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker-samples.sh python-task-dag 2>&1', $again, $code);
+    project_workspace_assert($code !== 0 && file_get_contents($project.'/jobs/task-dag/main.py') === 'edited' && strpos(implode("\n", $again), 'already exists') !== FALSE, 'a sample never replaces a folder');
+    shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker-samples.sh python-task-dag "Second DAG" 2>&1');
+    project_workspace_assert(is_file($project.'/jobs/second-dag/main.py'), 'a sample can go into a folder of another name');
+    $unknown = array();
+    exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker-samples.sh nope 2>&1', $unknown, $code);
+    project_workspace_assert($code === 2 && strpos(implode("\n", $unknown), 'python-sdk-progress') !== FALSE && ! is_dir($project.'/jobs/nope'), 'an unknown sample lists the samples: '.implode(' ', $unknown));
 }
 
 project_workspace_remove($root);

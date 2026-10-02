@@ -1,0 +1,189 @@
+/* VS Code-style code editor (assets/js/code-editor.js), in the Dark+ theme. */
+.js-code-editor {
+  --code-font: Consolas, "Liberation Mono", Menlo, "DejaVu Sans Mono", monospace;
+  --code-line: 20px;
+  background: #1e1e1e;
+  border: 1px solid #2b2b2b;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  overflow: hidden;
+}
+
+.js-code-tabs {
+  background: #252526;
+  display: flex;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.js-code-tab {
+  align-items: center;
+  background: #2d2d2d;
+  border: 0;
+  border-right: 1px solid #252526;
+  border-top: 1px solid transparent;
+  color: #969696;
+  display: inline-flex;
+  font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  gap: 6px;
+  padding: 7px 14px;
+  white-space: nowrap;
+}
+
+.js-code-tab:hover {
+  color: #cccccc;
+}
+
+.js-code-tab.is-active {
+  background: #1e1e1e;
+  border-top-color: #007acc;
+  color: #ffffff;
+}
+
+.js-code-tab:focus-visible {
+  outline: 1px solid #007acc;
+  outline-offset: -1px;
+}
+
+.js-code-tab-icon {
+  font-size: 12px;
+}
+
+.js-code-tab-icon.is-dockerfile { color: #2496ed; }
+.js-code-tab-icon.is-json { color: #f1c40f; }
+.js-code-tab-icon.is-yaml { color: #cb171e; }
+.js-code-tab-icon.is-requirements { color: #3572a5; }
+.js-code-tab-icon.is-markdown { color: #519aba; }
+.js-code-tab-icon.is-shell { color: #89e051; }
+
+.js-code-tab-flag {
+  background: #3c3c3c;
+  border-radius: 3px;
+  color: #b0b0b0;
+  font-size: 10px;
+  padding: 0 5px;
+  text-transform: uppercase;
+}
+
+.js-code-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.js-code-gutter {
+  color: #6e7681;
+  flex: 0 0 48px;
+  font-family: var(--code-font);
+  font-size: 13px;
+  line-height: var(--code-line);
+  padding: 10px 12px 10px 0;
+  text-align: right;
+  user-select: none;
+  will-change: transform;
+}
+
+.js-code-gutter span {
+  display: block;
+}
+
+.js-code-gutter span.is-current {
+  color: #c6c6c6;
+}
+
+.js-code-area {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.js-code-highlight,
+.js-code-input {
+  font-family: var(--code-font);
+  font-size: 13px;
+  line-height: var(--code-line);
+  margin: 0;
+  padding: 10px 14px;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.js-code-highlight {
+  background: transparent;
+  border: 0;
+  color: #d4d4d4;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  will-change: transform;
+}
+
+.js-code-input {
+  background: transparent;
+  border: 0;
+  caret-color: #aeafad;
+  color: transparent;
+  display: block;
+  height: 100%;
+  min-height: 280px;
+  outline: 0;
+  overflow: auto;
+  position: relative;
+  resize: none;
+  width: 100%;
+  z-index: 1;
+}
+
+.js-code-input::selection {
+  background: rgba(38, 79, 120, 0.85);
+}
+
+.js-code-editor.is-read-only .js-code-input {
+  caret-color: transparent;
+}
+
+.js-code-status {
+  align-items: center;
+  background: #007acc;
+  color: #ffffff;
+  display: flex;
+  flex: 0 0 auto;
+  font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  justify-content: space-between;
+  min-height: 22px;
+  padding: 0 10px;
+}
+
+.js-code-editor.is-read-only .js-code-status {
+  background: #3c3c3c;
+}
+
+.js-code-status-right {
+  display: flex;
+  gap: 14px;
+}
+
+/* Dark+ token colors. */
+.js-code-highlight .tok-comment { color: #6a9955; }
+.js-code-highlight .tok-keyword { color: #569cd6; }
+.js-code-highlight .tok-string { color: #ce9178; }
+.js-code-highlight .tok-number { color: #b5cea8; }
+.js-code-highlight .tok-variable { color: #9cdcfe; }
+.js-code-highlight .tok-key { color: #9cdcfe; }
+.js-code-highlight .tok-attribute { color: #c586c0; }
+.js-code-highlight .tok-type { color: #4ec9b0; }
+.js-code-highlight .tok-operator { color: #d4d4d4; }
+
+@media (max-width: 767px) {
+  .js-code-status-right span:not(.js-code-status-position):not(.js-code-status-language) {
+    display: none;
+  }
+}
