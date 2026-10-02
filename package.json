@@ -4,7 +4,7 @@
   "description": "Frontend asset restore for the legacy JobSeeker AdminLTE UI.",
   "scripts": {
     "assets:sync": "node scripts/sync-frontend-assets.js",
-    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:python-git && npm run test:draft-cache && npm run test:job-edit && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:context-env && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
+    "test": "npm run test:samples && npm run test:dataset-generator && npm run test:data-assets:sdk && npm run test:console-groups && npm run test:notebooks && npm run test:python-git && npm run test:workspace-runtime && npm run test:draft-cache && npm run test:job-edit && npm run test:platform-isolation && npm run test:job-list-hydration && npm run test:deployment-modes && npm run test:performance-delivery && npm run test:inline-editor && npm run test:email-editor && npm run test:docker-monitor && npm run test:job-container-metrics && npm run test:connectors && npm run test:connectors:sdk && npm run test:job-deps && npm run test:pipelines && npm run test:task-dag && npm run test:context-env && npm run test:hop && npm run test:dashboard && npm run test:jenkins-config && npm run test:query-efficiency && npm run test:job-metadata && npm run test:security",
     "test:samples": "node scripts/test-job-samples-dataset-generator.js && python3 scripts/test-job-sample-syntax.py",
     "test:samples:runtime:e2e": "python3 scripts/test-job-sample-runtime-e2e.py",
     "test:samples:jobs:e2e": "python3 scripts/test-job-samples-e2e.py",
@@ -17,10 +17,13 @@
     "test:query-efficiency": "node scripts/test-query-efficiency.js",
     "test:job-metadata": "node scripts/test-job-metadata.js",
     "test:console-groups": "node scripts/test-job-console-groups.js",
+    "test:notebooks": "python3 scripts/test-notebook-runner.py && node scripts/test-job-console-notebook.js",
     "test:python-git": "node scripts/test-python-git-integration.js && node scripts/test-git-workspace-features.js && php scripts/test-git-workspace.php",
     "test:python-git:e2e": "python3 scripts/test-python-git-workspace-e2e.py",
     "test:python-git:accounts:e2e": "python3 scripts/test-git-account-e2e.py",
     "test:python-git:move:e2e": "python3 scripts/test-git-move-and-samples-e2e.py",
+    "test:workspace-runtime": "php scripts/test-workspace-runtime.php && php scripts/test-project-workspace.php",
+    "test:workspace-runtime:e2e": "python3 scripts/test-workspace-runtime-e2e.py",
     "test:draft-cache": "node scripts/test-job-draft-cache.js",
     "test:job-edit": "node scripts/test-job-edit.js",
     "test:platform-isolation": "node scripts/test-platform-isolation.js",
@@ -66,20 +69,13 @@
   "dependencies": {
     "alertifyjs": "1.14.0",
     "animate.css": "3.7.2",
-    "bootstrap-sass": "3.4.3",
-    "bootstrap-datepicker": "1.8.0",
     "chart.js": "2.9.4",
     "ckeditor4": "4.25.2",
-    "datatables.net": "1.13.11",
-    "datatables.net-bs": "1.13.11",
+    "datatables.net": "3.1.2",
+    "datatables.net-bs": "3.1.2",
     "dropzone": "5.9.3",
     "font-awesome": "4.7.0",
     "ionicons": "2.0.1",
-    "jquery": "3.7.1",
-    "jquery-ui-dist": "1.13.3",
-    "moment": "2.30.1",
-    "select2": "4.0.13",
-    "sass": "1.69.5",
-    "toastr": "2.1.4"
+    "moment": "2.30.1"
   }
 }
