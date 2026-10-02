@@ -2852,6 +2852,14 @@ public function addContext() {
 
       $result = $this->model->deleteProject($id);
 
+      if ($result > 0) {
+        // Its runtime editors go with it; its settings row goes by foreign key.
+        $this->load->library('WorkspaceRuntimeService');
+        if ($this->workspaceruntimeservice->enabled()) {
+          $this->workspaceruntimeservice->removeProjectDeployments((int) $id);
+        }
+      }
+
       if ($result > 0) { echo(json_encode(array('status'=>TRUE, 'id' => $id))); }
       else { echo(json_encode(array('status'=>FALSE, 'id' => $id))); }
     }

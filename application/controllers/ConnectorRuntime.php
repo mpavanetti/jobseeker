@@ -42,6 +42,11 @@ class ConnectorRuntime extends BaseController
     private function normalizedJobName($value)
     {
         $value = trim((string) $value);
+        // "*" is a project root's editor session (code outside a job folder):
+        // it gets the connectors shared by every job, and only those.
+        if ($value === '*') {
+            return $value;
+        }
         return preg_match('/^[A-Za-z0-9._\-\/ ]{1,200}$/', $value) ? $value : FALSE;
     }
 

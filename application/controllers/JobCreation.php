@@ -6,6 +6,7 @@ require APPPATH . '/controllers/concerns/JobCreationExecutionTrait.php';
 require APPPATH . '/controllers/concerns/JenkinsRunnerTrait.php';
 require APPPATH . '/controllers/concerns/JobCreationGitWorkspaceTrait.php';
 require APPPATH . '/controllers/concerns/ProjectWorkspaceTrait.php';
+require APPPATH . '/controllers/concerns/WorkspaceRuntimeTrait.php';
 
 
 class JobCreation extends BaseController
@@ -15,6 +16,7 @@ class JobCreation extends BaseController
   use JenkinsRunnerTrait;
   use JobCreationGitWorkspaceTrait;
   use ProjectWorkspaceTrait;
+  use WorkspaceRuntimeTrait;
 
   /** Memoized HopProject library for this request. */
   private $hopProjectLibrary;
@@ -129,7 +131,9 @@ class JobCreation extends BaseController
         'hop_default_log_level' => 'Basic',
         'hop_selected_project' => $selectedHopProject === FALSE ? '' : $selectedHopProject,
         'hop_selected_entry' => $selectedHopEntry,
-        'hop_selected_engine' => $selectedHopEngine === '' ? '' : $hop->cleanEngine($selectedHopEngine)
+        'hop_selected_engine' => $selectedHopEngine === '' ? '' : $hop->cleanEngine($selectedHopEngine),
+        // Built workspace runtimes, offered as Docker images for Python jobs.
+        'runtime_images' => $this->workspaceRuntimesEnabled() ? $this->workspaceRuntimeService()->jobImages() : array()
       );
         
       $this->loadViews("jobCreation", $this->global, $data, NULL);
@@ -483,7 +487,7 @@ class JobCreation extends BaseController
       return $threshold;
     }
 
-    private function createRuntimeEnvironmentProperties($dom, $environment, $includeTaskParameters = FALSE) {
+    private function createRuntimeEnvironmentProperties($dom, $environment, $includeTaskParameters = FALSE, $includeNotebookParameters = FALSE) {
       $properties = $dom->createElement('properties');
       $parametersProperty = $dom->createElement('hudson.model.ParametersDefinitionProperty');
       $parameterDefinitions = $dom->createElement('parameterDefinitions');
@@ -515,6 +519,17 @@ class JobCreation extends BaseController
         $this->appendTextElement($dom, $tasksParameter, 'defaultValue', '');
         $this->appendTextElement($dom, $tasksParameter, 'trim', 'true');
         $parameterDefinitions->appendChild($tasksParameter);
+      }
+
+      // A notebook job's parameters can be overridden for one run, as
+      // papermill's -p does, without editing the job.
+      if ($includeNotebookParameters) {
+        $notebookParameter = $dom->createElement('hudson.model.StringParameterDefinition');
+        $this->appendTextElement($dom, $notebookParameter, 'name', 'JOBSEEKER_NOTEBOOK_PARAMETERS');
+        $this->appendTextElement($dom, $notebookParameter, 'description', 'Notebook: a JSON object of parameter values for this run only, such as {"rows": 10}. They override the job\'s values.');
+        $this->appendTextElement($dom, $notebookParameter, 'defaultValue', '');
+        $this->appendTextElement($dom, $notebookParameter, 'trim', 'true');
+        $parameterDefinitions->appendChild($notebookParameter);
       }
 
       $parametersProperty->appendChild($parameterDefinitions);
@@ -1521,11 +1536,80 @@ class JobCreation extends BaseController
         }
 
         $safeEntryPoint = $this->safeRelativePath($entryPoint);
-        if ($safeEntryPoint === FALSE || strtolower(pathinfo($safeEntryPoint, PATHINFO_EXTENSION)) !== 'py') {
+        if ($safeEntryPoint === FALSE || ! $this->isPythonEntryFile($safeEntryPoint)) {
           return FALSE;
         }
 
         return str_replace(DIRECTORY_SEPARATOR, '/', $safeEntryPoint);
+      }
+
+      /** A Python job runs a .py script or, top to bottom, a Jupyter notebook. */
+      private function isPythonEntryFile($path) {
+        return in_array(strtolower(pathinfo((string) $path, PATHINFO_EXTENSION)), array('py', 'ipynb'), TRUE);
+      }
+
+      /**
+       * Notebook settings from the form: parameters (name, source and value,
+       * the source being a literal value, a Context key or an environment
+       * variable), a per-cell timeout, whether later cells still run after one
+       * fails, and Transaction Monitoring tracking.
+       *
+       * @return array|string the options, or a message for the user
+       */
+      private function cleanNotebookOptions($parametersJson, $cellTimeout, $allowErrors, $track) {
+        $parametersJson = trim((string) $parametersJson);
+        $parameters = array();
+        if ($parametersJson !== '' && $parametersJson !== '[]') {
+          $decoded = strlen($parametersJson) <= 100000 ? json_decode($parametersJson, TRUE) : NULL;
+          if (! is_array($decoded)) {
+            return 'The notebook parameters could not be read. Check them and save again.';
+          }
+          $names = array();
+          foreach ($decoded as $item) {
+            if (! is_array($item)) {
+              return 'The notebook parameters could not be read. Check them and save again.';
+            }
+            $name = trim((string) (isset($item['name']) ? $item['name'] : ''));
+            $source = strtolower(trim((string) (isset($item['source']) ? $item['source'] : 'value')));
+            $value = (string) (isset($item['value']) ? $item['value'] : '');
+            if ($name === '' && trim($value) === '') {
+              continue;
+            }
+            if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $name)) {
+              return 'Notebook parameter "'.$name.'" needs a Python name such as rows or start_date.';
+            }
+            if (isset($names[$name])) {
+              return 'The notebook parameter '.$name.' is listed twice.';
+            }
+            if (! in_array($source, array('value', 'context', 'env'), TRUE)) {
+              return 'Notebook parameter '.$name.' has an unknown source.';
+            }
+            if (strlen($value) > 2000 || strpos($value, "\0") !== FALSE) {
+              return 'The value of notebook parameter '.$name.' is too long.';
+            }
+            if ($source === 'context' && trim($value) === '') {
+              $value = $name;
+            }
+            if ($source === 'env' && ! preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,127}$/', trim($value) === '' ? $name : trim($value))) {
+              return 'Notebook parameter '.$name.' reads an environment variable with an invalid name.';
+            }
+            $names[$name] = TRUE;
+            $parameters[] = array('name' => $name, 'source' => $source, 'value' => $source === 'value' ? $value : trim($value));
+            if (count($parameters) > 50) {
+              return 'A notebook job takes at most 50 parameters.';
+            }
+          }
+        }
+        $cellTimeout = trim((string) $cellTimeout);
+        if ($cellTimeout !== '' && (! ctype_digit($cellTimeout) || (int) $cellTimeout > 86400)) {
+          return 'The notebook cell timeout must be a number of seconds up to 86400, or empty for no limit.';
+        }
+        return array(
+          'parameters' => $parameters,
+          'cellTimeout' => (int) $cellTimeout,
+          'allowErrors' => (string) $allowErrors === '1',
+          'track' => (string) $track !== '0'
+        );
       }
 
       private function cleanPythonRequirementsText($requirementsText) {
@@ -1582,6 +1666,13 @@ class JobCreation extends BaseController
         return $relativePath;
       }
 
+      /** Files the compact inline workspace can safely round-trip and edit. */
+      private function isInlinePythonWorkspaceFile($path) {
+        $path = str_replace('\\', '/', (string) $path);
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'py'
+          || strtolower(basename($path)) === 'readme.md';
+      }
+
       private function cleanPythonInlineFilesJson($inlineFilesJson, $entryPoint) {
         $inlineFilesJson = (string) $inlineFilesJson;
         if (trim($inlineFilesJson) === '') {
@@ -1627,8 +1718,8 @@ class JobCreation extends BaseController
               return FALSE;
             }
 
-            $path = $this->normalizeInlinePythonWorkspacePath($file['path'], TRUE);
-            if ($path === FALSE || strtolower($path) === strtolower($entryPoint)) {
+            $path = $this->normalizeInlinePythonWorkspacePath($file['path'], FALSE);
+            if ($path === FALSE || ! $this->isInlinePythonWorkspaceFile($path) || strtolower($path) === strtolower($entryPoint)) {
               return FALSE;
             }
 
@@ -1936,7 +2027,7 @@ class JobCreation extends BaseController
 
       private function resolvePythonFile($sourceDirectory, $entryPoint) {
         $scriptPath = realpath(rtrim($sourceDirectory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $entryPoint));
-        if ($scriptPath === FALSE || ! is_file($scriptPath) || strtolower(pathinfo($scriptPath, PATHINFO_EXTENSION)) !== 'py' || ! $this->pathWithinBase($scriptPath, $sourceDirectory)) {
+        if ($scriptPath === FALSE || ! is_file($scriptPath) || ! $this->isPythonEntryFile($scriptPath) || ! $this->pathWithinBase($scriptPath, $sourceDirectory)) {
           return FALSE;
         }
 
@@ -1971,7 +2062,7 @@ class JobCreation extends BaseController
 
           if (is_dir($path) && ! is_link($path)) {
             $this->collectUploadedPythonFiles($path, $baseDirectory, $files);
-          } else if (is_file($path) && strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'py') {
+          } else if (is_file($path) && $this->isPythonEntryFile($path)) {
             $realPath = realpath($path);
             if ($realPath !== FALSE && $this->pathWithinBase($realPath, $baseDirectory)) {
               $files[] = $realPath;
@@ -2063,7 +2154,7 @@ class JobCreation extends BaseController
           if (is_dir($realPath) && ! is_link($realPath)) {
             $this->collectInlinePythonWorkspaceFiles($realPath, $baseDirectory, $entryPoint, $files, $directories, $includeContent);
             $directories[] = $relativePath;
-          } else if (is_file($realPath) && strtolower(pathinfo($realPath, PATHINFO_EXTENSION)) === 'py' && strtolower($relativePath) !== strtolower($entryPoint)) {
+          } else if (is_file($realPath) && $this->isInlinePythonWorkspaceFile($relativePath) && strtolower($relativePath) !== strtolower($entryPoint)) {
             if ($includeContent) {
               if (filesize($realPath) > 50000) {
                 continue;
@@ -3127,15 +3218,25 @@ class JobCreation extends BaseController
           return FALSE;
         }
 
-        if ($scriptPath === FALSE || strtolower(pathinfo($scriptPath, PATHINFO_EXTENSION)) !== 'py') {
+        if ($scriptPath === FALSE || ! $this->isPythonEntryFile($scriptPath)) {
           return FALSE;
         }
 
-        return array(
+        $execution = array(
           'mode' => 'local',
           'sourceDirectory' => $sourceDirectory,
           'scriptPath' => $scriptPath
         );
+        // A job folder of a project without Git (workspaces/shared/<name>-<id>)
+        // reads its project's Context values first.
+        if (preg_match('#/workspaces/shared/[a-z0-9._-]+-(\d+)/jobs/[^/]+/?$#', str_replace('\\', '/', $sourceDirectory), $projectMatch)) {
+          $project = $this->gitProjectSettings()->project((int) $projectMatch[1], TRUE);
+          if ($project !== FALSE) {
+            $execution['projectId'] = (int) $project['id'];
+            $execution['projectName'] = $project['name'];
+          }
+        }
+        return $execution;
       }
 
       private function cleanPythonRepositoryUrl($repositoryUrl) {
@@ -3400,7 +3501,7 @@ class JobCreation extends BaseController
        * ConnectorIdeSession. `.env.*` files are already kept out of git, Docker
        * builds and the sync back into the form.
        */
-      private function writeConnectorIdeSession($workspace, $jobName) {
+      private function writeConnectorIdeSession($workspace, $jobName, $project = NULL) {
         $path = rtrim($workspace, '/\\').DIRECTORY_SEPARATOR.'.env.jobseeker';
         $this->load->library('ConnectorIdeSession');
         $token = $this->connectoridesession->issue($jobName);
@@ -3413,6 +3514,10 @@ class JobCreation extends BaseController
           'JOBSEEKER_CONNECTOR_SESSION='.$token,
           'JOBSEEKER_CONNECTOR_ENVIRONMENT='.$this->connectoridesession->environment(),
           'JOBSEEKER_CONNECTOR_JOB='.$jobName,
+          // The SDK reads Context values for this project and environment, as
+          // the project's jobs do.
+          is_array($project) ? 'JOBSEEKER_PROJECT_ID='.(int) $project['id'] : '',
+          is_array($project) ? 'JOBSEEKER_PROJECT_NAME='.str_replace(array("\r", "\n"), ' ', (string) $project['name']) : '',
           ''
         )));
         umask($previousUmask);
@@ -4460,13 +4565,13 @@ class JobCreation extends BaseController
 
                 if ($environment === '' || $environment === '0') {
                   $this->session->set_flashdata('error', 'Please select the runtime environment for this Jenkins job. Existing jobs without an environment will still be shown as Unknown.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $this->load->model('Context_model');
                 if ((int) $this->Context_model->validateEnvironment($environment) === 0) {
                   $this->session->set_flashdata('error', 'The selected runtime environment is not configured in Context Settings.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $checkEnvironment = 1;
@@ -4489,7 +4594,7 @@ class JobCreation extends BaseController
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                           redirect('JobCreation');
+                           redirect($jobCreationReturn);
                           } else {
                             if (file_exists($filePath)) {
                             } else {
@@ -4512,7 +4617,7 @@ class JobCreation extends BaseController
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                           redirect('JobCreation');
+                           redirect($jobCreationReturn);
                           } else {
                             if (file_exists($filePath)) {
                             } else {
@@ -4537,7 +4642,7 @@ class JobCreation extends BaseController
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                           redirect('JobCreation');
+                           redirect($jobCreationReturn);
                           } else {
                             if (file_exists($filePath)) {
                             } else {
@@ -4600,7 +4705,7 @@ class JobCreation extends BaseController
                   $projectSelection = $this->selectedGitProject($pythonProjectId, $environment);
                   if ($projectSelection === FALSE) {
                     $this->session->set_flashdata('error', 'The selected project is inactive, no longer exists or has no Git repository. Choose another project or none.');
-                    redirect('JobCreation');
+                    redirect($jobCreationReturn);
                   }
                   $pythonGitProject = $projectSelection['project'];
                   if ($pythonGitProject !== NULL) {
@@ -4622,33 +4727,33 @@ class JobCreation extends BaseController
 
                 if ($pythonRequirementsText === FALSE) {
                   $this->session->set_flashdata('error', 'Your Python requirements.txt content is too large or contains invalid characters.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 if ($pythonPyprojectText === FALSE) {
                   $this->session->set_flashdata('error', 'Your pyproject.toml content is too large or contains invalid characters.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 if ($pythonDockerfileText === FALSE) {
                   $this->session->set_flashdata('error', 'Your Python Dockerfile content is too large or contains invalid characters.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 if ($pythonExecutable === FALSE) {
                   $this->session->set_flashdata('error', 'Please select a valid Python version.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 if (($pythonRuntimeMode === 'docker' || $linuxRuntimeMode === 'docker') && ($containerCpuLimit === FALSE || $containerMemoryLimitMb === FALSE)) {
                   $this->session->set_flashdata('error', 'Container limits are invalid. CPU must be between 0.10 and 64 cores and memory must be between 64 and 262144 MB.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $pythonDockerImage = $this->cleanPythonDockerImage($postedDockerImage, $pythonExecutable);
                 if ($pythonRuntimeMode === 'docker' && $pythonDockerImage === FALSE && $linuxUsesPythonRuntime) {
                   $this->session->set_flashdata('error', 'Please select a valid Python Docker image.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 if ($pythonDockerImage === FALSE) {
@@ -4675,10 +4780,27 @@ class JobCreation extends BaseController
                   'memoryLimitMb' => $containerMemoryLimitMb
                 );
 
+                // A notebook entry file runs with its own options; for a .py
+                // entry the (hidden) notebook fields are ignored.
+                $notebookOptions = $this->cleanNotebookOptions(
+                  $this->input->post('pythonNotebookParameters'),
+                  $this->input->post('pythonNotebookCellTimeout'),
+                  $this->input->post('pythonNotebookAllowErrors'),
+                  $this->input->post('pythonNotebookTrack')
+                );
+                if (is_string($notebookOptions)) {
+                  if (strtolower(pathinfo((string) $pythonEntryPoint, PATHINFO_EXTENSION)) === 'ipynb') {
+                    $this->session->set_flashdata('error', $notebookOptions);
+                    redirect($jobCreationReturn);
+                  }
+                  $notebookOptions = $this->cleanNotebookOptions('', '', '0', '1');
+                }
+                $pythonRuntimeOptions['notebook'] = $notebookOptions;
+
                 $linuxDockerImage = $this->cleanLinuxDockerImage($postedDockerImage, $linuxExecutionStrategy == 'script' ? $linuxScriptType : '');
                 if ($linuxRuntimeMode === 'docker' && $linuxDockerImage === FALSE && ! $linuxUsesPythonRuntime) {
                   $this->session->set_flashdata('error', 'Please select a valid Linux Docker image.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $linuxRuntimeOptions = array(
@@ -4690,7 +4812,7 @@ class JobCreation extends BaseController
 
                 if ($pythonEntryPoint === FALSE) {
                   $this->session->set_flashdata('error', 'You missed to select a valid Python entry file.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 // Docker workspaces may intentionally keep requirements.txt
@@ -4704,8 +4826,8 @@ class JobCreation extends BaseController
                 if ($usesInlinePythonSource) {
                   $pythonInlineFiles = $this->cleanPythonInlineFilesJson($this->input->post('pythonInlineFilesJson'), $pythonEntryPoint ?: 'main.py');
                   if ($pythonInlineFiles === FALSE) {
-                    $this->session->set_flashdata('error', 'Your inline Python workspace contains invalid file paths or too much content. Use .py files inside the job folder.');
-                    redirect('JobCreation');
+                    $this->session->set_flashdata('error', 'Your inline Python workspace contains invalid file paths or too much content. Use .py files or README.md inside the job folder.');
+                    redirect($jobCreationReturn);
                   }
 
                   $workspaceConflict = $this->inlinePythonWorkspaceConflict(
@@ -4726,7 +4848,7 @@ class JobCreation extends BaseController
                   }
                   if ($workspaceConflict !== FALSE) {
                     $this->session->set_flashdata('error', 'The inline Python workspace changed after this form was loaded, so JobSeeker did not overwrite it. Reload the job to review the latest VS Code files before saving again.');
-                    redirect('JobCreation');
+                    redirect($jobCreationReturn);
                   }
                 }
 
@@ -4749,7 +4871,7 @@ class JobCreation extends BaseController
 
                           if ($scriptPath === FALSE || $sourceDirectory === FALSE || ! is_file($scriptPath)) {
                             $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                            redirect('JobCreation');
+                            redirect($jobCreationReturn);
                           }
                           
                           // Check if using environemnt
@@ -4771,7 +4893,7 @@ class JobCreation extends BaseController
                           if (is_dir($filePath)) {
                             // // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                           redirect('JobCreation');
+                           redirect($jobCreationReturn);
                           } else {
                             if (file_exists($filePath)) {
                             } else {
@@ -4790,7 +4912,7 @@ class JobCreation extends BaseController
 
                           if ($scriptPath === FALSE || ! is_file($scriptPath)) {
                             $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                            redirect('JobCreation');
+                            redirect($jobCreationReturn);
                           }
 
                           // Check if using environemnt
@@ -4813,7 +4935,7 @@ class JobCreation extends BaseController
                           if (is_dir($filePath)) {
                             // echo "My File is a directory";
                            $this->session->set_flashdata('error', 'No runnable file was found in the uploaded package. Upload it again for this job: a Talend build needs its launcher (*_run.sh on Linux, *_run.bat on Windows), and a Bash job needs a .sh file.');
-                           redirect('JobCreation');
+                           redirect($jobCreationReturn);
                           } else {
                             if (file_exists($filePath)) {
                             } else {
@@ -4829,7 +4951,7 @@ class JobCreation extends BaseController
 
                           if (! $this->hopEnabled()) {
                             $this->session->set_flashdata('error', 'Apache Hop execution is disabled on this installation. Set JOBSEEKER_HOP_ENABLED=true to enable it.');
-                            redirect('JobCreation');
+                            redirect($jobCreationReturn);
                           }
 
                           $hopRequest['cpuLimit'] = $containerCpuLimit === FALSE ? '1' : $containerCpuLimit;
@@ -4838,7 +4960,7 @@ class JobCreation extends BaseController
 
                           if (! $hopResolution['ok']) {
                             $this->session->set_flashdata('error', $hopResolution['message']);
-                            redirect('JobCreation');
+                            redirect($jobCreationReturn);
                           }
 
                           $hopExecution = $hopResolution['execution'];
@@ -4850,7 +4972,7 @@ class JobCreation extends BaseController
                           } else if ($pythonSourceMode === 'git') {
                             if ($this->projectWorkspaceLayout()->cleanJobPath($pythonGitJobPath) === FALSE) {
                               $this->session->set_flashdata('error', 'The job folder must be a folder inside the repository, such as jobs/load-orders, or empty for the repository root.');
-                              redirect('JobCreation');
+                              redirect($jobCreationReturn);
                             }
                             $pythonExecution = $this->resolveGitPythonExecution($pythonRepositoryUrl, $pythonRepositoryBranch, $pythonEntryPointRaw, $pythonGitCredentialKey, $pythonGitProject, $environment, $job_name, $pythonGitJobPath);
                           } else if ($pythonSourceMode === 'inline') {
@@ -4861,7 +4983,7 @@ class JobCreation extends BaseController
 
                           if ($pythonExecution === FALSE) {
                            $this->session->set_flashdata('error', 'JobSeeker could not resolve the Python source. Check the upload, repository path, Git URL, and entry file. For ZIP uploads with a top-level folder, use an entry file like pyjob/main.py, or a unique filename such as main.py.');
-                           redirect('JobCreation');
+                           redirect($jobCreationReturn);
                           }
                   }
                 } else if ($linuxExecutionStrategy == 'python_inline'){
@@ -4871,7 +4993,7 @@ class JobCreation extends BaseController
 
                   if ($pythonExecution === FALSE) {
                    $this->session->set_flashdata('error', 'JobSeeker could not resolve the inline Python source. Check the entry file and code.');
-                   redirect('JobCreation');
+                   redirect($jobCreationReturn);
                   }
                 } else if ($linuxExecutionStrategy == 'command'){
 
@@ -4891,13 +5013,13 @@ class JobCreation extends BaseController
                   if ($timeoutStrategy == 'absolute') {
                     if (! ctype_digit((string) $timeoutMinutes) || (int) $timeoutMinutes < 1) {
                       $this->session->set_flashdata('error', 'You missed to select a valid timeout in minutes for the abort option.');
-                      redirect('JobCreation');
+                      redirect($jobCreationReturn);
                     }
                   } else {
                     $timeoutStrategy = 'noActivity';
                     if (! ctype_digit((string) $timeoutSeconds) || (int) $timeoutSeconds < 60) {
                       $this->session->set_flashdata('error', 'You missed to select a valid timeout in seconds for the abort option.');
-                      redirect('JobCreation');
+                      redirect($jobCreationReturn);
                     }
                   }
                 }
@@ -4924,7 +5046,7 @@ class JobCreation extends BaseController
                 if($editableEmailCheck == 1){
                   if($onSuccess == "0" && $onFailure == "0" && $onAbort == "0"){
                     $this->session->set_flashdata('error', 'You missed to select one field value for Editable email notification.');
-                    redirect('JobCreation');
+                    redirect($jobCreationReturn);
                   }
                 }
 
@@ -4935,7 +5057,7 @@ class JobCreation extends BaseController
                 $scheduleResult = $this->cronSchedule()->build($this->scheduleRequestFields());
                 if ($checkBuild == 1 && ! $scheduleResult['ok']) {
                   $this->session->set_flashdata('error', 'Schedule not saved: '.$scheduleResult['error']);
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
                 $scheduleSpec = $checkBuild == 1 ? $scheduleResult['spec'] : '';
                 if ($checkBuild == 1 && ! empty($scheduleResult['warnings'])) {
@@ -4965,7 +5087,7 @@ class JobCreation extends BaseController
                   if ($commandScreen['blocked']) {
                     log_message('error', 'CommandGuard blocked job "'.$job_name.'": '.$commandScreenSummary);
                     $this->session->set_flashdata('error', 'This job was not created. '.$commandScreenSummary.' Remove the flagged commands, or clear JOBSEEKER_COMMAND_GUARD_ENFORCE to allow them.');
-                    redirect('JobCreation');
+                    redirect($jobCreationReturn);
                   }
                   log_message('error', 'CommandGuard advisory for job "'.$job_name.'": '.$commandScreenSummary);
                   $this->session->set_flashdata('command_guard_warning', $commandScreenSummary.' The job was still created - review the flagged commands in the job\'s dependency panel.');
@@ -4990,7 +5112,8 @@ class JobCreation extends BaseController
                   $linuxExecutionStrategy === 'python_inline' ||
                   ($linuxExecutionStrategy === 'script' && ($linuxScriptType === 'python' || $linuxScriptType === 'python_inline'))
                 );
-                $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment, $declaresTasks));
+                $runsNotebook = $declaresTasks && is_array($pythonExecution) && $this->isNotebookExecution($pythonExecution);
+                $root->appendChild($this->createRuntimeEnvironmentProperties($dom, $environment, $declaresTasks && ! $runsNotebook, $runsNotebook));
                 $this->appendJenkinsEnvironmentAgentAssignment($dom, $root, $environment);
 
                 // Create Trigger Elements - one TimerTrigger with the spec built above,
@@ -5025,7 +5148,7 @@ class JobCreation extends BaseController
                       $repositoryRoot = rtrim($storeFolder, '/\\');
                       if (! $this->ensurePythonSharedLibrary($repositoryRoot)) {
                         $this->session->set_flashdata('error', 'Unable to prepare the shared Python jobseeker helper.');
-                        redirect('JobCreation');
+                        redirect($jobCreationReturn);
                       }
                       $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment), $pythonRuntimeOptions));
                     } else if($linuxScriptType == 'hop'){
@@ -5043,7 +5166,7 @@ class JobCreation extends BaseController
                     $repositoryRoot = rtrim($storeFolder, '/\\');
                     if (! $this->ensurePythonSharedLibrary($repositoryRoot)) {
                       $this->session->set_flashdata('error', 'Unable to prepare the shared Python jobseeker helper.');
-                      redirect('JobCreation');
+                      redirect($jobCreationReturn);
                     }
                     $this->appendTextElement($dom, $hudson_task_BashFile, 'command', $this->buildPythonExecutionCommand($pythonExecution, $repositoryRoot, $this->pythonEnvironmentArgument($environment, $checkEnvironment), $pythonRuntimeOptions));
                     $builders->appendChild($hudson_task_BashFile);
@@ -5189,7 +5312,7 @@ class JobCreation extends BaseController
                 $xmlContent = $dom->saveXML();
                 if ($xmlContent === FALSE) {
                   $this->session->set_flashdata('error', 'Unable to prepare the Jenkins job configuration.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 $savedJobNames = array();
@@ -5240,7 +5363,7 @@ class JobCreation extends BaseController
 
                 if (empty($savedJobNames)) {
                   $this->session->set_flashdata('error', 'No Jenkins jobs were saved. Failed jobs: '.implode(', ', $saveFailures).'.');
-                  redirect('JobCreation');
+                  redirect($jobCreationReturn);
                 }
 
                 // Register the Hop project and its jobs so the Apache Hop screen
