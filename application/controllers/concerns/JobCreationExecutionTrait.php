@@ -370,7 +370,15 @@ trait JobCreationExecutionTrait
        */
       /** Python that prints a pyproject.toml's [project] dependencies, one per line, without the SDK. */
       private function pyprojectDependencyReader() {
-        return 'import re, sys, tomllib'."\n"
+        // tomllib is Python 3.11+; on 3.10 tomli, or the copy pip vendors.
+        return 'import re, sys'."\n"
+          .'try:'."\n"
+          .'    import tomllib'."\n"
+          .'except ImportError:'."\n"
+          .'    try:'."\n"
+          .'        import tomli as tomllib'."\n"
+          .'    except ImportError:'."\n"
+          .'        from pip._vendor import tomli as tomllib'."\n"
           .'deps = tomllib.load(open(sys.argv[1], "rb")).get("project", {}).get("dependencies", [])'."\n"
           .'sys.stdout.write("".join(d.strip() + "\n" for d in deps if re.split(r"[\s\[<>=!~;@(]", d.strip(), maxsplit=1)[0].lower().replace("_", "-") != "jobseeker-runtime"))';
       }
@@ -558,6 +566,11 @@ trait JobCreationExecutionTrait
             'if [ -f "/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="/tmp/jobseeker-context/source/$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi',
             'if [ -n "$JOBSEEKER_PROJECT_DIR" ]; then',
             '  if [ "${JOBSEEKER_DEPENDENCIES_PREINSTALLED:-0}" != "1" ]; then',
+            // An image whose python is a virtual environment (a runtime with
+            // /opt/venv on PATH): Poetry installed into it would install into
+            // the interpreter underneath, which the job and its notebook
+            // kernel never run. An active VIRTUAL_ENV is where Poetry installs.
+            '    if python -c "import sys; raise SystemExit(0 if sys.prefix != sys.base_prefix else 1)" 2>/dev/null; then export VIRTUAL_ENV="$(python -c "import sys; print(sys.prefix)")"; fi',
             '    PIP_ROOT_USER_ACTION=ignore python -m pip install --quiet --disable-pip-version-check "poetry==2.4.1"',
             '    if (cd "$JOBSEEKER_PROJECT_DIR" && export POETRY_VIRTUALENVS_CREATE=false && if [ -f poetry.lock ] && ! poetry check --lock --no-interaction >/dev/null 2>&1; then echo "poetry.lock does not match pyproject.toml; refreshing it for this run."; poetry lock --no-interaction --no-ansi; fi && poetry install --no-root --no-interaction --no-ansi) > /tmp/jobseeker-poetry.log 2>&1; then',
             '      cat /tmp/jobseeker-poetry.log',
@@ -717,19 +730,25 @@ trait JobCreationExecutionTrait
           $lines[] = 'if [ -f "$JOBSEEKER_SOURCE_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SOURCE_DIR/requirements.txt"; fi';
           $lines[] = 'if [ -f "$JOBSEEKER_SCRIPT_DIR/requirements.txt" ]; then JOBSEEKER_REQUIREMENTS="$JOBSEEKER_SCRIPT_DIR/requirements.txt"; fi';
           $lines = array_merge($lines, $this->agentPyprojectRequirementsLines());
+          // pip builds a source folder in place (build/, *.egg-info): every
+          // job gets its own copy of the SDK, as Docker runs and editors do,
+          // instead of building in the folder all jobs share.
+          $lines[] = 'JOBSEEKER_SDK_BUILD="$WORKSPACE/.jobseeker-sdk-build"';
+          $lines[] = 'rm -rf "$JOBSEEKER_SDK_BUILD"; mkdir -p "$JOBSEEKER_SDK_BUILD"; cp -R "$JOBSEEKER_PYTHON_SDK/." "$JOBSEEKER_SDK_BUILD/"; rm -rf "$JOBSEEKER_SDK_BUILD/build" "$JOBSEEKER_SDK_BUILD"/src/*.egg-info';
           $lines[] = 'if [ -n "$JOBSEEKER_REQUIREMENTS" ]; then';
           $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_SOURCE_DIR/.jobseeker-python-libs"';
           $lines[] = '  "$JOBSEEKER_PYTHON" -m venv "$JOBSEEKER_VENV" || { echo "Unable to create Python virtual environment. Install python3-venv on this Jenkins agent or switch this job to Docker runtime."; exit 127; }';
           $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_VENV/bin/python"';
-          $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check "$JOBSEEKER_PYTHON_SDK"';
+          $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check "$JOBSEEKER_SDK_BUILD"';
           $lines[] = '  "$JOBSEEKER_RUN_PYTHON" -m pip install --quiet --disable-pip-version-check -r "$JOBSEEKER_REQUIREMENTS"';
           $lines[] = '  export PYTHONPATH="$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'else';
           $lines[] = '  JOBSEEKER_RUN_PYTHON="$JOBSEEKER_PYTHON"';
           $lines[] = '  rm -rf "$JOBSEEKER_VENV" "$JOBSEEKER_RUNTIME_LIBS"';
-          $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_PYTHON_SDK"';
+          $lines[] = '  "$JOBSEEKER_PYTHON" -m pip install --quiet --disable-pip-version-check --target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_SDK_BUILD"';
           $lines[] = '  export PYTHONPATH="$JOBSEEKER_RUNTIME_LIBS:$JOBSEEKER_SOURCE_DIR:$JOBSEEKER_SCRIPT_DIR:$PYTHONPATH"';
           $lines[] = 'fi';
+          $lines[] = 'rm -rf "$JOBSEEKER_SDK_BUILD"';
           $lines[] = 'if [ -n "${JOBSEEKER_PROJECT_ROOT:-}" ]; then export PYTHONPATH="$PYTHONPATH:$JOBSEEKER_PROJECT_ROOT"; fi';
           if ($notebook) {
             $lines = array_merge($lines, $this->notebookRunnerLines('"$JOBSEEKER_RUN_PYTHON"', '"$WORKSPACE/.jobseeker-notebook-libs"', '"$JOBSEEKER_SCRIPT_PATH"', '"$JOBSEEKER_NOTEBOOK_RUN_DIR/$(basename "$JOBSEEKER_SCRIPT_PATH")"'));

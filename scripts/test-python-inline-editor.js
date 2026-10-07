@@ -66,6 +66,11 @@ function assert(condition, message) {
 
 assert(controller.includes('use JobCreationEmailTrait;') && controller.includes('use JobCreationExecutionTrait;'), 'JobCreation must compose its focused implementation concerns.');
 assert(!controller.includes('private function buildPythonExecutionCommand(') && executionConcern.includes('private function buildPythonExecutionCommand('), 'Execution command generation must remain isolated from the main controller.');
+assert(executionConcern.includes("from pip._vendor import tomli as tomllib"), 'pyproject.toml must be readable on Python 3.10, which has no tomllib.');
+assert(executionConcern.includes('export VIRTUAL_ENV="$(python -c "import sys; print(sys.prefix)")"'), 'Poetry must install into an image whose python is a virtual environment, not the interpreter under it.');
+assert(executionConcern.includes('--target "$JOBSEEKER_RUNTIME_LIBS" "$JOBSEEKER_SDK_BUILD"') && !executionConcern.includes('"$JOBSEEKER_PYTHON_SDK"\';'),
+  'Agent runs must build the SDK from a private copy, never in the folder every job shares.');
+assert(/__pycache__\(\?:\/\|\$\)\|\\\.pyc\$/.test(controller), 'The SDK signature must skip the bytecode copyDirectory() leaves out, or every open replaces the SDK folder.');
 assert(!controller.includes('private function defaultFailureEmailBody(') && emailConcern.includes('private function defaultFailureEmailBody('), 'Email XML generation must remain isolated from the main controller.');
 assert(compose.includes('repository-data-init:'), 'Compose must initialize the writable shared job repository before PHP and OpenVSCode start.');
 assert(compose.includes('mkdir -p /repository/data-assets /repository/python/inline /repository/python/jobs'), 'Repository initialization must create the inline Python workspace root.');
