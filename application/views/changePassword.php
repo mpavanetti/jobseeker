@@ -22,7 +22,7 @@
                                 <div class="col-md-12">
                                     <div class="form-group">
                                         <label for="inputPassword1">Old Password</label>
-                                        <input type="password" class="form-control" id="inputOldPassword" placeholder="Old password" name="oldPassword" maxlength="20" required>
+                                        <input type="password" class="form-control" id="inputOldPassword" placeholder="Old password" name="oldPassword" maxlength="64" required>
                                     </div>
                                 </div>
                             </div>
@@ -31,7 +31,7 @@
                                 <div class="col-md-12">
                                     <div class="form-group">
                                         <label for="inputPassword1">New Password</label>
-                                        <input type="password" class="form-control" id="inputPassword1" placeholder="New password" name="newPassword" maxlength="20" required>
+                                        <input type="password" class="form-control" id="inputPassword1" placeholder="New password" name="newPassword" maxlength="64" required>
                                     </div>
                                 </div>
                             </div>
@@ -39,7 +39,7 @@
                                 <div class="col-md-12">
                                     <div class="form-group">
                                         <label for="inputPassword2">Confirm New Password</label>
-                                        <input type="password" class="form-control" id="inputPassword2" placeholder="Confirm new password" name="cNewPassword" maxlength="20" required>
+                                        <input type="password" class="form-control" id="inputPassword2" placeholder="Confirm new password" name="cNewPassword" maxlength="64" required>
                                     </div>
                                 </div>
                             </div>
@@ -61,7 +61,7 @@
                 ?>
                 <div class="alert alert-danger alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
+                    <?php echo html_escape($this->session->flashdata('error')); ?>                    
                 </div>
                 <?php } ?>
                 <?php  
@@ -71,7 +71,7 @@
                 ?>
                 <div class="alert alert-success alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
+                    <?php echo html_escape($this->session->flashdata('success')); ?>
                 </div>
                 <?php } ?>
                 
@@ -82,7 +82,7 @@
                 ?>
                 <div class="alert alert-warning alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('nomatch'); ?>
+                    <?php echo html_escape($this->session->flashdata('nomatch')); ?>
                 </div>
                 <?php } ?>
                 

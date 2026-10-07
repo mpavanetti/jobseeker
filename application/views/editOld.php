@@ -53,13 +53,13 @@ $groupId = $userInfo->groupId;
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="password">Password</label>
-                                        <input type="password" class="form-control" id="password" placeholder="Password" name="password" maxlength="20" autocomplete="new-password">
+                                        <input type="password" class="form-control" id="password" placeholder="Password" name="password" maxlength="64" autocomplete="new-password">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="cpassword">Confirm Password</label>
-                                        <input type="password" class="form-control" id="cpassword" placeholder="Confirm Password" name="cpassword" maxlength="20" autocomplete="new-password">
+                                        <input type="password" class="form-control" id="cpassword" placeholder="Confirm Password" name="cpassword" maxlength="64" autocomplete="new-password">
                                     </div>
                                 </div>
                             </div>
@@ -82,7 +82,7 @@ $groupId = $userInfo->groupId;
                                                 foreach ($roles as $rl)
                                                 {
                                                     ?>
-                                                    <option value="<?php echo $rl->roleId; ?>" <?php if($rl->roleId == $roleId) {echo "selected=selected";} ?>><?php echo $rl->role ?></option>
+                                                    <option value="<?php echo html_escape($rl->roleId); ?>" <?php if($rl->roleId == $roleId) {echo "selected=selected";} ?>><?php echo html_escape($rl->role); ?></option>
                                                     <?php
                                                 }
                                             }
@@ -100,7 +100,7 @@ $groupId = $userInfo->groupId;
                                                 foreach ($groups as $gp)
                                                 {
                                                     ?>
-                                                    <option value="<?php echo $gp->id; ?>" <?php if($gp->id == $groupId) {echo "selected=selected";} ?>><?php echo $gp->name ?></option>
+                                                    <option value="<?php echo html_escape($gp->id); ?>" <?php if($gp->id == $groupId) {echo "selected=selected";} ?>><?php echo html_escape($gp->name); ?></option>
                                                     <?php
                                                 }
                                             }
@@ -127,7 +127,7 @@ $groupId = $userInfo->groupId;
                 ?>
                 <div class="alert alert-danger alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
+                    <?php echo html_escape($this->session->flashdata('error')); ?>                    
                 </div>
                 <?php } ?>
                 <?php  
@@ -137,7 +137,7 @@ $groupId = $userInfo->groupId;
                 ?>
                 <div class="alert alert-success alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
+                    <?php echo html_escape($this->session->flashdata('success')); ?>
                 </div>
                 <?php } ?>
                 
