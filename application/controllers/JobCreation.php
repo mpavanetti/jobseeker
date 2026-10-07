@@ -1449,7 +1449,13 @@ class JobCreation extends BaseController
             return FALSE;
           }
 
+          // What copyDirectory() leaves out. Counting bytecode the source
+          // happens to hold made the copies differ forever, so every open and
+          // save swapped the SDK folder under builds installing from it.
           $relativePath = str_replace(DIRECTORY_SEPARATOR, '/', substr($item->getPathname(), strlen($directory) + 1));
+          if (preg_match('#(?:^|/)__pycache__(?:/|$)|\.pyc$#', $relativePath)) {
+            continue;
+          }
           if ($item->isDir()) {
             $entries[] = 'd '.$relativePath;
           } else if ($item->isFile()) {
@@ -2924,10 +2930,14 @@ class JobCreation extends BaseController
             'ms-python.python',
             'charliermarsh.ruff',
             'ms-python.mypy-type-checker',
-            'detachhead.basedpyright',
-            'Continue.continue'
+            'detachhead.basedpyright'
           )
         );
+        // Continue is only in the editor when the deployment adds it.
+        $continueEnabled = $this->envFlag('JOBSEEKER_OPENVSCODE_CONTINUE_ENABLED', FALSE);
+        if ($continueEnabled) {
+          $extensions['recommendations'][] = 'Continue.continue';
+        }
         $continueRules = implode("\n", array(
           '# JobSeeker Python workspace',
           '',
@@ -3184,9 +3194,11 @@ class JobCreation extends BaseController
           array('.vscode/settings.json', json_encode($settings, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
           array('.vscode/extensions.json', json_encode($extensions, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
           array('.vscode/tasks.json', json_encode($tasks, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
-          array('.vscode/launch.json', json_encode($launch, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE),
-          array('.continue/rules/jobseeker.md', $continueRules, FALSE)
+          array('.vscode/launch.json', json_encode($launch, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n", FALSE)
         ));
+        if ($continueEnabled) {
+          $writes[] = array('.continue/rules/jobseeker.md', $continueRules, FALSE);
+        }
 
         foreach ($writes as $write) {
           if (! $this->writeInlinePythonProjectFile($baseDirectory, $write[0], $write[1], $projectFiles, $write[2])) {
