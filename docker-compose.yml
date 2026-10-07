@@ -258,6 +258,10 @@ services:
       # each workspace it opens (application/libraries/ConnectorIdeSession.php).
       - JOBSEEKER_CONNECTOR_API_URL=http://nginx:8080/connector-runtime
       - JOBSEEKER_GIT_CREDENTIAL_URL=http://nginx:8080/git-credential
+      # Where the SDK reads Data Assets, for every process (as runtime editors
+      # set it); its default is the PHP container's path.
+      - JOBSEEKER_REPOSITORY_ROOT=/home/workspace/repository
+      - JOBSEEKER_DATA_ASSETS_MANIFEST=/home/workspace/repository/data-assets/manifest.json
     ports:
       - "${JOBSEEKER_OPENVSCODE_HOST:-127.0.0.1}:${JOBSEEKER_OPENVSCODE_PORT:-3000}:3000"
     volumes:
