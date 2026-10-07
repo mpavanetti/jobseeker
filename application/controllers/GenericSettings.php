@@ -84,14 +84,16 @@ class GenericSettings extends BaseController
             
             $this->load->library('form_validation');
             
-            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[255]');
-            $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[255]');
-            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[3000]');
-            $this->form_validation->set_rules('value2','Value 2','trim|max_length[3000]');
-            $this->form_validation->set_rules('value3','Value 3','trim|max_length[3000]');
-            $this->form_validation->set_rules('value4','Value 4','trim|max_length[3000]');
-            $this->form_validation->set_rules('value5','Value 5','trim|max_length[3000]');
-            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[5000]');
+            // The limits of the generic_settings columns, so an overlong value
+            // is reported here instead of failing the database write.
+            $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
+            $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[200]');
+            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[200]');
+            $this->form_validation->set_rules('value2','Value 2','trim|max_length[200]');
+            $this->form_validation->set_rules('value3','Value 3','trim|max_length[200]');
+            $this->form_validation->set_rules('value4','Value 4','trim|max_length[200]');
+            $this->form_validation->set_rules('value5','Value 5','trim|max_length[200]');
+            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[800]');
 
             if($this->form_validation->run() == FALSE)
             {
@@ -102,11 +104,13 @@ class GenericSettings extends BaseController
 
                 $job_name = $this->security->xss_clean($this->input->post('job_name'));
                 $setting = $this->security->xss_clean($this->input->post('setting'));
-                $value1 = $this->security->xss_clean($this->input->post('value1'));
-                $value2 = $this->security->xss_clean($this->input->post('value2'));
-                $value3 = $this->security->xss_clean($this->input->post('value3'));
-                $value4 = $this->security->xss_clean($this->input->post('value4'));
-                $value5 = $this->security->xss_clean($this->input->post('value5'));
+                // Setting values are read verbatim by ETL code; xss_clean() would
+                // URL-decode %xx in them. Both views escape them when rendering.
+                $value1 = (string) $this->input->post('value1');
+                $value2 = (string) $this->input->post('value2');
+                $value3 = (string) $this->input->post('value3');
+                $value4 = (string) $this->input->post('value4');
+                $value5 = (string) $this->input->post('value5');
                 $description = $this->security->xss_clean($this->input->post('description')); 
 
                  $validateSetting = $this->model->validateSetting($job_name, $setting);
@@ -163,29 +167,33 @@ class GenericSettings extends BaseController
             
             $this->load->library('form_validation');
             
+            // The limits of the generic_settings columns, so an overlong value
+            // is reported here instead of failing the database write.
             $this->form_validation->set_rules('job_name','Job Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[30]');
-            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[3000]');
-            $this->form_validation->set_rules('value2','Value 2','trim|max_length[3000]');
-            $this->form_validation->set_rules('value3','Value 3','trim|max_length[3000]');
-            $this->form_validation->set_rules('value4','Value 4','trim|max_length[3000]');
-            $this->form_validation->set_rules('value5','Value 5','trim|max_length[3000]');
-            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[3000]');
+            $this->form_validation->set_rules('setting','Setting Name','trim|required|max_length[200]');
+            $this->form_validation->set_rules('value1','Value 1','trim|required|max_length[200]');
+            $this->form_validation->set_rules('value2','Value 2','trim|max_length[200]');
+            $this->form_validation->set_rules('value3','Value 3','trim|max_length[200]');
+            $this->form_validation->set_rules('value4','Value 4','trim|max_length[200]');
+            $this->form_validation->set_rules('value5','Value 5','trim|max_length[200]');
+            $this->form_validation->set_rules('description','Setting Description','trim|required|max_length[800]');
 
             if($this->form_validation->run() == FALSE)
             {
-                $this->updateGenericSetting();
+                $this->EditSettingsFetchData((int) $this->input->post('id'));
             }
             else
             {
                 $id = $this->security->xss_clean($this->input->post('id'));
                 $job_name = $this->security->xss_clean($this->input->post('job_name'));
                 $setting = $this->security->xss_clean($this->input->post('setting'));
-                $value1 = $this->security->xss_clean($this->input->post('value1'));
-                $value2 = $this->security->xss_clean($this->input->post('value2'));
-                $value3 = $this->security->xss_clean($this->input->post('value3'));
-                $value4 = $this->security->xss_clean($this->input->post('value4'));
-                $value5 = $this->security->xss_clean($this->input->post('value5'));
+                // Setting values are read verbatim by ETL code; xss_clean() would
+                // URL-decode %xx in them. Both views escape them when rendering.
+                $value1 = (string) $this->input->post('value1');
+                $value2 = (string) $this->input->post('value2');
+                $value3 = (string) $this->input->post('value3');
+                $value4 = (string) $this->input->post('value4');
+                $value5 = (string) $this->input->post('value5');
                 $description = $this->security->xss_clean($this->input->post('description')); 
 
 

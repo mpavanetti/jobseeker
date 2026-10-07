@@ -457,7 +457,7 @@ class EmailSettings extends BaseController
 
             if($this->form_validation->run() == FALSE)
             {
-                $this->EditSettingsFetchData();
+                $this->EditSettingsFetchData((int) $this->input->post('id'));
             }
             else
             {
@@ -500,7 +500,7 @@ class EmailSettings extends BaseController
                 }
 
 
-                redirect('EmailSettings/EditSettingsFetchData');
+                redirect('EmailSettings/EditSettingsFetchData/'.(int) $id);
 
             }
 

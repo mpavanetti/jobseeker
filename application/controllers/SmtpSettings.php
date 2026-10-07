@@ -111,8 +111,10 @@ class SmtpSettings extends BaseController
                 $name = $this->security->xss_clean($this->input->post('name'));
                 $smtp_host = $this->security->xss_clean($this->input->post('smtp_host'));
                 $smtp_port = $this->security->xss_clean($this->input->post('smtp_port'));
-                $username = $this->security->xss_clean($this->input->post('username'));
-                $password = $this->security->xss_clean($this->input->post('password'));
+                // Credentials are used verbatim; xss_clean() would URL-decode %xx and
+                // rewrite text such as <script> inside a password.
+                $username = (string) $this->input->post('username');
+                $password = (string) $this->input->post('password');
                 $reply_to = $this->security->xss_clean($this->input->post('reply_to'));
                 $description = $this->security->xss_clean($this->input->post('description'));
 
@@ -192,7 +194,7 @@ class SmtpSettings extends BaseController
 
             if($this->form_validation->run() == FALSE)
             {
-                $this->addSetting();
+                $this->EditSettingsFetchData((int) $this->input->post('id'));
             }
             else
             {
@@ -204,8 +206,10 @@ class SmtpSettings extends BaseController
                 $name = $this->security->xss_clean($this->input->post('name'));
                 $smtp_host = $this->security->xss_clean($this->input->post('smtp_host'));
                 $smtp_port = $this->security->xss_clean($this->input->post('smtp_port'));
-                $username = $this->security->xss_clean($this->input->post('username'));
-                $password = $this->security->xss_clean($this->input->post('password'));
+                // Credentials are used verbatim; xss_clean() would URL-decode %xx and
+                // rewrite text such as <script> inside a password.
+                $username = (string) $this->input->post('username');
+                $password = (string) $this->input->post('password');
                 $reply_to = $this->security->xss_clean($this->input->post('reply_to'));
                 $description = $this->security->xss_clean($this->input->post('description'));
 
@@ -448,9 +452,15 @@ class SmtpSettings extends BaseController
         )) . "\n";
     }
 
+    /**
+     * A single-quoted Groovy literal, as WorkflowCompiler writes them. A
+     * json_encode()d value is a double-quoted GString: a '$' in a password was
+     * interpolated (MissingPropertyException) and its '\/' does not compile.
+     */
     private function groovyString($value)
     {
-        return json_encode((string) $value);
+        $value = str_replace(array('\\', "'", "\r", "\n"), array('\\\\', "\\'", '\\r', '\\n'), (string) $value);
+        return "'".$value."'";
     }
 
     private function smtpReplyTo($setting)

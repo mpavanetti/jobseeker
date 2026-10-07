@@ -2753,7 +2753,10 @@ public function addContext() {
     else
     {
 
-      $contextValue = $this->security->xss_clean($this->input->post('contextValue'));
+      // Runtime values (passwords, URLs, DSNs) reach jobs verbatim; xss_clean()
+      // URL-decodes %xx and rewrites <script> or eval( inside them. Every view
+      // escapes the value when it renders it.
+      $contextValue = (string) $this->input->post('contextValue');
       $contextKey = $this->security->xss_clean($this->input->post('contextKey'));
       $active = $this->security->xss_clean($this->input->post('active'));
       $encrypted = $this->security->xss_clean($this->input->post('encrypted'));
@@ -3259,7 +3262,10 @@ public function editContextUpdate() {
     else
     {
 
-      $contextValue = $this->security->xss_clean($this->input->post('contextValue'));
+      // Runtime values (passwords, URLs, DSNs) reach jobs verbatim; xss_clean()
+      // URL-decodes %xx and rewrites <script> or eval( inside them. Every view
+      // escapes the value when it renders it.
+      $contextValue = (string) $this->input->post('contextValue');
       $contextKey = $this->security->xss_clean($this->input->post('contextKey'));
       $active = $this->security->xss_clean($this->input->post('active'));
       $encrypted = $this->security->xss_clean($this->input->post('encrypted'));
