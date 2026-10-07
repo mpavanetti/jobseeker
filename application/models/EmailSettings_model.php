@@ -228,7 +228,9 @@ HTML
 
     function fetchSMTP() {
 
-        $this->db->select('*');
+        // Every signed-in role can read this list (the template forms fill
+        // their provider dropdown from it), so it never carries credentials.
+        $this->db->select('id, name, smtp_host, smtp_port, ssl');
         $this->db->from('smtp_settings');
 
         if ($this->db->field_exists('is_enabled', 'smtp_settings')) {

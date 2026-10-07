@@ -40,6 +40,7 @@ class JobExecution extends BaseController
                 }
 
                 $data = array(
+                    'can_manage_jobs' => $this->role == ROLE_ADMIN || $this->role == ROLE_MANAGER,
                     'hop_jobs' => $hopJobs,
                     'job_creation_dates' => $this->readJobCreationDates(),
                     'resume_job' => trim((string) $this->security->xss_clean($this->input->get('job'))),

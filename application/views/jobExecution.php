@@ -656,6 +656,8 @@
     var containerMetricsUrl = <?php echo json_encode(base_url() . 'docker-monitoring/jobs'); ?>;
     var hopGraphUrl = <?php echo json_encode(base_url() . 'hop/graph'); ?>;
     var hopJobs = <?php echo json_encode(isset($hop_jobs) && is_array($hop_jobs) ? $hop_jobs : array(), JSON_UNESCAPED_SLASHES); ?> || [];
+    // Jenkins refuses a start from other roles; they can still follow running builds here.
+    var canManageJobs = <?php echo ! empty($can_manage_jobs) ? 'true' : 'false'; ?>;
     var hopJobsByName = {};
     var jobsByName = {};
     var visibleJobs = [];
@@ -2880,6 +2882,11 @@
 
       if (resumed > 0) {
         toastr.info(resumed + ' running build console(s) opened.', 'Live Console');
+      }
+
+      if (readyJobs.length > 0 && ! canManageJobs) {
+        toastr.warning('Your role can follow running builds here but cannot start jobs.', 'Job Execution');
+        readyJobs = [];
       }
 
       if (readyJobs.length > 0) {

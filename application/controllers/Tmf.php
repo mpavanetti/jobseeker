@@ -262,8 +262,29 @@ class Tmf extends BaseController
     }
 
 
+    /**
+     * The two row updates below change TMF history, so they need a job
+     * management role and a POST, which is what puts them behind the CSRF
+     * check; as GET routes any page could fire them for a signed-in user.
+     */
+    private function allowTmfRowUpdate()
+    {
+        if (! $this->canManageTmf()) {
+            $this->output->set_status_header(403)->set_output('Access denied.');
+            return FALSE;
+        }
+        if ($this->input->method(TRUE) !== 'POST') {
+            $this->output->set_status_header(405)->set_output('Use POST to change a TMF row.');
+            return FALSE;
+        }
+        return TRUE;
+    }
+
      function updateUser($instanceId,$name)
     {
+        if (! $this->allowTmfRowUpdate()) {
+            return;
+        }
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
         $errorList["data"] = $this->model->updateUser($instanceId,$name);
 
@@ -271,6 +292,16 @@ class Tmf extends BaseController
 
      function updateStatus($id,$status)
     {
+        if (! $this->allowTmfRowUpdate()) {
+            return;
+        }
+        // Stored statuses are lower case; "Cancelled" from the cancel button
+        // otherwise became a second Cancelled entry in the status filter.
+        $status = strtolower(trim((string) $status));
+        if (! in_array($status, array('ready', 'running', 'error', 'warning', 'cancelled'), TRUE)) {
+            $this->output->set_status_header(400)->set_output('Unknown TMF status.');
+            return;
+        }
         $this->global['pageTitle'] = 'Job Seeker : Transaction Monitoring Framework';
         $errorList["data"] = $this->model->updateStatus($id,$status,$this->selectedEnvironmentFilter());
 

@@ -60,6 +60,14 @@ class JenkinsProxy extends BaseController
         $path = $this->input->get('path');
         $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : NULL;
 
+        if (! $this->proxyPathAllowedForRole($path)) {
+            $this->output
+                ->set_status_header(403)
+                ->set_content_type('text/plain')
+                ->set_output('Access denied. Only System Administrators can reach this Jenkins page.');
+            return;
+        }
+
         if (! in_array($method, array('GET', 'HEAD', 'OPTIONS'), TRUE) && preg_match('#(?:^|/)doDelete(?:\?.*)?$#i', (string) $path)) {
             $this->output
                 ->set_status_header(403)
@@ -90,6 +98,24 @@ class JenkinsProxy extends BaseController
             ->set_status_header($response['status'])
             ->set_content_type($response['content_type'])
             ->set_output($response['body']);
+    }
+
+    /**
+     * The proxy signs every request with the platform's Jenkins administrator
+     * credential, so an unrestricted path would let any signed-in role read
+     * Jenkins administration pages (system information with the controller's
+     * environment, logs, agent connection files) with administrator rights.
+     * The UI only proxies job and queue paths; everything else stays with
+     * System Administrators.
+     */
+    private function proxyPathAllowedForRole($path)
+    {
+        if ($this->role == ROLE_ADMIN) {
+            return TRUE;
+        }
+
+        $segment = strtok(ltrim((string) $path, '/'), '/?');
+        return in_array($segment, array('job', 'queue'), TRUE);
     }
 
     public function environmentSlots()

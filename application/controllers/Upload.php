@@ -146,6 +146,14 @@ class Upload extends BaseController
 
       $this->global['pageTitle'] = 'Job Seeker : Upload';
 
+      // Data Assets, which replaced this page, lets only job-management roles
+      // write input files; this legacy endpoint must not be the way around it.
+      if ($this->role != ROLE_ADMIN && $this->role != ROLE_MANAGER) {
+        $this->output->set_status_header(403);
+        echo 'Access denied.';
+        return;
+      }
+
       if ($jobname === NULL || $component === NULL || $type === NULL) {
         $this->output->set_status_header(400);
         echo 'Upload target is missing.';
