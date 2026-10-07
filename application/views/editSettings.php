@@ -27,7 +27,7 @@
                 ?>
                 <div class="alert alert-danger alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
+                    <?php echo html_escape($this->session->flashdata('error')); ?>                    
                 </div>
                 <?php } ?>
                 <?php  
@@ -37,7 +37,7 @@
                 ?>
                 <div class="alert alert-success alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
+                    <?php echo html_escape($this->session->flashdata('success')); ?>
                 </div>
                 <?php } ?>
                 
@@ -65,14 +65,14 @@
                             	<div class="col-md-3" style="display: none;">
                                     <div class="form-group">
                                         <label for="id">Id</label>
-                                        <input type="text" class="form-control required" value="<?php echo $fetch->id ?>" id="id" name="id" maxlength="11" required>
+                                        <input type="text" class="form-control required" value="<?php echo html_escape($fetch->id); ?>" id="id" name="id" maxlength="11" required>
                                     </div>
                                 </div>
 
                                 <div class="col-md-3">                                
                                     <div class="form-group">
                                         <label for="job_name">Job Name</label>
-                                        <input type="text" class="form-control required" value="<?php echo $fetch->job_name ?>" id="job_name" name="job_name" maxlength="255" required autocomplete="off">
+                                        <input type="text" class="form-control required" value="<?php echo html_escape($fetch->job_name); ?>" id="job_name" name="job_name" maxlength="30" required autocomplete="off">
                                     </div>
                                 </div>
 
@@ -80,7 +80,7 @@
 
                                     <div class="form-group">
                                         <label for="setting_name">Setting Name</label>
-                                      <input type="text" class="form-control required" id="setting" value="<?php echo $fetch->setting ?>" name="setting" maxlength="255" autocomplete="off" required>
+                                      <input type="text" class="form-control required" id="setting" value="<?php echo html_escape($fetch->setting); ?>" name="setting" maxlength="200" autocomplete="off" required>
                                     </div>
                                 </div>
 
@@ -92,7 +92,7 @@
                                   <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value1">Value 1</label>
-                                      <input type="text" class="form-control required" id="value1" value="<?php echo $fetch->value1 ?>" name="value1" maxlength="3000" autocomplete="off" required>
+                                      <input type="text" class="form-control required" id="value1" value="<?php echo html_escape($fetch->value1); ?>" name="value1" maxlength="200" autocomplete="off" required>
                                     </div>
                                 </div>
 
@@ -100,7 +100,7 @@
 
                                     <div class="form-group">
                                         <label for="value2">Value 2</label>
-                                      <input type="text" class="form-control" id="value2" value="<?php echo $fetch->value2 ?>" name="value2" maxlength="3000" autocomplete="off">
+                                      <input type="text" class="form-control" id="value2" value="<?php echo html_escape($fetch->value2); ?>" name="value2" maxlength="200" autocomplete="off">
                                     </div>
                                 </div>
 
@@ -108,14 +108,14 @@
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value3">Value 3</label>
-                                        <input type="text" class="form-control" id="value3" value="<?php echo $fetch->value3 ?>" name="value3" maxlength="3000" autocomplete="off">
+                                        <input type="text" class="form-control" id="value3" value="<?php echo html_escape($fetch->value3); ?>" name="value3" maxlength="200" autocomplete="off">
                                     </div>
                                 </div> 
 
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value4">Value 4</label>
-                                        <input type="text" class="form-control" id="value4" value="<?php echo $fetch->value4 ?>" name="value4" maxlength="3000" autocomplete="off">
+                                        <input type="text" class="form-control" id="value4" value="<?php echo html_escape($fetch->value4); ?>" name="value4" maxlength="200" autocomplete="off">
                                     </div>
                                 </div> 
 
@@ -124,7 +124,7 @@
                                     <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="value5">Value 5</label>
-                                        <input type="text" class="form-control" id="value5" value="<?php echo $fetch->value5 ?>" name="value5" maxlength="3000" autocomplete="off">
+                                        <input type="text" class="form-control" id="value5" value="<?php echo html_escape($fetch->value5); ?>" name="value5" maxlength="200" autocomplete="off">
                                     </div>
                                 </div> 
                                 </div>
@@ -135,7 +135,7 @@
                                  <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="description">Description</label>
-                                        <textarea class="form-control" id="description" value="<?php echo $fetch->description ?>" name="description" maxlength="5000" rows="5"><?php echo $fetch->description ?></textarea>
+                                        <textarea class="form-control" id="description" value="<?php echo html_escape($fetch->description); ?>" name="description" maxlength="800" rows="5"><?php echo html_escape($fetch->description); ?></textarea>
                                     </div>
                                 </div> 
                                 

@@ -33,7 +33,15 @@
                     <a class="btn btn-primary" href="<?php echo base_url(); ?>Context/contextDetails"><i class="fa fa-sliders"></i> Open Context Details</a>
                 </div>
             </div>
-        </div> 
+        </div>
+        <?php foreach (array('error' => 'alert-danger', 'success' => 'alert-success') as $flashType => $flashClass) { ?>
+          <?php $flashMessage = $this->session->flashdata($flashType); if ($flashMessage) { ?>
+        <div class="alert <?php echo $flashClass; ?> alert-dismissable">
+          <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+          <?php echo html_escape($flashMessage); ?>
+        </div>
+          <?php } ?>
+        <?php } ?>
       <div class="row" style="margin-top: 5px;">
         <div class="col-xs-12">
           <div class="box box-primary">

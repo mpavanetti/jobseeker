@@ -33,28 +33,28 @@
                                 <div class="col-md-3" style="display: none;">                                
                                     <div class="form-group">
                                         <label for="id">Id</label>
-                                        <input type="text" class="form-control required" value="<?php echo $fetch->id; ?>" id="id" name="id" maxlength="128" required autocomplete="off">
+                                        <input type="text" class="form-control required" value="<?php echo html_escape($fetch->id); ?>" id="id" name="id" maxlength="128" required autocomplete="off">
                                     </div>
                                     
                                 </div>
                                 <div class="col-md-3">                                
                                     <div class="form-group">
                                         <label for="name">Name</label>
-                                        <input type="text" class="form-control required" value="<?php echo $fetch->name; ?>" id="name" name="name" maxlength="128" required autocomplete="off">
+                                        <input type="text" class="form-control required" value="<?php echo html_escape($fetch->name); ?>" id="name" name="name" maxlength="128" required autocomplete="off">
                                     </div>
                                     
                                 </div>
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="smtp_host">Smtp Host</label>
-                                      <input type="text" class="form-control required" id="smtp_host" value="<?php echo $fetch->smtp_host; ?>" name="smtp_host" maxlength="128" autocomplete="off" required>
+                                      <input type="text" class="form-control required" id="smtp_host" value="<?php echo html_escape($fetch->smtp_host); ?>" name="smtp_host" maxlength="128" autocomplete="off" required>
                                     </div>
                                 </div>
 
                                 <div class ="col-md-3"> 
                                     <div class="form-group">
                                         <label for="smtp_port">Smtp Port</label>
-                                        <input type="text" class="form-control required" id="smtp_port" value="<?php echo $fetch->smtp_port; ?>" name="smtp_port" maxlength="128">
+                                        <input type="text" class="form-control required" id="smtp_port" value="<?php echo html_escape($fetch->smtp_port); ?>" name="smtp_port" maxlength="128">
                                     </div>
                                 </div>
                             </div>
@@ -64,14 +64,14 @@
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="username">Username</label>
-                                                                                <input type="text" class="form-control" id="username" value="<?php echo $fetch->username; ?>" name="username" maxlength="128" autocomplete="off">
+                                                                                <input type="text" class="form-control" id="username" value="<?php echo html_escape($fetch->username); ?>" name="username" maxlength="128" autocomplete="off">
                                                                                 <p class="help-block">Leave empty when the SMTP server does not require authentication.</p>
                                     </div>
                                 </div> 
                                 <div class="col-md-3">
                                     <div class="form-group">
                                         <label for="password">Password</label>
-                                                                                <input type="password" class="form-control" id="password" value="<?php echo $fetch->password; ?>" name="password" maxlength="128" autocomplete="off">
+                                                                                <input type="password" class="form-control" id="password" value="<?php echo html_escape($fetch->password); ?>" name="password" maxlength="128" autocomplete="off">
                                     </div>
                                 </div> 
                                                                 <div class="col-md-3">
@@ -121,7 +121,7 @@
                                  <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="description">Description</label>
-                                        <textarea class="form-control" id="description" value="<?php echo $fetch->description; ?>" name="description" maxlength="500" rows="5" required><?php echo $fetch->description; ?></textarea>
+                                        <textarea class="form-control" id="description" value="<?php echo html_escape($fetch->description); ?>" name="description" maxlength="500" rows="5" required><?php echo html_escape($fetch->description); ?></textarea>
                                     </div>
                                 </div> 
                             </div>
@@ -143,7 +143,7 @@
                 ?>
                 <div class="alert alert-danger alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
+                    <?php echo html_escape($this->session->flashdata('error')); ?>                    
                 </div>
                 <?php } ?>
                 <?php  
@@ -153,7 +153,7 @@
                 ?>
                 <div class="alert alert-success alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
+                    <?php echo html_escape($this->session->flashdata('success')); ?>
                 </div>
                 <?php } ?>
                 
