@@ -970,6 +970,7 @@ class Visualization_model extends CI_Model
         $this->db->distinct();
         $this->db->select('name');
         $this->db->from('tbl_users');
+        $this->db->where('isDeleted', 0);
         $query = $this->db->get();
         return $query->result();
     }
@@ -1002,8 +1003,8 @@ class Visualization_model extends CI_Model
                     LEFT JOIN tbl_groups g ON g.id = u.groupId
                     WHERE r.name = ? AND (
                         FIND_IN_SET('*', REPLACE(r.users, ' ', '')) > 0
-                        OR FIND_IN_SET(?, REPLACE(r.users, ' ', '')) > 0
-                        OR FIND_IN_SET(g.name, REPLACE(r.groups, ' ', '')) > 0
+                        OR FIND_IN_SET(REPLACE(?, ' ', ''), REPLACE(r.users, ' ', '')) > 0
+                        OR FIND_IN_SET(REPLACE(g.name, ' ', ''), REPLACE(r.groups, ' ', '')) > 0
                     )", array($user, $name, $user));
         return $query->num_rows();
     }
@@ -1016,8 +1017,8 @@ class Visualization_model extends CI_Model
                     LEFT JOIN tbl_users u ON u.name = ? AND u.isDeleted = 0
                     LEFT JOIN tbl_groups g ON g.id = u.groupId
                     WHERE FIND_IN_SET('*', REPLACE(r.users, ' ', '')) > 0
-                        OR FIND_IN_SET(?, REPLACE(r.users, ' ', '')) > 0
-                        OR FIND_IN_SET(g.name, REPLACE(r.groups, ' ', '')) > 0
+                        OR FIND_IN_SET(REPLACE(?, ' ', ''), REPLACE(r.users, ' ', '')) > 0
+                        OR FIND_IN_SET(REPLACE(g.name, ' ', ''), REPLACE(r.groups, ' ', '')) > 0
                     ORDER BY r.name", array($user, $user));
         return $query->result();
     }
