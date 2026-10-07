@@ -10,21 +10,21 @@
     <section class="content">
       <div class="container">
         <div class="row">
-          <form action="<?php echo base_url() ?>login-history" method="POST" id="searchList">
+          <form action="<?php echo base_url('login-history'.(!empty($userInfo) ? '/'.(int) $userInfo->userId : '')); ?>" method="POST" id="searchList">
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
               <div class="input-group">
-                <input id="fromDate" type="text" name="fromDate" value="<?php echo $fromDate; ?>" class="form-control datepicker" placeholder="From Date" autocomplete="off" />
+                <input id="fromDate" type="text" name="fromDate" value="<?php echo html_escape($fromDate); ?>" class="form-control datepicker" placeholder="From Date" autocomplete="off" />
                 <span class="input-group-addon"><label for="fromDate"><i class="fa fa-calendar"></i></label></span>
               </div>
             </div>
             <div class="col-lg-3 col-md-3 col-sm-6 col-xs-12 form-group">
               <div class="input-group">
-                <input id="toDate" type="text" name="toDate" value="<?php echo $toDate; ?>" class="form-control datepicker" placeholder="To Date" autocomplete="off" />
+                <input id="toDate" type="text" name="toDate" value="<?php echo html_escape($toDate); ?>" class="form-control datepicker" placeholder="To Date" autocomplete="off" />
                 <span class="input-group-addon"><label for="toDate"><i class="fa fa-calendar"></i></label></span>
               </div>
             </div>
             <div class="col-lg-4 col-md-4 col-sm-12 col-xs-12 form-group">
-              <input id="searchText" type="text" name="searchText" value="<?php echo $searchText; ?>" class="form-control" placeholder="Search Text"/>
+              <input id="searchText" type="text" name="searchText" value="<?php echo html_escape($searchText); ?>" class="form-control" placeholder="Search Text"/>
             </div>
             <div class="col-lg-1 col-md-1 col-sm-6 col-xs-6 form-group">
               <button type="submit" class="btn btn-md btn-primary btn-block searchList pull-right"><i class="fa fa-search" aria-hidden="true"></i></button> 
@@ -38,7 +38,7 @@
             <div class="col-xs-12">
               <div class="box">
                 <div class="box-header">
-                    <h3 class="box-title"><?= !empty($userInfo) ? $userInfo->name." : ".$userInfo->email : "All users" ?></h3>
+                    <h3 class="box-title"><?php echo !empty($userInfo) ? html_escape($userInfo->name." : ".$userInfo->email) : "All users"; ?></h3>
                     <div class="box-tools">
                     </div>
                 </div><!-- /.box-header -->
