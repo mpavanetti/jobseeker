@@ -33,13 +33,13 @@
                                 <div class="col-md-6">                                
                                     <div class="form-group">
                                         <label for="job_name">Job Name</label>
-                                        <input type="text" class="form-control required" value="<?php echo $job->job_name ?>" id="job_name" name="job_name" maxlength="128" required autocomplete="off">
+                                        <input type="text" class="form-control required" value="<?php echo html_escape($job->job_name); ?>" id="job_name" name="job_name" maxlength="128" required autocomplete="off">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="job_component">Job Component Name</label>
-                                      <input type="text" class="form-control required" id="job_component" value="<?php echo $job->job_component ?>" name="job_component" maxlength="128" autocomplete="off" required>
+                                      <input type="text" class="form-control required" id="job_component" value="<?php echo html_escape($job->job_component); ?>" name="job_component" maxlength="128" autocomplete="off" required>
 
                                       <!--  <select class="form-control required" id="job_component" name="job_component" required>
                                             <option value="tFileInputXML">tFileInputXML</option>
@@ -64,7 +64,7 @@
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="file_path">Repository</label>
-                                        <input type="text" class="form-control required" id="file_path" value="<?php echo $job->file_path ?>" name="file_path" maxlength="128" required autocomplete="off">
+                                        <input type="text" class="form-control required" id="file_path" value="<?php echo html_escape($job->file_path); ?>" name="file_path" maxlength="128" required autocomplete="off">
                                     </div>
                                 </div> 
                                 <div class="col-md-6 filename">
@@ -72,7 +72,7 @@
                                 <div class="col-md-6" style="display: none;">                                
                                     <div class="form-group">
                                         <label for="job_id">Id</label>
-                                        <input type="text" class="form-control required" value="<?php echo $job->id ?>" id="job_id" name="job_id" maxlength="128" required>
+                                        <input type="text" class="form-control required" value="<?php echo html_escape($job->id); ?>" id="job_id" name="job_id" maxlength="128" required>
                                     </div>
                                 </div>
                               <!--  <div class="col-md-6">
@@ -131,7 +131,7 @@
                 ?>
                 <div class="alert alert-danger alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
+                    <?php echo html_escape($this->session->flashdata('error')); ?>                    
                 </div>
                 <?php } ?>
                 <?php  
@@ -141,7 +141,7 @@
                 ?>
                 <div class="alert alert-success alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
+                    <?php echo html_escape($this->session->flashdata('success')); ?>
                 </div>
                 <?php } ?>
                 
@@ -205,7 +205,7 @@
   $("#file"). change(function(){
     var file_name = $(this). children("option:selected"). val();
         if(file_name === '1'){
-            $(".filename").html('<div class ="filenameAppend"> <div class="form-group"><label for="file_name">File Name</label><input type="text" class="form-control required" id="file_name" value="<?php echo $job->file_name ?>" name="file_name" maxlength="128" required></div></div>');
+            $(".filename").html('<div class ="filenameAppend"> <div class="form-group"><label for="file_name">File Name</label><input type="text" class="form-control required" id="file_name" value="<?php echo html_escape($job->file_name); ?>" name="file_name" maxlength="128" required></div></div>');
         } else {
             $(".filenameAppend").remove();
         }
