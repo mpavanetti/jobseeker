@@ -48,6 +48,11 @@ spec:
               value: http://nginx:8080/connector-runtime
             - name: JOBSEEKER_GIT_CREDENTIAL_URL
               value: http://nginx:8080/git-credential
+            # Where the SDK reads Data Assets; its default is the app's path.
+            - name: JOBSEEKER_REPOSITORY_ROOT
+              value: /home/workspace/repository
+            - name: JOBSEEKER_DATA_ASSETS_MANIFEST
+              value: /home/workspace/repository/data-assets/manifest.json
             - name: UV_PYTHON_INSTALL_DIR
               value: /tmp/jobseeker-python
           resources:
