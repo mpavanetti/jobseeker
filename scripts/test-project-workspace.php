@@ -149,6 +149,28 @@ if (trim((string) shell_exec('command -v sh')) !== '' && trim((string) shell_exe
     project_workspace_assert(strpos($run, 'cwd='.realpath($project).'/jobs/load-orders ') !== FALSE && strpos($run, 'path='.realpath($project).'/jobs/load-orders:'.realpath($project).' ') !== FALSE && strpos($run, ' DEV') !== FALSE, 'run starts in the job folder: '.$run);
     $test = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh test '.escapeshellarg($project.'/jobs/report/tests/x.py').' 2>&1');
     project_workspace_assert(strpos($test, 'Testing jobs/report') !== FALSE && strpos($test, 'args=-m pytest') !== FALSE, 'test runs the current job only: '.$test);
+    // A notebook runs through the SDK's runner, as its job does, not as a script.
+    $notebookRun = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh run '.escapeshellarg($project.'/jobs/report/report.ipynb').' 2>&1');
+    project_workspace_assert(strpos($notebookRun, 'args=-u -m jobseeker.notebook run '.$project.'/jobs/report/report.ipynb') !== FALSE, 'a notebook runs with jobseeker.notebook: '.$notebookRun);
+    // A job folder whose dependencies changed since .venv was set up (a
+    // sample added from the launcher) installs them before it runs, once.
+    if (! is_dir($project.'/jobs/report')) {
+        mkdir($project.'/jobs/report', 0777, TRUE);
+    }
+    file_put_contents($project.'/jobs/report/pyproject.toml', "[project]\ndependencies = [\"tabulate\"]\n");
+    file_put_contents($vscode.'/bootstrap-python.sh', "cd \"\$(dirname \"\$0\")/..\"\necho \"\$*\" >> .vscode/bootstrap.calls\nmkdir -p .venv/.jobseeker-deps\n(cd \"\$1\" && cat pyproject.toml poetry.lock uv.lock requirements.txt 2>/dev/null | cksum) > \".venv/.jobseeker-deps/deps-\$(printf '%s' \"\$1\" | tr '/' '_')\"\n");
+    $firstRun = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh run '.escapeshellarg($project.'/jobs/report/main.py').' 2>&1');
+    $secondRun = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh test '.escapeshellarg($project.'/jobs/report/main.py').' 2>&1');
+    project_workspace_assert(strpos($firstRun, 'Installing the dependencies of jobs/report into .venv') !== FALSE && strpos($secondRun, 'Installing') === FALSE
+        && trim((string) @file_get_contents($vscode.'/bootstrap.calls')) === 'jobs/report', 'a changed job folder is installed once, on its own: '.$firstRun.$secondRun);
+    file_put_contents($project.'/jobs/report/pyproject.toml', "[project]\ndependencies = [\"tabulate\", \"httpx\"]\n");
+    file_put_contents($vscode.'/bootstrap-python.sh', "exit 0\n");
+    $failedRun = shell_exec('cd '.escapeshellarg($project).' && sh .vscode/jobseeker.sh deps '.escapeshellarg($project.'/jobs/report/main.py').' 2>&1');
+    project_workspace_assert(strpos($failedRun, 'could not be installed') !== FALSE, 'an install that did not take is reported: '.$failedRun);
+    project_workspace_remove($project.'/.venv/.jobseeker-deps');
+    @unlink($vscode.'/bootstrap.calls');
+    @unlink($vscode.'/bootstrap-python.sh');
+    @unlink($project.'/jobs/report/pyproject.toml');
 
     // The sample task adds a sample from the library as a new job folder.
     project_workspace_assert($layout->sampleFolder('python-task-dag') === 'task-dag' && $layout->sampleFolder('Odd Name!') === 'odd-name', 'samples go into folders named after them');

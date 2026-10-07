@@ -88,7 +88,16 @@ Python projects can start jobs from JobSeeker's sample library
   carries the samples, so it needs no connection to JobSeeker), installs its
   dependencies into `.venv`, and prints the Job Creation link;
 - in the launcher, **Start from a sample** adds one to your workspace of the
-  selected project.
+  selected project; an editor that is already open sees it at once.
+
+Dependencies follow the job folder, however it got there. The setup task
+stamps each folder it installs (`.venv/.jobseeker-deps/`, a checksum of its
+`pyproject.toml`, lock files and `requirements.txt`), and **JobSeeker: run
+current job file**, **JobSeeker: test current job** and the debugger (its
+pre-launch task) install a job folder first when it has no stamp or its
+dependency files changed: a sample added from the launcher, or a package added
+to a job's `pyproject.toml`. **Run current job file** on a notebook runs it as
+its job does, top to bottom through `jobseeker.notebook`.
 
 A sample never replaces an existing folder. Its `pyproject.toml` requires the
 project runtime's Python. A sample that ships a Dockerfile keeps it only on
