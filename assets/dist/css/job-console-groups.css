@@ -24,6 +24,9 @@
   position: sticky;
   top: 0;
   z-index: 2;
+  /* The bar sticks below the console's top padding, and log lines scrolled
+     under it showed through that strip; paint it in the console colour. */
+  box-shadow: 0 -14px 0 #111827;
 }
 
 .job-console-toolbar .btn {

@@ -7,7 +7,7 @@ const header = fs.readFileSync('application/views/includes/header.php', 'utf8');
 for (const kind of ['docker-execution', 'python-tests', 'shell', 'hop-execution', 'task', 'dag']) {
   assert(consoleCss.includes('.job-console-section-' + kind), kind + ' needs an explicit console style');
 }
-assert(header.includes('job-console-groups.css?v=8'));
+assert(header.includes('job-console-groups.css?v=9'));
 assert(header.includes('job-console-groups.js?v=13'));
 assert(header.indexOf('job-console-notebook.js') !== -1 && header.indexOf('job-console-notebook.js') < header.indexOf('job-console-groups.js'), 'the notebook view loads before the console grouper');
 

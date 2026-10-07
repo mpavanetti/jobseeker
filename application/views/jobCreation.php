@@ -2174,7 +2174,7 @@
       ?>
       <div class="alert alert-danger alert-dismissable">
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <?php echo $error; ?>
+        <?php echo html_escape($error); ?>
       </div>
     <?php } ?>
     <?php
@@ -2188,7 +2188,7 @@
       ?>
       <div class="alert alert-success alert-dismissable destroy">
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <?php echo $success; ?>
+        <?php echo html_escape($success); ?>
       </div>
     <?php } ?>
     <?php
@@ -7834,20 +7834,25 @@
 
         var meaningfulTextFields = [
           'job_name', 'description', 'windowsCommandLine', 'linuxCommandLine',
-          'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonRepositoryBranch', 'pythonGitJobPath', 'pythonGitCredentialKey',
+          'pythonEntryPoint', 'pythonSourcePath', 'pythonProjectId', 'pythonRepositoryUrl', 'pythonGitJobPath', 'pythonGitCredentialKey',
           'pythonInlineCode', 'pythonRequirementsText', 'pythonPyprojectText', 'pythonDockerfileText',
           'recipients'
         ];
         var hasText = $.grep(meaningfulTextFields, function(field) {
           return $.trim(String(draft[field] || '')) !== '';
         }).length > 0;
+        // syncGitBranchDefault() fills the branch box with the environment's
+        // default branch on every visit; only a branch someone typed is work.
+        var branch = $.trim(String(draft.pythonRepositoryBranch || ''));
+        var defaultBranches = $.map(gitBranchDefaults, function(value) { return String(value); });
+        var hasBranch = branch !== '' && $.inArray(branch, defaultBranches) === -1;
         var hasEnabledOption = $.grep(['checkBuild', 'abort', 'winCommand', 'linuxCommand', 'runJobCheck', 'emailCheck', 'editableEmailCheck'], function(field) {
           return draftChecked(draft, field);
         }).length > 0;
         var hasPipeline = normalizeArray(draft.jobList).length > 0 || normalizeArray(draft.upstreamJobList).length > 0;
         var hasExtraFiles = $.trim(String(draft.pythonInlineFilesJson || '')) !== '' && $.trim(String(draft.pythonInlineFilesJson || '')) !== '{"files":[],"directories":[]}';
 
-        return hasText || hasEnabledOption || hasPipeline || hasExtraFiles;
+        return hasText || hasBranch || hasEnabledOption || hasPipeline || hasExtraFiles;
       }
 
       function discardCreatedDrafts(names) {

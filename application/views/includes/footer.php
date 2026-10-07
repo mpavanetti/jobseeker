@@ -438,14 +438,23 @@
                 }
 
                 refreshRunningJobs();
+                // Like the queued jobs below: a background tab does not poll
+                // the Jenkins job tree, and catches up when it is shown again.
                 runningTimer = window.setInterval(function() {
-                    refreshRunningJobs();
+                    if (! document.hidden) {
+                        refreshRunningJobs();
+                    }
                 }, refreshMs);
                 $('#sidebarRunningJobsRefresh').on('click', function() {
                     refreshRunningJobs(null, true);
                 });
                 $(document).on('jobseeker:environment-change', function(event, environment) {
                     refreshRunningJobs(environment, true);
+                });
+                $(document).on('visibilitychange.jobseekerRunning', function() {
+                    if (! document.hidden) {
+                        refreshRunningJobs(null, true);
+                    }
                 });
                 $(window).on('beforeunload', function() {
                     if (runningTimer) {
