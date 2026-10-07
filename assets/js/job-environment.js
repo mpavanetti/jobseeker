@@ -183,7 +183,10 @@
   function detectFromConfig(xmlText, fallbackJobName) {
     if ($ && xmlText) {
       try {
-        var xml = $.parseXML(xmlText);
+        // A config.xml request without dataType: 'text' comes back as an
+        // XMLDocument, which $.parseXML() turns into null. Accept both, or the
+        // ENVIRONMENT parameter is skipped and the job name is guessed instead.
+        var xml = typeof xmlText === 'string' ? $.parseXML(xmlText) : xmlText;
         var parameterEnvironment = detectFromParameters(xml);
 
         if (parameterEnvironment) {

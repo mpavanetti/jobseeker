@@ -408,22 +408,65 @@
       $(this).next('.select2-container').find('.select2-selection, .select2-search__field').attr('aria-label', label);
     });
 
-      function formatDateTimeLocal(value) {
-        var month = String(value.getMonth() + 1).padStart(2, '0');
-        var day = String(value.getDate()).padStart(2, '0');
-        var hours = String(value.getHours()).padStart(2, '0');
-        var minutes = String(value.getMinutes()).padStart(2, '0');
-        return value.getFullYear() + '-' + month + '-' + day + 'T' + hours + ':' + minutes;
+      // TMF times are stored and filtered in UTC. The date inputs follow the
+      // viewer's Local/UTC toggle, and a local entry is posted as its UTC
+      // equivalent; posting local wall time made "Today" miss the latest runs
+      // anywhere west of UTC.
+      function tmfTimeMode() {
+        return window.JobSeekerTime && window.JobSeekerTime.mode ? window.JobSeekerTime.mode() : 'utc';
+      }
+
+      function formatDateTimeInput(value, utc) {
+        var pad = function(part) { return String(part).padStart(2, '0'); };
+        return utc
+          ? value.getUTCFullYear() + '-' + pad(value.getUTCMonth() + 1) + '-' + pad(value.getUTCDate()) + 'T' + pad(value.getUTCHours()) + ':' + pad(value.getUTCMinutes())
+          : value.getFullYear() + '-' + pad(value.getMonth() + 1) + '-' + pad(value.getDate()) + 'T' + pad(value.getHours()) + ':' + pad(value.getMinutes());
+      }
+
+      function labelTmfDateInputs() {
+        var suffix = tmfTimeMode() === 'local' ? ' (local time)' : ' (UTC)';
+        $('label[for="fromDate"]').text('From Date / Time' + suffix);
+        $('label[for="toDate"]').text('To Date / Time' + suffix);
+      }
+
+      labelTmfDateInputs();
+      if (window.JobSeekerTime && window.JobSeekerTime.onChange) {
+        window.JobSeekerTime.onChange(labelTmfDateInputs);
       }
 
       $('.tmf-date-shortcut').on('click', function() {
         var days = parseInt($(this).data('days'), 10) || 0;
+        var utc = tmfTimeMode() !== 'local';
         var endDate = new Date();
-        var startDate = new Date();
-        startDate.setDate(endDate.getDate() - days);
-        startDate.setHours(0, 0, 0, 0);
-        $('#fromDate').val(formatDateTimeLocal(startDate));
-        $('#toDate').val(formatDateTimeLocal(endDate));
+        var startDate = new Date(endDate.getTime());
+        if (utc) {
+          startDate.setUTCDate(startDate.getUTCDate() - days);
+          startDate.setUTCHours(0, 0, 0, 0);
+        } else {
+          startDate.setDate(startDate.getDate() - days);
+          startDate.setHours(0, 0, 0, 0);
+        }
+        $('#fromDate').val(formatDateTimeInput(startDate, utc));
+        $('#toDate').val(formatDateTimeInput(endDate, utc));
+      });
+
+      $('#searchList').on('submit', function() {
+        var form = $(this);
+        var local = tmfTimeMode() === 'local';
+        form.find('input.tmf-utc-date').remove();
+        $('#fromDate, #toDate').each(function() {
+          var input = $(this);
+          var name = input.attr('id');
+          // A datetime-local value carries no offset, so Date reads it as local.
+          var parsed = local && input.val() ? new Date(input.val()) : null;
+          if (parsed && ! isNaN(parsed.getTime())) {
+            // The field keeps what was typed; the hidden copy is what is posted.
+            input.removeAttr('name');
+            $('<input type="hidden" class="tmf-utc-date">').attr('name', name).val(formatDateTimeInput(parsed, true)).appendTo(form);
+          } else {
+            input.attr('name', name);
+          }
+        });
       });
 
       $('.resetFilters').on('click', function() {

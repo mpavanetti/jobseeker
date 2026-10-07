@@ -99,7 +99,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   <!-- Alertify Js -->
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/alertify.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/plugins/alertify/css/themes/bootstrap.min.css" rel="stylesheet" type="text/css" />
-  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=8" rel="stylesheet" type="text/css" />
+  <link href="<?php echo base_url(); ?>assets/dist/css/job-console-groups.css?v=9" rel="stylesheet" type="text/css" />
   <!-- jQuery UI -->
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
   <link href="<?php echo base_url(); ?>assets/bower_components/jquery-ui/jquery-ui.theme.min.css" rel="stylesheet" type="text/css" />
@@ -135,7 +135,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
   @media (max-width: 767px) { .jobseeker-global-timezone .jobseeker-tz-label { display: none; } }
 </style>
 <script src="<?php echo base_url(); ?>assets/bower_components/jquery/dist/jquery.min.js"></script>
-<script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=2" type="text/javascript"></script>
+<script src="<?php echo base_url(); ?>assets/js/job-environment.js?v=3" type="text/javascript"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-console-notebook.js?v=3" type="text/javascript"></script>
 <script src="<?php echo base_url(); ?>assets/js/job-console-groups.js?v=13" type="text/javascript"></script>
 <script type="text/javascript">
@@ -1280,6 +1280,9 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
               </span>
             </a>
             <ul class="treeview-menu">
+              <?php // Data Assets, Connectors, Pipelines and Context Settings answer
+              // Access Denied for other roles, so they are not offered to them. ?>
+              <?php if ($role == ROLE_ADMIN || $role == ROLE_MANAGER) { ?>
               <li>
                 <a href="<?php echo base_url(); ?>data-assets" >
                   <i class="fa fa-cubes"></i>
@@ -1298,6 +1301,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
                   <span>Pipelines</span>
                 </a>
               </li>
+              <?php } ?>
               <?php if ($jobseekerHopEnabled) { ?><li>
                 <a href="<?php echo base_url(); ?>hop" >
                   <i class="fa fa-random"></i>
@@ -1324,6 +1328,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
             </li>
           </ul>
         </li>
+        <?php if ($role == ROLE_ADMIN || $role == ROLE_MANAGER) { ?>
         <li class="treeview">
           <a href="#">
             <i class="fa fa-sitemap"></i> <span>Context Settings</span>
@@ -1338,6 +1343,7 @@ if ($jobseekerSelectedEnvironment === '' || $jobseekerSelectedEnvironment === '*
 			<?php if ($jobseekerDeploymentMode !== 'standalone') { ?><li><a href="<?php echo base_url(); ?>Context/promotion"><i class="fa fa-level-up"></i><span>Environment Deployment</span></a></li><?php } ?>
           </ul>
         </li>
+        <?php } ?>
         <?php  if ($jenkins_enabled == true) { 
           if($role == ROLE_ADMIN || $role == ROLE_MANAGER)
           {
