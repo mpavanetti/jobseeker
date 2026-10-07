@@ -15,6 +15,18 @@
                 </div>
             </div>
         </div>
+        <?php foreach (array('error' => 'alert-danger', 'success' => 'alert-success') as $flashType => $flashClass) { ?>
+            <?php $flashMessage = $this->session->flashdata($flashType); if ($flashMessage) { ?>
+        <div class="row">
+            <div class="col-xs-12">
+                <div class="alert <?php echo $flashClass; ?> alert-dismissable">
+                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                    <?php echo html_escape($flashMessage); ?>
+                </div>
+            </div>
+        </div>
+            <?php } ?>
+        <?php } ?>
         <div class="row">
             <div class="col-xs-12">
               <div class="box box-primary">

@@ -126,8 +126,8 @@ class User extends BaseController
             
             $this->form_validation->set_rules('fname','Full Name','trim|required|max_length[128]');
             $this->form_validation->set_rules('email','Email','trim|required|valid_email|max_length[128]');
-            $this->form_validation->set_rules('password','Password','required|max_length[20]');
-            $this->form_validation->set_rules('cpassword','Confirm Password','trim|required|matches[password]|max_length[20]');
+            $this->form_validation->set_rules('password','Password','required|min_length[8]|max_length[64]');
+            $this->form_validation->set_rules('cpassword','Confirm Password','trim|required|matches[password]|max_length[64]');
             $this->form_validation->set_rules('role','Role','trim|required|numeric');
             $this->form_validation->set_rules('group','Group Name','trim|required|max_length[128]');
             $this->form_validation->set_rules('mobile','Phone Number','trim|required|callback_validPhoneNumber');
@@ -237,7 +237,14 @@ class User extends BaseController
             $data['roles'] = $this->user_model->getUserRoles();
             $data['groups'] = $this->user_model->getUserGroups();
             $data['userInfo'] = $this->user_model->getUserInfo($userId);
-            
+
+            // A deleted user (or a stale link) would otherwise open an empty
+            // form whose save reports success without changing anything.
+            if (empty($data['userInfo'])) {
+                $this->session->set_flashdata('error', 'That user no longer exists.');
+                redirect('userListing');
+            }
+
             $this->global['pageTitle'] = 'Job Seeker : Edit User';
             
             $this->loadViews("editOld", $this->global, $data, NULL);
@@ -262,8 +269,8 @@ class User extends BaseController
             
             $this->form_validation->set_rules('fname','Full Name','trim|required|max_length[128]');
             $this->form_validation->set_rules('email','Email','trim|required|valid_email|max_length[128]');
-            $this->form_validation->set_rules('password','Password','matches[cpassword]|max_length[20]');
-            $this->form_validation->set_rules('cpassword','Confirm Password','matches[password]|max_length[20]');
+            $this->form_validation->set_rules('password','Password','matches[cpassword]|min_length[8]|max_length[64]');
+            $this->form_validation->set_rules('cpassword','Confirm Password','matches[password]|max_length[64]');
             $this->form_validation->set_rules('role','Role','trim|required|numeric');
             $this->form_validation->set_rules('mobile','Phone Number','trim|required|callback_validPhoneNumber');
             $this->form_validation->set_rules('group','Group Name','trim|required|max_length[128]');
@@ -290,7 +297,7 @@ class User extends BaseController
                 else
                 {
                     $userInfo = array('email'=>$email, 'password'=>getHashedPassword($password), 'roleId'=>$roleId,
-                        'name'=>ucwords($name), 'mobile'=>$mobile, 'updatedBy'=>$this->vendorId, 
+                        'name'=>ucwords($name), 'groupId' => $group, 'mobile'=>$mobile, 'updatedBy'=>$this->vendorId,
                         'updatedDtm'=>date('Y-m-d H:i:s'));
                 }
                 

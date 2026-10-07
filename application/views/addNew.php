@@ -43,13 +43,13 @@
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="password">Password</label>
-                                        <input type="password" class="form-control required" id="password" name="password" maxlength="20" autocomplete="new-password">
+                                        <input type="password" class="form-control required" id="password" name="password" maxlength="64" autocomplete="new-password">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="form-group">
                                         <label for="cpassword">Confirm Password</label>
-                                        <input type="password" class="form-control required equalTo" id="cpassword" name="cpassword" maxlength="20" autocomplete="new-password">
+                                        <input type="password" class="form-control required equalTo" id="cpassword" name="cpassword" maxlength="64" autocomplete="new-password">
                                     </div>
                                 </div>
                             </div>
@@ -72,7 +72,7 @@
                                                 foreach ($roles as $rl)
                                                 {
                                                     ?>
-                                                    <option value="<?php echo $rl->roleId ?>" <?php if($rl->roleId == set_value('role')) {echo "selected=selected";} ?>><?php echo $rl->role ?></option>
+                                                    <option value="<?php echo html_escape($rl->roleId); ?>" <?php if($rl->roleId == set_value('role')) {echo "selected=selected";} ?>><?php echo html_escape($rl->role); ?></option>
                                                     <?php
                                                 }
                                             }
@@ -90,7 +90,7 @@
                                                 foreach ($groups as $gp)
                                                 {
                                                     ?>
-                                                    <option value="<?php echo $gp->id ?>"><?php echo $gp->name ?></option>
+                                                    <option value="<?php echo html_escape($gp->id); ?>"><?php echo html_escape($gp->name); ?></option>
                                                     <?php
                                                 }
                                             }
@@ -117,7 +117,7 @@
                 ?>
                 <div class="alert alert-danger alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('error'); ?>                    
+                    <?php echo html_escape($this->session->flashdata('error')); ?>                    
                 </div>
                 <?php } ?>
                 <?php  
@@ -127,7 +127,7 @@
                 ?>
                 <div class="alert alert-success alert-dismissable">
                     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-                    <?php echo $this->session->flashdata('success'); ?>
+                    <?php echo html_escape($this->session->flashdata('success')); ?>
                 </div>
                 <?php } ?>
                 
