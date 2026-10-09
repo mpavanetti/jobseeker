@@ -496,6 +496,82 @@ class Context_model extends CI_Model
         return TRUE;
     }
 
+    // Encrypted contexts. A value marked encrypted is stored as "enc:" and its CodeIgniter
+    // Encryption ciphertext (JOBSEEKER_ENCRYPTION_KEY), like connector secrets, so neither the
+    // database nor its backups hold it in clear. Jobs get it decrypted from connector-runtime
+    // (ConnectorRuntime::contextValue), which the SDK asks when it reads a sealed value. Values
+    // saved before this existed stay plain text until encryptPlainSecrets() seals them.
+    const SECRET_PREFIX = 'enc:';
+    // ContextValue is varchar(1000): the ciphertext of a longer value would not fit.
+    const SECRET_MAX_LENGTH = 600;
+
+    function isSealedSecret($value)
+    {
+        return strncmp((string) $value, self::SECRET_PREFIX, strlen(self::SECRET_PREFIX)) === 0;
+    }
+
+    function sealSecret($value)
+    {
+        $this->load->library('encryption');
+        $sealed = $this->encryption->encrypt((string) $value);
+        if ($sealed === FALSE) {
+            throw new RuntimeException('The context value could not be encrypted.');
+        }
+        return self::SECRET_PREFIX.$sealed;
+    }
+
+    // The value a sealed secret holds, a plain value as it is, or FALSE when it cannot be
+    // decrypted (it was sealed with another JOBSEEKER_ENCRYPTION_KEY, say).
+    function openSecret($value)
+    {
+        if (! $this->isSealedSecret($value)) {
+            return $value;
+        }
+        $this->load->library('encryption');
+        return $this->encryption->decrypt(substr((string) $value, strlen(self::SECRET_PREFIX)));
+    }
+
+    // A context's active value for a job, decrypted, found the way the SDK finds it (the newest
+    // active row of vw_contextdetails, in the project when one is named). NULL when there is
+    // none, FALSE when it cannot be decrypted.
+    function resolveActiveContextValue($contextKey, $environment, $projectName = '')
+    {
+        $this->db->select('ContextValue');
+        $this->db->from('vw_contextdetails');
+        $this->db->where('ContextKey', $contextKey);
+        $this->db->where('Environment', $environment);
+        $this->db->where('IsActive', 1);
+        if ($projectName !== '') {
+            $this->db->where('ProjectName', $projectName);
+        }
+        $this->db->order_by('Id', 'DESC');
+        $this->db->limit(1);
+        $row = $this->db->get()->row();
+        return $row === NULL ? NULL : $this->openSecret($row->ContextValue);
+    }
+
+    // Seals the values marked encrypted that are still plain text. Returns how many it sealed.
+    function encryptPlainSecrets()
+    {
+        $this->db->select('Id, ContextValue');
+        $this->db->from('contextdetails');
+        $this->db->where('isEncrypted', 1);
+        $this->db->where('ContextValue IS NOT NULL', NULL, FALSE);
+        $this->db->not_like('ContextValue', self::SECRET_PREFIX, 'after');
+        $sealed = 0;
+        foreach ($this->db->get()->result() as $row) {
+            if (strlen((string) $row->ContextValue) > self::SECRET_MAX_LENGTH) {
+                log_message('error', 'Context '.$row->Id.' is marked encrypted but too long to encrypt in place; it stays plain text until it is saved again.');
+                continue;
+            }
+            $this->db->where('Id', $row->Id);
+            $this->db->where('ContextValue', $row->ContextValue);
+            $this->db->update('contextdetails', array('ContextValue' => $this->sealSecret($row->ContextValue)));
+            $sealed += $this->db->affected_rows();
+        }
+        return $sealed;
+    }
+
     
 }
 

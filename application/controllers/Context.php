@@ -377,6 +377,15 @@ public function contextDetails() {
     $this->global['pageTitle'] = 'Job Seeker : ContextDetails Config';
     $user = $this->global['name'];
     $selectedEnvironment = $this->selectedContextEnvironment();
+    // Values marked encrypted before they were encrypted at rest are sealed on the first visit.
+    try {
+      $sealed = $this->model->encryptPlainSecrets();
+      if ($sealed > 0) {
+        log_message('info', 'Encrypted '.$sealed.' context value(s) that were stored in plain text.');
+      }
+    } catch (Exception $exception) {
+      log_message('error', 'Plain-text context secrets could not be encrypted: '.$exception->getMessage());
+    }
 
     $data["user"] = $user;
     $data["list"] = $this->model->listContexts($selectedEnvironment);
@@ -2775,6 +2784,15 @@ public function addContext() {
        redirect('Context/contextDetails?environment='.rawurlencode($selectedEnvironment));
      }
 
+     // An encrypted secret is stored encrypted (Context_model::sealSecret), never in clear.
+     if ((string) $encrypted === '1') {
+       if (strlen($contextValue) > Context_model::SECRET_MAX_LENGTH) {
+         $this->session->set_flashdata('error', 'An encrypted context value can be at most '.Context_model::SECRET_MAX_LENGTH.' characters.');
+         redirect('Context/contextDetails');
+       }
+       $contextValue = $this->model->sealSecret($contextValue);
+     }
+
      // Check if the data is alredy on table
      $validateSetting = $this->model->validateContext($contextKey,$projectName,$environmentName);
      $projectIdReturn = $this->model->getProjectId($projectName);
@@ -3241,7 +3259,8 @@ public function editContextUpdate() {
       redirect('Context/contextDetails');
     }
 
-    $this->form_validation->set_rules('contextValue','Context Value','required|max_length[1000]');
+    // May be left empty: the form never shows a stored secret, and an empty value keeps it.
+    $this->form_validation->set_rules('contextValue','Context Value','max_length[1000]');
     $this->form_validation->set_rules('contextKey','Context Key','trim|required|max_length[1000]');
     $this->form_validation->set_rules('ContextId','Context Id','required|integer');
     $this->form_validation->set_rules('active','Active Context','required|max_length[1]');
@@ -3273,14 +3292,32 @@ public function editContextUpdate() {
       $environmentName = $this->security->xss_clean($this->input->post('environmentName'));
       $description = $this->security->xss_clean($this->input->post('description'));
 
-     if ($contextKey == null || $contextValue == null || $projectName == null || $environmentName == null) {
-       $this->session->set_flashdata('error', 'Context Creation failed ! You must type a context key, value, project and environment.');
-       redirect('Context/contextDetails');
+     if ($contextKey == null || $projectName == null || $environmentName == null) {
+       $this->session->set_flashdata('error', 'Context update failed ! You must type a context key, project and environment.');
+       redirect('Context/editContext/'.$Id);
      }
 
      if ($selectedEnvironment !== 'ALL' && $this->normalizeJobSeekerEnvironment($environmentName) !== $selectedEnvironment) {
        $this->session->set_flashdata('error', 'The target context environment is outside the current backend scope.');
        redirect('Context/editContext/'.$Id);
+     }
+
+     // An empty value keeps the stored one (decrypted when it was encrypted, so it can be stored
+     // either way); an encrypted secret is stored encrypted.
+     if ($contextValue === '') {
+       $storedRows = $this->model->listContextId($Id);
+       $contextValue = empty($storedRows) ? FALSE : $this->model->openSecret($storedRows[0]->ContextValue);
+       if ($contextValue === FALSE || $contextValue === NULL || $contextValue === '') {
+         $this->session->set_flashdata('error', 'Enter the context value: the stored one could not be read.');
+         redirect('Context/editContext/'.$Id);
+       }
+     }
+     if ((string) $encrypted === '1') {
+       if (strlen($contextValue) > Context_model::SECRET_MAX_LENGTH) {
+         $this->session->set_flashdata('error', 'An encrypted context value can be at most '.Context_model::SECRET_MAX_LENGTH.' characters.');
+         redirect('Context/editContext/'.$Id);
+       }
+       $contextValue = $this->model->sealSecret($contextValue);
      }
 
      // Check if the data is alredy on table

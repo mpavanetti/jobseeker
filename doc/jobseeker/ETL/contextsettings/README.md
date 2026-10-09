@@ -24,7 +24,8 @@ I Recommend useing the following environment names:
 ![Env](img/environments.JPG)
 
 ## Context Details
-Use this section to create your contexts based on a key and value pairs, select the active status, is encrypted when you use encrypted password, to call a decryption method in your etl job for example, also select a project name and environment and use a description optionally.<br>
+Use this section to create your contexts based on a key and value pairs, select the active status, choose **Encrypted secret** for passwords and tokens, also select a project name and environment and use a description optionally.<br>
+An encrypted secret is stored encrypted with `JOBSEEKER_ENCRYPTION_KEY` (at most 600 characters) and never shown again: when you edit it, leave the value empty to keep the stored one, or type a new one. Jobs read it as any other context; the Python SDK gets it decrypted from JobSeeker ([Python SDK](../../../Python/README.MD)). Values marked encrypted before JobSeeker encrypted them are encrypted the next time this page is opened.<br>
 For example, the key Custom has been added for the environments LOCAL, DEV and PROD, each of them has a different value, when creating a job you can specify with environment the job will run, respectively the job will use the values setup, this is good for projects which has different environments and you don't need to rebuild your entire job for switching environments, use this solution to run the same job with different environment values.
 
 ![Context](img/contexts.JPG)

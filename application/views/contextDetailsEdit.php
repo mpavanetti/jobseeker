@@ -92,12 +92,13 @@
               <div class="context-field context-field-value">
                 <label for="contextValue">Context value <span class="text-danger">*</span></label>
                 <div class="input-group context-value-group">
-                  <input id="contextValue" type="text" name="contextValue" value="<?php echo html_escape($context->ContextValue); ?>" class="form-control" placeholder="Enter the runtime value" maxlength="1000" autocomplete="new-password" required>
+                  <?php $storedSecret = (int) $context->isEncrypted === 1; ?>
+                  <input id="contextValue" type="text" name="contextValue" value="<?php echo $storedSecret ? '' : html_escape($context->ContextValue); ?>" class="form-control" placeholder="<?php echo $storedSecret ? 'Stored encrypted: leave empty to keep it' : 'Enter the runtime value'; ?>" maxlength="1000" autocomplete="new-password" <?php echo $storedSecret ? '' : 'required'; ?>>
                   <span class="input-group-btn">
                     <button id="toggleContextValue" class="btn btn-default" type="button" aria-pressed="false"><i class="fa fa-eye"></i> Show</button>
                   </span>
                 </div>
-                <span class="context-help">Encrypted values start hidden and remain masked in the context list.</span>
+                <span class="context-help">Encrypted values are stored encrypted and never shown again: leave the field empty to keep the stored one, or type a new value.</span>
               </div>
               <div class="context-field context-field-description">
                 <label for="description">Description</label>

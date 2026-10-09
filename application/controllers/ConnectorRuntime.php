@@ -73,6 +73,11 @@ class ConnectorRuntime extends BaseController
             return;
         }
 
+        if ($this->input->post('context_key') !== NULL) {
+            $this->contextValue($ide, $token);
+            return;
+        }
+
         $environment = $this->normalizedEnvironment($this->input->post('environment'));
         $jobName = $this->normalizedJobName($this->input->post('job_name'));
         if ($environment === FALSE || $jobName === FALSE) {
@@ -159,5 +164,46 @@ class ConnectorRuntime extends BaseController
         }
         $source['environment'] = $environment;
         $this->jsonResponse(array('schema_version' => 1, 'git_source' => $source));
+    }
+
+    /**
+     * An encrypted context's value, decrypted here: the database holds only its ciphertext
+     * (Context_model::sealSecret), and the key stays with JobSeeker. The SDK asks when
+     * get_context() reads a sealed value, naming the project its lookup matched (none when it
+     * matched any project). An editor session may ask only within its own environment and job.
+     */
+    private function contextValue($ide, $token)
+    {
+        $environment = $this->normalizedEnvironment($this->input->post('environment'));
+        $contextKey = trim((string) $this->input->post('context_key'));
+        $project = trim((string) $this->input->post('project'));
+        if ($environment === FALSE || $contextKey === '' || strlen($contextKey) > 1000 || strlen($project) > 255) {
+            $this->jsonResponse(array('error' => 'A valid environment and context_key are required.'), 422);
+            return;
+        }
+        if ($ide) {
+            $jobName = $this->normalizedJobName($this->input->post('job_name'));
+            if ($jobName === FALSE || ! $this->connectoridesession->verify($token, $environment, $jobName)) {
+                $this->jsonResponse(array('error' => 'The OpenVSCode connector session is invalid. Reopen the workspace from JobSeeker.'), 401);
+                return;
+            }
+        }
+        if (! $this->jobSeekerEnvironmentIsAllowed($environment)) {
+            $this->jsonResponse(array('error' => 'This standalone deployment only exposes '.$this->jobSeekerStandaloneEnvironment().'.'), 409);
+            return;
+        }
+        $environment = $this->jobSeekerEffectiveEnvironment($environment);
+        $this->load->model('Context_model', 'contexts');
+        $value = $this->contexts->resolveActiveContextValue($contextKey, $environment, $project);
+        if ($value === NULL) {
+            $this->jsonResponse(array('error' => 'Context '.$contextKey.' is not set in '.$environment.'.'), 404);
+            return;
+        }
+        if ($value === FALSE) {
+            log_message('error', 'Context "'.$contextKey.'" ('.$environment.') could not be decrypted: was JOBSEEKER_ENCRYPTION_KEY changed?');
+            $this->jsonResponse(array('error' => 'Context '.$contextKey.' could not be decrypted.'), 500);
+            return;
+        }
+        $this->jsonResponse(array('schema_version' => 1, 'context_key' => $contextKey, 'environment' => $environment, 'value' => $value));
     }
 }

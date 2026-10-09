@@ -928,6 +928,43 @@ esac
     write_value(helper_path, helper, 0o700)
 
 
+# An encrypted context is stored as this prefix and its ciphertext (JobSeeker's Context_model).
+SEALED_CONTEXT_PREFIX = "enc:"
+
+
+def _open_sealed_context(key: str, environment: str, project: Optional[str], job: str) -> str:
+    """The value of an encrypted context. The settings database holds only its ciphertext and the
+    key stays with JobSeeker, so the job asks connector-runtime for it with its connector token,
+    as it does for connector secrets."""
+
+    endpoint = _env("JOBSEEKER_CONNECTOR_API_URL")
+    token = _env("JOBSEEKER_CONNECTOR_API_TOKEN")
+    if not endpoint or not token:
+        raise JobSeekerError(
+            "Context %s is encrypted; reading it needs JOBSEEKER_CONNECTOR_API_URL and "
+            "JOBSEEKER_CONNECTOR_API_TOKEN." % key
+        )
+    fields = {"environment": environment, "context_key": key, "job_name": job}
+    if project:
+        fields["project"] = project
+    request = urllib.request.Request(
+        endpoint,
+        data=urllib.parse.urlencode(fields).encode("utf-8"),
+        headers={"Authorization": "Bearer " + token, "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise JobSeekerError("Encrypted context %s could not be read: HTTP %s" % (key, error.code)) from error
+    except (urllib.error.URLError, ValueError) as error:
+        raise JobSeekerError("Encrypted context %s could not be read: %s" % (key, error)) from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("value"), str):
+        raise JobSeekerError("Encrypted context %s: JobSeeker's answer is invalid." % key)
+    return payload["value"]
+
+
 def materialize_connectors(
     directory: Optional[str] = None,
     environment: Optional[str] = None,
@@ -1598,13 +1635,19 @@ class JobSeeker:
         # value by its own environment, so a transport failure is held rather
         # than raised until the fallback below has had its turn.
         transport_error = None
+        matched_project = payload["project"]
         try:
             value = self.transport.get_context(payload)
             if value is None and implicit_project:
                 value = self.transport.get_context(dict(payload, project=None))
+                matched_project = None
         except Exception as error:  # noqa: BLE001 - re-raised below if nothing answers
             transport_error = error
             value = None
+
+        # An encrypted context reads as its ciphertext: JobSeeker decrypts it for the job.
+        if isinstance(value, str) and value.startswith(SEALED_CONTEXT_PREFIX):
+            value = _open_sealed_context(key, self.environment, matched_project, self.job)
 
         if value is None:
             value = context_from_environment(key)

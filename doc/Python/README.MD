@@ -172,6 +172,8 @@ endpoint = tmf.context("api_url", required=True, project="Default")
 
 A job of a project (a project job folder, or a Git job bound to a project) and code running in that project's VS Code editor read the project's own value first, then any project's, so two projects can both define `rows`. Pass `project` to read another project's value. In an editor JobSeeker opened, the environment is the one the workspace was opened for (the top bar), as it is for connectors.
 
+An **encrypted** context is stored encrypted, so the settings database only holds its ciphertext. When the SDK reads one, it asks JobSeeker's `connector-runtime` for the value, the way it fetches connector secrets: the job needs `JOBSEEKER_CONNECTOR_API_URL` and `JOBSEEKER_CONNECTOR_API_TOKEN`, which Jenkins agents already have. The call is the same `tmf.context("api_secret")`; without those settings it raises rather than return the ciphertext.
+
 ## Progress And Failure Logging
 
 Use `progress` for heartbeats and partial counters during long jobs:

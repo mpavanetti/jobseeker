@@ -22,10 +22,11 @@ against it.
 - **Jenkins**: the browser never receives Jenkins credentials. All Jenkins
   traffic is proxied server-side; the proxy builds its own `Authorization`
   header from the runtime config.
-- **Secrets**: connector values and governed data-source credentials are
-  encrypted at rest with the CodeIgniter Encryption library
+- **Secrets**: connector values, governed data-source credentials and contexts
+  marked encrypted are encrypted at rest with the CodeIgniter Encryption library
   (`JOBSEEKER_ENCRYPTION_KEY`). Connector secrets are materialized only for the
-  duration of a build.
+  duration of a build; an encrypted context reaches a job through
+  `connector-runtime` (the worker token), never in clear in the database.
 - **Insight Studio**: datasets and fields resolve through server-side
   allowlists; the connected-database path parameterizes all values and quotes
   every identifier (`quoteIdentifier`).
