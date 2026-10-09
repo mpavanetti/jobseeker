@@ -135,6 +135,8 @@ Workspace gateway | http://localhost:3001/ (editors of projects on a workspace r
 
 Use `JOBSEEKER_HTTP_PORT`, `JENKINS_HTTP_PORT`, `JOBSEEKER_MAILPIT_HTTP_PORT`, `JOBSEEKER_OPENVSCODE_PORT`, or `JOBSEEKER_WORKSPACE_GATEWAY_PORT` in `.env` when a default port is already in use.
 
+MariaDB (3306) and Mailpit (1025, 8025) listen on this machine only, like OpenVSCode and the Hop server: the other services reach them on the internal network. Mailpit has no sign-in and keeps every email JobSeeker sends, so open it to other devices (`JOBSEEKER_MAILPIT_HOST=0.0.0.0`) only on a network you trust; likewise `JOBSEEKER_DB_BIND_HOST=0.0.0.0` for a database tool on another machine.
+
 ### Optional Apache Hop
 
 Hop job support is enabled by default. The container engine needs no extra
